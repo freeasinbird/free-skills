@@ -15,6 +15,12 @@ Skills are designed to work with multiple agent platforms:
 - [Codex](https://openai.com/index/introducing-codex/)
 - Other agents that support prompt-based skill loading
 
+## Skills
+
+| Skill                              | Description                                                                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [agent-setup](skills/agent-setup/) | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding |
+
 ## Using a skill
 
 Each skill lives in `skills/<skill-name>/` with at least a `prompt.md`.
