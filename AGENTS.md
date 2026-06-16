@@ -6,6 +6,7 @@ across platforms (Claude Code, Codex, and others). See
 development conventions, contribution workflow, and project structure.
 
 <!-- agents-md:managed:devlog -->
+
 ## Devlog (session bookends)
 
 `devlog/` holds the reasoning trail — one short append-only entry per
@@ -27,6 +28,7 @@ working session (see `devlog/README.md` for the protocol).
 <!-- /agents-md:managed:devlog -->
 
 <!-- agents-md:managed:finish-line -->
+
 ## Default agent finish line
 
 For any user request that asks you to change code, docs, assets, or project
@@ -83,7 +85,7 @@ pointer.
 
 ## Project structure
 
-```
+```text
 skills/
   <skill-name>/
     prompt.md          # The skill prompt (required)
@@ -116,6 +118,7 @@ files (reference material, examples, sub-prompts) may live alongside it.
      testing/validation patterns for prompt-based skills. -->
 
 <!-- agents-md:managed:branches -->
+
 ## Branches
 
 All work lands through a PR: branch from `main`, do the work as atomic
@@ -127,7 +130,7 @@ Name branches `<type>/<short-kebab-slug>` — type from the Conventional
 Commits vocabulary (`feat`, `fix`, `refactor`, `docs`, `chore`), slug
 2–4 kebab-case words naming the work unit:
 
-```
+```text
 feat/worksheet-promotion
 fix/pane-focus-race
 chore/swift-format-sweep
@@ -142,6 +145,7 @@ setting) — the merge commit carries the narrative.
 <!-- /agents-md:managed:branches -->
 
 <!-- agents-md:managed:pull-requests -->
+
 ## Pull requests
 
 A PR is one work unit, reviewed as a whole and merged with a real merge
@@ -203,6 +207,7 @@ review it first, say). Once the PR is up:
 <!-- /agents-md:managed:pull-requests -->
 
 <!-- agents-md:managed:commits -->
+
 ## Commits
 
 History is optimized for three uses: diagnostics (blame/bisect lead to a
@@ -231,6 +236,7 @@ log tells the project's evolution). Rules:
 <!-- /agents-md:managed:commits -->
 
 <!-- agents-md:managed:done -->
+
 ## Definition of done for an increment
 
 Each increment is something actively used by the end of the work session —
@@ -238,11 +244,12 @@ not "code complete" or "tests pass" alone, but running and exercised.
 Before calling work done:
 
 <!-- agents-md:project:done-checks -->
+
 - Markdown lint clean (`npx markdownlint-cli2 '**/*.md'`)
 - Format clean (`npx prettier --check '**/*.md'`)
 - New or changed skills have a valid `prompt.md`
 - Skill prompts reviewed for platform-agnostic language (no
-  Claude-Code-only or Codex-only assumptions without explicit gates)
+Claude-Code-only or Codex-only assumptions without explicit gates)
 <!-- /agents-md:project:done-checks -->
 
 <!-- /agents-md:managed:done -->
