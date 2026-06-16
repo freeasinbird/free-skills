@@ -23,7 +23,7 @@ docs for importing external skills or prompt files.
 
 ## Repository layout
 
-```
+```text
 skills/
   <skill-name>/
     prompt.md            # Skill prompt (required entry point)

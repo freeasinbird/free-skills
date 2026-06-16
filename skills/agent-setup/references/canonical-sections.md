@@ -1,9 +1,12 @@
-# free-skills
+# Canonical Managed Sections
 
-An open-source collection of prompt-based agent skills designed to work
-across platforms (Claude Code, Codex, and others). See
-[README.md](README.md) for the project overview. This file covers
-development conventions, contribution workflow, and project structure.
+Each section below is the exact text to insert into a project's AGENTS.md,
+including the management markers. During init, paste verbatim. During
+update, compare the content between markers against these blocks.
+
+---
+
+## Section: devlog
 
 <!-- agents-md:managed:devlog -->
 
@@ -26,6 +29,10 @@ working session (see `devlog/README.md` for the protocol).
   the what-changed.
 
 <!-- /agents-md:managed:devlog -->
+
+---
+
+## Section: finish-line
 
 <!-- agents-md:managed:finish-line -->
 
@@ -57,65 +64,9 @@ change). Say exactly what is blocking the merge and what remains.
 
 <!-- /agents-md:managed:finish-line -->
 
-## Build, test, run
+---
 
-This is a markdown-only project — no compile or build step.
-
-### Lint
-
-```sh
-npx markdownlint-cli2 '**/*.md'
-```
-
-### Format
-
-```sh
-npx prettier --check '**/*.md'
-npx prettier --write '**/*.md'   # to fix
-```
-
-### CI
-
-<!-- TODO: Add CI configuration (.github/workflows/) once the repo has
-     content worth gating. The workflow conventions in this file assume CI
-     exists — set it up before the first real PR. -->
-
-CLAUDE.md is a pointer that imports AGENTS.md — edit AGENTS.md, never the
-pointer.
-
-## Project structure
-
-```text
-skills/
-  <skill-name>/
-    prompt.md          # The skill prompt (required)
-    ...                # Additional files as needed per skill
-```
-
-Each skill lives in its own directory under `skills/`. The only required
-file is `prompt.md` — the prompt text that an agent executes. Additional
-files (reference material, examples, sub-prompts) may live alongside it.
-
-## Architecture invariants
-
-1. **One directory per skill.** All skill content lives under
-   `skills/<skill-name>/`. No top-level loose skill files. This prevents
-   naming collisions and keeps each skill self-contained.
-
-2. **Platform-agnostic prompts.** Skills must work across Claude Code and
-   Codex (and ideally other agent platforms). Avoid platform-specific tool
-   calls or assumptions in prompt text; when platform-specific behavior is
-   needed, gate it explicitly and document the fallback.
-
-3. **`prompt.md` is the entry point.** Every skill directory must contain a
-   `prompt.md`. This is the file an agent loads to execute the skill.
-
-## Conventions
-
-<!-- TODO: Fill in as patterns emerge from the first few skills.
-     Things to capture: naming conventions for skill directories,
-     prompt structure guidelines, how to handle skill dependencies,
-     testing/validation patterns for prompt-based skills. -->
+## Section: branches
 
 <!-- agents-md:managed:branches -->
 
@@ -143,6 +94,10 @@ agents start pushing in parallel. Merged branches auto-delete (repo
 setting) — the merge commit carries the narrative.
 
 <!-- /agents-md:managed:branches -->
+
+---
+
+## Section: pull-requests
 
 <!-- agents-md:managed:pull-requests -->
 
@@ -206,6 +161,10 @@ review it first, say). Once the PR is up:
 
 <!-- /agents-md:managed:pull-requests -->
 
+---
+
+## Section: commits
+
 <!-- agents-md:managed:commits -->
 
 ## Commits
@@ -235,6 +194,10 @@ log tells the project's evolution). Rules:
 
 <!-- /agents-md:managed:commits -->
 
+---
+
+## Section: done
+
 <!-- agents-md:managed:done -->
 
 ## Definition of done for an increment
@@ -245,11 +208,10 @@ Before calling work done:
 
 <!-- agents-md:project:done-checks -->
 
-- Markdown lint clean (`npx markdownlint-cli2 '**/*.md'`)
-- Format clean (`npx prettier --check '**/*.md'`)
-- New or changed skills have a valid `prompt.md`
-- Skill prompts reviewed for platform-agnostic language (no
-Claude-Code-only or Codex-only assumptions without explicit gates)
+- Tests green
+- Lint/format clean
+- Affected surfaces verified in the running application
+- Schema/data-model changes round-trip through the serialization boundary
 <!-- /agents-md:project:done-checks -->
 
 <!-- /agents-md:managed:done -->
