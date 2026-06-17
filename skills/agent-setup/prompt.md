@@ -179,7 +179,7 @@ detected." Don't create a CI config (too project-specific), just warn.
 | ---------------------------------- | ----------------------------------------- |
 | `CLAUDE.md`                        | Agent entry point — `@`-imports AGENTS.md |
 | `AGENTS.md`                        | Development conventions (single source)   |
-| `CONTRIBUTING.md`                  | Human entry point — points to AGENTS.md   |
+| `CONTRIBUTING.md`                  | Human contribution guide                  |
 | `devlog/README.md`                 | Devlog protocol                           |
 | `.github/pull_request_template.md` | PR body scaffold                          |
 

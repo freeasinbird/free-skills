@@ -39,9 +39,7 @@ skills/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), which points to
-[AGENTS.md](AGENTS.md) — the single source of truth for development
-conventions.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
