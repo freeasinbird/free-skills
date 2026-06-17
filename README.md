@@ -1,6 +1,6 @@
 # free-skills
 
-Open-source, platform-agnostic prompt skills for AI coding agents.
+Open, platform-agnostic prompt skills for AI coding agents.
 
 Skills are self-contained prompt instructions that teach an agent how to
 perform a specific task — reviewing code, setting up a project, running a
@@ -45,4 +45,10 @@ conventions.
 
 ## License
 
-[CC BY-SA 4.0](LICENSE)
+This work is licensed under [CC BY-SA 4.0](./LICENSE).
+
+See [LICENSE-PHILOSOPHY.md](./LICENSE-PHILOSOPHY.md) for why we chose this license.
+
+---
+
+A [Free as in Bird](https://freeasinbird.com) project.
