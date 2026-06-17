@@ -47,7 +47,7 @@ conventions.
 
 This work is licensed under [CC BY-SA 4.0](./LICENSE).
 
-See [LICENSE-PHILOSOPHY.md](./LICENSE-PHILOSOPHY.md) for why we chose this license.
+See [LICENSING-PHILOSOPHY.md](./LICENSING-PHILOSOPHY.md) for why we chose this license.
 
 ---
 
