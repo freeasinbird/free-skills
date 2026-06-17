@@ -45,4 +45,4 @@ conventions.
 
 ## License
 
-[MIT](LICENSE)
+[CC BY-SA 4.0](LICENSE)
