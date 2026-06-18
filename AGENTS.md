@@ -88,13 +88,14 @@ pointer.
 ```text
 skills/
   <skill-name>/
-    prompt.md          # The skill prompt (required)
+    SKILL.md           # The skill prompt (required entry point)
     ...                # Additional files as needed per skill
 ```
 
 Each skill lives in its own directory under `skills/`. The only required
-file is `prompt.md` — the prompt text that an agent executes. Additional
-files (reference material, examples, sub-prompts) may live alongside it.
+file is `SKILL.md` — the skill prompt with YAML frontmatter (name and
+description) that an agent loads to execute the skill. Additional files
+(reference material, examples, sub-prompts) may live alongside it.
 
 ## Architecture invariants
 
@@ -107,8 +108,9 @@ files (reference material, examples, sub-prompts) may live alongside it.
    calls or assumptions in prompt text; when platform-specific behavior is
    needed, gate it explicitly and document the fallback.
 
-3. **`prompt.md` is the entry point.** Every skill directory must contain a
-   `prompt.md`. This is the file an agent loads to execute the skill.
+3. **`SKILL.md` is the entry point.** Every skill directory must contain a
+   `SKILL.md`. This is the file an agent loads to execute the skill.
+   Both Claude Code and Codex discover skills by this filename.
 
 ## Conventions
 
@@ -247,7 +249,7 @@ Before calling work done:
 
 - Markdown lint clean (`npx markdownlint-cli2 '**/*.md'`)
 - Format clean (`npx prettier --check '**/*.md'`)
-- New or changed skills have a valid `prompt.md`
+- New or changed skills have a valid `SKILL.md`
 - Skill prompts reviewed for platform-agnostic language (no
 Claude-Code-only or Codex-only assumptions without explicit gates)
 <!-- /agents-md:project:done-checks -->
