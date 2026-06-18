@@ -5,7 +5,7 @@ Open, platform-agnostic prompt skills for AI coding agents.
 Skills are self-contained prompt instructions that teach an agent how to
 perform a specific task — reviewing code, setting up a project, running a
 deploy checklist, etc. Each skill is a directory under `skills/` with a
-`prompt.md` entry point that any compatible agent can load and execute.
+`SKILL.md` entry point that any compatible agent can load and execute.
 
 ## Compatibility
 
@@ -24,7 +24,7 @@ Skills are designed to work with multiple agent platforms:
 
 ## Using a skill
 
-Each skill lives in `skills/<skill-name>/` with at least a `prompt.md`.
+Each skill lives in `skills/<skill-name>/` with at least a `SKILL.md`.
 How you load it depends on your agent platform — consult your platform's
 docs for importing external skills or prompt files.
 
@@ -33,7 +33,7 @@ docs for importing external skills or prompt files.
 ```text
 skills/
   <skill-name>/
-    prompt.md            # Skill prompt (required entry point)
+    SKILL.md             # Skill prompt (required entry point)
     references/          # Supporting material (optional)
     ...
 ```
