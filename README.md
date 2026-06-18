@@ -17,9 +17,10 @@ Skills are designed to work with multiple agent platforms:
 
 ## Skills
 
-| Skill                              | Description                                                                                                                                   |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [agent-setup](skills/agent-setup/) | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding |
+| Skill                                              | Description                                                                                                                                                                  |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [agent-setup](skills/agent-setup/)                 | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding                                |
+| [license-philosopher](skills/license-philosopher/) | Apply the Free as in Bird licensing philosophy — suggests and adds the appropriate copyleft license (CC BY-SA 4.0, LGPL-3.0, GPL-3.0, or AGPL-3.0) based on the project type |
 
 ## Using a skill
 
