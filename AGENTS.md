@@ -115,10 +115,11 @@ description) that an agent loads to execute the skill. Additional files
 
 ## Conventions
 
-<!-- TODO: Fill in as patterns emerge from the first few skills.
-     Things to capture: naming conventions for skill directories,
-     prompt structure guidelines, how to handle skill dependencies,
-     testing/validation patterns for prompt-based skills. -->
+- **README skills table is alphabetical by skill name.** Insert a new
+  skill's row in order, not appended at the end.
+
+<!-- TODO: Fill in more as patterns emerge — prompt structure guidelines,
+     how to handle skill dependencies, testing/validation patterns. -->
 
 <!-- agents-md:managed:branches -->
 
