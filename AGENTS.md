@@ -32,9 +32,10 @@ working session (see `devlog/README.md` for the protocol).
 ## Default agent finish line
 
 For any user request that asks you to change code, docs, assets, or project
-state, the default endpoint is **merged `main` with local cleanup complete**.
-Do not stop at an implementation, local commit, pushed branch, or open PR
-unless the user explicitly asks to review before merge.
+state, the default endpoint is **an open, review-ready PR with required
+checks green** — not a merged branch. Merging is a human decision; do not
+merge your own PR unless the user explicitly asks, or the project has adopted
+an opt-in self-merge workflow.
 
 Use this checklist at the start of each work session:
 
@@ -47,13 +48,13 @@ Use this checklist at the start of each work session:
 5. Commit one concern at a time with a body that says why.
 6. Push, open the PR with the template, and remove sections that do not apply.
 7. Poll required checks until they finish; fix failures on the branch.
-8. Self-review the PR files view, then merge with `gh pr merge <n> --merge`.
-9. Resync local `main`, delete the local branch, and prune remote refs.
+8. Self-review the PR files view, then hand off — leave the PR open for a
+   human to review and merge.
 
-Only stop before merge when the user asks to stop, required checks fail and
-cannot be fixed in the session, or a required review artifact cannot be
-attached by the agent (for example GitHub-hosted screenshots for a visible UI
-change). Say exactly what is blocking the merge and what remains.
+Stop once the PR is open, green, and self-reviewed. Say what remains (review
+and merge) and point the reviewer at anything that needs attention. Don't
+merge, delete the branch, or resync `main` yourself unless the user asks for
+that, or the project has adopted a self-merge workflow.
 
 <!-- /agents-md:managed:finish-line -->
 
@@ -183,28 +184,30 @@ arc.
     observed: tests, lint, fixture/screenshot checks (both palettes for
     UI), export/import round-trip for schema changes. Facts only — never
     "should work"; verification gaps are explicit `Not run:` bullets.
-- **Self-review the diff in the PR files view before merging** — it
+- **Self-review the diff in the PR files view before handing off** — it
   catches stray hunks and leftovers the editor view didn't.
 - Merge-commit merges are the only enabled method (squash and rebase
   are disabled in repo settings) and merged branches auto-delete — the
   settings enforce the Commits rules; don't re-enable around them.
 
-### Landing a PR
+### Handing off the PR
 
-Opening the PR isn't the finish line — carry the work unit through to a
-merged `main` yourself, unless the user asked to stop at the PR (to
-review it first, say). Once the PR is up:
+Opening the PR is the agent's finish line — leave it open for a human to
+review, approve, and merge, unless the user explicitly asks you to merge or
+the project has adopted a self-merge workflow. Once the PR is up:
 
 - **Wait for required checks** — poll `gh pr checks <n>` until they
-  complete; never merge red or still-running. A failing check gets fixed
-  on the branch, not merged around.
-- **Self-review the diff** (above) before merging.
-- **Merge** with `gh pr merge <n> --merge` (the only enabled method); the
-  remote branch auto-deletes.
-- **Resync and clean up** — `git checkout main && git pull --ff-only`,
-  then delete the local branch (`git branch -d <branch>`) and
-  `git fetch --prune`. A stacked follow-up PR retargets to `main` on its
-  own once its base merges.
+  complete; fix any red check on the branch, never hand off a known-red PR.
+- **Self-review the diff** (above) so it's ready for a reviewer.
+- **Stop and summarize** — say the PR is open and green, and surface
+  anything the reviewer should focus on. Leave merging, branch cleanup, and
+  the `main` resync to whoever approves it.
+
+If the user does ask you to merge, use `gh pr merge <n> --merge` (the only
+enabled method; the remote branch auto-deletes), then resync
+(`git checkout main && git pull --ff-only`), delete the local branch
+(`git branch -d <branch>`), and `git fetch --prune`. A stacked follow-up PR
+retargets to `main` on its own once its base merges.
 
 <!-- /agents-md:managed:pull-requests -->
 
