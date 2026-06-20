@@ -21,9 +21,11 @@ where your agent looks for skills:
 Copy or symlink the skill's directory there — symlink it from a clone of
 this repo if you want it to track upstream — or point your agent at the
 skill's `SKILL.md` and ask it to follow it. For example, to symlink one
-skill into Claude Code from a clone:
+skill into Claude Code from a clone (the skills directory may not exist
+yet on a fresh setup, so create it first):
 
 ```sh
+mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/license-philosopher" ~/.claude/skills/license-philosopher
 ```
 
