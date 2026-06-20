@@ -17,6 +17,8 @@ Skills are designed to work with multiple agent platforms:
 
 ## Skills
 
+<!-- Listed alphabetically by skill name. Insert new skills in order. -->
+
 | Skill                                              | Description                                                                                                                                                                  |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [agent-setup](skills/agent-setup/)                 | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding                                |
