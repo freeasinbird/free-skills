@@ -116,6 +116,12 @@ arc.
 - **Body** — scaffolded by `.github/pull_request_template.md`:
   - **Why** — prose, one to three short sentences. State the problem or
     motivation. Link the devlog entry when one exists; don't duplicate it.
+    Add a close keyword immediately before each issue number the PR fully
+    resolves or finishes (`Closes #11`; repeat the keyword to close several
+    — `Closes #11, closes #12` — since a bare list like `Closes #11, #12`
+    closes only the first). Reference related-but-unfinished issues with a
+    plain `#N` (e.g. `Refs #N`), which links without closing, and leave
+    those for a human.
   - **What** — required bullets. Describe work-unit outcomes, not
     file-by-file churn. For multi-commit PRs, use a compact commit map
     (one bullet per commit or concern) and say rejected alternatives live

@@ -4,7 +4,11 @@
 ## Why
 
 <!-- One to three short prose sentences. Link the devlog entry when one
-     exists; don't duplicate it. -->
+     exists; don't duplicate it. Add a close keyword immediately before each
+     issue number the PR fully resolves or finishes (`Closes #11`; repeat to
+     close several — `Closes #11, closes #12`; a bare list `Closes #11, #12`
+     closes only the first). Reference related-but-unfinished issues with a
+     plain `#N` (e.g. `Refs #N`) and leave those for a human. -->
 
 ## What
 
