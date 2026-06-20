@@ -40,10 +40,11 @@ interactively during init and left untouched during updates.
 6. Audit standard project files — see "Standard project files" below.
    Report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
-7. Verify repo settings where possible (merge-commit-only, auto-delete
-   branches) and note any that can't be checked programmatically.
-8. Summarize what was created, what the user should fill in, and which
-   standard files are missing.
+7. Check the repo settings the conventions depend on and offer to align
+   them — see "Repo settings" below. Report any that can't be checked or
+   set (wrong permissions, non-GitHub forge).
+8. Summarize what was created, what the user should fill in, which
+   standard files are missing, and which repo settings need attention.
 
 ## Update mode
 
@@ -62,6 +63,8 @@ interactively during init and left untouched during updates.
 7. Check scaffolding files (devlog/README.md, CLAUDE.md, CONTRIBUTING.md,
    PR template) and offer to create any that are missing.
 8. Audit standard project files (see below) and flag any newly missing.
+9. Check the repo settings the conventions depend on (see "Repo settings")
+   and offer to align any that have drifted.
 
 ## Conventional section order
 
@@ -193,6 +196,48 @@ detected." Don't create a CI config (too project-specific), just warn.
 Note: projects may have additional `docs/` files for format specs,
 API references, or other concerns. These two are the baseline worth
 flagging; everything else is project-specific.
+
+## Repo settings
+
+Several canonical conventions assume specific repository settings. The
+`branches` and `pull-requests` sections state that merged branches
+auto-delete and that a real merge commit is the only merge method —
+those sentences read as false if the settings are off. agent-setup
+doesn't own repo configuration, but it should check these and offer to
+align them.
+
+Treat this as **detect → report → offer to enable**, never a silent
+mutation. Changing repo settings needs admin rights the agent may not
+have, so confirm before applying and otherwise fall back to telling the
+user the desired state and where to set it.
+
+Settings the conventions depend on:
+
+| Setting                                   | Why it matters                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| Auto-delete head branches on merge        | `branches`/`pull-requests` state merged branches auto-delete        |
+| Merge-commit-only (squash and rebase off) | `commits` needs real merge commits for the `--first-parent` history |
+
+These toggles are forge-specific. On GitHub, check and (after confirming)
+set them with `gh` — skip or adapt this on other forges, which expose
+equivalent settings:
+
+```sh
+# Check current state
+gh api repos/{owner}/{repo} \
+  --jq '{delete_branch_on_merge, allow_merge_commit, allow_squash_merge, allow_rebase_merge}'
+
+# Align (only after confirming with the user)
+gh api -X PATCH repos/{owner}/{repo} \
+  -F delete_branch_on_merge=true \
+  -F allow_merge_commit=true \
+  -F allow_squash_merge=false \
+  -F allow_rebase_merge=false
+```
+
+If the agent lacks permission or the forge isn't GitHub, report the
+desired state and point the user at the setting (on GitHub: Settings →
+General → Pull Requests).
 
 ## Additional Resources
 
