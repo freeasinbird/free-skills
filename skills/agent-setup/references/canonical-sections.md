@@ -177,6 +177,12 @@ arc.
   inline with the disposition and the fixing commit SHA ("Fixed in
   `<sha>`" / a reasoned decline), then resolve the thread. Resolving every
   thread is _not_ a hard merge gate — evaluate-on-merits is.
+- **Keep the body current as review evolves the PR.** The body becomes the
+  merge commit, so when review adds commits or shifts scope, update What, the
+  commit map (flag which commits resolve review findings), and Verification
+  before re-handing-off. The inline disposition + fixing SHA on each resolved
+  thread (above) is the located per-finding record — don't duplicate it into
+  a standing "feedback" section that would drift.
 - Merge-commit merges are the only enabled method (squash and rebase
   are disabled in repo settings) and merged branches auto-delete — the
   settings enforce the Commits rules; don't re-enable around them.

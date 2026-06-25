@@ -67,6 +67,15 @@ repo's AGENTS.md (which a re-sync would overwrite).
   all six SHAs, and two (`6ae1184`, `7b264c2`) are cited in resolved-thread
   replies — rewriting would dangle them; c1 isn't internally broken, so this
   is a clarification (commit-4 precedent), not the append-only in-place case.
+- **PR-body-sync convention, placed with feedback-response not handoff.** Asked
+  whether the process keeps the PR description current through review and
+  whether to add a "feedback acted on" section. Added one bullet: keep the body
+  (What / commit map / Verification) in sync as review adds commits; flag
+  review-driven commits. Declined a standing feedback section — the inline
+  disposition+SHA+resolved thread is the located record and commits are the
+  durable one; a section would duplicate and drift. Placed after "Responding to
+  automated review" (user correctly flagged it's feedback-response, not the
+  "Handing off" finish-line act) and phrased for all review, not just bots.
 
 ## To promote
 
