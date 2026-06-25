@@ -23,8 +23,10 @@ session (see `devlog/README.md` for the protocol).
   that should be promoted to AGENTS.md — a new invariant discovered, a
   convention that wasn't written down, a gotcha that bit you. The devlog
   entry records it; a follow-up commit promotes it. Use local 24-hour
-  time so same-day entries sort in session order. ≤ 40 lines; commits carry
-  the what-changed.
+  time so same-day entries sort in session order. Keep it dense — decisions,
+  not narration; target ≤ ~40 lines per session-round, scaling when one entry
+  consolidates many review rounds. Commits and PR threads carry the
+  what-changed.
 
 <!-- /agents-md:managed:devlog -->
 

@@ -31,6 +31,14 @@ repo's AGENTS.md (which a re-sync would overwrite).
   one intended divergence.
 - **Prettier normalized `*em*` → `_em_`** in both managed files identically;
   parity preserved.
+- **Reframed the ≤40-line cap as a density target (post-open feedback).** The
+  new revisable-until-merge rule makes one entry absorb every review round, so
+  a hard per-file cap fought heavy-review PRs. Rule is now density (decisions,
+  never narration; transcript lives in commits + PR threads), with ≤~40 lines
+  as a _per-round_ soft target that scales with distinct decisions. Landed as
+  its own commit, not a fold into c1/c2 — it resolves a tension this PR
+  introduced and edits pre-existing cap text, so a named commit reads better
+  than rewriting pushed commits.
 
 ## To promote
 
