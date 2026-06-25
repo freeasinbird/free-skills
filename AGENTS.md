@@ -250,6 +250,34 @@ enabled method; the remote branch auto-deletes), then resync
 (`git checkout main && git pull --ff-only`), delete the local branch
 (`git branch -d <branch>`), and `git fetch --prune`.
 
+### Reviewing a PR
+
+The mirror of "Responding to automated review" — hold the bar you'd want
+held for you. Use the project's review tooling for the bug-hunting pass;
+these are the conventions for the comments it produces.
+
+- **Calibrate to severity, and tag it.** Separate blocking findings
+  (correctness, security, data-loss, red tests/CI, broken invariants) from
+  non-blocking ones (naming, style, optional simplification). Only blockers
+  gate the merge. Don't manufacture speculative or contrived findings — the
+  author convention is to decline those with a one-line reason.
+- **Every comment carries evidence and a concrete ask.** Point at
+  `file:line`, name the failure it causes, and propose a fix or ask a
+  question. Mark uncertainty as uncertainty ("possible:"), never assert it —
+  the Verification facts-only discipline applies to review too.
+- **Review against intent, not just the diff.** Read the PR's Why/What and
+  the devlog; check the change does what it claims, that Verification matches
+  reality, and that docs/tests moved with behavior. Don't relitigate what the
+  devlog marks decided or deferred.
+- **Stay in scope.** Out-of-scope improvements are non-blocking nits or a
+  follow-up issue, not merge-blockers; don't grow the PR through review.
+- **Scale depth to risk.** Routine PRs get a normal pass; destructive /
+  credential-leak / trust-boundary changes get the refute-first lens (see the
+  finish line). A docs typo doesn't.
+- **Resolve explicitly.** State what would unblock; let the author
+  fix-or-decline. Resolving every thread isn't the gate — agreement on
+  blockers is.
+
 ### Stacked PRs
 
 Dependent docs or cleanup work can proceed without waiting for its base: a

@@ -39,6 +39,20 @@ repo's AGENTS.md (which a re-sync would overwrite).
   its own commit, not a fold into c1/c2 — it resolves a tension this PR
   introduced and edits pre-existing cap text, so a named commit reads better
   than rewriting pushed commits.
+- **Added reviewer-side conventions (post-open feedback).** `pull-requests`
+  documented only the author receiving review (§1b); the reviewer side was
+  missing. Added a `### Reviewing a PR` subsection mirroring the author rules
+  (severity-tag, evidence + concrete ask, review against intent, stay in
+  scope, scale depth to risk, resolve explicitly). Kept methodology-neutral —
+  "use the project's review tooling" rather than naming a Claude-Code-only
+  skill (invariant #2). Subsection over a new `review` managed KEY: review
+  doesn't separate cleanly from PR conventions.
+- **Folded Codex's P2 into c2 (dogfooding fold-fix).** The managed devlog
+  block still said "append-only" while the README now says revisable — valid
+  finding. Dropped the word and folded into the protocol commit (c2) so every
+  commit stays internally consistent, not a separate fix commit. Done via
+  cherry-pick rebuild (rebase -i unavailable) with a backup branch; tree diff
+  vs pre-fold = only the two-line drop.
 
 ## To promote
 
