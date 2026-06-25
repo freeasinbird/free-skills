@@ -61,7 +61,16 @@ interactively during init and left untouched during updates.
    block — never overwrite that block during update; only compare the
    principle text outside it.
 7. Check scaffolding files (devlog/README.md, CLAUDE.md, CONTRIBUTING.md,
-   PR template) and offer to create any that are missing.
+   PR template): offer to create any that are missing, and for any that
+   already exist, compare against the current templates in
+   `references/scaffolding.md`. If one has drifted — especially
+   `devlog/README.md`, whose protocol the managed `devlog` and `commits`
+   blocks rely on — show the diff and offer to refresh it. These files carry
+   no management markers and may hold local customizations, so never
+   overwrite silently; let the user decide per file. This keeps an updated
+   repo's protocol docs from contradicting the freshly-synced managed blocks
+   (e.g. a stale "entries are never edited" devlog README against the
+   fold-fix rule that has the author revise the matching entry).
 8. Audit standard project files (see below) and flag any newly missing.
 9. Check the repo settings the conventions depend on (see "Repo settings")
    and offer to align any that have drifted.

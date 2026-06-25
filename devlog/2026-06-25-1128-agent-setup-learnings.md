@@ -53,6 +53,14 @@ repo's AGENTS.md (which a re-sync would overwrite).
   commit stays internally consistent, not a separate fix commit. Done via
   cherry-pick rebuild (rebase -i unavailable) with a backup branch; tree diff
   vs pre-fold = only the two-line drop.
+- **Made update mode refresh drifted scaffolding (2nd P2).** Update mode only
+  created _missing_ scaffold files, so an existing repo would sync the managed
+  fold-fix block but keep a stale "entries are never edited" `devlog/README.md`
+  — the protocol change reached only fresh inits. Fixed in SKILL.md step 7:
+  compare existing scaffolding against the templates and offer to refresh on
+  drift (diff + per-file choice; no markers, so never silent). New commit, not
+  a fold — distinct concern (update-mode mechanics), no existing commit touches
+  SKILL.md.
 
 ## To promote
 
