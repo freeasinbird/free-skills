@@ -12,8 +12,8 @@ update, compare the content between markers against these blocks.
 
 ## Devlog (session bookends)
 
-`devlog/` holds the reasoning trail — one short append-only entry per
-working session (see `devlog/README.md` for the protocol).
+`devlog/` holds the reasoning trail — one short entry per working
+session (see `devlog/README.md` for the protocol).
 
 - **Before starting:** read the most recent one or two entries
   (`find devlog -maxdepth 1 -type f -name '*.md' ! -name README.md | sort | tail -2`)
