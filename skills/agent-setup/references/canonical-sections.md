@@ -49,7 +49,9 @@ an opt-in self-merge workflow.
 
 Use this checklist at the start of each work session:
 
-1. Read README plus the latest devlog entries, then start from `main`.
+1. Read README plus the latest devlog entries, then start from `main` — or,
+   for a follow-up that depends on an open PR, from that PR's branch (see
+   Stacked PRs under Pull requests).
 2. Create one correctly named branch for the work unit.
 3. Make the scoped change, including docs/devlog/tests/assets that keep it
    complete.

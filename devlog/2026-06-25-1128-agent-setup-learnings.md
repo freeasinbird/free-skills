@@ -61,6 +61,12 @@ repo's AGENTS.md (which a re-sync would overwrite).
   drift (diff + per-file choice; no markers, so never silent). New commit, not
   a fold — distinct concern (update-mode mechanics), no existing commit touches
   SKILL.md.
+- **Stacked-PR exception in finish-line step 1 (3rd P2).** Step 1 said start
+  from `main` unconditionally, contradicting the new Stacked PRs pattern.
+  Added the exception inline. New commit, not a fold into c1: folding rewrites
+  all six SHAs, and two (`6ae1184`, `7b264c2`) are cited in resolved-thread
+  replies — rewriting would dangle them; c1 isn't internally broken, so this
+  is a clarification (commit-4 precedent), not the append-only in-place case.
 
 ## To promote
 
