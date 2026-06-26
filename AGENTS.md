@@ -135,6 +135,16 @@ description) that an agent loads to execute the skill. Additional files
 - **README skills table is alphabetical by skill name.** Insert a new
   skill's row in order, not appended at the end.
 
+- **`SKILL.md` frontmatter must parse as YAML; write `description` as a `>-`
+  block scalar.** Skill indexers read `name`/`description` as YAML, so a plain
+  (unquoted) scalar silently fails to load the skill when its text contains a
+  colon-then-space (e.g. `proactively: the`), a leading `#`, or other YAML
+  structural characters. A `>-` folded block scalar keeps the text literal and
+  parse-safe — use it for new skills. Existing plain-scalar descriptions are
+  acceptable only while they stay parse-safe; converting them to `>-` is a
+  welcome hardening. Verify with any YAML parser when unsure. (Surfaced by a P1
+  review on the visual-evidence skill; see the 2026-06-26 devlog.)
+
 <!-- TODO: Fill in more as patterns emerge — prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->
 
@@ -347,7 +357,8 @@ Before calling work done:
 
 - Markdown lint clean (`npx markdownlint-cli2 '**/*.md'`)
 - Format clean (`npx prettier --check '**/*.md'`)
-- New or changed skills have a valid `SKILL.md`
+- New or changed skills have a valid `SKILL.md` with parse-safe YAML
+  frontmatter (`description` as a `>-` block scalar — see Conventions)
 - Skill prompts reviewed for platform-agnostic language (no
 Claude-Code-only or Codex-only assumptions without explicit gates)
 <!-- /agents-md:project:done-checks -->
