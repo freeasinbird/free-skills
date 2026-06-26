@@ -18,23 +18,40 @@ where your agent looks for skills:
 - **Claude Code** — `~/.claude/skills/<name>/`
 - **Codex** — `~/.agents/skills/<name>/`
 
-Copy or symlink the skill's directory there — symlink it from a clone of
-this repo if you want it to track upstream — or point your agent at the
-skill's `SKILL.md` and ask it to follow it. For example, to symlink one
-skill into Claude Code from a clone (the skills directory may not exist
-yet on a fresh setup, so create it first):
+### Quick install (recommended)
+
+The [`skills` CLI](https://github.com/vercel-labs/skills) installs straight
+from this repo — no clone, on macOS, Linux, and Windows:
+
+```sh
+npx skills add freeasinbird/free-skills                              # pick from the list
+npx skills add freeasinbird/free-skills --skill license-philosopher  # a named skill
+npx skills add freeasinbird/free-skills --skill '*'                  # every skill
+```
+
+It symlinks into your agent's skills directory; `npx skills update` keeps them
+current. See `npx skills add --help` for scope flags (`-g`, `-a`, `--copy`).
+
+### Manual install
+
+Or place the skill yourself: copy or symlink its directory into the agent's
+skills location — symlink it from a clone if you want it to track upstream —
+or point your agent at the skill's `SKILL.md` and ask it to follow it. For
+example, to symlink one skill into Claude Code from a clone (the skills
+directory may not exist yet on a fresh setup, so create it first):
 
 ```sh
 mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/license-philosopher" ~/.claude/skills/license-philosopher
 ```
 
-### Convenience: link every skill (macOS / Linux)
+### Convenience: link every skill from a clone (macOS / Linux)
 
-To install all skills into both Claude Code and Codex at once — and keep
-them current as the repo evolves — clone the repo and run the link helper.
-It symlinks every skill into `~/.claude/skills` and `~/.agents/skills`, so a
-single `git pull` refreshes them all:
+If you'd rather not use Node, or you keep a local clone and prefer
+git-tracked symlinks, the `link-skills.sh` helper installs all skills into
+both Claude Code and Codex from a clone and keeps them current. It symlinks
+every skill into `~/.claude/skills` and `~/.agents/skills`, so a single
+`git pull` refreshes them all:
 
 ```sh
 git clone https://github.com/freeasinbird/free-skills.git
