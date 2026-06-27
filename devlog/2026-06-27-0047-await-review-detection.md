@@ -57,10 +57,22 @@ watch" framing license it). Making the watch the default is real but it is
 **workflow policy, separate from reviewer identity** — moved to its own
 follow-up PR (stacked on this branch) so this PR holds one contract.
 
+## agent-setup: nudge to record the reviewer
+
+Added a detect → report audit to agent-setup (init + update): check whether the
+project records its automated reviewer in an unmanaged section; if not, flag it
+("record one once a reviewer is configured"). Crucially it **reports, never
+writes** — distinct from the rejected init-time detect-and-record, because a
+record agent-setup wrote at init would go stale (the reviewer usually post-dates
+setup). Closes the last gap in "agent-setup manages activation": the policy
+(watch-by-default, in the follow-up) and the record convention are both
+propagated, and setup now actively points a repo at the record step.
+
 ## Rejected
 
-Per-repo toggle; init-time detect-and-record; recording absence; a fire-on-open
-hook; folding watch-by-default into this PR.
+Per-repo toggle; init-time detect-and-_write_ (auto-writing a record at setup —
+but we do detect → report absence); recording absence; a fire-on-open hook;
+folding watch-by-default into this PR.
 
 ## Verification
 
