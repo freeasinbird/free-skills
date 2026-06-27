@@ -10,15 +10,7 @@ work with [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
 [Codex](https://openai.com/index/introducing-codex/), and other agents that
 load `SKILL.md` prompts.
 
-## Installation
-
-A skill is just a `SKILL.md` directory, so installing one means putting it
-where your agent looks for skills:
-
-- **Claude Code** — `~/.claude/skills/<name>/`
-- **Codex** — `~/.agents/skills/<name>/`
-
-### Quick install (recommended)
+## Quick install
 
 The [`skills` CLI](https://github.com/vercel-labs/skills) installs straight
 from this repo — no clone, on macOS, Linux, and Windows:
@@ -30,11 +22,35 @@ npx skills add freeasinbird/free-skills --skill '*'                  # every ski
 ```
 
 It symlinks into your agent's skills directory; `npx skills update` keeps them
-current. See `npx skills add --help` for scope flags (`-g`, `-a`, `--copy`).
+current, and `npx skills add --help` lists scope flags (`-g`, `-a`, `--copy`).
+For manual setup or linking every skill from a clone, see
+[Installation](#installation).
+
+## Skills
+
+<!-- Listed alphabetically by skill name. Insert new skills in order. -->
+
+| Skill                                              | Description                                                                                                                                                                  |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [agent-setup](skills/agent-setup/)                 | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding                                |
+| [license-philosopher](skills/license-philosopher/) | Apply the Free as in Bird licensing philosophy — suggests and adds the appropriate copyleft license (CC BY-SA 4.0, LGPL-3.0, GPL-3.0, or AGPL-3.0) based on the project type |
+| [self-merge](skills/self-merge/)                   | Opt-in override of the safe default — lets an agent merge its own PR and clean up, with guardrails, only when the user or project policy explicitly allows it                |
+| [visual-evidence](skills/visual-evidence/)         | Capture tight, deterministic before/after screenshots of a UI change for PR reviewers, then hand off to the gh-imgup skill to upload and attach them                         |
+
+## Installation
+
+A skill is just a `SKILL.md` directory, so installing one means putting it
+where your agent looks for skills:
+
+- **Claude Code** — `~/.claude/skills/<name>/`
+- **Codex** — `~/.agents/skills/<name>/`
+
+The [quick install](#quick-install) above is the easiest path; use the methods
+below for manual setup or a git-tracked local clone.
 
 ### Manual install
 
-Or place the skill yourself: copy or symlink its directory into the agent's
+Place the skill yourself: copy or symlink its directory into the agent's
 skills location — symlink it from a clone if you want it to track upstream —
 or point your agent at the skill's `SKILL.md` and ask it to follow it. For
 example, to symlink one skill into Claude Code from a clone (the skills
@@ -63,17 +79,6 @@ scripts/link-skills.sh             # create the symlinks
 Re-run it after a `git pull` that adds or removes skills. Pass `--adopt` to
 replace an earlier copied install with a tracking symlink; see
 `scripts/link-skills.sh --help` for all options.
-
-## Skills
-
-<!-- Listed alphabetically by skill name. Insert new skills in order. -->
-
-| Skill                                              | Description                                                                                                                                                                  |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [agent-setup](skills/agent-setup/)                 | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding                                |
-| [license-philosopher](skills/license-philosopher/) | Apply the Free as in Bird licensing philosophy — suggests and adds the appropriate copyleft license (CC BY-SA 4.0, LGPL-3.0, GPL-3.0, or AGPL-3.0) based on the project type |
-| [self-merge](skills/self-merge/)                   | Opt-in override of the safe default — lets an agent merge its own PR and clean up, with guardrails, only when the user or project policy explicitly allows it                |
-| [visual-evidence](skills/visual-evidence/)         | Capture tight, deterministic before/after screenshots of a UI change for PR reviewers, then hand off to the gh-imgup skill to upload and attach them                         |
 
 ## Repository layout
 
