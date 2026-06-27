@@ -290,8 +290,11 @@ arc.
 - **Fix the class, not just the cited line.** When a finding names one
   location, sweep the file/repo for the same class and fix every instance in
   the same push — otherwise the bot re-reviews on the next push and flags the
-  siblings one at a time, so sweeping converges in far fewer cycles. Expect
-  that re-review loop, and expect diminishing returns: automated reviewers can
+  siblings one at a time, so sweeping converges in far fewer cycles. **Make the
+  sweep mechanical** — grep/search the file (and repo) for the finding's
+  pattern, don't just eyeball the nearby lines; the same class routinely recurs
+  in sibling sentences or files the citation never named, and a half-sweep only
+  resurfaces it next round. Expect that re-review loop, and expect diminishing returns: automated reviewers can
   surface ever-smaller nits indefinitely, so converge and hand off rather than
   chasing every round to zero (value captured is the bar, not threads-at-zero).
 - **Keep the body current as review evolves the PR.** The body becomes the
