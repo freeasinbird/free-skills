@@ -85,6 +85,11 @@ This is a markdown-only project — no compile or build step.
 npx markdownlint-cli2 '**/*.md'
 ```
 
+Gotcha: MD038 is active, so an inline code span can't have a leading or
+trailing space inside the backticks. Wrapping a colon-then-space in backticks
+to show that sequence trips it — describe such whitespace-bearing sequences in
+prose ("a colon-then-space") rather than quoting them in a code span.
+
 ### Format
 
 ```sh
@@ -124,7 +129,16 @@ description) that an agent loads to execute the skill. Additional files
 2. **Platform-agnostic prompts.** Skills must work across Claude Code and
    Codex (and ideally other agent platforms). Avoid platform-specific tool
    calls or assumptions in prompt text; when platform-specific behavior is
-   needed, gate it explicitly and document the fallback.
+   needed, gate it explicitly and document the fallback. **This extends to the
+   agent-setup canonical conventions** — they get copied into downstream
+   AGENTS.md files and run by arbitrary agents, so a convention must not assume
+   a capability either. **Subagents/delegation are the canonical trap:** not
+   every agent or session can spawn a subagent (e.g. a Codex session, or an
+   agent with no subagent concept), so any instruction to delegate must be
+   gated on the platform supporting it and state the fallback (skip it, or use
+   an external/human reviewer), never emitting steps the running agent can't
+   perform. (Surfaced by a P2 review on the fresh-context-review convention;
+   see the 2026-06-26 devlog.)
 
 3. **`SKILL.md` is the entry point.** Every skill directory must contain a
    `SKILL.md`. This is the file an agent loads to execute the skill.
@@ -144,6 +158,20 @@ description) that an agent loads to execute the skill. Additional files
   acceptable only while they stay parse-safe; converting them to `>-` is a
   welcome hardening. Verify with any YAML parser when unsure. (Surfaced by a P1
   review on the visual-evidence skill; see the 2026-06-26 devlog.)
+
+- **This repo dogfoods agent-setup — edit managed conventions in two places.**
+  free-skills' own AGENTS.md is built from the agent-setup skill, so its
+  `<!-- agents-md:managed:* -->` blocks (devlog, finish-line, branches,
+  pull-requests, commits, done) mirror the canonical source at
+  `skills/agent-setup/references/canonical-sections.md`. When you change one of
+  those conventions, edit **both** the canonical source **and** this file's
+  matching managed block, keeping the managed text in sync (`diff` them).
+  **Exception:** a managed block may wrap a nested
+  `<!-- agents-md:project:* -->` sub-block (here, `project:done-checks` inside
+  `done`) — that content is project-specific by design, so keep it local and
+  never overwrite it with the canonical template. Sections outside the managed
+  markers (Architecture invariants, Conventions, Build) are free-skills-only —
+  edit those here alone.
 
 <!-- TODO: Fill in more as patterns emerge — prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->
