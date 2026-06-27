@@ -297,6 +297,13 @@ arc.
   resurfaces it next round. Expect that re-review loop, and expect diminishing returns: automated reviewers can
   surface ever-smaller nits indefinitely, so converge and hand off rather than
   chasing every round to zero (value captured is the bar, not threads-at-zero).
+- **Don't under-converge either.** The flip side of not chasing nits: don't
+  declare a PR "addressed" while the reviewer is still raising real issues, and
+  never treat a finding that recurs from your _own_ incomplete fix as
+  convergence — that is a miss to sweep, not a stop. Agents lean toward stopping
+  early and rationalizing it, so bias toward continuing while findings are
+  genuinely worthwhile; the human's merge is the reliable convergence signal,
+  not your own sense that you are done.
 - **Keep the body current as review evolves the PR.** The body becomes the
   merge commit, so when review adds commits or shifts scope, update What, the
   commit map (flag which commits resolve review findings), and Verification
