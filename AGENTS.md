@@ -56,9 +56,17 @@ Use this checklist at the start of each work session:
    current scope covers, or explicitly re-defer — decided invariants
    shouldn't live only as devlog archaeology.
 7. Push, open the PR with the template, and remove sections that do not apply.
-8. Poll required checks until they finish; fix failures on the branch.
-9. Self-review the PR files view, then hand off — leave the PR open for a
-   human to review and merge.
+8. If an automated reviewer is active, start one review-watch for the
+   PR/reviewer before waiting on checks: use any available review-watch
+   skill, tool, or automation that can report back without manual polling,
+   anchor the baseline to the event that should produce the next reviewer pass,
+   and do not ask whether to watch when a permitted non-blocking mechanism
+   exists.
+9. Poll required checks until they finish; fix failures on the branch.
+10. Before handoff, let the review-watch finish: handle any in-scope reviewer
+    activity, or record the bounded timeout / no-review result with the baseline.
+11. Self-review the PR files view, then hand off — leave the PR open for a
+    human to review and merge.
 
 For changes on a **destructive path** (delete/cleanup), a
 **credential-leak surface**, or a **returned-object-trust boundary**, add a
@@ -345,9 +353,26 @@ the project has adopted a self-merge workflow. Once the PR is up:
 - **Self-review the diff** (above) so it's ready for a reviewer.
 - **Watch for new review activity between turns** — the finish line means
   open, green, threads handled, self-reviewed, _and no new review activity
-  outstanding_. Poll open PRs for _both_ new review comments and CI,
-  address findings on the branch, and only then declare done. This is
-  guidance, not mandated automation.
+  outstanding_. Where a reviewer is active, first use any dedicated
+  review-watch skill, tool, or automation your environment exposes that can
+  report back or re-enter without manual polling; otherwise follow this workflow
+  manually. If your platform can watch non-blockingly (a backgrounded poll or
+  scheduled wake-up) and policy permits that mechanism,
+  **starting one active watch per PR/reviewer is the default — don't pause to ask
+  whether to watch**. If a non-blocking mechanism would require permission that
+  is not already granted, use the next permitted path instead of selecting it.
+  Anchor that baseline to the trigger event that should produce the next reviewer pass,
+  not the moment the watch starts: use the PR open/ready event or actual push
+  event for open/push-triggered reviews, and use the request time for a no-push
+  recheck such as marking ready or manually requesting review. Reviewer activity
+  after that event is in-scope and must be handled, not absorbed into the
+  baseline as already-seen; start the watch as soon as the PR is open so the
+  checks wait can't defer it. On a new push, advance or replace that watch's
+  baseline rather than leaving duplicate watchers running. Poll open PRs for
+  _both_ new review comments and CI, address findings on the branch, and only
+  then declare done. Where non-blocking support is absent, use a bounded
+  foreground poll only when it fits the current turn; otherwise hand back with
+  the baseline and don't silently skip the review.
 - **Stop and summarize** — say the PR is open and green, and surface
   anything the reviewer should focus on. Leave merging, branch cleanup, and
   the `main` resync to whoever approves it.
