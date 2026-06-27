@@ -3,16 +3,19 @@ name: await-pr-review
 description: >-
   Wait for an automated PR reviewer (such as Codex) to post its review, then
   handle the feedback — without you having to tell the agent to check or poll.
-  Use this after you open or push to a pull request and want the agent to watch
-  for the bot's review and address it. It waits non-blockingly where the
-  platform supports it (a backgrounded poll or a scheduled wake-up that
-  re-invokes the agent when feedback lands), and only falls back to a bounded
-  foreground poll when it must. When feedback arrives it auto-addresses the
-  clear-cut findings and surfaces judgment calls for you, converging across the
-  re-reviews that its own fixes trigger but stopping once findings dwindle to
-  marginal nits. It reuses the project's review-response conventions and does
-  not replace human review. Not for when there is no automated reviewer, no open
-  PR, or you only want a human to review.
+  Use this after you open or push to a pull request that has an automated
+  reviewer — starting the watch is the default follow-on, not something to ask
+  whether to do; it watches for the bot's review and addresses it. It waits
+  non-blockingly where platform support and session policy permit it (a
+  delegated watcher/subagent that can notify or re-enter the main agent,
+  backgrounded poll, or scheduled wake-up that re-invokes the agent when
+  feedback lands), and only falls back to a bounded foreground poll when it must.
+  When feedback arrives it auto-addresses the clear-cut findings and surfaces
+  judgment calls for you, converging across the re-reviews that its own fixes
+  trigger but stopping once findings dwindle to marginal nits. It reuses the
+  project's review-response conventions and does not replace human review. Not
+  for when there is no automated reviewer, no open PR, or you only want a human
+  to review.
 ---
 
 # Await PR Review
@@ -24,14 +27,26 @@ orchestration**; the actual responses follow the project's existing review
 conventions (it references them, it does not restate a weaker version).
 
 The design goal is to **not block the main thread**: where the platform can
-re-enter the agent on its own (a backgrounded watcher or a scheduled wake-up),
-you keep working while it waits, and the agent comes back when the review lands.
-Blocking is a last resort, used only where nothing else is available.
+delegate a watcher that reliably notifies or re-enters the main agent, run a
+backgrounded watcher, or re-enter the agent on a schedule — and policy permits
+that mechanism — you keep working while it waits, and the agent comes back when
+the review lands. Blocking is a last resort, used only where nothing else is
+available.
+
+Because the non-blocking watch does not occupy the main thread while it waits,
+**starting it is the default after opening or pushing such a PR — don't stop to ask
+whether to watch.** Asking "should I watch for the review?" is exactly the manual
+polling this skill exists to remove; start the watch and keep working. Keep one
+active watch per PR/reviewer; after a new push, advance or replace that watch's
+baseline rather than leaving duplicate watchers running. (Where the platform or
+session policy can't watch non-blockingly, fall back per the ladder in step 3 —
+the gate is the available permitted mechanism, not whether to engage.)
 
 ## When to use it
 
 - Right after opening a PR, or after pushing fixes to one, when an automated
-  reviewer will post a review shortly and you want it handled without babysitting.
+  reviewer will post a review shortly — the default next step, handled without
+  babysitting, not one to ask whether to do.
 - Any time you would otherwise type "check the PR for comments" or "keep polling
   until the review shows up."
 
@@ -49,6 +64,23 @@ Blocking is a last resort, used only where nothing else is available.
 
 Find the PR for the current branch (`gh pr view --json number,url`). Record a
 **baseline** of what already exists so later you detect only _new_ activity.
+**Anchor that baseline to the event that will produce the pass you're waiting
+for, not the moment the watch starts.** For an open/push-triggered wait, capture
+the PR open/ready or actual push event timestamp at the event boundary (or read
+that event timestamp from the host). The reviewer often fires on PR open or push,
+so a pass can land after that event but _before_ you start the watcher; anchoring
+to watch-start would bank it as pre-existing and hand off unhandled. Do **not**
+use the head commit's authored/committed time as a proxy for the push: a locally
+created commit may predate already-handled reviews and only be pushed later.
+Treat reviewer activity after the captured open/push timestamp as new, and start
+the watch promptly — before waiting on anything else (e.g. CI) — so the window
+where a review can slip in unbaselined stays small. **But when you _manually
+re-trigger_ a recheck with no new push** (the request-it-once path in step 2),
+the last push predates reviews you've already handled, so last-push anchoring
+would replay them and exit the wait instantly. Anchor that case to the
+**trigger/request time** instead: snapshot the reviews that exist _at the moment
+you request_ as already-seen, and treat only the reviewer's pass dated after that
+request as the awaited one.
 Capture **two** things, because they are separate connections: top-level
 **reviews** (a bot can complete a review with a summary/approval and _no_ inline
 findings — that round shows up only here, not under threads) and the inline
@@ -129,6 +161,22 @@ trigger and none is pending, request it once — don't re-trigger on every poll.
 
 Use the strongest mechanism the platform offers, in this order:
 
+- **Delegated watcher / subagent (preferred where available and permitted).** If
+  the environment can spawn a subagent while the main thread continues, the
+  session policy permits delegation without asking, and the platform will
+  reliably notify or re-enter the main agent when the watcher finishes, delegate
+  a watcher-only task. Give it the repo, PR number, configured reviewer login,
+  expected head SHA, and baseline event time. It should poll until reviewer
+  activity appears on that head or the bounded wait expires, then report the
+  matching review's ID, state, `submittedAt`, and body; unresolved actionable
+  threads with thread/comment IDs and path/line; and checks status. If the
+  watcher cannot fetch the top-level review body, it must say so explicitly and
+  tell the main agent to refetch it before declaring the round clean. The watcher
+  must not edit files, commit, push, post trigger comments, reply to review
+  threads, or resolve threads. If delegation would require explicit permission
+  that is not already granted, or completion would require the main agent/user to
+  poll the subagent manually, skip this mechanism and fall through to the next
+  available watch path.
 - **Backgrounded poll (preferred, non-blocking).** Launch a background watcher
   that re-checks the PR on an interval and exits when new reviewer activity
   appears past the baseline; the harness then re-invokes the agent to handle it.
@@ -235,15 +283,24 @@ project has opted into self-merge.
 
 ## Platform support and fallbacks
 
-The non-blocking mechanisms above are **platform-specific** — backgrounded
-re-invocation and scheduled wake-ups are not universal. Gate on what the running
-agent actually supports and degrade in the order given; never emit steps the
-agent cannot perform. Concretely: an agent with background re-invocation or
-scheduled wake-ups (e.g. Claude Code) runs the **non-blocking** path; an agent
-whose turn is synchronous (e.g. a Codex CLI session) degrades to the **bounded
-foreground poll** — still hands-off within the turn, just blocking — or hands
-back. Everything else here (resolving the PR, detecting activity via `gh`,
-addressing, converging) is platform-neutral and behaves the same across agents.
+The non-blocking mechanisms above are **platform-specific** — subagents,
+backgrounded re-invocation, and scheduled wake-ups are not universal. Gate on
+what the running agent actually supports and what its session policy permits,
+then degrade in the order given; never emit steps the agent cannot perform or is
+not allowed to start without permission. A delegated watcher counts as
+non-blocking only when its completion reliably notifies or re-enters the main
+agent; merely spawning a subagent is not enough if the main agent or user must
+poll that subagent to learn it finished. If subagents exist but delegation
+requires explicit permission, or completion does not wake the main agent, skip
+that path and use backgrounded polling, scheduled wake-up, bounded foreground
+polling, or hand-back instead. An agent with background re-invocation or
+scheduled wake-ups (e.g. Claude Code) runs the **non-blocking** path for that
+environment; an agent whose turn is synchronous and lacks a reliable
+subagent/background re-entry path (e.g. a plain Codex CLI session) degrades to
+the **bounded foreground poll** — still hands-off within the turn, just blocking
+— or hands back. Everything else here (resolving the PR, detecting activity via
+`gh`, addressing, converging) is platform-neutral and behaves the same across
+agents.
 
 This skill assumes a reviewer bot, a PR host CLI (such as `gh`), and a shell;
 where any is missing, hand control back to the user rather than pretending to
