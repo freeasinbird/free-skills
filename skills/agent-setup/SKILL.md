@@ -40,6 +40,8 @@ interactively during init and left untouched during updates.
 6. Audit standard project files — see "Standard project files" below.
    Report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
+   Also check for an automated-reviewer record — see "Automated reviewer
+   record" below.
 7. Check the repo settings the conventions depend on and offer to align
    them — see "Repo settings" below. Report any that can't be checked or
    set (wrong permissions, non-GitHub forge).
@@ -50,17 +52,23 @@ interactively during init and left untouched during updates.
 
 1. Read `references/canonical-sections.md` for current canonical text.
 2. Read the project's AGENTS.md.
-3. For each `<!-- agents-md:managed:KEY -->` block:
+3. **Before refreshing any managed block, protect the reviewer record.** If an
+   automated-reviewer record appears inside an `agents-md:managed:*` block, stop
+   and offer to move that record verbatim to an unmanaged, project-specific
+   section before applying the managed-block refresh — see "Automated reviewer
+   record". Do not silently drop or rewrite it; if the user declines relocation,
+   skip refreshing that managed block and report the conflict.
+4. For each `<!-- agents-md:managed:KEY -->` block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY.
    - If different, show the diff and ask whether to update.
-4. Leave all unmarked (project-specific) content untouched.
-5. If a canonical section is missing entirely, offer to insert it at its
+5. Leave all unmarked (project-specific) content untouched.
+6. If a canonical section is missing entirely, offer to insert it at its
    conventional position.
-6. The `done` section has a nested `<!-- agents-md:project:done-checks -->`
+7. The `done` section has a nested `<!-- agents-md:project:done-checks -->`
    block — never overwrite that block during update; only compare the
    principle text outside it.
-7. Check scaffolding files (devlog/README.md, CLAUDE.md, CONTRIBUTING.md,
+8. Check scaffolding files (devlog/README.md, CLAUDE.md, CONTRIBUTING.md,
    PR template): offer to create any that are missing, and for any that
    already exist, compare against the current templates in
    `references/scaffolding.md`. If one has drifted — especially
@@ -71,9 +79,12 @@ interactively during init and left untouched during updates.
    repo's protocol docs from contradicting the freshly-synced managed blocks
    (e.g. a stale "entries are never edited" devlog README against the
    fold-fix rule that has the author revise the matching entry).
-8. Audit standard project files (see below) and flag any newly missing.
-9. Check the repo settings the conventions depend on (see "Repo settings")
-   and offer to align any that have drifted.
+9. Audit standard project files (see below) and flag any newly missing;
+   also check that an automated-reviewer record is present (its location guard
+   already ran in step 3) — see "Automated reviewer
+   record".
+10. Check the repo settings the conventions depend on (see "Repo settings")
+    and offer to align any that have drifted.
 
 ## Conventional section order
 
@@ -247,6 +258,24 @@ gh api -X PATCH repos/{owner}/{repo} \
 If the agent lacks permission or the forge isn't GitHub, report the
 desired state and point the user at the setting (on GitHub: Settings →
 General → Pull Requests).
+
+## Automated reviewer record
+
+The managed `pull-requests` section tells agents to record a noticed
+automated reviewer so a review-watch can resolve who to wait on without
+re-detecting (the "record a noticed automated reviewer" convention).
+During init and update, check whether the project carries such a record:
+typically an "Automated reviewer" line in a project-specific (unmanaged)
+AGENTS.md section naming the reviewer, its login/account identity (and the
+API-specific form when it differs), and its trigger.
+
+Treat this as **detect → report, never fabricate**. A reviewer is usually
+configured after agent-setup first runs, so absence is expected and fine; do not
+infer or invent one. If none is recorded, note that one should be added once a
+reviewer is configured. If a record exists inside an `agents-md:managed:*` block,
+flag it before any managed-block refresh and offer to relocate it verbatim to an
+unmanaged, project-specific section. The record is durable project state; a
+managed-block sync must not delete it silently.
 
 ## Additional Resources
 

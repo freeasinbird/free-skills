@@ -194,6 +194,20 @@ arc.
   when available: a same-model subagent is only _partially_ independent (shared
   architectural blind spots) and costs tokens — scale to risk, skip trivial or
   mechanical work.
+- **Record a noticed automated reviewer.** When you observe this repo has an
+  automated PR reviewer — a bot-authored review on a recent PR — and the project
+  hasn't recorded it, add a one-line note to an unmanaged, project-specific
+  section of AGENTS.md with enough identity to match its future reviews: the
+  reviewer's **name**, its **login/account identity** (including the API-specific
+  form when it differs — some hosts suffix bot logins, e.g. a `[bot]` suffix in
+  one API but not another), and how it is **triggered** (automatic on PR events,
+  a manual command, or a CI job). Keep the actual reviewer record outside
+  `agents-md:managed:*` blocks so agent-setup updates do not overwrite it. Later
+  sessions filter review activity by that login and presence alone can't
+  disambiguate two bots, so the identity — not a bare "a reviewer exists" — is
+  the point. Record only a reviewer you actually observed, never its absence: a
+  stale record naming a removed reviewer costs at most a wasted wait, while a
+  recorded "none" would silently skip a reviewer added later.
 - **Responding to automated review.** Bot reviewers (inline P1/P2
   comments) draw a lot of feedback; evaluate each comment on its merits.
   Fix real findings; push back — _with a one-line reason_ — on contrived,
@@ -350,6 +364,7 @@ Before calling work done:
 - Lint/format clean
 - Affected surfaces verified in the running application
 - Schema/data-model changes round-trip through the serialization boundary
+
 <!-- /agents-md:project:done-checks -->
 
 <!-- /agents-md:managed:done -->
