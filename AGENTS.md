@@ -173,6 +173,12 @@ description) that an agent loads to execute the skill. Additional files
   markers (Architecture invariants, Conventions, Build) are free-skills-only —
   edit those here alone.
 
+- **Automated reviewer: Codex** — login `chatgpt-codex-connector` (REST API form
+  `chatgpt-codex-connector[bot]`); trigger: automatic on PR events (open / mark
+  ready), or manual `@codex review`. The `await-pr-review` skill shipped in this
+  repo uses this project-specific record when resolving which reviewer to wait
+  for; update it if the reviewer or its trigger changes.
+
 <!-- TODO: Fill in more as patterns emerge — prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->
 
