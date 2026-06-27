@@ -38,6 +38,8 @@ Blocking is a last resort, used only where nothing else is available.
 ## When NOT to use it
 
 - No automated reviewer is configured on the repo — there is nothing to wait for.
+  Step 2 says how to tell: a recorded reviewer identity, a bot-authored review on
+  recent PRs, or the user naming one.
 - No open PR yet (open it first), or the change is on a branch with no PR.
 - You only want a human review — this watches the bot pass, not a person.
 
@@ -73,16 +75,55 @@ thread set only when you actually need it (e.g. to resolve threads), and then
 page with `pageInfo{hasNextPage endCursor}` / `after:` since `first:50` is one
 page.
 
-### 2. Ensure the review is requested
+### 2. Identify the reviewer, then ensure it's requested
 
-First know **which reviewer** you are waiting on — its bot account (the
-`author.login` you match in step 3) and how it is invoked. Any reviewer that
-posts through GitHub's review mechanism works here (Codex, a Claude review
-action, CodeRabbit, and the like); only the bot login and the trigger change.
-Reviewers differ on triggering: most run automatically on open and on each push;
-some need a command comment (Codex uses `@codex review`; others use their own);
-some run as a CI/Action job on PR events. If yours needs a trigger and none is
-pending, request it once — don't re-trigger on every poll.
+You need enough **identity to match the reviewer's future reviews** — its account
+login (the `author.login` you filter on in step 3), not merely "some bot will
+review." Establish it in this order; the **recorded identity is the primary
+source, detection only a fallback**:
+
+- **Recorded identity (primary).** If the project records its automated reviewer
+  (per the "record a noticed reviewer" convention — typically an "Automated
+  reviewer" line in AGENTS.md), use it: the reviewer's name, login (mind the
+  API-form caveat in step 3), and trigger. Treat it as a strong hint, not gospel
+  — if repeated waits turn up nothing the note may be stale (reviewer removed),
+  so fall through to detection.
+- **Detection (fallback).** Otherwise scan recent PRs for a bot-authored review
+  (`gh pr list --state all --limit 20 --json number`, then each PR's reviews) — a
+  `Bot`/`App` author that submitted a _review_ is the reviewer (CI bots post
+  checks/statuses, not reviews). This yields both the gate (a reviewer exists)
+  and the login to match. **If the scan finds more than one distinct bot
+  reviewer** (e.g. Codex _and_ CodeRabbit), don't auto-pick — "is a bot" can't
+  disambiguate them, and step 3's login filter would reject the others as a
+  "different bot" and stall; ask the user which to wait on (or require a record).
+  Detection reveals the **login but not necessarily the trigger** — past reviews
+  show who reviewed, not what starts a fresh one. Before treating the reviewer as
+  ready to wait on, derive the trigger from project notes, reviewer docs, prior PR
+  command comments, or host configuration; if you cannot tell it runs
+  automatically, ask for the trigger instead of burning the capped poll.
+- **Human-asserted — only if it identifies.** The user telling you a reviewer
+  exists counts **only when it names the reviewer enough to match its reviews** (a
+  login, or a name you can resolve to one) — step 3 still filters by
+  `author.login`, so a bare "there is a reviewer" can't be matched. If the
+  assertion lacks identity, ask for the login (and trigger) before engaging.
+- **None of these → don't engage.** No record, no bot review in history, and no
+  identifying assertion means there is nothing to match on; hand back (see When
+  NOT to use).
+
+**When you confirm a reviewer the project hasn't recorded, write the record**
+outside managed blocks in a project-specific AGENTS.md section (per the
+convention) so later sessions needn't re-detect: the reviewer's name, its
+login/account identity (including the API-specific form when it differs), and how
+it's triggered. Record only a reviewer you observed, never its absence — a stale
+record naming a removed reviewer costs at most a capped wait, while a recorded
+"none" would silently skip a reviewer added later.
+
+Any reviewer that posts through GitHub's review mechanism works here (Codex, a
+Claude review action, CodeRabbit, and the like); only the bot login and the
+trigger change. Reviewers differ on triggering: most run automatically on open
+and on each push; some need a command comment (Codex uses `@codex review`; others
+use their own); some run as a CI/Action job on PR events. If yours needs a
+trigger and none is pending, request it once — don't re-trigger on every poll.
 
 ### 3. Wait for new review activity — non-blocking where supported
 
