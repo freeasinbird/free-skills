@@ -110,9 +110,13 @@ the baseline: a **submitted review**, a **new review thread**, or a **new
 review-comment on an existing thread** (a reply leaves no new thread and no new
 submitted review, so this third case is easy to miss — it is why step 1 reads
 `comments(last:1)`). All three must be **authored by the configured reviewer** —
-match `author.login`
-against the target bot. A human review, or a _different_ bot, posting after the
-baseline is **not** the awaited pass: this skill is scoped to the automated
+match `author.login` against the target bot. **Mind the login form: GitHub
+returns a bot as `name` in GraphQL but `name[bot]` in REST** (e.g.
+`chatgpt-codex-connector` via the GraphQL `reviewThreads` vs
+`chatgpt-codex-connector[bot]` via `gh api repos/.../pulls/N/reviews`) — match
+the right form per API, or the filter silently matches nothing and a real review
+looks like "no activity." A human review, or a _different_ bot, posting after
+the baseline is **not** the awaited pass: this skill is scoped to the automated
 reviewer, so unrelated activity must not finish the round (else you stop early
 or auto-address the wrong feedback while the target reviewer is still pending).
 Do **not** treat an **acknowledgement** as completion either — some reviewers
