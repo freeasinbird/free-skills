@@ -168,8 +168,32 @@ arc.
     code and scoped to the surface they describe (a compiled CLI and a
     wrapper script differ), stated without marketing or competitor
     put-downs.
-- **Self-review the diff in the PR files view before handing off** — it
-  catches stray hunks and leftovers the editor view didn't.
+- **Self-review the diff in the PR files view before handing off** — seeing
+  the whole change as one artifact catches stray hunks, leftover debug code,
+  scope creep, and accidental files the editor hid. This is a
+  _mechanical-hygiene_ pass: it works because the representation changes, not
+  because same-context review judges design well — it does **not** substitute
+  for substantive critique.
+- **Substantive critique needs fresh, ideally non-self eyes.** Same-context
+  self-review shares the blind spots that produced the code, and models lean
+  toward agreeing with their own output — so it is weak for correctness,
+  design, and missed edge cases. Independence ladder, weakest to strongest:
+  self-in-context < same-model fresh-context subagent < different-vendor bot /
+  human. An automatic bot reviewer or a human is the load-bearing substantive
+  pass; the default finish line already stops at an open PR for one.
+- **Optional, risk-gated: a fresh-context pre-push review.** For non-trivial
+  changes — or any repo without an external bot reviewer — get a _fresh_ set of
+  eyes before pushing, to converge before the external bot. **Where your
+  platform and tools support delegation** (and it is allowed without asking),
+  spawn a fresh-context reviewer: prompt it to _refute_, give it only the diff
+  plus the PR's stated intent (not your reasoning trail), and let it hunt
+  correctness, security, and edge-case failures. **Where they don't** — an
+  agent with no subagent concept, or a session where delegation needs explicit
+  permission — skip it and lean on the external bot / human review, or ask the
+  user first; never emit steps the running agent can't perform. Caveats even
+  when available: a same-model subagent is only _partially_ independent (shared
+  architectural blind spots) and costs tokens — scale to risk, skip trivial or
+  mechanical work.
 - **Responding to automated review.** Bot reviewers (inline P1/P2
   comments) draw a lot of feedback; evaluate each comment on its merits.
   Fix real findings; push back — _with a one-line reason_ — on contrived,
