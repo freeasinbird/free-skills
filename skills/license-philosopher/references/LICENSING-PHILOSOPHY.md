@@ -12,6 +12,6 @@ We match the license to the type of work.
 
 **Knowledge artifacts** (prompts, agent skills, patterns, documentation) are licensed under **CC BY-SA 4.0**. As pure knowledge, they should remain free permanently — and anyone who builds on them should extend the same freedom. Attribution keeps the chain of origin visible.
 
-**Libraries** are licensed under **LGPL-3.0**. The source code — the knowledge — stays free. You can build whatever you want with it, but modifications to the library itself return to the commons.
+**Libraries** are licensed under **LGPL-3.0**. The source code — the knowledge — stays free. You can build whatever you want with it, but modifications to the library itself return to the commons. Our rule is to use the strongest weak-copyleft license the target ecosystem can actually honor — **LGPL-3.0** where it can be honored cleanly, and **MPL-2.0** where static linking or bundling would make LGPL unworkable. An unenforceable license protects nothing, so we choose the tightest copyleft that holds.
 
 **Standalone applications and tools** are licensed under **GPL-3.0** or **AGPL-3.0**, depending on how the software reaches its users. Tools that run locally use GPL-3.0 — modifications must be shared when the modified software is distributed. Tools deployed as network services use AGPL-3.0 — because serving software over a network doesn't change the nature of the knowledge it contains. In both cases, modifications to source code are new knowledge, and knowledge belongs to everyone.
