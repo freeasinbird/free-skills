@@ -1,8 +1,8 @@
 ---
 name: license-philosopher
-description:
+description: >-
   Apply the Free as in Bird licensing philosophy to a repository — selecting
-  and adding the appropriate copyleft license (CC BY-SA 4.0, LGPL-3.0,
+  and adding the appropriate copyleft license (CC BY-SA 4.0, LGPL-3.0, MPL-2.0,
   GPL-3.0, or AGPL-3.0) based on the type of work. Use this skill when the
   user asks to "add a license", "set up licensing", "apply the licensing
   philosophy", "add LICENSING-PHILOSOPHY.md", "choose a license for this
@@ -27,12 +27,21 @@ free, and what you build with it is yours. This skill adds three things:
 Analyze the repository to understand what type of work it is. The
 license follows from the project type:
 
-| Project type                 | License      | SPDX identifier | Signals                                                                                         |
-| ---------------------------- | ------------ | --------------- | ----------------------------------------------------------------------------------------------- |
-| Knowledge artifacts          | CC BY-SA 4.0 | `cc-by-sa-4.0`  | Mostly markdown, prompts, documentation, patterns, agent skills, templates, educational content |
-| Libraries                    | LGPL-3.0     | `lgpl-3.0`      | Package manifest with exports, designed to be imported as a dependency, public API surface      |
-| Local applications and tools | GPL-3.0      | `gpl-3.0`       | CLI entry point, desktop app, local tool — users download and run it on their machine           |
-| Network services             | AGPL-3.0     | `agpl-3.0`      | Server entry point, HTTP routes, WebSocket handlers, deployed and accessed over a network       |
+| Project type                 | License      | SPDX identifier | Signals                                                                                                             |
+| ---------------------------- | ------------ | --------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Knowledge artifacts          | CC BY-SA 4.0 | `cc-by-sa-4.0`  | Mostly markdown, prompts, documentation, patterns, agent skills, templates, educational content                     |
+| Libraries (dynamic-link)     | LGPL-3.0     | `lgpl-3.0`      | Imported as a dependency in a dynamic-link or import-based ecosystem (Python, JVM, C/C++); relinking is satisfiable |
+| Libraries (static-link)      | MPL-2.0      | `mpl-2.0`       | Imported as a dependency where static linking or bundling is the norm (Rust, Go, bundled JavaScript, mobile SDKs)   |
+| Local applications and tools | GPL-3.0      | `gpl-3.0`       | CLI entry point, desktop app, local tool — users download and run it on their machine                               |
+| Network services             | AGPL-3.0     | `agpl-3.0`      | Server entry point, HTTP routes, WebSocket handlers, deployed and accessed over a network                           |
+
+For libraries, the rule is to use the strongest weak-copyleft license the
+target ecosystem can actually honor. LGPL-3.0 is the default — but its
+relinking obligation is unworkable where static linking or bundling is the
+norm (Rust, Go, bundled JavaScript, mobile SDKs), and an unenforceable
+copyleft protects nothing. There, MPL-2.0 is the strongest weak copyleft that
+actually functions. Default to LGPL-3.0; override to MPL-2.0 only for those
+static-link / bundled ecosystems.
 
 When classifying, look at:
 
@@ -61,7 +70,7 @@ Analyze the repository and present your recommendation:
 - If an existing license was found, mention it and how your suggestion
   compares
 
-Then present all four options and ask the user which they'd like to use.
+Then present all five options and ask the user which they'd like to use.
 Frame your analysis as a suggestion — the user may have context you don't
 (e.g., a library that will soon become a standalone tool, or a CLI that's
 really a network service wrapper). Accept their choice without pushback.
@@ -70,10 +79,10 @@ If an existing license file will be replaced, confirm that's acceptable
 before proceeding.
 
 **Short-circuit rule**: If the repo already has a license that isn't one of
-the four supported by this philosophy, and the user doesn't want to change
+the five supported by this philosophy, and the user doesn't want to change
 it, stop here — the philosophy file would be incoherent with the actual
 license. Let the user know why and end gracefully. If the existing license
-_is_ one of the four and the user wants to keep it, skip the LICENSE write
+_is_ one of the five and the user wants to keep it, skip the LICENSE write
 step but continue with the philosophy file and README section.
 
 ### 3. Write the LICENSE file
@@ -86,8 +95,8 @@ Fetch the license text using this priority order:
    gh api /licenses/<spdx-id> --jq .body
    ```
 
-   where `<spdx-id>` is one of: `cc-by-sa-4.0`, `lgpl-3.0`, `gpl-3.0`,
-   `agpl-3.0`
+   where `<spdx-id>` is one of: `cc-by-sa-4.0`, `lgpl-3.0`, `mpl-2.0`,
+   `gpl-3.0`, `agpl-3.0`
 
 2. **Bundled fallback**: Read from `references/licenses/<spdx-id>.txt`
    in this skill's directory
@@ -104,6 +113,15 @@ itself is the canonical license text and should not be modified.
 **LGPL-3.0 note**: The LGPL-3.0 is a set of additional permissions on top
 of GPL-3.0. A project using LGPL-3.0 needs both texts. Write the GPL-3.0
 text as `LICENSE` and the LGPL-3.0 additional terms as `LICENSE.LESSER`.
+
+**MPL-2.0 note**: MPL-2.0 is self-contained file-level copyleft — its text
+stands alone, so write it as a single `LICENSE` with no companion file
+(unlike LGPL-3.0 above). MPL also carries a per-file source-code notice
+(Exhibit A, "This Source Code Form is subject to the terms of the Mozilla
+Public License, v. 2.0…"). Because the copyleft attaches per file, point the
+user to add that notice to their covered source files — the same
+manual-notice step as the copyright notice above, not an edit to the
+canonical `LICENSE` text.
 
 ### 4. Add LICENSING-PHILOSOPHY.md
 
@@ -137,6 +155,7 @@ this license.
 Where `LICENSE_NAME` and `LICENSE_PATH` are:
 
 - `CC BY-SA 4.0` → `./LICENSE`
+- `MPL-2.0` → `./LICENSE`
 - `GPL-3.0-or-later` → `./LICENSE`
 - `AGPL-3.0-or-later` → `./LICENSE`
 
