@@ -1,8 +1,10 @@
 # Scaffolding Files
 
 Content for project files created during agent setup. Copy each section's
-content verbatim into the target file. Skip creation if the target file
-already exists.
+content verbatim into the target file. If the target file already exists,
+don't recreate it: drift handling (compare against the template, show the
+diff, offer to refresh) is defined in SKILL.md init step 5 and update
+step 8.
 
 ---
 

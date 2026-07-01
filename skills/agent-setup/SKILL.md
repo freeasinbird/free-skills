@@ -1,10 +1,13 @@
 ---
 name: agent-setup
-description:
-  This skill should be used when the user asks to "set up this project for
-  agents", "initialize AGENTS.md", "create AGENTS.md", "update AGENTS.md", "sync
-  workflow sections", "check agent setup", "bootstrap devlog", "make this project
-  agent-ready", or discusses managing shared development conventions across projects.
+description: >-
+  Make a project agent-ready: create or update AGENTS.md with managed canonical
+  workflow sections, scaffold the devlog, CLAUDE.md pointer, CONTRIBUTING.md,
+  and PR template, and audit standard files and repo settings. Use when the
+  user asks to "set up this project for agents", "initialize AGENTS.md",
+  "create AGENTS.md", "update AGENTS.md", "sync workflow sections", "check
+  agent setup", "bootstrap devlog", "make this project agent-ready", or
+  discusses managing shared development conventions across projects.
 ---
 
 # Agent Setup
@@ -20,23 +23,45 @@ interactively during init and left untouched during updates.
 
 - No AGENTS.md in the project root → **Init mode**
 - AGENTS.md exists with `<!-- agents-md:managed:` markers → **Update mode**
-- AGENTS.md exists without markers → ask whether to adopt management
-  (insert markers around matching sections) or leave unmanaged
+- AGENTS.md exists with no exact markers but with marker lookalikes,
+  managed or nested `project:done-checks` (update-mode step 3's
+  malformation rule: comment lines that resemble either marker in
+  spacing, case, or indentation) → stop and report them; don't offer
+  adoption. Wrapping sections around malformed remnants
+  leaves a partially adopted file that only fails later, so the user
+  should fix or remove the lookalikes first.
+- AGENTS.md exists without markers → ask whether to adopt management or
+  leave unmanaged. To adopt: match sections to canonical keys by heading,
+  wrap each match's existing text as-is in markers, then immediately run
+  the update-mode comparison so the user sees any divergence as a diff.
+  One exception to as-is: when wrapping a matched `done` section, also
+  wrap its existing project checks in the nested
+  `<!-- agents-md:project:done-checks -->` markers (text unchanged);
+  update-mode validation requires the nested pair inside a managed
+  `done` block, so a bare wrap would dead-end the adoption.
 
 ## Init mode
 
 1. Read the project to understand language, build system, test framework,
    and directory structure.
 2. Read `references/canonical-sections.md` for exact managed-section text.
-3. Write AGENTS.md following the conventional section order (see below),
-   with each canonical section wrapped in its markers.
-4. Guide the user through project-specific sections interactively — see
-   "Project-specific section guidance" below.
-5. Create scaffolding files (skip any that already exist):
+3. Gather the project-specific sections interactively — see
+   "Project-specific section guidance" below. The conventional order
+   interleaves them with the managed sections, so collect this content
+   (or decide on placeholders) before writing.
+4. Write AGENTS.md once, following the conventional section order (see
+   below): each canonical section wrapped in its markers, project-specific
+   content or placeholders in place.
+5. Create scaffolding files:
    - `devlog/README.md` — content in `references/scaffolding.md` §devlog-readme
    - `.github/pull_request_template.md` — content in `references/scaffolding.md` §pr-template
    - `CONTRIBUTING.md` — content in `references/scaffolding.md` §contributing
    - `CLAUDE.md` — content in `references/scaffolding.md` §claude-md
+
+   For any that already exist, don't recreate them: compare against the
+   template and, on drift, show the diff and offer to refresh — the same
+   rule as update-mode step 8; never overwrite silently.
+
 6. Audit standard project files — see "Standard project files" below.
    Report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
@@ -52,37 +77,42 @@ interactively during init and left untouched during updates.
 
 1. Read `references/canonical-sections.md` for current canonical text.
 2. Read the project's AGENTS.md.
-3. **Before refreshing any managed block, protect the reviewer record.** If an
-   automated-reviewer record appears inside an `agents-md:managed:*` block, stop
-   and offer to move that record verbatim to an unmanaged, project-specific
-   section before applying the managed-block refresh — see "Automated reviewer
-   record". Do not silently drop or rewrite it; if the user declines relocation,
-   skip refreshing that managed block and report the conflict.
-4. For each `<!-- agents-md:managed:KEY -->` block:
+3. Validate the markers before touching anything: every opening
+   `<!-- agents-md:managed:KEY -->` has a matching close after it, no KEY
+   appears twice, every KEY is a known one, any line that merely
+   resembles a managed marker or the nested `project:done-checks` marker
+   (indentation, case, or spacing variants, a mistyped key) is treated
+   as a malformation, and, when a managed `done` block is present, the
+   nested `<!-- agents-md:project:done-checks -->` block sits inside it,
+   once, exact. (Nested markers with no managed `done` block are the
+   documented opt-out, not a malformation; see "Managed section
+   markers".) On any malformation, stop and report it; never refresh
+   (a broken boundary would pull project-specific text into the managed
+   region, and the refresh would delete it).
+4. Protect the reviewer record before refreshing: if an automated-reviewer
+   record appears inside a managed block, resolve its location first — see
+   "Automated reviewer record".
+5. For each managed block:
    - Extract the content between markers.
-   - Compare against the canonical version for that KEY.
+   - Compare against the canonical version for that KEY. For `done`,
+     exclude the nested `project:done-checks` block from both sides
+     (matching its exact marker lines only, per step 3) and compare only
+     the text around it; never modify the nested block.
    - If different, show the diff and ask whether to update.
-5. Leave all unmarked (project-specific) content untouched.
-6. If a canonical section is missing entirely, offer to insert it at its
+6. Leave all unmarked (project-specific) content untouched.
+7. If a canonical section is missing entirely, offer to insert it at its
    conventional position.
-7. The `done` section has a nested `<!-- agents-md:project:done-checks -->`
-   block — never overwrite that block during update; only compare the
-   principle text outside it.
 8. Check scaffolding files (devlog/README.md, CLAUDE.md, CONTRIBUTING.md,
-   PR template): offer to create any that are missing, and for any that
-   already exist, compare against the current templates in
-   `references/scaffolding.md`. If one has drifted — especially
-   `devlog/README.md`, whose protocol the managed `devlog` and `commits`
-   blocks rely on — show the diff and offer to refresh it. These files carry
-   no management markers and may hold local customizations, so never
-   overwrite silently; let the user decide per file. This keeps an updated
-   repo's protocol docs from contradicting the freshly-synced managed blocks
-   (e.g. a stale "entries are never edited" devlog README against the
-   fold-fix rule that has the author revise the matching entry).
+   PR template): offer to create any that are missing; for any that exist,
+   compare against the templates in `references/scaffolding.md` and, on
+   drift, show the diff and offer to refresh. These files carry no markers
+   and may hold local customizations, so never overwrite silently; let the
+   user decide per file. (Watch `devlog/README.md` especially: the managed
+   `devlog` and `commits` blocks rely on its protocol, and a stale copy
+   contradicts freshly-synced blocks.)
 9. Audit standard project files (see below) and flag any newly missing;
-   also check that an automated-reviewer record is present (its location guard
-   already ran in step 3) — see "Automated reviewer
-   record".
+   also check that an automated-reviewer record is present — see
+   "Automated reviewer record".
 10. Check the repo settings the conventions depend on (see "Repo settings")
     and offer to align any that have drifted.
 
@@ -118,6 +148,8 @@ Keys: `devlog`, `finish-line`, `branches`, `pull-requests`, `commits`, `done`.
 
 To opt a section out of management, remove its markers. The update mode
 will note it as missing and offer to re-add, but will not force it.
+Opting out `done` this way leaves the nested `project:done-checks`
+markers behind as plain project content; that is expected and fine.
 
 ## Project-specific section guidance
 
@@ -130,7 +162,10 @@ move on. The user can re-run in update mode once the project has shape.
 ### Header/intro
 
 Write a one-paragraph intro: project name, pointer to the spec document
-(usually README.md), and a sentence on what AGENTS.md covers.
+(usually README.md), and a sentence on what AGENTS.md covers. Also write
+the canonical file rule into AGENTS.md (intro or CI subsection):
+"CLAUDE.md is a pointer that imports AGENTS.md — edit AGENTS.md, never
+the pointer."
 
 ### Build, test, run
 
@@ -148,8 +183,6 @@ Write a one-paragraph intro: project name, pointer to the spec document
   `eslint` for JS/TS, `black` + `ruff` for Python, `rustfmt` +
   `clippy` for Rust). The goal is a single command that can lint and a
   single command that can format, both runnable in CI.
-- Note the canonical file rule: "CLAUDE.md is a pointer that imports
-  AGENTS.md — edit AGENTS.md, never the pointer."
 
 ### Architecture invariants (optional)
 
@@ -219,17 +252,13 @@ flagging; everything else is project-specific.
 
 ## Repo settings
 
-Several canonical conventions assume specific repository settings. The
-`branches` and `pull-requests` sections state that merged branches
-auto-delete and that a real merge commit is the only merge method —
-those sentences read as false if the settings are off. agent-setup
-doesn't own repo configuration, but it should check these and offer to
-align them.
-
-Treat this as **detect → report → offer to enable**, never a silent
-mutation. Changing repo settings needs admin rights the agent may not
-have, so confirm before applying and otherwise fall back to telling the
-user the desired state and where to set it.
+Several canonical conventions assume repository settings: `branches` and
+`pull-requests` state that merged branches auto-delete and that a real
+merge commit is the only merge method, which read as false if the
+settings are off. Treat this as **detect → report → offer to enable**,
+never a silent mutation. Changing repo settings needs admin rights the
+agent may not have, so confirm before applying; otherwise tell the user
+the desired state and where to set it.
 
 Settings the conventions depend on:
 
@@ -272,10 +301,17 @@ API-specific form when it differs), and its trigger.
 Treat this as **detect → report, never fabricate**. A reviewer is usually
 configured after agent-setup first runs, so absence is expected and fine; do not
 infer or invent one. If none is recorded, note that one should be added once a
-reviewer is configured. If a record exists inside an `agents-md:managed:*` block,
-flag it before any managed-block refresh and offer to relocate it verbatim to an
-unmanaged, project-specific section. The record is durable project state; a
-managed-block sync must not delete it silently.
+reviewer is configured.
+
+The record is durable project state; a managed-block sync must not delete or
+rewrite it silently. If a record sits inside an `agents-md:managed:*` block,
+flag it before any managed-block refresh and offer, in order:
+
+1. Relocate the record verbatim to an unmanaged, project-specific section,
+   then refresh the block.
+2. If relocation is declined: refresh the block and re-insert the record
+   verbatim at its prior position, flagged for later relocation.
+3. If both are declined: skip refreshing that block and report the conflict.
 
 ## Additional Resources
 
@@ -283,5 +319,5 @@ managed-block sync must not delete it silently.
 
 - **`references/canonical-sections.md`** — exact text of all managed
   sections, ready to paste
-- **`references/scaffolding.md`** — content for devlog/README.md and
-  PR template
+- **`references/scaffolding.md`** — content for all scaffolded files
+  (devlog README, PR template, CONTRIBUTING.md, CLAUDE.md pointer)
