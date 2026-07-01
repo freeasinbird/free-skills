@@ -30,13 +30,14 @@ For manual setup or linking every skill from a clone, see
 
 <!-- Listed alphabetically by skill name. Insert new skills in order. -->
 
-| Skill                                              | Description                                                                                                                                                                           |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [agent-setup](skills/agent-setup/)                 | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding                                         |
-| [await-pr-review](skills/await-pr-review/)         | Wait (non-blocking where supported) for an automated PR reviewer such as Codex, then auto-address clear-cut findings and surface judgment calls, converging without nitpicking        |
-| [license-philosopher](skills/license-philosopher/) | Apply the Free as in Bird licensing philosophy — suggests and adds the appropriate copyleft license (CC BY-SA 4.0, LGPL-3.0, MPL-2.0, GPL-3.0, or AGPL-3.0) based on the project type |
-| [self-merge](skills/self-merge/)                   | Opt-in override of the safe default — lets an agent merge its own PR and clean up, with guardrails, only when the user or project policy explicitly allows it                         |
-| [visual-evidence](skills/visual-evidence/)         | Capture tight, deterministic before/after screenshots of a UI change for PR reviewers, then hand off to the gh-imgup skill to upload and attach them                                  |
+| Skill                                              | Description                                                                                                                                                                                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [agent-setup](skills/agent-setup/)                 | Set up a project for agent-driven development — generates AGENTS.md with managed workflow sections, devlog, PR template, and repo scaffolding                                                                                                  |
+| [await-pr-review](skills/await-pr-review/)         | Wait (non-blocking where supported) for an automated PR reviewer such as Codex, then auto-address clear-cut findings and surface judgment calls, converging without nitpicking                                                                 |
+| [license-philosopher](skills/license-philosopher/) | Apply the Free as in Bird licensing philosophy — suggests and adds the appropriate copyleft license (CC BY-SA 4.0, LGPL-3.0, MPL-2.0, GPL-3.0, or AGPL-3.0) based on the project type                                                          |
+| [prompt-crafter](skills/prompt-crafter/)           | Write, edit, and review reusable agent prompt payloads (CLAUDE.md / AGENTS.md content, pasteable chat instructions) for Claude and ChatGPT/Codex — taxonomy-driven audits, cross-tool variant alignment, and a mechanical verification battery |
+| [self-merge](skills/self-merge/)                   | Opt-in override of the safe default — lets an agent merge its own PR and clean up, with guardrails, only when the user or project policy explicitly allows it                                                                                  |
+| [visual-evidence](skills/visual-evidence/)         | Capture tight, deterministic before/after screenshots of a UI change for PR reviewers, then hand off to the gh-imgup skill to upload and attach them                                                                                           |
 
 ## Installation
 
