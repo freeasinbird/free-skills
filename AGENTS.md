@@ -454,6 +454,8 @@ Before calling work done:
   frontmatter (`description` as a `>-` block scalar; see Conventions)
 - Skill prompts reviewed for platform-agnostic language (no
   Claude-Code-only or Codex-only assumptions without explicit gates)
+- Managed blocks in sync with the canonical source
+  (`./scripts/check-managed-sync.sh`)
 
 <!-- /agents-md:project:done-checks -->
 
