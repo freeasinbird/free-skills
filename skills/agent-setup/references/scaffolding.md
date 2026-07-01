@@ -51,7 +51,7 @@ entries are the trail of how it got that way.
 - Promote anything load-bearing into README.md or AGENTS.md — the devlog
   is archaeology (grep it when re-litigating), never standing context. An
   item needing a maintainer action you can't take (repo settings,
-  release-engineering, publishing) gets a GitHub issue, referenced from the
+  release-engineering, publishing) gets a tracker issue, referenced from the
   devlog with `Refs #N` — not left only under a heading the start-of-session
   protocol won't re-read.
 ```
@@ -84,7 +84,7 @@ Target: `.github/pull_request_template.md`
 ## Screenshots
 
 <!-- Required for PRs with visible UI changes; delete for non-visual PRs.
-     Replace this section with actual GitHub-hosted, reviewer-visible image or
+     Replace this section with actual forge-hosted, reviewer-visible image or
      recording attachments before merging. Local paths, textual descriptions,
      and "checked locally" notes do not satisfy this section. -->
 

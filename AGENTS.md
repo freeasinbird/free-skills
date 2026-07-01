@@ -247,27 +247,26 @@ arc.
     (one bullet per commit or concern) and say rejected alternatives live
     in the devlog when they do.
   - **Screenshots** — required for PRs with visible UI changes; delete it
-    for non-visual work. Replace the section with actual GitHub-hosted,
+    for non-visual work. Replace the section with actual forge-hosted,
     reviewer-visible image or recording attachments before merging; local
     paths, textual descriptions, and "checked locally" notes do not satisfy
     it. If you cannot attach the artifacts yourself, stop before merge and
     ask the user to add or confirm them. Show the changed surfaces,
-    important states, and both paper/ink palettes when the change affects
-    appearance. Keep captions short and name the state shown. Verification
+    important states, and every theme or appearance mode the change
+    affects. Keep captions short and name the state shown. Verification
     still belongs in Verification.
   - **Review Notes** — optional bullets; delete the section when it adds
     no routing value. Use it to point reviewers at important files, review
     order, mechanical commits, or risky edges.
   - **Verification** — required bullets. Start each with `Passed:`,
     `Checked:`, `Attempted:`, or `Not run:`. Say what was actually run and
-    observed: tests, lint, fixture/screenshot checks (both palettes for
-    UI), export/import round-trip for schema changes. Facts only — never
+    observed: tests, lint, fixture/screenshot checks (every affected theme
+    for UI), round-trips for schema changes. Facts only — never
     "should work"; verification gaps are explicit `Not run:` bullets.
     Factual doc claims ship under the same discipline: counts, flags,
-    behaviors, and subprocess/network guarantees are checked against the
-    code and scoped to the surface they describe (a compiled CLI and a
-    wrapper script differ), stated without marketing or competitor
-    put-downs.
+    behaviors, and runtime guarantees are checked against the code and
+    scoped to the surface they describe, stated without marketing or
+    competitor put-downs.
 - **Self-review the diff in the PR files view before handing off** — seeing
   the whole change as one artifact catches stray hunks, leftover debug code,
   scope creep, and accidental files the editor hid. This is a
@@ -348,8 +347,9 @@ Opening the PR is the agent's finish line — leave it open for a human to
 review, approve, and merge, unless the user explicitly asks you to merge or
 the project has adopted a self-merge workflow. Once the PR is up:
 
-- **Wait for required checks** — poll `gh pr checks <n>` until they
-  complete; fix any red check on the branch, never hand off a known-red PR.
+- **Wait for required checks** — poll them until they complete (on
+  GitHub: `gh pr checks <n>`); fix any red check on the branch, never
+  hand off a known-red PR.
 - **Self-review the diff** (above) so it's ready for a reviewer.
 - **Watch for new review activity between turns** — the finish line means
   open, green, threads handled, self-reviewed, _and no new review activity
@@ -377,8 +377,9 @@ the project has adopted a self-merge workflow. Once the PR is up:
   anything the reviewer should focus on. Leave merging, branch cleanup, and
   the `main` resync to whoever approves it.
 
-If the user does ask you to merge, use `gh pr merge <n> --merge` (the only
-enabled method; the remote branch auto-deletes), then resync
+If the user does ask you to merge, merge with a real merge commit (the
+only enabled method; on GitHub: `gh pr merge <n> --merge`; the remote
+branch auto-deletes), then resync
 (`git checkout main && git pull --ff-only`), delete the local branch
 (`git branch -d <branch>`), and `git fetch --prune`.
 
@@ -413,8 +414,9 @@ these are the conventions for the comments it produces.
 ### Stacked PRs
 
 Dependent docs or cleanup work can proceed without waiting for its base: a
-follow-up PR can be based on an open PR's branch (`gh pr create --base
-<feature-branch>`) and auto-retargets to `main` when the base merges. Two
+follow-up PR can be based on an open PR's branch (on GitHub:
+`gh pr create --base <feature-branch>`) and auto-retargets to `main`
+when the base merges. Two
 gotchas: while the base is open the stacked PR's diff shows only its own
 commits; and if the base is force-pushed (fold-fix above), `rebase --onto`
 the stack onto the new base tip.
@@ -454,8 +456,8 @@ log tells the project's evolution). Rules:
 - **Never squash-merge multi-commit work** — it destroys the atomic
   structure above. Merge with a real merge commit so
   `git log --first-parent` reads as the work-unit narrative and the full
-  log holds the atoms. Narrative subjects ("M2+M3: walking skeleton…")
-  belong at that merge/PR level.
+  log holds the atoms. Narrative subjects ("Walking skeleton: end-to-end
+  flow") belong at that merge/PR level.
 
 <!-- /agents-md:managed:commits -->
 

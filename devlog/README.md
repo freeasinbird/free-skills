@@ -36,6 +36,6 @@ entries are the trail of how it got that way.
 - Promote anything load-bearing into README.md or AGENTS.md — the devlog
   is archaeology (grep it when re-litigating), never standing context. An
   item needing a maintainer action you can't take (repo settings,
-  release-engineering, publishing) gets a GitHub issue, referenced from the
+  release-engineering, publishing) gets a tracker issue, referenced from the
   devlog with `Refs #N` — not left only under a heading the start-of-session
   protocol won't re-read.
