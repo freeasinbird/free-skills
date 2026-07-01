@@ -7,6 +7,11 @@ to fill with the project's real checks (see SKILL.md). During update,
 compare the content between markers against these blocks, leaving that
 nested block alone.
 
+Sections: [devlog](#section-devlog),
+[finish-line](#section-finish-line), [branches](#section-branches),
+[pull-requests](#section-pull-requests), [commits](#section-commits),
+[done](#section-done).
+
 ---
 
 ## Section: devlog
