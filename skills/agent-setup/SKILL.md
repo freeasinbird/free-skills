@@ -45,7 +45,7 @@ interactively during init and left untouched during updates.
 1. Read the project to understand language, build system, test framework,
    and directory structure.
 2. Read `references/canonical-sections.md` for exact managed-section text.
-3. Gather the project-specific sections interactively — see
+3. Gather the project-specific sections interactively; see
    "Project-specific section guidance" below. The conventional order
    interleaves them with the managed sections, so collect this content
    (or decide on placeholders) before writing.
@@ -53,22 +53,22 @@ interactively during init and left untouched during updates.
    below): each canonical section wrapped in its markers, project-specific
    content or placeholders in place.
 5. Create scaffolding files:
-   - `devlog/README.md` — content in `references/scaffolding.md` §devlog-readme
-   - `.github/pull_request_template.md` — content in `references/scaffolding.md` §pr-template
-   - `CONTRIBUTING.md` — content in `references/scaffolding.md` §contributing
-   - `CLAUDE.md` — content in `references/scaffolding.md` §claude-md
+   - `devlog/README.md`: content in `references/scaffolding.md` §devlog-readme
+   - `.github/pull_request_template.md`: content in `references/scaffolding.md` §pr-template
+   - `CONTRIBUTING.md`: content in `references/scaffolding.md` §contributing
+   - `CLAUDE.md`: content in `references/scaffolding.md` §claude-md
 
    For any that already exist, don't recreate them: compare against the
-   template and, on drift, show the diff and offer to refresh — the same
-   rule as update-mode step 8; never overwrite silently.
+   template and, on drift, show the diff and offer to refresh (the same
+   rule as update-mode step 8); never overwrite silently.
 
-6. Audit standard project files — see "Standard project files" below.
+6. Audit standard project files; see "Standard project files" below.
    Report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
-   Also check for an automated-reviewer record — see "Automated reviewer
+   Also check for an automated-reviewer record; see "Automated reviewer
    record" below.
 7. Check the repo settings the conventions depend on and offer to align
-   them — see "Repo settings" below. Report any that can't be checked or
+   them; see "Repo settings" below. Report any that can't be checked or
    set (wrong permissions, non-GitHub forge).
 8. Summarize what was created, what the user should fill in, which
    standard files are missing, and which repo settings need attention.
@@ -90,7 +90,7 @@ interactively during init and left untouched during updates.
    (a broken boundary would pull project-specific text into the managed
    region, and the refresh would delete it).
 4. Protect the reviewer record before refreshing: if an automated-reviewer
-   record appears inside a managed block, resolve its location first — see
+   record appears inside a managed block, resolve its location first; see
    "Automated reviewer record".
 5. For each managed block:
    - Extract the content between markers.
@@ -111,7 +111,7 @@ interactively during init and left untouched during updates.
    `devlog` and `commits` blocks rely on its protocol, and a stale copy
    contradicts freshly-synced blocks.)
 9. Audit standard project files (see below) and flag any newly missing;
-   also check that an automated-reviewer record is present — see
+   also check that an automated-reviewer record is present; see
    "Automated reviewer record".
 10. Check the repo settings the conventions depend on (see "Repo settings")
     and offer to align any that have drifted.
@@ -164,7 +164,7 @@ move on. The user can re-run in update mode once the project has shape.
 Write a one-paragraph intro: project name, pointer to the spec document
 (usually README.md), and a sentence on what AGENTS.md covers. Also write
 the canonical file rule into AGENTS.md (intro or CI subsection):
-"CLAUDE.md is a pointer that imports AGENTS.md — edit AGENTS.md, never
+"CLAUDE.md is a pointer that imports AGENTS.md; edit AGENTS.md, never
 the pointer."
 
 ### Build, test, run
@@ -195,7 +195,7 @@ the pointer."
 - Ask: "What non-obvious patterns or footguns should a new contributor know?"
 - Framework traps, naming conventions, testing patterns, runtime quirks.
 
-### Definition of done — project checks
+### Definition of done: project checks
 
 The managed `done` section includes a principle block and a placeholder
 for project-specific verification steps. During init, fill the
@@ -221,7 +221,7 @@ note why it matters.
 
 ### CI configuration
 
-The workflow conventions assume CI exists — the finish line polls
+The workflow conventions assume CI exists: the finish line polls
 required checks, the commits section requires every commit green, and
 the definition of done starts with tests and lint. Check for any of:
 `.github/workflows/`, `.circleci/`, `Jenkinsfile`, `.gitlab-ci.yml`,
@@ -231,13 +231,13 @@ detected." Don't create a CI config (too project-specific), just warn.
 
 ### Scaffolded by this skill (created, not just audited)
 
-| File                               | Purpose                                   |
-| ---------------------------------- | ----------------------------------------- |
-| `CLAUDE.md`                        | Agent entry point — `@`-imports AGENTS.md |
-| `AGENTS.md`                        | Development conventions (single source)   |
-| `CONTRIBUTING.md`                  | Human contribution guide                  |
-| `devlog/README.md`                 | Devlog protocol                           |
-| `.github/pull_request_template.md` | PR body scaffold                          |
+| File                               | Purpose                                  |
+| ---------------------------------- | ---------------------------------------- |
+| `CLAUDE.md`                        | Agent entry point; `@`-imports AGENTS.md |
+| `AGENTS.md`                        | Development conventions (single source)  |
+| `CONTRIBUTING.md`                  | Human contribution guide                 |
+| `devlog/README.md`                 | Devlog protocol                          |
+| `.github/pull_request_template.md` | PR body scaffold                         |
 
 ### docs/ (project-specific, no canonical content)
 
@@ -268,7 +268,7 @@ Settings the conventions depend on:
 | Merge-commit-only (squash and rebase off) | `commits` needs real merge commits for the `--first-parent` history |
 
 These toggles are forge-specific. On GitHub, check and (after confirming)
-set them with `gh` — skip or adapt this on other forges, which expose
+set them with `gh`; skip or adapt this on other forges, which expose
 equivalent settings:
 
 ```sh
@@ -317,7 +317,7 @@ flag it before any managed-block refresh and offer, in order:
 
 ### Reference Files
 
-- **`references/canonical-sections.md`** — exact text of all managed
+- **`references/canonical-sections.md`**: exact text of all managed
   sections, ready to paste
-- **`references/scaffolding.md`** — content for all scaffolded files
+- **`references/scaffolding.md`**: content for all scaffolded files
   (devlog README, PR template, CONTRIBUTING.md, CLAUDE.md pointer)

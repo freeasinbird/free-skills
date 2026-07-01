@@ -1,14 +1,15 @@
-<!-- Title: imperative, ≤ 72 chars, names the outcome — it becomes the
+<!-- Title: imperative, ≤ 72 chars, names the outcome; it becomes the
      merge-commit subject, so write it for `git log --first-parent`. -->
 
 ## Why
 
 <!-- One to three short prose sentences. Link the devlog entry when one
      exists; don't duplicate it. Add a close keyword immediately before each
-     issue number the PR fully resolves or finishes (`Closes #11`; repeat to
-     close several — `Closes #11, closes #12`; a bare list `Closes #11, #12`
-     closes only the first). Reference related-but-unfinished issues with a
-     plain `#N` (e.g. `Refs #N`) and leave those for a human. -->
+     issue number the PR fully resolves or finishes: `Closes #11`, repeating
+     the keyword to close several (`Closes #11, closes #12`), since a bare
+     list `Closes #11, #12` closes only the first. Reference
+     related-but-unfinished issues with a plain `#N` (e.g. `Refs #N`) and
+     leave those for a human. -->
 
 ## What
 
@@ -30,5 +31,5 @@
 ## Verification
 
 <!-- Bullets required. Start each bullet with Passed:, Checked:, Attempted:,
-     or Not run:. Say what was actually run and observed. Facts only — never
+     or Not run:. Say what was actually run and observed. Facts only, never
      "should work"; verification gaps are explicit Not run: bullets. -->

@@ -3,7 +3,7 @@
 The reasoning trail. One short entry per working session: what landed,
 what was decided (with the why and what was rejected), what was
 deliberately deferred, open questions. The README is the spec and always
-holds current truth — if an entry here contradicts it, the README wins;
+holds current truth: if an entry here contradicts it, the README wins;
 entries are the trail of how it got that way.
 
 ## Protocol
@@ -13,15 +13,15 @@ entries are the trail of how it got that way.
   branches and agent sessions append without merge conflicts, while same-day
   entries still sort in session order.
 - **Revisable until merge, then frozen.** An entry may be revised or
-  consolidated while its PR is unmerged (in lockstep with branch rewrites —
+  consolidated while its PR is unmerged (in lockstep with branch rewrites;
   see fold-fix in AGENTS.md). It freezes when the PR merges; later
   corrections go in a new entry. Never rewrite an already-merged entry.
 - **Dense, not capped.** Record decisions, deferrals, and rejected
-  alternatives — never narration; the mechanical what-changed lives in
+  alternatives, never narration; the mechanical what-changed lives in
   commits and per-thread dispositions in the PR. Target ≤ ~40 lines _per
   session-round_; an entry that consolidates many review rounds scales with
   the count of distinct decisions. If it's overflowing, check you're not
-  transcribing commits or thread replies — cut those, not the decisions.
+  transcribing commits or thread replies; cut those, not the decisions.
 - **Structure is optional, but the queue header is canonical.** A short
   entry needs no sub-headers. When sections help, this set keeps the trail
   greppable: Decisions / Fixed / Deferred / Gotchas / Verification /
@@ -31,9 +31,9 @@ entries are the trail of how it got that way.
   Devlog section: read the latest entries before starting; append an entry
   and drain the open `## To promote` / deferred / needs-human queue (or
   explicitly re-defer) before finishing.
-- Promote anything load-bearing into README.md or AGENTS.md — the devlog
+- Promote anything load-bearing into README.md or AGENTS.md: the devlog
   is archaeology (grep it when re-litigating), never standing context. An
   item needing a maintainer action you can't take (repo settings,
   release-engineering, publishing) gets a tracker issue, referenced from the
-  devlog with `Refs #N` — not left only under a heading the start-of-session
+  devlog with `Refs #N`, not left only under a heading the start-of-session
   protocol won't re-read.
