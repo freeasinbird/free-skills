@@ -6,8 +6,9 @@ description: >-
   and PR template, and audit standard files and repo settings. Use when the
   user asks to "set up this project for agents", "initialize AGENTS.md",
   "create AGENTS.md", "update AGENTS.md", "sync workflow sections", "check
-  agent setup", "bootstrap devlog", "make this project agent-ready", or
-  discusses managing shared development conventions across projects.
+  agent setup", "bootstrap devlog", "make this project agent-ready", asks
+  to add a devlog, PR template, or CONTRIBUTING.md to a repo, or discusses
+  managing shared development conventions across projects.
 ---
 
 # Agent Setup
