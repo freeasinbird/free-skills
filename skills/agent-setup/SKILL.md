@@ -117,6 +117,14 @@ interactively during init and left untouched during updates.
 10. Check the repo settings the conventions depend on (see "Repo settings")
     and offer to align any that have drifted.
 
+Where the running agent can execute shell scripts, run
+`scripts/compare-managed-blocks.sh path/to/AGENTS.md` (from this skill's
+directory) to perform steps 3 and 5's mechanical parts in one
+deterministic pass: it validates markers and prints a per-block diff,
+excluding the nested block, and treats a missing block as the documented
+opt-out. Review its diffs with the user as step 5 describes. Without
+shell access, follow the steps manually as written.
+
 ## Conventional section order
 
 ```text
@@ -322,3 +330,9 @@ flag it before any managed-block refresh and offer, in order:
   sections, ready to paste
 - **`references/scaffolding.md`**: content for all scaffolded files
   (devlog README, PR template, CONTRIBUTING.md, CLAUDE.md pointer)
+
+### Scripts
+
+- **`scripts/compare-managed-blocks.sh`**: read-only comparator for
+  update mode's mechanical parts (marker validation, per-block diff);
+  requires a shell, with the manual steps as the fallback
