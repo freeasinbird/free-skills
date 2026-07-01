@@ -13,8 +13,8 @@
 ## What
 
 <!-- Bullets required. Describe work-unit outcomes, not file-by-file churn.
-     For multi-commit PRs, include a compact commit map. Include rejected
-     alternatives, or point to the devlog entry that records them. -->
+     For multi-commit PRs, include a compact commit map. Say rejected
+     alternatives live in the devlog when they do; don't duplicate them. -->
 
 ## Screenshots
 

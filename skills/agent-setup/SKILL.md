@@ -125,7 +125,7 @@ interactively during init and left untouched during updates.
 4. Build, test, run                      (project-specific)
 5. [Other project-specific sections]     (project-specific)
 6. Branches                              (managed: branches)
-7. Pull requests + Landing a PR          (managed: pull-requests)
+7. Pull requests + Handing off the PR    (managed: pull-requests)
 8. Commits                               (managed: commits)
 9. Definition of done for an increment   (managed: done)
 ```

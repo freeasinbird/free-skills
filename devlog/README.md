@@ -27,12 +27,10 @@ entries are the trail of how it got that way.
   greppable: Decisions / Fixed / Deferred / Gotchas / Verification /
   `## To promote`. Use the exact `## To promote` spelling for the promotion
   queue so one grep finds it across every entry.
-- **Session bookends.** Before starting work: read the most recent one or
-  two entries
-  (`find devlog -maxdepth 1 -type f -name '*.md' ! -name README.md | sort | tail -2`),
-  and grep for the open `To promote` / deferred / needs-human queue. Before
-  finishing: append an entry, and drain what the current scope covers from
-  that queue (or explicitly re-defer).
+- **Session bookends.** The operational protocol lives in AGENTS.md's
+  Devlog section: read the latest entries before starting; append an entry
+  and drain the open `## To promote` / deferred / needs-human queue (or
+  explicitly re-defer) before finishing.
 - Promote anything load-bearing into README.md or AGENTS.md — the devlog
   is archaeology (grep it when re-litigating), never standing context. An
   item needing a maintainer action you can't take (repo settings,
