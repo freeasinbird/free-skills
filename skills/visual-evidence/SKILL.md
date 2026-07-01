@@ -148,7 +148,8 @@ doing the quality check now means one look covers both before you hand off.
 Hand the captured files to the **gh-imgup skill**, which uploads them and
 returns renderable Markdown. Do not re-implement upload or invent a host here.
 If that skill isn't loaded in your environment, the underlying tool is the
-`@freeasinbird/gh-imgup` **CLI** — run it with `npx` (Node 22+). Its `--help`
+`@freeasinbird/gh-imgup` **CLI** — run it with `npx -y @freeasinbird/gh-imgup`
+(the `-y` skips npx's interactive first-run prompt; Node 22+). Its `--help`
 notes the upload contract and the secret review, but only tersely; apply the
 full review below (or read the gh-imgup skill's review section) before
 uploading — don't treat `--help` as the complete checklist. Either way, the
