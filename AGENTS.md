@@ -64,8 +64,12 @@ For changes on a **destructive path** (delete/cleanup), a
 refute-first verification pass before committing (independent lenses whose
 job is to _disprove_ the fix) and record in the devlog which findings were
 confirmed, rejected-by-verification (so they're not re-raised), and
-accepted-by-decision. Scope this to those risk classes; a docs typo or
-pure refactor shouldn't trigger it.
+accepted-by-decision. For a behavior-preserving refactor on one of these
+paths, where the platform can execute code, have a lens reconstruct the
+old implementation (`git show <base>:<file>`) and compare old against new
+decision-for-decision over a fuzzed corpus; a diff-read can only assert
+equivalence, a harness measures it. Scope all of this to those risk
+classes; a docs typo or a refactor off these paths shouldn't trigger it.
 
 <!-- /agents-md:managed:finish-line -->
 

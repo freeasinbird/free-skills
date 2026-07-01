@@ -297,6 +297,38 @@ If the agent lacks permission or the forge isn't GitHub, report the
 desired state and point the user at the setting (on GitHub: Settings →
 General → Pull Requests).
 
+### Required checks and CI matrices
+
+When branch protection is configured, required status checks are matched
+by context name, and a skipped required check counts as satisfied. Both
+failure modes bite when a single CI job becomes a matrix: renaming the
+job leaves the required context never reporting, so nothing can merge;
+keeping the name via a bare fan-in job (`needs:` alone) fails open,
+because a failed matrix leg skips the fan-in and the skipped check
+passes. Keep the required context reporting through a fan-in job with
+`if: always()` and an explicit result test:
+
+```yaml
+check:
+  needs: test # the matrix job
+  if: always() # run even when a leg failed
+  runs-on: ubuntu-latest
+  steps:
+    - run: test "${{ needs.test.result }}" = "success"
+```
+
+During the audit, compare the protected branch's required contexts
+against the workflow job names and flag any context no job reports, and
+any bare fan-in guarding a matrix. On GitHub:
+
+```sh
+gh api repos/{owner}/{repo}/branches/{branch}/protection \
+  --jq '.required_status_checks.contexts'
+```
+
+Skip this check when branch protection isn't configured; same
+detect → report → offer rule as above, never a silent change.
+
 ## Automated reviewer record
 
 The managed `pull-requests` section tells agents to record a noticed
