@@ -42,6 +42,11 @@ entries are the trail of how it got that way.
   greppable: Decisions / Fixed / Deferred / Gotchas / Verification /
   `## To promote`. Use the exact `## To promote` spelling for the promotion
   queue so one grep finds it across every entry.
+- **Frozen queue entries drain by reference.** A `## To promote` item in
+  a merged (frozen) entry can't be edited out; the entry that does the
+  promotion (or re-deferral) records the drain and names the source
+  entry. When the queue grep surfaces an item, check later entries for
+  its drain record before re-raising it.
 - **Session bookends.** The operational protocol lives in AGENTS.md's
   Devlog section: read the latest entries before starting; append an entry
   and drain the open `## To promote` / deferred / needs-human queue (or
