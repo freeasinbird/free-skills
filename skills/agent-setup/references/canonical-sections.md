@@ -209,7 +209,12 @@ arc.
   location, sweep the file and repo mechanically (grep for the finding's
   pattern, don't just eyeball nearby lines) and fix every instance in the
   same push: the class routinely recurs in sibling sentences or files the
-  citation never named, and each miss costs another review round. Expect
+  citation never named, and each miss costs another review round. For
+  validation or parsing code, the mechanical sweep is an adversarial
+  enumeration of the input space (case, spacing, indentation,
+  prefix/suffix, order, duplication, nesting), run once as tests, not a
+  widening of the cited pattern: pattern-widening spent eight review
+  rounds on one class before the enumeration closed it. Expect
   diminishing returns too: automated reviewers can surface ever-smaller
   nits indefinitely, so converge and hand off rather than chasing every
   round to zero (value captured is the bar, not threads-at-zero).
