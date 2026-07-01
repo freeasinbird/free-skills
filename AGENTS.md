@@ -465,6 +465,8 @@ Before calling work done:
   Claude-Code-only or Codex-only assumptions without explicit gates)
 - Managed blocks in sync with the canonical source
   (`./scripts/check-managed-sync.sh`)
+- Comparator regression suite green when the comparator or sync check
+  changed (`./scripts/test-compare-managed-blocks.sh`)
 
 <!-- /agents-md:project:done-checks -->
 
