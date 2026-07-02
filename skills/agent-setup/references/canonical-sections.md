@@ -154,8 +154,11 @@ arc.
     human to close.
   - **What**: required bullets. Describe work-unit outcomes, not
     file-by-file churn. For multi-commit PRs, use a compact commit map
-    (one bullet per commit or concern) and say rejected alternatives live
-    in the devlog when they do.
+    (one bullet per commit or concern), referencing each commit by its
+    subject, not its SHA: folding a review fix into its commit (see
+    Commits) rewrites every downstream SHA, so a SHA-keyed map forces a
+    body rewrite each round, while subjects don't go stale. Say rejected
+    alternatives live in the devlog when they do.
   - **Screenshots**: required for PRs with visible UI changes; delete it
     for non-visual work. Replace the section with actual forge-hosted,
     reviewer-visible image or recording attachments before handing off,
@@ -250,10 +253,11 @@ arc.
   convergence signal, not your own sense that you are done.
 - **Keep the body current as review evolves the PR.** The body becomes the
   merge commit, so when review adds commits or shifts scope, update What,
-  the commit map (flag which commits resolve review findings), and
-  Verification before re-handing-off. The inline disposition + fixing SHA
-  on each resolved thread (above) is the located per-finding record; don't
-  duplicate it into a standing "feedback" section that would drift.
+  the commit map (flag which commits resolve review findings, by subject as
+  above), and Verification before re-handing-off. The inline disposition +
+  fixing SHA on each resolved thread (above) is the located per-finding
+  record (that reply is written once, post-fold, so its SHA doesn't churn);
+  don't duplicate it into a standing "feedback" section that would drift.
 - The intended repo settings enforce the Commits rules: merge commits
   only (squash and rebase disabled) and auto-delete of merged branches.
   Don't re-enable around them; where they aren't set, hold the same
