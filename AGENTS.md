@@ -296,16 +296,28 @@ arc.
   A same-model subagent is only _partially_ independent and costs tokens;
   scale to risk, skip trivial or mechanical work.
 - **Record a noticed automated reviewer.** When you observe a bot-authored
-  review on a recent PR and the project hasn't recorded the reviewer, add a
-  one-line note to an unmanaged, project-specific section of AGENTS.md
+  review on a recent PR, or a reviewer status signal (a bot reacting on PR
+  descriptions shortly after they open, recurring across PRs: a reviewer
+  whose passes have all been clean may never post a review), and the project
+  hasn't recorded the reviewer, add a compact
+  record (an "Automated reviewer" entry; the required fields below usually
+  take a short paragraph) to an unmanaged, project-specific section of
+  AGENTS.md
   (outside `agents-md:managed:*` blocks, so syncs don't overwrite it) with
   enough identity to match its future reviews: the reviewer's **name**, its
   **login/account identity** (including the API-specific form when it
-  differs, e.g. a `[bot]` suffix in one API but not another), and how it is
-  **triggered** (automatic on PR events, a manual command, or a CI job).
-  Later sessions filter review activity by that login, so the identity,
-  not a bare "a reviewer exists", is the point. Record only a reviewer you
-  actually observed, never its absence.
+  differs, e.g. a `[bot]` suffix in one API but not another), how it is
+  **triggered** (automatic on PR events, a manual command, or a CI job), and
+  any **status signals** it posts out of band (an in-progress or clean-pass
+  indicator, e.g. a reaction on the PR description; some reviewers post no
+  review at all on a clean pass, so the recorded clean-pass signal is what
+  lets a later watch finish instead of timing out). Later sessions filter
+  review activity by that login, so the identity, not a bare "a reviewer
+  exists", is the point. An existing record is not a reason to skip: when
+  you observe status signals (or a changed trigger) the record lacks,
+  augment it in place, since a name/login/trigger-only record still forces
+  the full wait cap on clean passes. Record only a reviewer and signals you
+  actually observed, never an absence.
 - **Responding to automated review.** Evaluate each comment on its merits:
   fix real findings; push back, _with a one-line reason_, on contrived,
   speculative, or already-fixed ones; never reflexively comply. Reply

@@ -340,9 +340,12 @@ The managed `pull-requests` section tells agents to record a noticed
 automated reviewer so a review-watch can resolve who to wait on without
 re-detecting (the "record a noticed automated reviewer" convention).
 During init and update, check whether the project carries such a record:
-typically an "Automated reviewer" line in a project-specific (unmanaged)
+typically an "Automated reviewer" entry in a project-specific (unmanaged)
 AGENTS.md section naming the reviewer, its login/account identity (and the
-API-specific form when it differs), and its trigger.
+API-specific form when it differs), its trigger, and any observed status
+signals (an in-progress or clean-pass indicator, such as a reaction on the
+PR description; without a recorded clean-pass signal, a review-watch can
+only time out on a reviewer that posts no review when a pass is clean).
 
 Treat this as **detect → report, never fabricate**. A reviewer is usually
 configured after agent-setup first runs, so absence is expected and fine; do not
