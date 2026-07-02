@@ -1,0 +1,5 @@
+# Mechanical churn commits, excluded from git blame.
+# Activate locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Sweep the remaining em dashes from await-pr-review prose
+4bb36e63c876401caf32bbd457038e2a9ffad7bd
