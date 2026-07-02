@@ -85,7 +85,7 @@ you request_ as already-seen, and treat only the reviewer's pass dated after tha
 request as the awaited one.
 Capture **three** things, because they are separate connections: top-level
 **reviews** (a bot can complete a review with a summary/approval and _no_ inline
-findings — that round shows up only here, not under threads), the inline
+findings: that round shows up only here, not under threads), the inline
 **review threads**, and the PR-description **reactions**, where some reviewers
 signal review status out of band (see the status signals in step 3). Snapshot
 the latest reviewer review time, the current thread IDs, and the reviewer's
@@ -135,7 +135,7 @@ source, detection only a fallback**:
   reviewer" entry in AGENTS.md), use it: the reviewer's name, login (mind the
   API-form caveat in step 3), trigger, and any recorded status signals (the
   in-progress and clean-pass indicators used in step 3). Treat it as a strong
-  hint, not gospel — if repeated waits turn up nothing the note may be stale
+  hint, not gospel: if repeated waits turn up nothing the note may be stale
   (reviewer removed), so fall through to detection.
 - **Detection (fallback).** Otherwise scan recent PRs for a bot-authored review
   (`gh pr list --state all --limit 20 --json number`, then each PR's reviews) — a
@@ -151,8 +151,8 @@ source, detection only a fallback**:
   PR carries a bot review at all, check
   PR-description reactions too: a bot reacting on PRs shortly after they
   open, recurring across PRs, is a clean-pass-only reviewer signalling out of
-  band (step 3), and its reaction `user.login` yields the login — for an
-  App-based bot in the `name[bot]` form (strip the suffix for the
+  band (step 3), and its reaction `user.login` yields the login: for an
+  App-based bot, in the `name[bot]` form (strip the suffix for the
   review-author form and record both); a reviewer running as a regular
   machine-user account reacts under its plain login. Either way
   this yields both the gate (a reviewer exists)
@@ -167,7 +167,7 @@ source, detection only a fallback**:
   automatically, ask for the trigger instead of burning the capped poll.
 - **Human-asserted — only if it identifies.** The user telling you a reviewer
   exists counts **only when it names the reviewer enough to match its reviews** (a
-  login, or a name you can resolve to one) — step 3 still filters by that
+  login, or a name you can resolve to one); step 3 still filters by that
   login, so a bare "there is a reviewer" can't be matched. If the
   assertion lacks identity, ask for the login (and trigger) before engaging.
 - **None of these → don't engage.** No record, no bot review in history, and no
@@ -183,7 +183,7 @@ clean-pass indicator, step 3), so later watches can finish on them instead of
 waiting out the cap. The same applies to an **existing** record that predates
 signal recording: when you observe status signals it lacks, augment the
 record in place rather than treating "already recorded" as done. Record only
-a reviewer you observed, never its absence —
+a reviewer you observed, never its absence:
 a stale record naming a removed reviewer costs at most a capped wait, while a
 recorded "none" would silently skip a reviewer added later.
 
@@ -208,9 +208,9 @@ so mechanisms that wake it once beat mechanisms that wake it per check).
 Watcher side, cheapest first:
 
 - **Backgrounded no-model poll (preferred wherever the platform can run a
-  background process whose completion re-invokes the agent — backgrounding
-  alone is not enough; without the re-entry the loop finishes into a turn
-  that never resumes).** Launch a background shell loop that re-checks the PR
+  background process whose completion re-invokes the agent; backgrounding
+  alone is not enough, since without the re-entry the loop finishes into a
+  turn that never resumes).** Launch a background shell loop that re-checks the PR
   on an interval and exits when new reviewer activity appears past the
   baseline (in Claude Code, a `run_in_background` shell loop); the harness
   then re-invokes the agent once to handle it. This costs zero tokens while
@@ -285,9 +285,9 @@ usually ends the wait in single-digit minutes.
 Finish a round on any of four signals from the configured reviewer, dated after
 the baseline: a **submitted review**, a **new review thread**, a **new
 review-comment on an existing thread** (a reply leaves no new thread and no new
-submitted review, so this case is easy to miss — it is why step 1 reads
+submitted review, so this case is easy to miss; it is why step 1 reads
 `comments(last:1)`), or the reviewer's **clean-pass status signal** (next
-paragraph). All four must be **authored by the configured reviewer** — match
+paragraph). All four must be **authored by the configured reviewer**: match
 the target bot against `author.login` for reviews and thread comments, but
 against `user.login` for reactions (the field GraphQL exposes a reaction's
 author under, as in the step-1 query). **Mind the login form: GitHub
@@ -303,11 +303,11 @@ Do **not** treat an **acknowledgement** as completion either — some reviewers
 post a placeholder or react before the real review (Codex, for one, acknowledges
 an `@codex review` request and posts the actual review, with any inline
 findings, _afterward_); a reaction on your trigger comment or a placeholder is
-still _pending_, so keep waiting. But don't depend on an ack either — not
+still _pending_, so keep waiting. But don't depend on an ack either: not
 every reviewer posts one, so key off the reviewer's actual response (any of
 the four signals above), never an acknowledgement that may never come. Treat
 it as "reviewed, nothing to address" only when the latest review adds no new
-unresolved threads **and** its `state` / `body` carry no actionable feedback —
+unresolved threads **and** its `state` / `body` carry no actionable feedback:
 a `CHANGES_REQUESTED`, or a `COMMENTED` review with a substantive summary
 body, can hold findings with no inline thread at all, so read the review's
 state and body before declaring clean.
