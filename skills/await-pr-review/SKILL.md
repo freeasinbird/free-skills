@@ -108,15 +108,19 @@ first-vs-last comment, author filtering), so **prefer time, not enumeration**:
 treat a round as arrived when the configured reviewer has a `submittedAt` (from
 `reviews` above), any review-comment `createdAt`, or a status-signal reaction
 `createdAt` (step 3) _after_ the baseline. That single timestamp comparison
-sidesteps every snippet edge. Reach for the full
-thread set only when you actually need it (e.g. to resolve threads), and then
-page with `pageInfo{hasNextPage endCursor}` / `after:` since `first:50` is one
-page. For the reply-on-an-existing-thread signal, that window matters: a
-reply beyond the thread page would be invisible, so detect new comments via
-the REST review-comments feed sorted newest-first
-(`gh api "repos/OWNER/REPO/pulls/PR/comments?sort=created&direction=desc"`),
-where any post-baseline comment is on the first page by construction (REST
-authors carry the `name[bot]` form).
+sidesteps every snippet edge except one, and it applies to **every windowed
+connection in the snapshot** (`reviews(last:20)`, `reviewThreads(first:50)`,
+`reactions(last:20)`): a single page is a window, not the collection, so
+enough newer activity by other authors can push the item you are looking
+for out of it. When detecting, read each source through a **paged** feed
+until you are past the baseline: on REST,
+`gh api "repos/OWNER/REPO/pulls/PR/comments?per_page=100&page=N"` and the
+matching `pulls/PR/reviews` and `issues/PR/reactions` endpoints (authors
+there carry the `name[bot]` form); on GraphQL, cursor-page with
+`pageInfo{hasNextPage endCursor}` / `after:`. Reach for the full thread set
+only when you actually need it (e.g. to resolve threads). The bundled
+`watch-review.sh` (step 3) is the executable form of this detection, with
+every source paged; prefer it over re-deriving the snippet.
 
 ### 2. Identify the reviewer, then ensure it's requested
 
@@ -212,7 +216,16 @@ Watcher side, cheapest first:
   then re-invokes the agent once to handle it. This costs zero tokens while
   waiting and wakes the main agent exactly once: the loop only answers "is
   there reviewer activity after the baseline?", a timestamp comparison that
-  needs no model.
+  needs no model. On GitHub, don't write the loop by hand: this skill ships
+  `watch-review.sh` alongside this file, parameterized on the PR, baseline,
+  reviewer login (both API forms), expected head SHA (so a stale pass
+  against a superseded head does not end the wait), signal contents,
+  cadence, and cap. It
+  implements the step-1 query and the matching rules below, and exits with a
+  distinct code plus a compact one-line report for review activity (0),
+  clean pass (3), or cap expiry (2), so the caller branches on the exit code
+  without parsing prose. Where `gh` or a shell is missing, fall back to the
+  prose; it is the same specification.
 - **Delegated watcher / subagent (only where background processes are absent
   but subagents are available and permitted).** If the session policy permits
   delegation without asking, and the platform will reliably notify or
