@@ -315,16 +315,16 @@ arc.
   enumeration of the input space (case, spacing, indentation,
   prefix/suffix, order, duplication, nesting), run once as tests, not a
   widening of the cited pattern: pattern-widening spent eight review
-  rounds on one class before the enumeration closed it. Expect
-  diminishing returns too: automated reviewers can surface ever-smaller
-  nits indefinitely, so converge and hand off rather than chasing every
-  round to zero (value captured is the bar, not threads-at-zero).
-- **Don't under-converge either.** Don't declare a PR "addressed" while the
-  reviewer is still raising real issues, and never treat a finding that
-  recurs from your _own_ incomplete fix as convergence; that is a miss to
-  sweep, not a stop. Bias toward continuing while findings are genuinely
-  worthwhile; the human's merge is the reliable convergence signal, not
-  your own sense that you are done.
+  rounds on one class before the enumeration closed it.
+- **Converge deliberately, and don't under-converge.** Automated
+  reviewers can surface ever-smaller nits indefinitely, so converge
+  and hand off rather than chasing every round to zero (value captured
+  is the bar, not threads-at-zero). But don't declare a PR "addressed"
+  while the reviewer is still raising real issues, and never treat a
+  finding that recurs from your _own_ incomplete fix as convergence;
+  that is a miss to sweep, not a stop. Bias toward continuing while
+  findings are genuinely worthwhile; the human's merge is the reliable
+  convergence signal, not your own sense that you are done.
 - **Keep the body current as review evolves the PR.** The body becomes the
   merge commit, so when review adds commits or shifts scope, update What,
   the commit map (flag which commits resolve review findings), and
