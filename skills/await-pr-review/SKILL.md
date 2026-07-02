@@ -251,8 +251,10 @@ Watcher side, cheapest first:
   available watch path.
 
 Main-agent side: the default resume is a **single wake on activity**; the
-watcher fires once and the main agent pays one full-context read, usually
-cache-cold because reviews take longer to land than a short prompt-cache TTL.
+watcher fires once and the main agent pays one full-context read, often
+cache-cold when the review takes longer to land than a short prompt-cache TTL
+(though a fast reviewer plus a tight no-model poll can instead land that wake
+while the cache is still warm; see the cadence note below).
 Where the platform can instead re-enter the agent on a timer (a scheduled
 wake-up or self-paced loop), each wake replays the main context itself, which
 is normally the costliest pattern; it becomes the cheaper one only in a
@@ -281,6 +283,16 @@ re-check about every **4–5 minutes** (~270s also keeps a 5-minute prompt
 cache warm). Either way, cap the total wait (e.g. **20–30 minutes**) before
 reporting that no review arrived; a reviewer with a clean-pass signal (below)
 usually ends the wait in single-digit minutes.
+
+The tight no-model cadence has a second payoff beyond latency. Observed Codex
+reviews landed 2m54s–4m46s after each push, right around a 5-minute cache TTL,
+so a ~75s poll tends to detect the review and fire its single wake while the
+main context is still cache-warm, whereas a coarse ~270s grid would not detect
+it until a later tick and would wake the agent cold: at typical pricing a
+roughly 12x swing on that one wake read (the cached-read fraction versus a full
+cold read). Treat the latency band as observed for one reviewer, not a
+guarantee, but it is a further reason to prefer the tight cadence on the
+no-model path.
 
 Finish a round on any of four signals from the configured reviewer, dated after
 the baseline: a **submitted review**, a **new review thread**, a **new
@@ -384,6 +396,26 @@ context is small, or the round is mostly judgment calls (each escalation
 wakes the main agent anyway, so the savings evaporate), and note that unlike
 the watcher, the fixer needs a capable model class: the savings come from
 context size, not model tier.
+
+That break-even is stated **per round**, which makes short rounds look like
+they never justify delegation. But a convergence loop is many rounds, and what
+changes across them is the rebuild cost. A **fresh fixer each round** re-pays
+the context rebuild every time (re-reading the diff, the touched files, the
+conventions), so over N rounds it pays `N × R_rebuild`; a **fixer kept alive
+across the loop** pays that rebuild once (`1 × R_rebuild`), then reuses its
+warm context, and it keeps each round's debris (its findings and fixes) out of
+the main context, since only the compact reports cross back. So a persistent
+fixer likely wins on any longer exchange (roughly 4+ rounds) even when each
+round on its own falls below the per-round break-even above; the per-round rule
+still governs a one-shot round. Two honest caveats. It needs a platform that
+can keep a subagent **resumable across the main agent's turns** (in Claude
+Code, re-messaging the same agent instead of spawning a new one), so gate it
+like the delegated-fixer path above and fall back to in-main rounds where that
+is unavailable. And the judgment calls still wake the main agent every round
+regardless. The fixer's own context grows across the loop, which is the point,
+not a cost: that growth lands in the small, cheap context instead of the fat
+main one.
+
 Where delegation with write access is unavailable or not permitted, run the
 rounds in the main agent as usual; for a long review loop from an
 already-huge session, starting a fresh session for the loop is the manual
@@ -406,7 +438,9 @@ including the round your last fix triggered. **Never stop on a worthwhile
 round**, and **don't cap a still-valuable back-and-forth**: if each round is
 still delivering, ten useful rounds beat stopping at three. A good finding is
 the signal to continue — after each fix, wait for the next review and only then
-judge it.
+judge it. When the exchange runs long, keep the fixer alive across rounds
+rather than respawning it each time; step 4 covers why a persistent fixer
+amortizes its context rebuild better over a multi-round loop.
 
 **Stop when the value actually tapers** — a round comes back clean, or only
 marginal nits (style, micro-wording, contrived edge-cases). Decline any
