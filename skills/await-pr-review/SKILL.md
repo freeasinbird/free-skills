@@ -2,9 +2,9 @@
 name: await-pr-review
 description: >-
   Wait for an automated PR reviewer (such as Codex) to post its review, then
-  handle the feedback — without you having to tell the agent to check or poll.
+  handle the feedback, without you having to tell the agent to check or poll.
   Use this after you open or push to a pull request that has an automated
-  reviewer — starting the watch is the default follow-on, not something to ask
+  reviewer: starting the watch is the default follow-on, not something to ask
   whether to do; it watches for the bot's review (or its out-of-band
   clean-pass signal, such as a reaction on the PR description) and addresses
   it. It waits non-blockingly where platform support and session policy
@@ -23,43 +23,43 @@ description: >-
 # Await PR Review
 
 Watch an open pull request for its automated reviewer (e.g. Codex), then handle
-the feedback — the part you would otherwise do by repeatedly telling the agent
+the feedback: the part you would otherwise do by repeatedly telling the agent
 to "check the PR" or "poll for comments." This skill owns the **waiting and
 orchestration**; the actual responses follow the project's existing review
 conventions (it references them, it does not restate a weaker version).
 
 The design goal is to **not block the main thread**: where the platform can
 delegate a watcher that reliably notifies or re-enters the main agent, run a
-backgrounded watcher, or re-enter the agent on a schedule — and policy permits
-that mechanism — you keep working while it waits, and the agent comes back when
+backgrounded watcher, or re-enter the agent on a schedule (and policy permits
+that mechanism), you keep working while it waits, and the agent comes back when
 the review lands. Blocking is a last resort, used only where nothing else is
 available.
 
 Because the non-blocking watch does not occupy the main thread while it waits,
-**starting it is the default after opening or pushing such a PR — don't stop to ask
+**starting it is the default after opening or pushing such a PR; don't stop to ask
 whether to watch.** Asking "should I watch for the review?" is exactly the manual
 polling this skill exists to remove; start the watch and keep working. Keep one
 active watch per PR/reviewer; after a new push, advance or replace that watch's
 baseline (anchoring rules: step 1) rather than leaving duplicate watchers
 running. (Where the platform or
-session policy can't watch non-blockingly, fall back per the ladder in step 3 —
+session policy can't watch non-blockingly, fall back per the ladder in step 3;
 the gate is the available permitted mechanism, not whether to engage.)
 
 ## When to use it
 
 - Right after opening a PR, or after pushing fixes to one, when an automated
-  reviewer will post a review shortly — the default next step, handled without
+  reviewer will post a review shortly: the default next step, handled without
   babysitting, not one to ask whether to do.
 - Any time you would otherwise type "check the PR for comments" or "keep polling
   until the review shows up."
 
 ## When NOT to use it
 
-- No automated reviewer is configured on the repo — there is nothing to wait for.
+- No automated reviewer is configured on the repo: there is nothing to wait for.
   Step 2 says how to tell: a recorded reviewer identity, a bot-authored review on
   recent PRs, or the user naming one.
 - No open PR yet (open it first), or the change is on a branch with no PR.
-- You only want a human review — this watches the bot pass, not a person.
+- You only want a human review: this watches the bot pass, not a person.
 
 ## The loop
 
@@ -76,7 +76,7 @@ to watch-start would bank it as pre-existing and hand off unhandled. Do **not**
 use the head commit's authored/committed time as a proxy for the push: a locally
 created commit may predate already-handled reviews and only be pushed later.
 Treat reviewer activity after the captured open/push timestamp as new, and start
-the watch promptly — before waiting on anything else (e.g. CI) — so the window
+the watch promptly, before waiting on anything else (such as CI), so the window
 where a review can slip in unbaselined stays small. **But when you _manually
 re-trigger_ a recheck with no new push** (the request-it-once path in step 2),
 the last push predates reviews you've already handled, so last-push anchoring
@@ -112,14 +112,14 @@ derivation, and the REST/GraphQL paging mechanics) is in
 
 ### 2. Identify the reviewer, then ensure it's requested
 
-You need enough **identity to match the reviewer's future reviews** — its account
+You need enough **identity to match the reviewer's future reviews**: its account
 login (the login you filter on in step 3, via `author.login` for reviews and
 `user.login` for reactions), not merely "some bot will
 review." Establish it in this order; the **recorded identity is the primary
 source, detection only a fallback**:
 
 - **Recorded identity (primary).** If the project records its automated reviewer
-  (per the "record a noticed reviewer" convention — typically an "Automated
+  (per the "record a noticed reviewer" convention, typically an "Automated
   reviewer" entry in AGENTS.md), use it: the reviewer's name, login (mind the
   API-form caveat in step 3), trigger, and any recorded status signals (the
   in-progress and clean-pass indicators used in step 3). Treat it as a strong
@@ -134,19 +134,19 @@ source, detection only a fallback**:
   every clean PR. A repo with no bot review on any PR can still have a
   clean-pass-only reviewer, detectable by its recurring reaction on PR
   descriptions shortly after they open (step 3); its reaction login yields
-  the identity — record both login forms (login-form rule in step 3). Either
+  the identity; record both login forms (login-form rule in step 3). Either
   way the scan yields both the gate (a reviewer exists) and the login to
   match; the full procedure (the commands, and deriving each login form) is
   in `references/detection.md`. **If the scan finds more than one distinct bot
-  reviewer** (e.g. Codex _and_ CodeRabbit), don't auto-pick — "is a bot" can't
+  reviewer** (e.g. Codex _and_ CodeRabbit), don't auto-pick: "is a bot" can't
   disambiguate them, and step 3's login filter would reject the others as a
   "different bot" and stall; ask the user which to wait on (or require a record).
-  Detection reveals the **login but not necessarily the trigger** — past reviews
+  Detection reveals the **login but not necessarily the trigger**: past reviews
   show who reviewed, not what starts a fresh one. Before treating the reviewer as
   ready to wait on, derive the trigger from project notes, reviewer docs, prior PR
   command comments, or host configuration; if you cannot tell it runs
   automatically, ask for the trigger instead of burning the capped poll.
-- **Human-asserted — only if it identifies.** The user telling you a reviewer
+- **Human-asserted, only if it identifies.** The user telling you a reviewer
   exists counts **only when it names the reviewer enough to match its reviews** (a
   login, or a name you can resolve to one); step 3 still filters by that
   login, so a bare "there is a reviewer" can't be matched. If the
@@ -174,9 +174,9 @@ trigger change. Reviewers differ on triggering: most run automatically on open
 and on each push (Codex does both, and also accepts a manual `@codex review`);
 some run only on a command comment, with reviewer-specific syntax; some run as
 a CI/Action job on PR events. If yours needs a
-trigger and none is pending, request it once — don't re-trigger on every poll.
+trigger and none is pending, request it once; don't re-trigger on every poll.
 
-### 3. Wait for new review activity — non-blocking where supported
+### 3. Wait for new review activity, non-blocking where supported
 
 The watch itself is mechanical: take the step-1 snapshot, compare timestamps
 against the baseline, sleep, repeat. It needs no judgment until feedback
@@ -268,7 +268,7 @@ usually ends the wait in single-digit minutes.
 The tight no-model cadence has a second payoff beyond latency: observed Codex
 reviews landed 2m54s–4m46s after each push, so a ~75s poll tends to fire the
 single wake while the main context is still cache-warm, where a coarse ~270s
-grid would wake it cold — at typical pricing roughly a 12x swing on that one
+grid would wake it cold: at typical pricing roughly a 12x swing on that one
 wake read. Treat the band as observed for one reviewer, not a guarantee; the
 observed-latency data and the warm-wake arithmetic are in
 `references/cost-model.md`.
@@ -295,7 +295,7 @@ looks like "no activity." A human review, or a _different_ bot, posting after
 the baseline is **not** the awaited pass: this skill is scoped to the automated
 reviewer, so unrelated activity must not finish the round (else you stop early
 or auto-address the wrong feedback while the target reviewer is still pending).
-Do **not** treat an **acknowledgement** as completion either — some reviewers
+Do **not** treat an **acknowledgement** as completion either: some reviewers
 post a placeholder or react before the real review (Codex, for one, acknowledges
 an `@codex review` request and posts the actual review, with any inline
 findings, _afterward_); a reaction on your trigger comment or a placeholder is
@@ -328,7 +328,7 @@ baseline and does not count, and the wait cap stays as the backstop when the
 signals are ambiguous. And reaction authors carry the reaction form of the
 canonical login-form rule above, not the review-author form.
 
-### 4. Address the feedback — auto clear-cut, surface judgment calls
+### 4. Address the feedback: auto clear-cut, surface judgment calls
 
 For each new finding, follow the project's review-response conventions where it
 has them (e.g. an AGENTS.md "Responding to automated review" section); the
@@ -343,7 +343,7 @@ essentials, project-agnostic:
   SHA (or the reasoned decline), then resolve the thread.
 - **Auto-address the clear-cut; surface the judgment calls.** Apply the
   obviously-correct fixes yourself. **Pause and surface** anything ambiguous,
-  contentious, or design-altering for the user to decide — do not silently make
+  contentious, or design-altering for the user to decide; do not silently make
   a debatable change.
 
 **Where to run the rounds.** By default the main agent addresses the feedback
@@ -400,39 +400,39 @@ equivalent.
 Addressing pushes commits, which re-triggers a push-triggered reviewer; for a
 command-triggered one, re-issue its trigger (step 2) after the fix push or the
 wait has nothing coming. **Advance the
-baseline (step 1) before each post-fix wait** — to the review you just handled,
+baseline (step 1) before each post-fix wait**: to the review you just handled,
 or to the push you just made. Otherwise the already-handled review is still
 "after baseline," so the next wait returns instantly and reprocesses old
 feedback; only the reviewer's _fresh_ pass should finish the next round.
 
 The stop signal is **value tapering, not round count.** Keep going for as long
 as rounds keep
-surfacing **worthwhile** findings — real correctness, clarity, or safety issues,
+surfacing **worthwhile** findings: real correctness, clarity, or safety issues,
 including the round your last fix triggered. **Never stop on a worthwhile
 round**, and **don't cap a still-valuable back-and-forth**: if each round is
 still delivering, ten useful rounds beat stopping at three. A good finding is
-the signal to continue — after each fix, wait for the next review and only then
+the signal to continue: after each fix, wait for the next review and only then
 judge it. When the exchange runs long, keep the fixer alive across rounds
 rather than respawning it each time; step 4 covers why a persistent fixer
 amortizes its context rebuild better over a multi-round loop.
 
-**Stop when the value actually tapers** — a round comes back clean, or only
+**Stop when the value actually tapers**: a round comes back clean, or only
 marginal nits (style, micro-wording, contrived edge-cases). Decline any
 remaining nits with a one-line reason and hand off. Value captured is the bar,
 not threads-at-zero. "Stop" means stop _auto-addressing and watching_, not
-"guaranteed converged" — note that a further review may still land so the human
+"guaranteed converged"; note that a further review may still land so the human
 knows to glance.
 
 The only reason to interrupt a loop that is **still finding real issues** is
-**non-convergence, not a quota**: if you are thrashing — the same finding
+**non-convergence, not a quota**: if you are thrashing (the same finding
 recurring _after a correct, complete fix_, or each fix spawning new problems
-without net progress — the change or the loop is broken, so pause and bring in
+without net progress), the change or the loop is broken, so pause and bring in
 the human with what is stuck. But distinguish true thrash from **your own
 half-fix**: a class that recurs because you patched the cited line and didn't
-sweep its siblings is not non-convergence — that is your miss, so sweep it
+sweep its siblings is not non-convergence; that is your miss, so sweep it
 properly (grep the file) and keep going. Don't rationalize a stop from a recurrence
 you caused. Any round-count ceiling is purely a guard against a pathological
-infinite loop, set far above any healthy exchange — never a target to stop at.
+infinite loop, set far above any healthy exchange, never a target to stop at.
 
 **Track findings by class across the whole exchange, and escalate on a
 recurrence.** Classify every finding as it arrives, from any source (a serial
@@ -475,7 +475,7 @@ project has opted into self-merge.
 
 ## Platform support and fallbacks
 
-The non-blocking mechanisms above are **platform-specific** — subagents,
+The non-blocking mechanisms above are **platform-specific**: subagents,
 backgrounded re-invocation, and scheduled wake-ups are not universal. Gate on
 what the running agent actually supports and what its session policy permits,
 then pick the cheapest permitted mechanism per step 3's cost model; never emit
@@ -490,8 +490,8 @@ permitted path. An agent with background re-invocation or
 scheduled wake-ups (e.g. Claude Code) runs the **non-blocking** path for that
 environment; an agent whose turn is synchronous and lacks a reliable
 subagent/background re-entry path (e.g. a plain Codex CLI session) degrades to
-the **bounded foreground poll** — still hands-off within the turn, just blocking
-— or hands back. Everything else here (resolving the PR, detecting activity via
+the **bounded foreground poll** (still hands-off within the turn, just
+blocking) or hands back. Everything else here (resolving the PR, detecting activity via
 `gh`, addressing, converging) is platform-neutral and behaves the same across
 agents.
 
