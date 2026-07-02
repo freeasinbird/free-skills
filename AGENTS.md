@@ -179,10 +179,16 @@ description) that an agent loads to execute the skill. Additional files
   edit those here alone.
 
 - **Automated reviewer: Codex.** Login `chatgpt-codex-connector` (REST API form
-  `chatgpt-codex-connector[bot]`); trigger: automatic on PR events (open / mark
-  ready), or manual `@codex review`. The `await-pr-review` skill shipped in this
-  repo uses this project-specific record when resolving which reviewer to wait
-  for; update it if the reviewer or its trigger changes.
+  `chatgpt-codex-connector[bot]`, which GraphQL also uses for _reactions_);
+  trigger: automatic on PR events (open / mark ready / push; re-reviews after
+  each fix push were observed live on PR 46), or manual
+  `@codex review`. Status signals, observed on PRs 41–44: it reacts on the PR
+  description with 👀 while a review is in progress and 👍 when a pass found
+  nothing (a clean pass may post no review at all); it posts a review only
+  when it has findings. The `await-pr-review` skill shipped in this repo uses
+  this project-specific record when resolving which reviewer to wait for and
+  which signals finish a round; update it if the reviewer, its trigger, or its
+  signals change.
 
 <!-- TODO: Fill in more as patterns emerge: prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->

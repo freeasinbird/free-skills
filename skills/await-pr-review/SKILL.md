@@ -5,8 +5,10 @@ description: >-
   handle the feedback — without you having to tell the agent to check or poll.
   Use this after you open or push to a pull request that has an automated
   reviewer — starting the watch is the default follow-on, not something to ask
-  whether to do; it watches for the bot's review and addresses it. It waits
-  non-blockingly where platform support and session policy permit it (a
+  whether to do; it watches for the bot's review (or its out-of-band
+  clean-pass signal, such as a reaction on the PR description) and addresses
+  it. It waits non-blockingly where platform support and session policy
+  permit it (a
   delegated watcher/subagent that can notify or re-enter the main agent,
   backgrounded poll, or scheduled wake-up that re-invokes the agent when
   feedback lands), and only falls back to a bounded foreground poll when it must.
@@ -81,16 +83,19 @@ would replay them and exit the wait instantly. Anchor that case to the
 **trigger/request time** instead: snapshot the reviews that exist _at the moment
 you request_ as already-seen, and treat only the reviewer's pass dated after that
 request as the awaited one.
-Capture **two** things, because they are separate connections: top-level
+Capture **three** things, because they are separate connections: top-level
 **reviews** (a bot can complete a review with a summary/approval and _no_ inline
-findings — that round shows up only here, not under threads) and the inline
-**review threads**. Snapshot the latest reviewer review time and the current
-thread IDs:
+findings — that round shows up only here, not under threads), the inline
+**review threads**, and the PR-description **reactions**, where some reviewers
+signal review status out of band (see the status signals in step 3). Snapshot
+the latest reviewer review time, the current thread IDs, and the reviewer's
+reactions:
 
 ```sh
 gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
   reviews(last:20){nodes{author{login} submittedAt state}}
-  reviewThreads(first:50){nodes{id isResolved comments(last:1){nodes{author{login} createdAt}}}}}}}' \
+  reviewThreads(first:50){nodes{id isResolved comments(last:1){nodes{author{login} createdAt}}}}
+  reactions(last:20){nodes{content createdAt user{login}}}}}}' \
   -F o=OWNER -F r=REPO -F n=PR
 ```
 
@@ -101,29 +106,52 @@ oldest would miss it.
 This enumerate-and-diff snippet is illustrative but edge-prone (paging,
 first-vs-last comment, author filtering), so **prefer time, not enumeration**:
 treat a round as arrived when the configured reviewer has a `submittedAt` (from
-`reviews` above) or any review-comment `createdAt` _after_ the baseline. That
-single timestamp comparison sidesteps every snippet edge. Reach for the full
+`reviews` above), any review-comment `createdAt`, or a status-signal reaction
+`createdAt` (step 3) _after_ the baseline. That single timestamp comparison
+sidesteps every snippet edge. Reach for the full
 thread set only when you actually need it (e.g. to resolve threads), and then
 page with `pageInfo{hasNextPage endCursor}` / `after:` since `first:50` is one
-page.
+page. For the reply-on-an-existing-thread signal, that window matters: a
+reply beyond the thread page would be invisible, so detect new comments via
+the REST review-comments feed sorted newest-first
+(`gh api "repos/OWNER/REPO/pulls/PR/comments?sort=created&direction=desc"`),
+where any post-baseline comment is on the first page by construction (REST
+authors carry the `name[bot]` form).
 
 ### 2. Identify the reviewer, then ensure it's requested
 
 You need enough **identity to match the reviewer's future reviews** — its account
-login (the `author.login` you filter on in step 3), not merely "some bot will
+login (the login you filter on in step 3, via `author.login` for reviews and
+`user.login` for reactions), not merely "some bot will
 review." Establish it in this order; the **recorded identity is the primary
 source, detection only a fallback**:
 
 - **Recorded identity (primary).** If the project records its automated reviewer
   (per the "record a noticed reviewer" convention — typically an "Automated
-  reviewer" line in AGENTS.md), use it: the reviewer's name, login (mind the
-  API-form caveat in step 3), and trigger. Treat it as a strong hint, not gospel
-  — if repeated waits turn up nothing the note may be stale (reviewer removed),
-  so fall through to detection.
+  reviewer" entry in AGENTS.md), use it: the reviewer's name, login (mind the
+  API-form caveat in step 3), trigger, and any recorded status signals (the
+  in-progress and clean-pass indicators used in step 3). Treat it as a strong
+  hint, not gospel — if repeated waits turn up nothing the note may be stale
+  (reviewer removed), so fall through to detection.
 - **Detection (fallback).** Otherwise scan recent PRs for a bot-authored review
   (`gh pr list --state all --limit 20 --json number`, then each PR's reviews) — a
   `Bot`/`App` author that submitted a _review_ is the reviewer (CI bots post
-  checks/statuses, not reviews). This yields both the gate (a reviewer exists)
+  checks/statuses, not reviews). Once reviews identify the bot, scan recent
+  PRs' description reactions by that same bot too, and record any status
+  signals you observe; match the reactions on the **reaction form** of its
+  login (the plain review login plus the `[bot]` suffix for an App bot,
+  step 3), since the review-author form matches no reactions. A reviewer
+  that posts reviews only on findings
+  rounds marks clean passes out of band, and a record missing the
+  clean-pass signal still burns the full wait cap on every clean PR. If no
+  PR carries a bot review at all, check
+  PR-description reactions too: a bot reacting on PRs shortly after they
+  open, recurring across PRs, is a clean-pass-only reviewer signalling out of
+  band (step 3), and its reaction `user.login` yields the login — for an
+  App-based bot in the `name[bot]` form (strip the suffix for the
+  review-author form and record both); a reviewer running as a regular
+  machine-user account reacts under its plain login. Either way
+  this yields both the gate (a reviewer exists)
   and the login to match. **If the scan finds more than one distinct bot
   reviewer** (e.g. Codex _and_ CodeRabbit), don't auto-pick — "is a bot" can't
   disambiguate them, and step 3's login filter would reject the others as a
@@ -135,8 +163,8 @@ source, detection only a fallback**:
   automatically, ask for the trigger instead of burning the capped poll.
 - **Human-asserted — only if it identifies.** The user telling you a reviewer
   exists counts **only when it names the reviewer enough to match its reviews** (a
-  login, or a name you can resolve to one) — step 3 still filters by
-  `author.login`, so a bare "there is a reviewer" can't be matched. If the
+  login, or a name you can resolve to one) — step 3 still filters by that
+  login, so a bare "there is a reviewer" can't be matched. If the
   assertion lacks identity, ask for the login (and trigger) before engaging.
 - **None of these → don't engage.** No record, no bot review in history, and no
   identifying assertion means there is nothing to match on; hand back (see When
@@ -145,61 +173,111 @@ source, detection only a fallback**:
 **When you confirm a reviewer the project hasn't recorded, write the record**
 outside managed blocks in a project-specific AGENTS.md section (per the
 convention) so later sessions needn't re-detect: the reviewer's name, its
-login/account identity (including the API-specific form when it differs), and how
-it's triggered. Record only a reviewer you observed, never its absence — a stale
-record naming a removed reviewer costs at most a capped wait, while a recorded
-"none" would silently skip a reviewer added later.
+login/account identity (including the API-specific form when it differs), how
+it's triggered, and any status signals you observed (an in-progress or
+clean-pass indicator, step 3), so later watches can finish on them instead of
+waiting out the cap. The same applies to an **existing** record that predates
+signal recording: when you observe status signals it lacks, augment the
+record in place rather than treating "already recorded" as done. Record only
+a reviewer you observed, never its absence —
+a stale record naming a removed reviewer costs at most a capped wait, while a
+recorded "none" would silently skip a reviewer added later.
 
 Any reviewer that posts through GitHub's review mechanism works here (Codex, a
 Claude review action, CodeRabbit, and the like); only the bot login and the
 trigger change. Reviewers differ on triggering: most run automatically on open
-and on each push; some need a command comment (Codex uses `@codex review`; others
-use their own); some run as a CI/Action job on PR events. If yours needs a
+and on each push (Codex does both, and also accepts a manual `@codex review`);
+some run only on a command comment, with reviewer-specific syntax; some run as
+a CI/Action job on PR events. If yours needs a
 trigger and none is pending, request it once — don't re-trigger on every poll.
 
 ### 3. Wait for new review activity — non-blocking where supported
 
-Use the strongest mechanism the platform offers, in this order:
+The watch itself is mechanical: run the step-1 query, compare timestamps
+against the baseline, sleep, repeat. It needs no judgment until feedback
+actually lands, so choose the mechanism by **cost, not capability**: the
+cheapest one the platform offers that still reliably re-enters the main agent.
+Two costs add up: what runs while waiting (the watcher), and how the main
+agent resumes (every re-entry replays the whole main context as input tokens,
+so mechanisms that wake it once beat mechanisms that wake it per check).
 
-- **Delegated watcher / subagent (preferred where available and permitted).** If
-  the environment can spawn a subagent while the main thread continues, the
-  session policy permits delegation without asking, and the platform will
-  reliably notify or re-enter the main agent when the watcher finishes, delegate
-  a watcher-only task. Give it the repo, PR number, configured reviewer login,
+Watcher side, cheapest first:
+
+- **Backgrounded no-model poll (preferred wherever the platform can run a
+  background process whose completion re-invokes the agent — backgrounding
+  alone is not enough; without the re-entry the loop finishes into a turn
+  that never resumes).** Launch a background shell loop that re-checks the PR
+  on an interval and exits when new reviewer activity appears past the
+  baseline (in Claude Code, a `run_in_background` shell loop); the harness
+  then re-invokes the agent once to handle it. This costs zero tokens while
+  waiting and wakes the main agent exactly once: the loop only answers "is
+  there reviewer activity after the baseline?", a timestamp comparison that
+  needs no model.
+- **Delegated watcher / subagent (only where background processes are absent
+  but subagents are available and permitted).** If the session policy permits
+  delegation without asking, and the platform will reliably notify or
+  re-enter the main agent when the watcher finishes, delegate a watcher-only
+  task. The watch is mechanical, so run it on the **smallest, cheapest model
+  class the platform offers** (a frontier-class watcher buys nothing), and
+  have it poll inside one long-running command rather than one tool call per
+  check, since each tool call replays the watcher's own growing context. Give
+  it the repo, PR number, configured reviewer login and status signals,
   expected head SHA, and baseline event time. It should poll until reviewer
-  activity appears on that head or the bounded wait expires, then report the
-  matching review's ID, state, `submittedAt`, and body; unresolved actionable
-  threads with thread/comment IDs and path/line; and checks status. If the
-  watcher cannot fetch the top-level review body, it must say so explicitly and
-  tell the main agent to refetch it before declaring the round clean. The watcher
-  must not edit files, commit, push, post trigger comments, reply to review
-  threads, or resolve threads. If delegation would require explicit permission
-  that is not already granted, or completion would require the main agent/user to
-  poll the subagent manually, skip this mechanism and fall through to the next
+  activity appears on that head or the bounded wait expires, then report
+  **compactly** (IDs, timestamps, state, path/line, never thread dumps; the
+  report lives in the main context for the rest of the session): the matching
+  review's ID, state, `submittedAt`, and body; unresolved actionable threads
+  with thread/comment IDs and path/line; any status-signal reaction with its
+  `createdAt`; and checks status. If the watcher cannot fetch the top-level
+  review body, it must say so explicitly and tell the main agent to refetch
+  it before declaring the round clean. The watcher must not edit files,
+  commit, push, post trigger comments, reply to review threads, or resolve
+  threads. If delegation would require explicit permission that is not
+  already granted, or completion would require the main agent/user to poll
+  the subagent manually, skip this mechanism and fall through to the next
   available watch path.
-- **Backgrounded poll (preferred, non-blocking).** Launch a background watcher
-  that re-checks the PR on an interval and exits when new reviewer activity
-  appears past the baseline; the harness then re-invokes the agent to handle it.
-  In Claude Code this is a `run_in_background` shell loop. The main thread stays
-  free while it waits.
-- **Scheduled wake-up (non-blocking).** Where the platform can re-enter the
-  agent on a timer instead of holding a process (e.g. a self-paced loop /
-  scheduled wake-up), schedule the next re-check rather than running a watcher.
-- **Bounded foreground poll (blocking fallback).** Only where neither of the
-  above exists: poll in the foreground with a hard cap, accepting that it blocks.
+
+Main-agent side: the default resume is a **single wake on activity**; the
+watcher fires once and the main agent pays one full-context read, usually
+cache-cold because reviews take longer to land than a short prompt-cache TTL.
+Where the platform can instead re-enter the agent on a timer (a scheduled
+wake-up or self-paced loop), each wake replays the main context itself, which
+is normally the costliest pattern; it becomes the cheaper one only in a
+narrow case: the main context is large, the platform discounts cached context
+reads steeply behind a short cache TTL, and the expected wait is short. Then
+waking at the cache-keepalive cadence costs the cached-read fraction of a
+cold read per wake, and keepalive wins while wakes times the cached-read
+price stay under one cold read (at typical pricing roughly ten
+cache-cadence wakes, so waits up to ~45 minutes). With a small context, a
+long wait, or no cached-read discount, the single cold wake wins.
+
+Remaining fallbacks, in order:
+
+- **Bounded foreground poll (blocking fallback).** Only where none of the
+  above exists: poll in the foreground with a hard cap, accepting that it
+  blocks, and that it is the costliest per check: each foreground poll is a
+  full-context round whose output then stays in the context for the rest of
+  the session.
 - **Hand back (last resort).** Where the agent can do none of these, report the
   baseline and ask the user to re-invoke once the bot has commented.
 
-Cadence: automated reviews usually land a few minutes after a push, so re-check
-about every **4–5 minutes** (~270s also keeps the prompt cache warm) and cap the
-total wait (e.g. **20–30 minutes**) before reporting that no review arrived.
+Cadence scales with what a re-check costs. A no-model background poll can
+re-check every **60–90 seconds** (an API call is the only cost, and the
+tighter loop cuts latency); paths where a model wakes per check should
+re-check about every **4–5 minutes** (~270s also keeps a 5-minute prompt
+cache warm). Either way, cap the total wait (e.g. **20–30 minutes**) before
+reporting that no review arrived; a reviewer with a clean-pass signal (below)
+usually ends the wait in single-digit minutes.
 
-Finish a round on any of three signals from the configured reviewer, dated after
-the baseline: a **submitted review**, a **new review thread**, or a **new
+Finish a round on any of four signals from the configured reviewer, dated after
+the baseline: a **submitted review**, a **new review thread**, a **new
 review-comment on an existing thread** (a reply leaves no new thread and no new
-submitted review, so this third case is easy to miss — it is why step 1 reads
-`comments(last:1)`). All three must be **authored by the configured reviewer** —
-match `author.login` against the target bot. **Mind the login form: GitHub
+submitted review, so this case is easy to miss — it is why step 1 reads
+`comments(last:1)`), or the reviewer's **clean-pass status signal** (next
+paragraph). All four must be **authored by the configured reviewer** — match
+the target bot against `author.login` for reviews and thread comments, but
+against `user.login` for reactions (the field GraphQL exposes a reaction's
+author under, as in the step-1 query). **Mind the login form: GitHub
 returns a bot as `name` in GraphQL but `name[bot]` in REST** (e.g.
 `chatgpt-codex-connector` via the GraphQL `reviewThreads` vs
 `chatgpt-codex-connector[bot]` via `gh api repos/.../pulls/N/reviews`) — match
@@ -211,15 +289,39 @@ or auto-address the wrong feedback while the target reviewer is still pending).
 Do **not** treat an **acknowledgement** as completion either — some reviewers
 post a placeholder or react before the real review (Codex, for one, acknowledges
 an `@codex review` request and posts the actual review, with any inline
-findings, _afterward_); a thumbs-up or placeholder is still _pending_, so keep
-waiting. But don't depend on an ack either — not every reviewer posts one, so
-key off the reviewer's actual response (any of the three signals above — a
-submitted review, a new thread, or a reply on an existing thread), never an
-acknowledgement that may never come. Treat it as "reviewed, nothing to address"
-only when the latest review adds no new unresolved threads **and** its `state` /
-`body` carry no actionable feedback — a `CHANGES_REQUESTED`, or a `COMMENTED`
-review with a substantive summary body, can hold findings with no inline thread
-at all, so read the review's state and body before declaring clean.
+findings, _afterward_); a reaction on your trigger comment or a placeholder is
+still _pending_, so keep waiting. But don't depend on an ack either — not
+every reviewer posts one, so key off the reviewer's actual response (any of
+the four signals above), never an acknowledgement that may never come. Treat
+it as "reviewed, nothing to address" only when the latest review adds no new
+unresolved threads **and** its `state` / `body` carry no actionable feedback —
+a `CHANGES_REQUESTED`, or a `COMMENTED` review with a substantive summary
+body, can hold findings with no inline thread at all, so read the review's
+state and body before declaring clean.
+
+Some reviewers also signal status **out of band**, on the PR itself rather
+than through a review, and some post no review at all when a pass finds
+nothing to raise. A watch that reads only reviews and threads therefore waits
+out its full cap on a clean PR, then wrongly reports "no review arrived."
+Codex, for one, reacts on the PR description: eyes (👀) while a review is in
+progress, thumbs-up (👍) when a pass found nothing; on a clean first pass
+that thumbs-up, minutes after open, is the only artifact the reviewer leaves.
+Learn your reviewer's signals, record them with its identity (step 2), and
+snapshot the PR-description reactions in the step-1 query. A **clean-pass
+signal dated after the baseline** is the fourth completion signal: the round
+finished as "reviewed, nothing to address." An **in-progress signal** works
+like the acknowledgement rule above: its presence means keep waiting; its
+absence proves nothing (the reviewer may remove it when the review
+completes). Two caveats. Reactions are one-per-user-per-emoji and mutable, so
+match on the signal's `createdAt` being after the baseline, never on bare
+presence: a leftover clean-pass reaction from an earlier round predates the
+baseline and does not count, and the wait cap stays as the backstop when the
+signals are ambiguous. And mind the login form here too: for an App-based
+bot, GraphQL exposes a
+_reaction_ author as `user.login`, in the REST-style `name[bot]` form, unlike
+the same bot's GraphQL review `author.login`, which is plain `name`; a
+reviewer running as a regular machine-user account carries its plain login
+in both places.
 
 ### 4. Address the feedback — auto clear-cut, surface judgment calls
 
@@ -239,9 +341,46 @@ essentials, project-agnostic:
   contentious, or design-altering for the user to decide — do not silently make
   a debatable change.
 
+**Where to run the rounds.** By default the main agent addresses the feedback
+itself: the watcher has already woken it, its context is warm, and it holds
+the diff and the session's understanding of the change. Delegating a round to
+a subagent does not save main-agent wakes; it adds them (the spawn turn, then
+a completion wake to read the report), and a fresh fixer must first rebuild
+working context the main agent already has (re-reading the diff, the touched
+files, the conventions). What delegation saves is everything in between:
+each tool call replays the calling agent's context, so a long round replays
+the main context once per call while a fixer replays only its own small one.
+That trade pays off only when both hold: the round is long (many findings, a
+wide class sweep, dozens of tool calls) **and** the main context dwarfs the
+fixer's brief. A short round (a few edits) is cheaper in the already-awake
+main agent, overhead included. When both do hold, and the platform supports
+delegation with write access (and session policy permits it without asking),
+run the fix round in a fresh, compact fixer context: brief it with the repo,
+the PR, the reviewer's identity and status signals, the current baseline, and
+a pointer to the project's review-response conventions. The fixer
+auto-addresses the clear-cut findings, runs the project's verification checks
+itself and reports facts, and **reports judgment calls back rather than
+deciding them**: the same auto/surface split as above, relocated. Only the
+fixer's final report crosses back into the main context, so hold it to the
+watcher's compactness contract (fixing commit SHAs, a one-line disposition
+per finding, judgment calls with just enough quoted context to decide, never
+full diffs); the main agent acts on that report and spot-checks only the
+judgment calls, since re-verifying clear-cut fixes from the main context pays
+for the round twice. Skip delegation when the round is short, the main
+context is small, or the round is mostly judgment calls (each escalation
+wakes the main agent anyway, so the savings evaporate), and note that unlike
+the watcher, the fixer needs a capable model class: the savings come from
+context size, not model tier.
+Where delegation with write access is unavailable or not permitted, run the
+rounds in the main agent as usual; for a long review loop from an
+already-huge session, starting a fresh session for the loop is the manual
+equivalent.
+
 ### 5. Converge on value, don't cap a productive exchange
 
-Addressing pushes commits, which re-triggers the reviewer. **Advance the
+Addressing pushes commits, which re-triggers a push-triggered reviewer; for a
+command-triggered one, re-issue its trigger (step 2) after the fix push or the
+wait has nothing coming. **Advance the
 baseline (step 1) before each post-fix wait** — to the review you just handled,
 or to the push you just made. Otherwise the already-handled review is still
 "after baseline," so the next wait returns instantly and reprocesses old
@@ -286,8 +425,12 @@ project has opted into self-merge.
 The non-blocking mechanisms above are **platform-specific** — subagents,
 backgrounded re-invocation, and scheduled wake-ups are not universal. Gate on
 what the running agent actually supports and what its session policy permits,
-then degrade in the order given; never emit steps the agent cannot perform or is
-not allowed to start without permission. A delegated watcher counts as
+then pick the cheapest permitted mechanism per step 3's cost model; never emit
+steps the agent cannot perform or is
+not allowed to start without permission. The same gate covers step 4's
+delegated fixer: it needs delegation _with write access_, which is a larger
+grant than the watcher's read-only poll, so where it is not both supported and
+permitted, the main agent runs the rounds itself. A delegated watcher counts as
 non-blocking only when its completion reliably notifies or re-enters the main
 agent; merely spawning a subagent is not enough if the main agent or user must
 poll that subagent to learn it finished. If subagents exist but delegation
