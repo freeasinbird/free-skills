@@ -84,12 +84,16 @@ difference between the two images must be the change itself. Hold constant:
 
 - **Route / URL and app data** — prefer seeded or fixture data, not live or
   random data.
-- **Viewport size** and device-pixel-ratio / zoom.
+- **Viewport size** and device-pixel-ratio / zoom. Set a fixed, standard
+  viewport rather than whatever the window happens to be: 1280×720 is a sane
+  desktop default (or the app's design target); use a mobile width (e.g.
+  390×844) when the change is mobile-specific. Prefer 2x DPR so text stays
+  legible when the image is scaled down.
 - **Theme** — and capture **both light and dark** as separate pairs when the
   change affects appearance in both.
 - **Interactive state** — default / hover / focus / active / error / empty /
   loading. Capture the state that demonstrates the change.
-- **Crop region** — the same rectangle for both shots (see framing), so they
+- **Crop region** — the same framing for both shots (see framing), so they
   line up when placed side by side.
 
 ### 4. Framing & cropping
@@ -102,12 +106,28 @@ difference between the two images must be the change itself. Hold constant:
     `page.screenshot({ clip: { x, y, width, height } })`.
   - Chrome DevTools / CDP: read the node's bounding box and clip to it.
   - OS screenshot tools: crop to a fixed rectangle and reuse it for both shots.
+- **No element capture available?** Capture the screen or window, then crop
+  both images to the same fixed rectangle after the fact with whatever image
+  tool the host provides (ImageMagick or macOS `sips` are examples, not
+  requirements). The invariant is the identical crop rectangle across both
+  shots, not any particular tool.
 - Include **just enough surrounding context** to orient the reviewer — a little
   padding around the component — and cut irrelevant sidebars and headers.
-- Keep the **crop identical across before and after** so they're directly
-  comparable.
-- Use a reasonable resolution / DPR for legibility, but mind GitHub's size
-  limits and gh-imgup's `--max-size` (default 25 MB).
+  Tight is not context-free: keep one orienting landmark in frame (the
+  component's own heading, or a sliver of the adjacent element) so the
+  reviewer can tell where in the UI they are; a crop showing only the
+  changed pixels reads as a floating fragment.
+- Keep the **framing identical across before and after** so they're directly
+  comparable: the same rectangle for fixed-rectangle capture; the same
+  element and padding for element capture, where the element's own size may
+  change when the fix changes it.
+- **Mind the final dimensions.** The image has to stay legible rendered
+  inline in a PR body (GitHub renders it at roughly 830 CSS px wide), so
+  avoid extreme aspect ratios and multi-thousand-pixel captures: a full-page
+  shot of a very tall page renders as an illegible strip. Reserve full-page
+  capture for genuinely page-level changes, and even then prefer the
+  relevant section. Use a reasonable resolution / DPR for legibility, but
+  mind GitHub's size limits and gh-imgup's `--max-size` (default 25 MB).
 
 These tools are examples for common host setups, not requirements — use
 whatever capture mechanism your environment provides, applying the same
@@ -138,6 +158,16 @@ verified. Confirm:
 - **Before and after are comparable.** Same crop, viewport, and theme, so the
   only difference is the change. If they don't line up, re-capture the odd one
   under the other's conditions — a mismatched pair misleads the reviewer.
+- **Dimensions are sane and explained.** Inspect the actual width×height of
+  each file (ImageMagick `identify`, macOS
+  `sips -g pixelWidth -g pixelHeight`, or your capture tool's output).
+  Fixed-rectangle crops must match exactly. For element-level captures, the
+  only dimension differences allowed are the ones the change itself
+  explains, on either axis: a padding or line-height fix moves height, a
+  widened button or column moves width, and the delta should roughly match
+  the CSS change. Treat any unexplained difference as a non-comparable
+  pair. Flag absurd sizes for re-capture: a multi-thousand-pixel-tall
+  full-page scroll, or a sub-100px sliver that cropped away the subject.
 
 This is the capture-quality pass and is separate from gh-imgup's secret review
 (a different axis). You'll open each image again at upload time for that review;
@@ -157,6 +187,16 @@ upload step is gh-imgup's; this skill only produces the images.
 
 - **Default placement: the PR description** — most visible to reviewers. A
   comment is the fallback, for after-the-fact additions or for issues.
+- **Review each image before uploading, and not only for "secrets."** This is
+  gh-imgup's mandatory, load-bearing step; there is no un-publish, so it comes
+  before any step that puts bytes on the wire. Screenshots
+  leak more than API keys, so check every image for: credentials, tokens, and
+  keys; internal hostnames, IPs, and infrastructure details; customer data or
+  PII (names, emails, account numbers); and anything else not meant to be
+  shared. The gh-imgup skill carries the canonical checklist; defer to it when
+  it's loaded, and never substitute a softer or narrower version. (The CLI's
+  `--help` states the requirement only in one line; it's a reminder, not the
+  full checklist.)
 - Use gh-imgup's preferred body-composition flow: run it **upload-only** (no
   `--pr`/`--issue`) and compose the Markdown URLs it prints to stdout into the
   PR/issue body. Use `--pr`/`--issue` only for a follow-up comment on an
@@ -164,15 +204,30 @@ upload step is gh-imgup's; this skill only produces the images.
 - **Label clearly** — a **Before** / **After** pair, with captions naming the
   state shown (e.g. "Empty state — dark mode"). Show **both palettes** when the
   change affects appearance in light and dark.
-- **Review each image before uploading — and not only for "secrets."** This is
-  gh-imgup's mandatory, load-bearing step; there is no un-publish. Screenshots
-  leak more than API keys, so check every image for: credentials, tokens, and
-  keys; internal hostnames, IPs, and infrastructure details; customer data or
-  PII (names, emails, account numbers); and anything else not meant to be
-  shared. The gh-imgup skill carries the canonical checklist — defer to it when
-  it's loaded, and never substitute a softer or narrower version. (The CLI's
-  `--help` states the requirement only in one line; it's a reminder, not the
-  full checklist.)
+- **Use a concrete display layout.** Judge width by the saved file's actual
+  pixel width, not the element's logical width: a 2x-DPR capture doubles it,
+  and GitHub sizes the image by file pixels. When each file is narrow enough
+  to pair side by side (roughly ≤600px file width each; a table cell gets
+  about half of the ~830px body, so wider files shrink badly), put the pair
+  in a two-column GFM table so the reviewer's eye can jump between them:
+
+  ```markdown
+  | Before                | After               |
+  | --------------------- | ------------------- |
+  | ![Before](before-url) | ![After](after-url) |
+  ```
+
+  When the images are wider, stack them with a bold **Before** caption above
+  the first and **After** above the second, so neither is shrunk to
+  illegibility. Repeat the block per theme, with the caption naming the theme
+  ("Before (dark)" / "After (dark)").
+
+- **Verify the rendered result.** This is the final step, after every image
+  has passed the pre-upload review above and gh-imgup has uploaded it: view
+  the rendered PR or issue body and confirm both images actually render (no
+  broken attachment links), each label sits with its own image, and the pair
+  reads in before → after order. A block that looks right in raw Markdown can
+  still render broken; a missing image is only visible in the rendered view.
 
 ## Examples
 
@@ -184,8 +239,8 @@ could be a release or a stacked branch), navigate to the list with seeded
 fixture rows, set
 a fixed viewport, and element-capture just the list → `before.png`. Apply the
 padding fix, reload the **same** route at the **same** viewport with the
-**same** fixture data, and capture the same element with the same crop →
-`after.png`. If the component renders in both themes, repeat for dark →
+**same** fixture data, and capture the same element with the same framing →
+`after.png` (same width; the height grows by the padding you added). If the component renders in both themes, repeat for dark →
 `before-dark.png` / `after-dark.png`. Run the full pre-upload review on each
 image (see _Compose & attach_), hand all of them to gh-imgup upload-only, and
 compose a labeled Before/After block (both palettes) into the PR description.
