@@ -53,7 +53,7 @@ checks green**, not a merged branch. Merging is a human decision; do not
 merge your own PR unless the user explicitly asks, or the project has adopted
 an opt-in self-merge workflow.
 
-Use this checklist at the start of each work session:
+Use this checklist for each work session:
 
 1. Read README plus the latest devlog entries, then start from `main`, or,
    for a follow-up that depends on an open PR, from that PR's branch (see
@@ -75,12 +75,14 @@ Use this checklist at the start of each work session:
    review and merge.
 
 For changes on a **destructive path** (delete/cleanup), a
-**credential-leak surface**, or a **returned-object-trust boundary**, add a
-refute-first verification pass before committing (independent lenses whose
-job is to _disprove_ the fix) and record in the devlog which findings were
-confirmed, rejected-by-verification (so they're not re-raised), and
-accepted-by-decision. For a behavior-preserving refactor on one of these
-paths, where the platform can execute code, have a lens reconstruct the
+**credential-leak surface**, or a **returned-object-trust boundary**
+(trusting fields of a value handed back by an external call or
+deserializer), add a refute-first verification pass before committing
+(independent lenses whose job is to _disprove_ the fix) and record in
+the devlog which findings were confirmed, rejected-by-verification (so
+they're not re-raised), and accepted-by-decision. For a
+behavior-preserving refactor on one of these paths, where the platform
+can execute code, have a lens reconstruct the
 old implementation (`git show <base>:<file>`) and compare old against new
 decision-for-decision over a fuzzed corpus; a diff-read can only assert
 equivalence, a harness measures it. Scope all of this to those risk
@@ -96,10 +98,12 @@ classes; a docs typo or a refactor off these paths shouldn't trigger it.
 
 ## Branches
 
-All work lands through a PR: branch from `main`, do the work as atomic
-commits (see Commits), open a PR, merge with a real merge commit;
-never commit directly to `main`. No triviality exception: every bypass
-erodes the `--first-parent` narrative.
+All work lands through a PR: branch from `main` (read `main` as the
+repo's default branch throughout), do the work as atomic commits (see
+Commits), open a PR; the work merges with a real merge commit, a
+human's call per the finish line. Never commit directly to `main`. No
+triviality exception: every bypass erodes the `--first-parent`
+narrative.
 
 Name branches `<type>/<short-kebab-slug>`: type from the Conventional
 Commits vocabulary (`feat`, `fix`, `refactor`, `docs`, `chore`), slug
@@ -154,10 +158,11 @@ arc.
     in the devlog when they do.
   - **Screenshots**: required for PRs with visible UI changes; delete it
     for non-visual work. Replace the section with actual forge-hosted,
-    reviewer-visible image or recording attachments before merging; local
-    paths, textual descriptions, and "checked locally" notes do not satisfy
-    it. If you cannot attach the artifacts yourself, stop before merge and
-    ask the user to add or confirm them. Show the changed surfaces,
+    reviewer-visible image or recording attachments before handing off,
+    and in every case before merge; local paths, textual descriptions,
+    and "checked locally" notes do not satisfy it. If you cannot attach
+    the artifacts yourself, say so at handoff and ask the user to add
+    or confirm them before merge. Show the changed surfaces,
     important states, and every theme or appearance mode the change
     affects. Keep captions short and name the state shown. Verification
     still belongs in Verification.
@@ -245,16 +250,17 @@ arc.
 
 ### Handing off the PR
 
-Opening the PR is the agent's finish line; leave it open for a human to
-review, approve, and merge, unless the user explicitly asks you to merge or
-the project has adopted a self-merge workflow. Done means open, green,
-threads handled, self-reviewed, and no new review activity outstanding.
-Once the PR is up:
+An open PR, not a merged one, is the agent's finish line; leave it
+open for a human to review, approve, and merge, unless the user
+explicitly asks you to merge or the project has adopted a self-merge
+workflow. Done means open, green, threads handled, self-reviewed, and
+no new review activity outstanding. Once the PR is up:
 
 - **Start one review-watch per PR/reviewer as soon as the PR is open**,
-  where a reviewer is active, before waiting on checks, so the checks wait
-  can't defer it. Prefer a dedicated review-watch skill, tool, or
-  automation that can report back without manual polling; otherwise, if
+  where the project records an automated reviewer or you have observed
+  one, before waiting on checks, so the checks wait can't defer it.
+  Prefer a dedicated review-watch skill, tool, or automation that can
+  report back without manual polling; otherwise, if
   your platform can watch non-blockingly (a backgrounded poll or scheduled
   wake-up) and policy permits that mechanism, use it; don't pause to ask
   whether to watch. If a non-blocking mechanism would need permission not
@@ -289,8 +295,9 @@ auto-delete setting didn't, then resync
 ### Reviewing a PR
 
 The mirror of "Responding to automated review": hold the bar you'd want
-held for you. Use the project's review tooling for the bug-hunting pass;
-these are the conventions for the comments it produces.
+held for you. Use the project's review tooling for the bug-hunting
+pass where it has any, otherwise read the full diff yourself; these
+are the conventions for the comments the pass produces.
 
 - **Calibrate to severity, and tag it.** Separate blocking findings
   (correctness, security, data-loss, red tests/CI, broken invariants) from
