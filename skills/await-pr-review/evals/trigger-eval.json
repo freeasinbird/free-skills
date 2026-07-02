@@ -1,0 +1,82 @@
+[
+  {
+    "query": "just pushed the fix to PR #52, codex usually reviews within a few minutes - handle whatever it flags and ping me if anything needs my call",
+    "should_trigger": true
+  },
+  {
+    "query": "opened https://github.com/acme/billing-api/pull/118 for the retry-logic change. wait for the bot review and address it",
+    "should_trigger": true
+  },
+  {
+    "query": "ok the PR is up. keep an eye on it for codex feedback while you start on the changelog",
+    "should_trigger": true
+  },
+  {
+    "query": "can you poll the PR until the coderabbit review shows up and fix the real findings? decline the nitpicky ones",
+    "should_trigger": true
+  },
+  {
+    "query": "I keep having to tell you to check the PR for comments every few minutes. just watch it this time and deal with the review when it lands",
+    "should_trigger": true
+  },
+  {
+    "query": "pushed 3 commits addressing the last round. wait for the re-review and keep going until it comes back clean",
+    "should_trigger": true
+  },
+  {
+    "query": "the codex bot put the eyes reaction on my PR description a minute ago. wait for it to finish its pass and take care of the findings",
+    "should_trigger": true
+  },
+  {
+    "query": "I commented @codex review on PR 87 since it didn't fire on the push. make sure we don't miss its pass, and fix what it raises",
+    "should_trigger": true
+  },
+  {
+    "query": "pr's open, babysit the codex review for me, im heading to lunch",
+    "should_trigger": true
+  },
+  {
+    "query": "open the PR for this branch, then watch for the automated review and handle whatever comes back",
+    "should_trigger": true
+  },
+  {
+    "query": "wait for CI to go green on PR 41 and let me know if any check fails",
+    "should_trigger": false
+  },
+  {
+    "query": "did my PR get merged yet? check #33 on acme/web and tell me its status",
+    "should_trigger": false
+  },
+  {
+    "query": "add sarah-dev as a reviewer on PR 19 and drop her a note that it's ready for her",
+    "should_trigger": false
+  },
+  {
+    "query": "review this PR for me and leave comments: https://github.com/acme/web/pull/9, focus on the auth changes",
+    "should_trigger": false
+  },
+  {
+    "query": "summarize the review comments that are already sitting on PR 12, I haven't read them yet",
+    "should_trigger": false
+  },
+  {
+    "query": "set up codex to auto-review new PRs in this repo, I think it needs an app install or a workflow file",
+    "should_trigger": false
+  },
+  {
+    "query": "this repo has no bot reviewer, so before I merge can you self-review the diff on my branch for obvious bugs",
+    "should_trigger": false
+  },
+  {
+    "query": "poll the staging deploy status until the release goes live and then run the smoke tests",
+    "should_trigger": false
+  },
+  {
+    "query": "my branch doesn't have a PR yet, just run lint and commit the formatting fixes",
+    "should_trigger": false
+  },
+  {
+    "query": "my teammate left a bunch of comments on PR 61 overnight, go through and respond to each of them",
+    "should_trigger": false
+  }
+]
