@@ -354,6 +354,8 @@ log tells the project's evolution). Rules:
   when one exists. State change deltas ("27 → 36 tests") if meaningful;
   never absolute status ("36 tests green"); CI asserts that, and it
   goes stale.
+- **Never commit secrets** (credentials, tokens, keys, `.env`
+  contents); reference them by name and use placeholders in examples.
 - **Mechanical churn commits alone.** Reformats, renames, and moves get
   their own commit, added to `.git-blame-ignore-revs` in the same change
   (activate locally with
