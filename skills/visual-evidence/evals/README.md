@@ -15,8 +15,9 @@ belong in a session workspace outside the repo.
   1. `spacing-fix-pair`: fix exists as an uncommitted patch; expects a
      tight-cropped before/after pair (identical width; any height delta
      explained by the padding change), both themes.
-  2. `net-new-component`: add an empty-state card; expects a single
-     captioned after shot and no fabricated before.
+  2. `net-new-component`: add an empty-state card; expects captioned
+     after shots for both themes, the required card text, styling
+     consistent with the existing cards, and no fabricated before.
   3. `before-already-committed`: fix already committed; expects the
      before state reconstructed from git history, then a comparable
      pair.
