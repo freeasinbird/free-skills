@@ -23,14 +23,16 @@
       "id": 2,
       "eval_name": "net-new-component",
       "prompt": "You are working in the static-site git repo at <fixture-repo>. Add a new empty-state card to the page: a card, shown after the task list, containing the heading 'No tasks yet' and the text 'Add your first task to get started.' Style it consistently with the existing cards in both light and dark mode. Then produce the visual evidence a PR reviewer would need for this change. Serve the site with python3 -m http.server from the repo root (pick a free port). IMPORTANT: do NOT upload or attach the images anywhere (no gh-imgup, no GitHub, no image host, no PR or issue). Stop at local image files saved in <outputs-dir>, plus the composed evidence markdown saved to <outputs-dir>/evidence.md referencing those local files by relative path.",
-      "expected_output": "A single captioned after shot of the new empty-state card (a dark variant is welcome), with no fabricated before image, plus an evidence.md placing the captioned shot(s), and no uploads performed.",
+      "expected_output": "Captioned after shots of the new empty-state card for both light and dark themes, showing the required card text and styled consistently with the existing cards, with no fabricated before image, plus an evidence.md placing the captioned shots, and no uploads performed.",
       "files": [],
       "expectations": [
         "An after image of the new empty-state card exists and is non-blank",
+        "The captured card shows the required text: the heading 'No tasks yet' and the body 'Add your first task to get started.'",
+        "After shots exist for both light and dark themes, and in each the new card's styling is consistent with the existing cards for that theme (background, border, and text colors match the page's card style)",
         "No fabricated before image exists and the markdown contains no Before label for the net-new component",
-        "The image is within sane dimension bounds (each axis <= 2000px)",
-        "The image is cropped to the new card region, not the full page or screen",
-        "The composed markdown captions the shot naming the state shown",
+        "Every image is within sane dimension bounds (each axis <= 2000px)",
+        "Every image is cropped to the new card region, not the full page or screen",
+        "The composed markdown captions each shot naming the state and theme shown",
         "Nothing was uploaded or attached anywhere; evidence stops at local files"
       ]
     },
