@@ -40,7 +40,8 @@ Because the non-blocking watch does not occupy the main thread while it waits,
 whether to watch.** Asking "should I watch for the review?" is exactly the manual
 polling this skill exists to remove; start the watch and keep working. Keep one
 active watch per PR/reviewer; after a new push, advance or replace that watch's
-baseline rather than leaving duplicate watchers running. (Where the platform or
+baseline (anchoring rules: step 1) rather than leaving duplicate watchers
+running. (Where the platform or
 session policy can't watch non-blockingly, fall back per the ladder in step 3 —
 the gate is the available permitted mechanism, not whether to engage.)
 
@@ -89,38 +90,25 @@ findings: that round shows up only here, not under threads), the inline
 **review threads**, and the PR-description **reactions**, where some reviewers
 signal review status out of band (see the status signals in step 3). Snapshot
 the latest reviewer review time, the current thread IDs, and the reviewer's
-reactions:
+reactions. The exact snapshot query and its field caveats (such as reading each
+thread's **newest** comment, not its first: a reviewer reply on an _existing_
+thread lands as the latest comment, and reading the oldest would miss it) are
+specified in `references/detection.md`; `watch-review.sh` (step 3) implements
+the same detection.
 
-```sh
-gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-  reviews(last:20){nodes{author{login} submittedAt state}}
-  reviewThreads(first:50){nodes{id isResolved comments(last:1){nodes{author{login} createdAt}}}}
-  reactions(last:20){nodes{content createdAt user{login}}}}}}' \
-  -F o=OWNER -F r=REPO -F n=PR
-```
-
-Note `comments(last:1)` — the **newest** comment per thread, not the first; a
-reviewer reply on an _existing_ thread is the latest comment, and using the
-oldest would miss it.
-
-This enumerate-and-diff snippet is illustrative but edge-prone (paging,
-first-vs-last comment, author filtering), so **prefer time, not enumeration**:
-treat a round as arrived when the configured reviewer has a `submittedAt` (from
-`reviews` above), any review-comment `createdAt`, or a status-signal reaction
-`createdAt` (step 3) _after_ the baseline. That single timestamp comparison
-sidesteps every snippet edge except one, and it applies to **every windowed
-connection in the snapshot** (`reviews(last:20)`, `reviewThreads(first:50)`,
-`reactions(last:20)`): a single page is a window, not the collection, so
-enough newer activity by other authors can push the item you are looking
-for out of it. When detecting, read each source through a **paged** feed
-until you are past the baseline: on REST,
-`gh api "repos/OWNER/REPO/pulls/PR/comments?per_page=100&page=N"` and the
-matching `pulls/PR/reviews` and `issues/PR/reactions` endpoints (authors
-there carry the `name[bot]` form); on GraphQL, cursor-page with
-`pageInfo{hasNextPage endCursor}` / `after:`. Reach for the full thread set
-only when you actually need it (e.g. to resolve threads). The bundled
-`watch-review.sh` (step 3) is the executable form of this detection, with
-every source paged; prefer it over re-deriving the snippet.
+Two rules govern the detection. **Prefer time, not enumeration**: treat a
+round as arrived when the configured reviewer has a review `submittedAt`, a
+review-comment `createdAt`, or a status-signal reaction `createdAt` (step 3)
+_after_ the baseline; enumerate-and-diff of threads is edge-prone (paging,
+first-vs-last comment, author filtering). And **page every source past the
+baseline**: a single page is a window, not the collection, so enough newer
+activity by other authors can push the item you are looking for out of it.
+Reach for the full thread set only when you actually need it (e.g. to resolve
+threads). The bundled `watch-review.sh` (step 3) is the executable form of
+this detection, with every source paged; prefer it over re-deriving it. The
+full prose specification (the snapshot query, the windowed-connection
+derivation, and the REST/GraphQL paging mechanics) is in
+`references/detection.md`.
 
 ### 2. Identify the reviewer, then ensure it's requested
 
@@ -137,26 +125,19 @@ source, detection only a fallback**:
   in-progress and clean-pass indicators used in step 3). Treat it as a strong
   hint, not gospel: if repeated waits turn up nothing the note may be stale
   (reviewer removed), so fall through to detection.
-- **Detection (fallback).** Otherwise scan recent PRs for a bot-authored review
-  (`gh pr list --state all --limit 20 --json number`, then each PR's reviews) — a
-  `Bot`/`App` author that submitted a _review_ is the reviewer (CI bots post
-  checks/statuses, not reviews). Once reviews identify the bot, scan recent
-  PRs' description reactions by that same bot too, and record any status
-  signals you observe; match the reactions on the **reaction form** of its
-  login (the plain review login plus the `[bot]` suffix for an App bot,
-  step 3), since the review-author form matches no reactions. A reviewer
-  that posts reviews only on findings
-  rounds marks clean passes out of band, and a record missing the
-  clean-pass signal still burns the full wait cap on every clean PR. If no
-  PR carries a bot review at all, check
-  PR-description reactions too: a bot reacting on PRs shortly after they
-  open, recurring across PRs, is a clean-pass-only reviewer signalling out of
-  band (step 3), and its reaction `user.login` yields the login: for an
-  App-based bot, in the `name[bot]` form (strip the suffix for the
-  review-author form and record both); a reviewer running as a regular
-  machine-user account reacts under its plain login. Either way
-  this yields both the gate (a reviewer exists)
-  and the login to match. **If the scan finds more than one distinct bot
+- **Detection (fallback).** Otherwise scan recent PRs for a bot-authored
+  review: a `Bot`/`App` author that submitted a _review_ is the reviewer (CI
+  bots post checks/statuses, not reviews). Scan that bot's PR-description
+  reactions too and record any status signals you observe: a reviewer that
+  posts reviews only on findings rounds marks clean passes out of band, and
+  a record missing the clean-pass signal still burns the full wait cap on
+  every clean PR. A repo with no bot review on any PR can still have a
+  clean-pass-only reviewer, detectable by its recurring reaction on PR
+  descriptions shortly after they open (step 3); its reaction login yields
+  the identity — record both login forms (login-form rule in step 3). Either
+  way the scan yields both the gate (a reviewer exists) and the login to
+  match; the full procedure (the commands, and deriving each login form) is
+  in `references/detection.md`. **If the scan finds more than one distinct bot
   reviewer** (e.g. Codex _and_ CodeRabbit), don't auto-pick — "is a bot" can't
   disambiguate them, and step 3's login filter would reject the others as a
   "different bot" and stall; ask the user which to wait on (or require a record).
@@ -197,7 +178,7 @@ trigger and none is pending, request it once — don't re-trigger on every poll.
 
 ### 3. Wait for new review activity — non-blocking where supported
 
-The watch itself is mechanical: run the step-1 query, compare timestamps
+The watch itself is mechanical: take the step-1 snapshot, compare timestamps
 against the baseline, sleep, repeat. It needs no judgment until feedback
 actually lands, so choose the mechanism by **cost, not capability**: the
 cheapest one the platform offers that still reliably re-enters the main agent.
@@ -221,11 +202,12 @@ Watcher side, cheapest first:
   reviewer login (both API forms), expected head SHA (so a stale pass
   against a superseded head does not end the wait), signal contents,
   cadence, and cap. It
-  implements the step-1 query and the matching rules below, and exits with a
+  implements the step-1 detection and the matching rules below, and exits with a
   distinct code plus a compact one-line report for review activity (0),
   clean pass (3), or cap expiry (2), so the caller branches on the exit code
-  without parsing prose. Where `gh` or a shell is missing, fall back to the
-  prose; it is the same specification.
+  without parsing prose. Where `gh` or a shell is missing, hand-roll the
+  watch from the specification in `references/detection.md`; it is the same
+  detection the script implements.
 - **Delegated watcher / subagent (only where background processes are absent
   but subagents are available and permitted).** If the session policy permits
   delegation without asking, and the platform will reliably notify or
@@ -258,13 +240,12 @@ while the cache is still warm; see the cadence note below).
 Where the platform can instead re-enter the agent on a timer (a scheduled
 wake-up or self-paced loop), each wake replays the main context itself, which
 is normally the costliest pattern; it becomes the cheaper one only in a
-narrow case: the main context is large, the platform discounts cached context
-reads steeply behind a short cache TTL, and the expected wait is short. Then
-waking at the cache-keepalive cadence costs the cached-read fraction of a
-cold read per wake, and keepalive wins while wakes times the cached-read
-price stay under one cold read (at typical pricing roughly ten
-cache-cadence wakes, so waits up to ~45 minutes). With a small context, a
-long wait, or no cached-read discount, the single cold wake wins.
+narrow case (the main context is large, the platform discounts cached context
+reads steeply behind a short cache TTL, and the expected wait is short), and
+then only up to the break-even: at typical pricing roughly ten cache-cadence
+wakes, so waits up to ~45 minutes. Otherwise the single cold wake wins. The
+cache-TTL arithmetic behind these numbers is derived in
+`references/cost-model.md`.
 
 Remaining fallbacks, in order:
 
@@ -284,29 +265,32 @@ cache warm). Either way, cap the total wait (e.g. **20–30 minutes**) before
 reporting that no review arrived; a reviewer with a clean-pass signal (below)
 usually ends the wait in single-digit minutes.
 
-The tight no-model cadence has a second payoff beyond latency. Observed Codex
-reviews landed 2m54s–4m46s after each push, right around a 5-minute cache TTL,
-so a ~75s poll tends to detect the review and fire its single wake while the
-main context is still cache-warm, whereas a coarse ~270s grid would not detect
-it until a later tick and would wake the agent cold: at typical pricing a
-roughly 12x swing on that one wake read (the cached-read fraction versus a full
-cold read). Treat the latency band as observed for one reviewer, not a
-guarantee, but it is a further reason to prefer the tight cadence on the
-no-model path.
+The tight no-model cadence has a second payoff beyond latency: observed Codex
+reviews landed 2m54s–4m46s after each push, so a ~75s poll tends to fire the
+single wake while the main context is still cache-warm, where a coarse ~270s
+grid would wake it cold — at typical pricing roughly a 12x swing on that one
+wake read. Treat the band as observed for one reviewer, not a guarantee; the
+observed-latency data and the warm-wake arithmetic are in
+`references/cost-model.md`.
 
 Finish a round on any of four signals from the configured reviewer, dated after
 the baseline: a **submitted review**, a **new review thread**, a **new
 review-comment on an existing thread** (a reply leaves no new thread and no new
-submitted review, so this case is easy to miss; it is why step 1 reads
-`comments(last:1)`), or the reviewer's **clean-pass status signal** (next
+submitted review, so this case is easy to miss; it is why the step-1
+snapshot reads each thread's newest comment, not its first), or the
+reviewer's **clean-pass status signal** (next
 paragraph). All four must be **authored by the configured reviewer**: match
 the target bot against `author.login` for reviews and thread comments, but
 against `user.login` for reactions (the field GraphQL exposes a reaction's
-author under, as in the step-1 query). **Mind the login form: GitHub
-returns a bot as `name` in GraphQL but `name[bot]` in REST** (e.g.
-`chatgpt-codex-connector` via the GraphQL `reviewThreads` vs
-`chatgpt-codex-connector[bot]` via `gh api repos/.../pulls/N/reviews`) — match
-the right form per API, or the filter silently matches nothing and a real review
+author under). **Mind the login form** (the canonical login-form rule the
+rest of this skill points at): GitHub returns a bot as `name` in GraphQL but
+`name[bot]` in REST (e.g. `chatgpt-codex-connector` via the GraphQL
+`reviewThreads` vs `chatgpt-codex-connector[bot]` via
+`gh api repos/.../pulls/N/reviews`); a _reaction_ author carries the
+REST-style `name[bot]` form for an App-based bot even in GraphQL; and a
+reviewer running as a regular machine-user account carries its plain login
+everywhere. Match the right form per API and per field, or the filter
+silently matches nothing and a real review
 looks like "no activity." A human review, or a _different_ bot, posting after
 the baseline is **not** the awaited pass: this skill is scoped to the automated
 reviewer, so unrelated activity must not finish the round (else you stop early
@@ -332,7 +316,7 @@ Codex, for one, reacts on the PR description: eyes (👀) while a review is in
 progress, thumbs-up (👍) when a pass found nothing; on a clean first pass
 that thumbs-up, minutes after open, is the only artifact the reviewer leaves.
 Learn your reviewer's signals, record them with its identity (step 2), and
-snapshot the PR-description reactions in the step-1 query. A **clean-pass
+include the PR-description reactions in the step-1 snapshot. A **clean-pass
 signal dated after the baseline** is the fourth completion signal: the round
 finished as "reviewed, nothing to address." An **in-progress signal** works
 like the acknowledgement rule above: its presence means keep waiting; its
@@ -341,12 +325,8 @@ completes). Two caveats. Reactions are one-per-user-per-emoji and mutable, so
 match on the signal's `createdAt` being after the baseline, never on bare
 presence: a leftover clean-pass reaction from an earlier round predates the
 baseline and does not count, and the wait cap stays as the backstop when the
-signals are ambiguous. And mind the login form here too: for an App-based
-bot, GraphQL exposes a
-_reaction_ author as `user.login`, in the REST-style `name[bot]` form, unlike
-the same bot's GraphQL review `author.login`, which is plain `name`; a
-reviewer running as a regular machine-user account carries its plain login
-in both places.
+signals are ambiguous. And reaction authors carry the reaction form of the
+canonical login-form rule above, not the review-author form.
 
 ### 4. Address the feedback — auto clear-cut, surface judgment calls
 
@@ -368,17 +348,13 @@ essentials, project-agnostic:
 
 **Where to run the rounds.** By default the main agent addresses the feedback
 itself: the watcher has already woken it, its context is warm, and it holds
-the diff and the session's understanding of the change. Delegating a round to
-a subagent does not save main-agent wakes; it adds them (the spawn turn, then
-a completion wake to read the report), and a fresh fixer must first rebuild
-working context the main agent already has (re-reading the diff, the touched
-files, the conventions). What delegation saves is everything in between:
-each tool call replays the calling agent's context, so a long round replays
-the main context once per call while a fixer replays only its own small one.
-That trade pays off only when both hold: the round is long (many findings, a
-wide class sweep, dozens of tool calls) **and** the main context dwarfs the
-fixer's brief. A short round (a few edits) is cheaper in the already-awake
-main agent, overhead included. When both do hold, and the platform supports
+the diff and the session's understanding of the change. Delegation adds
+main-agent wakes and a context rebuild before it saves anything
+(`references/cost-model.md` derives this break-even and the persistent-fixer
+amortization below), so the trade pays off only when both hold: the round is
+long (many findings, a wide class sweep, dozens of tool calls) **and** the
+main context dwarfs the fixer's brief. A short round (a few edits) is cheaper
+in the already-awake main agent, overhead included. When both do hold, and the platform supports
 delegation with write access (and session policy permits it without asking),
 run the fix round in a fresh, compact fixer context: brief it with the repo,
 the PR, the reviewer's identity and status signals, the current baseline, and
@@ -398,16 +374,14 @@ the watcher, the fixer needs a capable model class: the savings come from
 context size, not model tier.
 
 That break-even is stated **per round**, which makes short rounds look like
-they never justify delegation. But a convergence loop is many rounds, and what
-changes across them is the rebuild cost. A **fresh fixer each round** re-pays
-the context rebuild every time (re-reading the diff, the touched files, the
-conventions), so over N rounds it pays `N × R_rebuild`; a **fixer kept alive
-across the loop** pays that rebuild once (`1 × R_rebuild`), then reuses its
-warm context, and it keeps each round's debris (its findings and fixes) out of
-the main context, since only the compact reports cross back. So a persistent
-fixer likely wins on any longer exchange (roughly 4+ rounds) even when each
-round on its own falls below the per-round break-even above; the per-round rule
-still governs a one-shot round. Two honest caveats. It needs a platform that
+they never justify delegation. But a convergence loop is many rounds, and a
+**fixer kept alive across the loop** amortizes the context rebuild a fresh
+fixer would re-pay every round, while keeping each round's debris (its
+findings and fixes) out of the main context, since only the compact reports
+cross back (the amortization arithmetic is in `references/cost-model.md`).
+So a persistent fixer likely wins on any longer exchange (roughly 4+ rounds)
+even when each round on its own falls below the per-round break-even above;
+the per-round rule still governs a one-shot round. Two honest caveats. It needs a platform that
 can keep a subagent **resumable across the main agent's turns** (in Claude
 Code, re-messaging the same agent instead of spawning a new one), so gate it
 like the delegated-fixer path above and fall back to in-main rounds where that
@@ -506,16 +480,13 @@ backgrounded re-invocation, and scheduled wake-ups are not universal. Gate on
 what the running agent actually supports and what its session policy permits,
 then pick the cheapest permitted mechanism per step 3's cost model; never emit
 steps the agent cannot perform or is
-not allowed to start without permission. The same gate covers step 4's
-delegated fixer: it needs delegation _with write access_, which is a larger
-grant than the watcher's read-only poll, so where it is not both supported and
-permitted, the main agent runs the rounds itself. A delegated watcher counts as
-non-blocking only when its completion reliably notifies or re-enters the main
-agent; merely spawning a subagent is not enough if the main agent or user must
-poll that subagent to learn it finished. If subagents exist but delegation
-requires explicit permission, or completion does not wake the main agent, skip
-that path and use backgrounded polling, scheduled wake-up, bounded foreground
-polling, or hand-back instead. An agent with background re-invocation or
+not allowed to start without permission. The grants form a ladder: the
+delegated watcher needs read-only delegation whose completion reliably
+notifies or re-enters the main agent (that gate, and the skip rule when it
+fails, live in step 3's delegated-watcher path), while step 4's delegated
+fixer needs delegation _with write access_, a larger grant (its gate lives
+in step 4); where a grant is not both supported and permitted, take the next
+permitted path. An agent with background re-invocation or
 scheduled wake-ups (e.g. Claude Code) runs the **non-blocking** path for that
 environment; an agent whose turn is synchronous and lacks a reliable
 subagent/background re-entry path (e.g. a plain Codex CLI session) degrades to
