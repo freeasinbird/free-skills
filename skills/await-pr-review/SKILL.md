@@ -460,6 +460,38 @@ properly (grep the file) and keep going. Don't rationalize a stop from a recurre
 you caused. Any round-count ceiling is purely a guard against a pathological
 infinite loop, set far above any healthy exchange — never a target to stop at.
 
+**Track findings by class across the whole exchange, and escalate on a
+recurrence.** Classify every finding as it arrives, from any source (a serial
+reviewer's rounds, an adversarial refute pass, your own self-review), and sweep
+each one's class immediately per step 4: the _first_ finding already earns an
+exhaustive same-push sweep, so never hold off waiting for a second. What the
+finding history adds is an **escalation** signal, tracked finding-level, not
+round-level (rounds are just the serial reviewer's batching). When a class gains
+a **second member** anywhere (same review, adjacent rounds, wherever) despite
+that sweep, you drew the boundary too narrow, so widen it one level up and
+re-enumerate the larger class (for example "thread page", then "REST comment
+page", then the real class "any single-page read of any connection") instead of
+patching the new instance at the old width.
+
+That second same-class finding is also when to spend one **adversarial refute
+pass**, where the platform permits **read-only** fresh-context delegation: a
+few fresh-context lenses, run in parallel, each tasked to _disprove_ the change,
+to surface the rest of the class in one shot before the reviewer serializes it
+over more rounds. This is a lighter grant than step 4's write-capable fixer:
+like the watcher, the lenses only disprove and report evidence, never edit,
+commit, or push, so gate them on read-only delegation (as step 4's fixer is
+gated on write access), not on the fixer's gate. The economics: a review round
+costs on the order of 1.5–3x the main context in token-equivalents plus ~10 min
+of latency, while a three-lens refute pass costs about one round's tokens and one
+round's wall clock, so it pays once the odds of two or more further preemptable
+rounds clear roughly 0.3–0.5, a bar a recurring class empirically meets.
+Guardrails: one such pass per PR, re-armed only if a class recurs after it;
+platform-gated on read-only delegation, with plain serial sweeping as the
+fallback where even that is unavailable; and evidence-or-drop on whatever it
+raises, no speculative findings. Don't fire it on
+mixed-class declining-severity nits, a small change, or a single-surface diff,
+where there is no class to preempt.
+
 ### 6. Report
 
 Summarize: what the reviewer raised, what was fixed (with SHAs), what was
