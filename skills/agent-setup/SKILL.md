@@ -261,10 +261,11 @@ flagging; everything else is project-specific.
 
 ## Repo settings
 
-Several canonical conventions assume repository settings: `branches` and
-`pull-requests` state that merged branches auto-delete and that a real
-merge commit is the only merge method, which read as false if the
-settings are off. Treat this as **detect → report → offer to enable**,
+Several canonical conventions name repository settings as the intended
+setup: merged branches auto-delete, a real merge commit is the only
+merge method, and the merge commit carries the PR title and body. The
+audit keeps that setup true so the canonical text's manual fallbacks
+stay rare. Treat this as **detect → report → offer to enable**,
 never a silent mutation. Changing repo settings needs admin rights the
 agent may not have, so confirm before applying; otherwise tell the user
 the desired state and where to set it.
@@ -275,6 +276,7 @@ Settings the conventions depend on:
 | ----------------------------------------- | ------------------------------------------------------------------- |
 | Auto-delete head branches on merge        | `branches`/`pull-requests` state merged branches auto-delete        |
 | Merge-commit-only (squash and rebase off) | `commits` needs real merge commits for the `--first-parent` history |
+| Merge commit message from PR title/body   | `pull-requests` writes PR titles for the `--first-parent` log       |
 
 These toggles are forge-specific. On GitHub, check and (after confirming)
 set them with `gh`; skip or adapt this on other forges, which expose
@@ -283,14 +285,17 @@ equivalent settings:
 ```sh
 # Check current state
 gh api repos/{owner}/{repo} \
-  --jq '{delete_branch_on_merge, allow_merge_commit, allow_squash_merge, allow_rebase_merge}'
+  --jq '{delete_branch_on_merge, allow_merge_commit, allow_squash_merge,
+         allow_rebase_merge, merge_commit_title, merge_commit_message}'
 
 # Align (only after confirming with the user)
 gh api -X PATCH repos/{owner}/{repo} \
   -F delete_branch_on_merge=true \
   -F allow_merge_commit=true \
   -F allow_squash_merge=false \
-  -F allow_rebase_merge=false
+  -F allow_rebase_merge=false \
+  -f merge_commit_title=PR_TITLE \
+  -f merge_commit_message=PR_BODY
 ```
 
 If the agent lacks permission or the forge isn't GitHub, report the
