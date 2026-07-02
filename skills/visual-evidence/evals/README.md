@@ -20,9 +20,12 @@ belong in a session workspace outside the repo.
   3. `before-already-committed`: fix already committed; expects the
      before state reconstructed from git history, then a comparable
      pair.
-- `trigger-evals.json` (planned): should-trigger / should-not-trigger
-  query set for the description-optimization loop; added when that
-  loop runs.
+- `trigger-evals.json`: 20 user-approved queries (10 should-trigger,
+  10 should-not-trigger) for the description-optimization loop
+  (skill-creator's `scripts.run_loop`). The negatives are deliberate
+  near-misses: attach-an-already-taken image (gh-imgup's trigger),
+  backend or perf fixes, docs changes, desktop screenshots, UI test
+  authoring.
 
 ## Re-running
 
