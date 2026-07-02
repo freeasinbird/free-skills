@@ -1,0 +1,82 @@
+[
+  {
+    "query": "just fixed the navbar padding on mobile (it was overlapping the logo), can you open a PR for it",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm about to fix the misaligned totals column in InvoiceTable.tsx, can you grab before/after screenshots for the PR?",
+    "should_trigger": true
+  },
+  {
+    "query": "we added a dark mode variant for the settings page last sprint and reviewers keep asking what it looks like. add visual proof to PR #212",
+    "should_trigger": true
+  },
+  {
+    "query": "built a new EmptyState component in src/components/EmptyState.vue, need to show it in the PR so design can sign off",
+    "should_trigger": true
+  },
+  {
+    "query": "reviewing my teammate's PR that changes the card grid from flexbox to CSS grid, hard to tell from the diff if anything shifted. can you show me what actually changed visually?",
+    "should_trigger": true
+  },
+  {
+    "query": "users say the account dropdown looks broken since last week's release. I have a fix ready on fix/dropdown-z-index, make sure the reviewer can see it's fixed",
+    "should_trigger": true
+  },
+  {
+    "query": "ok the button spacing fix is done... how do i add screenshots to the pr, like a before and after thing",
+    "should_trigger": true
+  },
+  {
+    "query": "bump the line-height in the article body styles from 1.4 to 1.6 and open a PR",
+    "should_trigger": true
+  },
+  {
+    "query": "Please capture evidence of the typography changes on the marketing landing page (font sizes and heading weights) for the design review issue.",
+    "should_trigger": true
+  },
+  {
+    "query": "swap our alert banners from orange to the new brand amber #f5a623 across the app, then get it up for review",
+    "should_trigger": true
+  },
+  {
+    "query": "i already took a screenshot of the bug, it's on my desktop as bug.png, attach it to issue #88",
+    "should_trigger": false
+  },
+  {
+    "query": "fixed the race condition in the payment webhook handler, open a PR with a good description",
+    "should_trigger": false
+  },
+  {
+    "query": "update the README installation section for the new pnpm setup and open a PR",
+    "should_trigger": false
+  },
+  {
+    "query": "take a screenshot of my desktop so I can show IT the weird popup error I keep getting",
+    "should_trigger": false
+  },
+  {
+    "query": "review PR #145, it refactors the date parsing utilities, make sure the tests cover the edge cases",
+    "should_trigger": false
+  },
+  {
+    "query": "the dashboard feels slow to render, profile it and open a PR with the memoization fix",
+    "should_trigger": false
+  },
+  {
+    "query": "add a feature flag that toggles the new checkout flow off by default and PR it, no UI changes yet",
+    "should_trigger": false
+  },
+  {
+    "query": "I have before.png and after.png from QA in ~/Downloads, put them in the PR description",
+    "should_trigger": false
+  },
+  {
+    "query": "generate an architecture diagram of our services and add it to the docs folder",
+    "should_trigger": false
+  },
+  {
+    "query": "add a playwright test that checks the login page renders the SSO button",
+    "should_trigger": false
+  }
+]
