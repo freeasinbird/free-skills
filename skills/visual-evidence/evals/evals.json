@@ -1,0 +1,53 @@
+{
+  "skill_name": "visual-evidence",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "spacing-fix-pair",
+      "prompt": "You are working in the static-site git repo at <fixture-repo>. The card list rows look cramped: the .card rule's vertical padding is too tight. The fix already exists as an uncommitted patch file at <fixture-repo>/spacing-fix.patch (apply it with git apply). Apply the spacing fix and produce the visual evidence a PR reviewer would need to judge this change by looking at it. The site is plain static files; serve it with python3 -m http.server from the repo root (pick a free port). The page styles both light and dark mode via prefers-color-scheme. IMPORTANT: do NOT upload or attach the images anywhere (no gh-imgup, no GitHub, no image host, no PR or issue). Stop at local image files saved in <outputs-dir>, plus the composed evidence markdown saved to <outputs-dir>/evidence.md referencing those local files by relative path.",
+      "expected_output": "A tight-cropped before/after screenshot pair of the card list for both light and dark themes (four images), each before/after pair identical in width with any height delta explained by the padding change, plus an evidence.md that labels Before and After in that order for each theme, with no uploads performed.",
+      "files": [],
+      "expectations": [
+        "Before and after images exist for the light theme",
+        "Before and after images exist for the dark theme",
+        "Every captured image is non-blank (pixel variance above a trivial threshold)",
+        "Each before/after pair has identical pixel width, and any height delta is consistent with the padding change (element capture) or zero (fixed-rectangle capture)",
+        "Every image is within sane dimension bounds (each axis <= 2000px, no full-page tall strip, no sub-100px sliver)",
+        "Images are cropped to the card list region, not the full page or screen",
+        "The composed markdown labels Before and After, with Before preceding After",
+        "The composed markdown covers both themes with captions naming the theme",
+        "Nothing was uploaded or attached anywhere; evidence stops at local files"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "net-new-component",
+      "prompt": "You are working in the static-site git repo at <fixture-repo>. Add a new empty-state card to the page: a card, shown after the task list, containing the heading 'No tasks yet' and the text 'Add your first task to get started.' Style it consistently with the existing cards in both light and dark mode. Then produce the visual evidence a PR reviewer would need for this change. Serve the site with python3 -m http.server from the repo root (pick a free port). IMPORTANT: do NOT upload or attach the images anywhere (no gh-imgup, no GitHub, no image host, no PR or issue). Stop at local image files saved in <outputs-dir>, plus the composed evidence markdown saved to <outputs-dir>/evidence.md referencing those local files by relative path.",
+      "expected_output": "A single captioned after shot of the new empty-state card (a dark variant is welcome), with no fabricated before image, plus an evidence.md placing the captioned shot(s), and no uploads performed.",
+      "files": [],
+      "expectations": [
+        "An after image of the new empty-state card exists and is non-blank",
+        "No fabricated before image exists and the markdown contains no Before label for the net-new component",
+        "The image is within sane dimension bounds (each axis <= 2000px)",
+        "The image is cropped to the new card region, not the full page or screen",
+        "The composed markdown captions the shot naming the state shown",
+        "Nothing was uploaded or attached anywhere; evidence stops at local files"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "before-already-committed",
+      "prompt": "You are working in the static-site git repo at <fixture-repo>. The card-spacing fix has ALREADY been committed: HEAD is the commit 'Fix card list vertical padding' and its parent is the buggy state. Produce the before/after visual evidence a PR reviewer would need for this already-landed change. The site is plain static files; serve it with python3 -m http.server (pick a free port). IMPORTANT: do NOT upload or attach the images anywhere (no gh-imgup, no GitHub, no image host, no PR or issue). Stop at local image files saved in <outputs-dir>, plus the composed evidence markdown saved to <outputs-dir>/evidence.md referencing those local files by relative path.",
+      "expected_output": "The before state reconstructed from git history (worktree or checkout of the pre-fix commit) rather than skipped, then a comparable before/after pair (identical width; height delta explained by the spacing fix) and an evidence.md labeling Before and After in order, with no uploads performed.",
+      "files": [],
+      "expectations": [
+        "The before state was reconstructed from git history (worktree, checkout, or equivalent), not skipped or faked",
+        "Before and after images exist and are non-blank",
+        "The before/after pair has identical pixel width, and any height delta is consistent with the spacing fix (element capture) or zero (fixed-rectangle capture)",
+        "Every image is within sane dimension bounds (each axis <= 2000px)",
+        "The composed markdown labels Before and After, with Before preceding After",
+        "Nothing was uploaded or attached anywhere; evidence stops at local files"
+      ]
+    }
+  ]
+}
