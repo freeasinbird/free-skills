@@ -1,8 +1,8 @@
 ---
 name: self-merge
-description:
+description: >-
   This skill should be used when a user explicitly opts into letting the
-  agent carry a pull request all the way to merged `main` itself — "merge it
+  agent carry a pull request all the way to merged `main` itself: "merge it
   yourself", "self-merge", "merge my own PR", "carry the PR through to
   merge", "land the PR without waiting for me". It is an opt-in override of
   the safe default (stop at an open, review-ready PR for a human to merge)
@@ -18,7 +18,7 @@ your own.
 
 ## When this applies
 
-The default agent finish line is an open, review-ready PR — merging is a
+The default agent finish line is an open, review-ready PR; merging is a
 human decision. Use this skill **only** when one of these is true:
 
 - The user has explicitly asked the agent to merge its own work, or
@@ -39,7 +39,7 @@ agent carries the full review burden. Do not merge until all of these hold:
   never merge around them.
 - **Self-review the diff in the PR files view.** Look for stray hunks,
   leftover debug code, scope creep, and anything the editor view hid.
-- **Required review artifacts are attached** — for example GitHub-hosted
+- **Required review artifacts are attached**, for example GitHub-hosted
   screenshots for a visible UI change. If you cannot attach them yourself,
   stop and ask the user rather than merging without them.
 - **The change is reversible and low-blast-radius.** For irreversible or
@@ -54,13 +54,13 @@ open PR and say exactly what is blocking the merge.
 
 Once the guardrails hold:
 
-1. **Merge** with `gh pr merge <n> --merge` — a real merge commit, so
+1. **Merge** with `gh pr merge <n> --merge`: a real merge commit, so
    `git log --first-parent` reads as the work-unit narrative. Squash and
    rebase are typically disabled to preserve atomic history; don't re-enable
    them to work around this. The remote branch auto-deletes when the repo is
    configured for it.
-2. **Resync** — `git checkout main && git pull --ff-only`.
-3. **Clean up** — delete the local branch (`git branch -d <branch>`) and
+2. **Resync**: `git checkout main && git pull --ff-only`.
+3. **Clean up**: delete the local branch (`git branch -d <branch>`) and
    `git fetch --prune`. A stacked follow-up PR retargets to `main` on its
    own once its base merges.
 

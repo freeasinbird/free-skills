@@ -496,6 +496,8 @@ Before calling work done:
 
 - Markdown lint clean (`npx markdownlint-cli2 '**/*.md'`)
 - Format clean (`npx prettier --check '**/*.md'`)
+- Prose-tic check clean (`./scripts/check-prose-tics.sh`): no em dashes,
+  misused en dashes, or stock AI openers in markdown outside `devlog/`
 - New or changed skills have a valid `SKILL.md` with parse-safe YAML
   frontmatter (`description` as a `>-` block scalar; see Conventions)
 - Skill prompts reviewed for platform-agnostic language (no
@@ -506,6 +508,8 @@ Before calling work done:
   changed (`./scripts/test-compare-managed-blocks.sh`)
 - Watcher validation matrix green when await-pr-review's `watch-review.sh`
   changed (`./scripts/test-watch-review.sh`)
+- Prose-tics matrix green when the prose-tic check changed
+  (`./scripts/test-check-prose-tics.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
   changed (`./scripts/test-capture.sh`)
 
