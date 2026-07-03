@@ -87,8 +87,12 @@ difference between the two images must be the change itself. Hold constant:
 - **Viewport size** and device-pixel-ratio / zoom. Set a fixed, standard
   viewport rather than whatever the window happens to be: 1280×720 is a sane
   desktop default (or the app's design target); use a mobile width (e.g.
-  390×844) when the change is mobile-specific. Prefer 2x DPR so text stays
-  legible when the image is scaled down.
+  390×844) when the change is mobile-specific. When the change is
+  responsive (it affects layout across widths), capture desktop and mobile
+  as a viewport matrix in the same run (one command where your tooling
+  supports it; see the reference capture script) instead of re-driving the
+  app once per width; each width is its own before/after pair. Prefer 2x
+  DPR so text stays legible when the image is scaled down.
 - **Theme**: capture **both light and dark** as separate pairs when the
   change affects appearance in both.
 - **Interactive state**: default / hover / focus / active / error / empty /
@@ -100,7 +104,11 @@ difference between the two images must be the change itself. Hold constant:
 
 - **Crop to the affected component or region, not the whole screen**, unless
   the change is genuinely page-level (overall layout, cross-page spacing). A
-  full-screen shot buries the point in nav, chrome, and noise.
+  full-screen shot buries the point in nav, chrome, and noise. An oversized
+  shot also keeps costing after capture: an image placed into an agent
+  conversation is typically re-read on every later turn, so a full-page
+  screenshot spends context for the rest of the session, while a tight crop
+  pays once.
 - Prefer **element-level capture** so the frame is tight and deterministic:
   - Playwright: `locator.screenshot()` / `elementHandle.screenshot()`, or
     `page.screenshot({ clip: { x, y, width, height } })`.
@@ -134,10 +142,41 @@ These tools are examples for common host setups, not requirements: use
 whatever capture mechanism your environment provides, applying the same
 craft (tight crop, identical conditions, deterministic state).
 
+### Reference capture script
+
+Where headless Chrome and Node 22+ are available, `capture.mjs` alongside
+this file makes the mechanics of steps 3–5 executable in one command:
+deterministic readiness waits (network-idle, selector visibility), an
+animation kill switch, a pinned color scheme (`--dark` for the dark
+variant of a theme pair), a viewport matrix, DPR, element clipping with
+padding, retries, and a total timeout budget.
+
+```sh
+node capture.mjs --url http://localhost:3000/cards --out after.png \
+  --viewport 1280x720,390x844 --wait-for '#card-list' --clip '#card-list'
+```
+
+It prints one line per written file with the image's actual dimensions,
+which is the input to the step 6 dimension check. The timeout budget
+(default 90 seconds, `--timeout-budget`) keeps the whole run under the
+roughly 2-minute cap common to agent shell tools (see step 5), and its
+exit codes are explicit: 64 usage, 69 no usable Chrome or Node, 1 capture
+failed after retries. Where Chrome or Node 22+ is missing, the script
+refuses with exit 69 and the prose in steps 3–6 is the specification:
+apply the same craft with whatever capture mechanism your environment
+provides.
+
 ### 5. Determinism & hygiene
 
 - **Disable animations** and wait for network-idle and the target element to be
   visible before capturing, so shots are stable and repeatable.
+- **Budget the capture's wall-clock time explicitly.** Agent shell tools
+  commonly cap a command around 2 minutes, and a capture that hangs on a
+  readiness wait eats the whole cap and returns nothing. Give the run a
+  total timeout budget under that cap (the reference script defaults to
+  90 seconds) with per-attempt timeouts and retries, so a hung wait fails
+  fast, retries, and reports a legible error instead of being killed
+  opaquely.
 - Use **seeded / fixture data**; avoid timestamps, random values, and live
   customer data that add noise.
 - Hygiene here is about _clean, comparable_ shots. **Secret and PII safety is
