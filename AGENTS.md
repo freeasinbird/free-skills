@@ -506,6 +506,8 @@ Before calling work done:
   changed (`./scripts/test-compare-managed-blocks.sh`)
 - Watcher validation matrix green when await-pr-review's `watch-review.sh`
   changed (`./scripts/test-watch-review.sh`)
+- Capture validation matrix green when visual-evidence's `capture.mjs`
+  changed (`./scripts/test-capture.sh`)
 
 <!-- /agents-md:project:done-checks -->
 
