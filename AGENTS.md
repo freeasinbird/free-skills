@@ -221,6 +221,18 @@ agents start pushing in parallel. Merged branches auto-delete where
 that repo setting is on (delete them after merge where it isn't); the
 merge commit carries the narrative.
 
+**Prefer a dedicated worktree per work unit.** Where your platform and
+session support working from a second checkout (a native worktree tool
+or session flag, or plain
+`git worktree add <path> -b <type>/<slug> <base>`), do the work in a
+dedicated worktree instead of the shared primary checkout, so parallel
+agent sessions and the user's own work never collide on files, branch
+state, or uncommitted changes. Remove the worktree once its branch
+merges (`git worktree remove <path>`). Where they don't (no
+multi-checkout support, or a sandbox pinned to one directory), fall
+back to a branch in the primary checkout; the branch discipline above
+still applies either way.
+
 Follow-up work that depends on an open PR can stack on its branch instead
 of waiting; see the Stacked PRs pattern under Pull requests.
 
