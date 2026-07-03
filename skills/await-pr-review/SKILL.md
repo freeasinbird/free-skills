@@ -340,7 +340,9 @@ essentials, project-agnostic:
   class and fix every instance in the same push, so the next re-review doesn't
   flag the siblings one at a time.
 - **Reply and resolve.** Reply inline with the disposition and the fixing commit
-  SHA (or the reasoned decline), then resolve the thread.
+  SHA (or the reasoned decline), then resolve the thread. A decline pushes no
+  commit, so a round of only declines leaves a push-triggered reviewer with
+  nothing to re-fire on; step 5 covers re-triggering the next pass.
 - **Auto-address the clear-cut; surface the judgment calls.** Apply the
   obviously-correct fixes yourself. **Pause and surface** anything ambiguous,
   contentious, or design-altering for the user to decide; do not silently make
@@ -397,13 +399,28 @@ equivalent.
 
 ### 5. Converge on value, don't cap a productive exchange
 
-Addressing pushes commits, which re-triggers a push-triggered reviewer; for a
-command-triggered one, re-issue its trigger (step 2) after the fix push or the
-wait has nothing coming. **Advance the
-baseline (step 1) before each post-fix wait**: to the review you just handled,
-or to the push you just made. Otherwise the already-handled review is still
-"after baseline," so the next wait returns instantly and reprocesses old
-feedback; only the reviewer's _fresh_ pass should finish the next round.
+A round ends one of two ways, and each needs a different re-trigger. **When you
+pushed a fix**, the commit re-triggers a push-triggered reviewer on its own; a
+command-triggered one still needs its command re-issued (step 2). **When the
+round produced no push** (you declined every finding, or it was a pure
+judgment-call round with no code change), no push event fires, so a
+push-triggered reviewer has nothing coming and a wait would burn the watcher's
+full cap to a timeout. Always force a fresh pass yourself before waiting:
+prefer the reviewer's manual command where it has one (for Codex, an
+`@codex review` comment; lighter, no side effects), and fall back to the host's
+mark-draft-then-ready toggle only when the reviewer has no command but its
+recorded trigger set includes ready-for-review (heavier: it can dismiss
+approvals and block merge while the PR is draft). Use only an affordance the
+reviewer's recorded trigger actually re-fires on; if none exists, hand off
+rather than wait on a pass that will never come.
+
+**Advance the baseline (step 1) before each post-fix wait**: to the review you
+just handled, or to the push you just made. For a no-push re-trigger, anchor
+instead to the trigger/request time per step 1's manual-recheck rule, so the
+reviews you already handled aren't replayed. Otherwise the already-handled
+review is still "after baseline," so the next wait returns instantly and
+reprocesses old feedback; only the reviewer's _fresh_ pass should finish the
+next round.
 
 The stop signal is **value tapering, not round count.** Keep going for as long
 as rounds keep
@@ -411,8 +428,8 @@ surfacing **worthwhile** findings: real correctness, clarity, or safety issues,
 including the round your last fix triggered. **Never stop on a worthwhile
 round**, and **don't cap a still-valuable back-and-forth**: if each round is
 still delivering, ten useful rounds beat stopping at three. A good finding is
-the signal to continue: after each fix, wait for the next review and only then
-judge it. When the exchange runs long, keep the fixer alive across rounds
+the signal to continue: after each round, re-trigger as above, wait for the
+next review, and only then judge it. When the exchange runs long, keep the fixer alive across rounds
 rather than respawning it each time; step 4 covers why a persistent fixer
 amortizes its context rebuild better over a multi-round loop.
 
