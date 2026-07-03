@@ -510,6 +510,8 @@ Before calling work done:
   changed (`./scripts/test-watch-review.sh`)
 - Prose-tics matrix green when the prose-tic check changed
   (`./scripts/test-check-prose-tics.sh`)
+- Capture validation matrix green when visual-evidence's `capture.mjs`
+  changed (`./scripts/test-capture.sh`)
 
 <!-- /agents-md:project:done-checks -->
 
