@@ -22,8 +22,9 @@
 
 <!-- Required for PRs with visible UI changes; delete for non-visual PRs.
      Replace this section with actual forge-hosted, reviewer-visible image or
-     recording attachments before merging. Local paths, textual descriptions,
-     and "checked locally" notes do not satisfy this section. -->
+     recording attachments before handing off, and in every case before merge.
+     Local paths, textual descriptions, and "checked locally" notes do not
+     satisfy this section. -->
 
 ## Review Notes
 
