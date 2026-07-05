@@ -316,9 +316,13 @@ no new review activity outstanding. Once the PR is up:
 
 If the user does ask you to merge, merge with a real merge commit (on
 GitHub: `gh pr merge <n> --merge`), delete the remote branch if the
-auto-delete setting didn't, then resync
-(`git checkout main && git pull --ff-only`), delete the local branch
-(`git branch -d <branch>`), and `git fetch --prune`.
+auto-delete setting didn't, then resync the base branch, delete the
+local branch (`git branch -d <branch>`), and `git fetch --prune`. In a
+single checkout the resync is `git checkout main && git pull --ff-only`;
+when the work ran in a dedicated worktree (see Branches) `git checkout main`
+refuses with "already used by worktree", so resync `main` in the primary
+checkout and `git worktree remove <path>` the feature worktree before
+deleting its branch.
 
 ### Reviewing a PR
 

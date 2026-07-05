@@ -59,9 +59,12 @@ Once the guardrails hold:
    rebase are typically disabled to preserve atomic history; don't re-enable
    them to work around this. The remote branch auto-deletes when the repo is
    configured for it.
-2. **Resync**: `git checkout main && git pull --ff-only`.
-3. **Clean up**: delete the local branch (`git branch -d <branch>`) and
-   `git fetch --prune`. A stacked follow-up PR retargets to `main` on its
-   own once its base merges.
+2. **Resync**: `git checkout main && git pull --ff-only`. If the work ran
+   in a dedicated worktree, `git checkout main` refuses with "already used
+   by worktree"; resync `main` in the primary checkout instead.
+3. **Clean up**: delete the local branch (`git branch -d <branch>`; from a
+   worktree, `git worktree remove <path>` first, since a branch checked out
+   in a worktree can't be deleted) and `git fetch --prune`. A stacked
+   follow-up PR retargets to `main` on its own once its base merges.
 
 Then summarize what merged and what, if anything, remains.
