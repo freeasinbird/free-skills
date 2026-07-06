@@ -115,10 +115,31 @@ difference between the two images must be the change itself. Hold constant:
   - Chrome DevTools / CDP: read the node's bounding box and clip to it.
   - OS screenshot tools: crop to a fixed rectangle and reuse it for both shots.
 - **No element capture available?** Capture the screen or window, then crop
-  both images to the same fixed rectangle after the fact with whatever image
-  tool the host provides (ImageMagick or macOS `sips` are examples, not
-  requirements). The invariant is the identical crop rectangle across both
-  shots, not any particular tool.
+  both images to the same fixed rectangle after the fact. The invariant is the
+  identical crop rectangle across both shots, not any particular tool; prefer
+  one that can crop an arbitrary rectangle and that your environment either
+  already has or can install unattended (auto-mode agents can't stop to
+  hand-install a system package). Examples, roughly in that friction order:
+  - **Already installed?** A system binary is a zero-setup one-liner:
+    ImageMagick (`magick in.png -crop WxH+X+Y +repage out.png`) or libvips
+    (`vips crop in.png out.png L T W H`). On macOS, `sips` is always present, but
+    it crops **in place** and **centered** by default, so pass an explicit
+    `--out` and pin the origin with `--cropOffset`:
+    `sips in.png -c H W --cropOffset TOP LEFT --out out.png` (bare `-c` alone
+    overwrites the input with a centered crop).
+  - **Otherwise install one via a runtime you already have**, which an agent
+    can do non-interactively: Pillow (`pip install pillow`, prebuilt wheels on
+    common platforms) with `Image.open(p).crop((left, top, right, bottom)).save(out)`,
+    or, on Node, Sharp (`npm install --no-save --no-package-lock sharp`, so
+    cropping a screenshot leaves no stray dependency or lockfile in the change
+    under review) with
+    `sharp(p).extract({ left, top, width, height }).toFile(out)`.
+
+  Self-installing assumes the agent's sandbox allows network (and, in full-auto,
+  open permissions); a network-restricted sandbox (common under Codex and locked-
+  down automode) makes even `pip`/`npm` fail, so an already-installed tool, or
+  `capture.mjs`'s own element clip on the primary path, stays the most reliable.
+
 - Include **just enough surrounding context** to orient the reviewer (a
   little padding around the component) and cut irrelevant sidebars and
   headers.
