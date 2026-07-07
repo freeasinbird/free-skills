@@ -170,6 +170,13 @@ write the canonical sections and scaffolding, leave placeholders for
 project-specific sections (a TODO comment noting what to fill in), and
 move on. The user can re-run in update mode once the project has shape.
 
+Keep the project-specific payload lean: AGENTS.md is loaded whole into
+every agent session, so its sections should hold rules that apply to
+most sessions. Reference material (a format spec, API detail, a long
+gotcha catalog) belongs in `docs/` behind a one-line pointer that names
+when to read it ("before editing the parser, read
+`docs/format-spec.md`"), not inlined.
+
 ### Header/intro
 
 Write a one-paragraph intro: project name, pointer to the spec document
