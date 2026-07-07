@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 comparator=skills/agent-setup/scripts/compare-managed-blocks.sh
 canon=skills/agent-setup/references/canonical-sections.md
-keys=(devlog finish-line branches pull-requests commits done)
+keys=(devlog finish-line context branches pull-requests commits done)
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

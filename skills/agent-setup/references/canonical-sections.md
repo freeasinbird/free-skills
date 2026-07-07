@@ -8,7 +8,8 @@ compare the content between markers against these blocks, leaving that
 nested block alone.
 
 Sections: [devlog](#section-devlog),
-[finish-line](#section-finish-line), [branches](#section-branches),
+[finish-line](#section-finish-line), [context](#section-context),
+[branches](#section-branches),
 [pull-requests](#section-pull-requests), [commits](#section-commits),
 [done](#section-done).
 
@@ -89,6 +90,48 @@ equivalence, a harness measures it. Scope all of this to those risk
 classes; a docs typo or a refactor off these paths shouldn't trigger it.
 
 <!-- /agents-md:managed:finish-line -->
+
+---
+
+## Section: context
+
+<!-- agents-md:managed:context -->
+
+## Context discipline
+
+The working context is finite, and everything held in it is re-sent
+with every later tool call, so transient bulk pulled in early taxes
+every step after it. Durable state belongs in files (the devlog entry,
+the PR body); keep the working context to what the current step needs.
+
+- **Keep raw bulk out.** Prefer targeted, bounded reads and searches
+  (a file region, a match list, a filtered log tail) over whole-file
+  dumps and unfiltered search output; don't page a large artifact into
+  context when a bounded query answers the question.
+- **Delegate broad exploration.** Where your platform and session
+  support delegation, offload broad exploration and mechanical sweeps
+  to a delegate that returns conclusions (findings, `file:line`
+  pointers, a short digest), never its raw output. Where they don't,
+  fall back to the bounded reads and searches above. Scale to size
+  either way: for a question a couple of targeted reads can answer,
+  spawning a delegate costs more than it saves.
+- **Right-size delegated work.** Where the platform exposes a model
+  class or effort level for delegated work, send mechanical scanning
+  and digesting to the cheapest class that handles it reliably;
+  frontier capability spent on rote reading is waste. Where it
+  doesn't, skip this.
+- **No quiet fan-out.** One delegate for exploration or review is
+  normal. Parallel multi-agent fan-outs multiply cost invisibly;
+  before launching one, state the expected scale and proceed with the
+  user's go-ahead or within a budget they already set.
+- **Prefer a fresh session over a bloated one.** The devlog entry and
+  the PR body carry the durable state, so at a natural boundary (a PR
+  handed off, a review round closed, a new work unit) in a long
+  session, suggest continuing in a fresh session seeded with the PR
+  number and the entry rather than pushing on; the accumulated context
+  adds little to the next unit and dominates its cost.
+
+<!-- /agents-md:managed:context -->
 
 ---
 
