@@ -15,7 +15,7 @@ description: >-
 
 Ensure a project is agent-ready: AGENTS.md with canonical workflow
 sections, devlog directory, CLAUDE.md pointer, PR template, and repo
-scaffolding. Six canonical sections encode the owner's workflow
+scaffolding. Seven canonical sections encode the owner's workflow
 conventions and are managed across projects; project-specific sections
 (build/test/run, architecture invariants, conventions) are guided
 interactively during init and left untouched during updates.
@@ -131,12 +131,13 @@ shell access, follow the steps manually as written.
 1. Header/intro                          (project-specific)
 2. Devlog (session bookends)             (managed: devlog)
 3. Default agent finish line             (managed: finish-line)
-4. Build, test, run                      (project-specific)
-5. [Other project-specific sections]     (project-specific)
-6. Branches                              (managed: branches)
-7. Pull requests + Handing off the PR    (managed: pull-requests)
-8. Commits                               (managed: commits)
-9. Definition of done for an increment   (managed: done)
+4. Context discipline                    (managed: context)
+5. Build, test, run                      (project-specific)
+6. [Other project-specific sections]     (project-specific)
+7. Branches                              (managed: branches)
+8. Pull requests + Handing off the PR    (managed: pull-requests)
+9. Commits                               (managed: commits)
+10. Definition of done for an increment  (managed: done)
 ```
 
 ## Managed section markers
@@ -153,7 +154,8 @@ Content...
 <!-- /agents-md:managed:KEY -->
 ```
 
-Keys: `devlog`, `finish-line`, `branches`, `pull-requests`, `commits`, `done`.
+Keys: `devlog`, `finish-line`, `context`, `branches`, `pull-requests`,
+`commits`, `done`.
 
 To opt a section out of management, remove its markers. The update mode
 will note it as missing and offer to re-add, but will not force it.
@@ -167,6 +169,13 @@ the project is too early for these decisions (fresh repo, no code yet),
 write the canonical sections and scaffolding, leave placeholders for
 project-specific sections (a TODO comment noting what to fill in), and
 move on. The user can re-run in update mode once the project has shape.
+
+Keep the project-specific payload lean: AGENTS.md is loaded whole into
+every agent session, so its sections should hold rules that apply to
+most sessions. Reference material (a format spec, API detail, a long
+gotcha catalog) belongs in `docs/` behind a one-line pointer that names
+when to read it ("before editing the parser, read
+`docs/format-spec.md`"), not inlined.
 
 ### Header/intro
 

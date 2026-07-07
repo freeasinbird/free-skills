@@ -32,7 +32,7 @@ if [ ! -f "$agents" ]; then
   exit 1
 fi
 
-keys=(devlog finish-line branches pull-requests commits done)
+keys=(devlog finish-line context branches pull-requests commits done)
 status=0
 
 count_line() { # count_line <file> <exact-line>

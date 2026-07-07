@@ -31,6 +31,11 @@ entries are the trail of how it got that way.
   consolidated while its PR is unmerged (in lockstep with branch rewrites;
   see fold-fix in AGENTS.md). It freezes when the PR merges; later
   corrections go in a new entry. Never rewrite an already-merged entry.
+- **Checkpoint long sessions.** The unmerged entry may be written
+  incrementally: at a natural checkpoint (a PR opened, a review round
+  closed, a decision made), write or update it so a fresh session can
+  resume from the entry plus the PR body instead of carrying the whole
+  session forward. Revisable-until-merge covers these rewrites.
 - **Dense, not capped.** Record decisions, deferrals, and rejected
   alternatives, never narration; the mechanical what-changed lives in
   commits and per-thread dispositions in the PR. Target ≤ ~40 lines _per
