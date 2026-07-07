@@ -20,7 +20,9 @@ target, structure, and when an entry may be revised.
   the user asking. Also grep the devlog for the open `## To promote` /
   deferred / needs-human queue so promotions don't span sessions unnoticed.
 - **Before finishing:** append `devlog/YYYY-MM-DD-HHMM-slug.md`: decisions
-  (why, and what was rejected), deferrals, open questions. Note anything
+  (why, and what was rejected), deferrals, open questions; the entry may be
+  built incrementally at checkpoints while its PR is unmerged (see
+  devlog/README.md). Note anything
   that should be promoted to AGENTS.md: a new invariant discovered, a
   convention that wasn't written down, a gotcha that bit you; the entry
   records it, a follow-up commit promotes it. Commits and PR threads carry
