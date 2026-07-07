@@ -248,9 +248,11 @@ arc.
 
 - **Title**: imperative, ≤ 72 chars, names the outcome, no type prefix
   or ticket noise ("Fix missing menu bar on unbundled launch"). In the
-  intended repo setup the PR title and body become the merge commit
-  message, so `git log --first-parent` reads as the list of PR titles;
-  write the title for that log either way.
+  intended repo setup the PR title (plus its number) is the _entire_
+  merge commit message: merges are title-only, so the body's review
+  material (screenshots, verification, review notes) never lands in
+  history, and `git log --first-parent` reads as the list of PR
+  titles; write the title for that log either way.
 - **Body**: scaffolded by the repo's PR template (on GitHub:
   `.github/pull_request_template.md`):
   - **Why**: prose, one to three short sentences. State the problem or
@@ -358,18 +360,20 @@ arc.
   that is a miss to sweep, not a stop. Bias toward continuing while
   findings are genuinely worthwhile; the human's merge is the reliable
   convergence signal, not your own sense that you are done.
-- **Keep the body current as review evolves the PR.** The body becomes the
-  merge commit, so when review adds commits or shifts scope, update What,
+- **Keep the body current as review evolves the PR.** The body is the
+  work unit's durable record on the forge (the merge commit carries only
+  the title), so when review adds commits or shifts scope, update What,
   the commit map (flag which commits resolve review findings, by subject as
   above), and Verification before re-handing-off. The inline disposition +
   fixing SHA on each resolved thread (above) is the located per-finding
   record (that reply is written once, post-fold, so its SHA doesn't churn);
   don't duplicate it into a standing "feedback" section that would drift.
 - The intended repo settings enforce the Commits rules: merge commits
-  only (squash and rebase disabled) and auto-delete of merged branches.
-  Don't re-enable around them; where they aren't set, hold the same
-  rules manually (merge-commit merges only, delete the remote branch
-  after merge).
+  only (squash and rebase disabled), title-only merge messages, and
+  auto-delete of merged branches. Don't re-enable around them; where
+  they aren't set, hold the same rules manually (merge-commit merges
+  only, the merge message kept to the PR title, delete the remote
+  branch after merge).
 
 ### Handing off the PR
 
@@ -410,7 +414,11 @@ no new review activity outstanding. Once the PR is up:
   the `main` resync to whoever approves it.
 
 If the user does ask you to merge, merge with a real merge commit (on
-GitHub: `gh pr merge <n> --merge`), delete the remote branch if the
+GitHub: `gh pr merge <n> --merge`; where the repo's title-only
+merge-message settings aren't confirmed set, pass the message
+explicitly instead of inheriting the forge default:
+`gh pr merge <n> --merge --subject '<PR title> (#<n>)' --body ''`),
+delete the remote branch if the
 auto-delete setting didn't, then resync the base branch, delete the
 local branch (`git branch -d <branch>`), and `git fetch --prune`. In a
 single checkout the resync is `git checkout main && git pull --ff-only`;

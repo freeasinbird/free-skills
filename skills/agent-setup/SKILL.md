@@ -263,7 +263,7 @@ flagging; everything else is project-specific.
 
 Several canonical conventions name repository settings as the intended
 setup: merged branches auto-delete, a real merge commit is the only
-merge method, and the merge commit carries the PR title and body. The
+merge method, and the merge commit message is the PR title alone. The
 audit keeps that setup true so the canonical text's manual fallbacks
 stay rare. Treat this as **detect → report → offer to enable**,
 never a silent mutation. Changing repo settings needs admin rights the
@@ -272,11 +272,11 @@ the desired state and where to set it.
 
 Settings the conventions depend on:
 
-| Setting                                   | Why it matters                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------- |
-| Auto-delete head branches on merge        | `branches`/`pull-requests` state merged branches auto-delete        |
-| Merge-commit-only (squash and rebase off) | `commits` needs real merge commits for the `--first-parent` history |
-| Merge commit message from PR title/body   | `pull-requests` writes PR titles for the `--first-parent` log       |
+| Setting                                   | Why it matters                                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Auto-delete head branches on merge        | `branches`/`pull-requests` state merged branches auto-delete                                |
+| Merge-commit-only (squash and rebase off) | `commits` needs real merge commits for the `--first-parent` history                         |
+| Merge commit message = PR title only      | keeps the body's review material out of history; the title carries the `--first-parent` log |
 
 These toggles are forge-specific. On GitHub, check and (after confirming)
 set them with `gh`; skip or adapt this on other forges, which expose
@@ -295,7 +295,7 @@ gh api -X PATCH repos/{owner}/{repo} \
   -F allow_squash_merge=false \
   -F allow_rebase_merge=false \
   -f merge_commit_title=PR_TITLE \
-  -f merge_commit_message=PR_BODY
+  -f merge_commit_message=BLANK
 ```
 
 If the agent lacks permission or the forge isn't GitHub, report the

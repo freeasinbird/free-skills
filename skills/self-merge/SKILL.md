@@ -55,7 +55,11 @@ open PR and say exactly what is blocking the merge.
 Once the guardrails hold:
 
 1. **Merge** with `gh pr merge <n> --merge`: a real merge commit, so
-   `git log --first-parent` reads as the work-unit narrative. Squash and
+   `git log --first-parent` reads as the work-unit narrative. Where the
+   repo's title-only merge-message settings aren't confirmed set, pass
+   the message explicitly instead of inheriting the forge default:
+   `gh pr merge <n> --merge --subject '<PR title> (#<n>)' --body ''`.
+   Squash and
    rebase are typically disabled to preserve atomic history; don't re-enable
    them to work around this. The remote branch auto-deletes when the repo is
    configured for it.
