@@ -18,14 +18,19 @@ target, structure, and when an entry may be revised.
   they carry decisions and deliberate deferrals that aren't in the spec.
   Don't re-litigate or "fix" what an entry marks as decided/deferred without
   the user asking. Also grep the devlog for the open `## To promote` /
-  deferred / needs-human queue so promotions don't span sessions unnoticed.
+  deferred / needs-human queue so promotions don't span sessions unnoticed:
+  an item with no `->` state marker (or whose `-> re-deferred` clock has
+  run out) is open, unless a later entry or a tracker issue naming that
+  item and its source entry holds its drain record (see devlog/README.md).
 - **Before finishing:** append `devlog/YYYY-MM-DD-HHMM-slug.md`: decisions
   (why, and what was rejected), deferrals, open questions; the entry may be
   built incrementally at checkpoints while its PR is unmerged (see
   devlog/README.md). Note anything
   that should be promoted to AGENTS.md: a new invariant discovered, a
   convention that wasn't written down, a gotcha that bit you; the entry
-  records it, a follow-up commit promotes it. Commits and PR threads carry
+  records it, a follow-up commit promotes it. Draining or re-deferring a
+  queue item appends a `->` state marker to the source item
+  (devlog/README.md defines the forms). Commits and PR threads carry
   the what-changed.
 
 <!-- /agents-md:managed:devlog -->
@@ -53,7 +58,8 @@ Use this checklist for each work session:
 5. Commit one concern at a time with a body that says why.
 6. Before opening a docs/chore PR (or at session end), grep the devlog
    for the open `## To promote` / deferred / needs-human queue and clear
-   what the current scope covers, or explicitly re-defer; decided
+   what the current scope covers, or explicitly re-defer, marking the
+   source item; decided
    invariants shouldn't live only as devlog archaeology.
 7. Push, open the PR with the template, and remove sections that do not apply.
 8. Hand off per "Handing off the PR" (under Pull requests): start the

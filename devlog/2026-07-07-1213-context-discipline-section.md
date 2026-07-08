@@ -46,3 +46,5 @@ tool call re-sends the conversation; cached reads ~0.1x, cache writes
   it re-litigates the directory-of-entries merge-conflict rationale in
   devlog/README.md, so it needs Ben's explicit sign-off, not an
   agent's judgment.
+  -> declined in 2026-07-08-0919-devlog-protocol-v2.md: chose drain
+  annotations instead
