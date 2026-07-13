@@ -64,8 +64,12 @@ behavior; the protocol moves to it rather than outlawing it.
   freeasinbird.com, gh-imgup) waits for this PR to merge. straylight's
   sync should backfill `->` markers on its already-drained items;
   freeasinbird.com keeps its extra devlog/artifacts bullet.
+  -> declined in 2026-07-13-1809-post-63-cleanup-drains.md (owner's call:
+  downstream sync is handled per-repo, never queue-tracked or escalated to
+  an issue)
 - A legacy-queue audit of free-skills' older unmarked items; the
   merge-cleanup escalation step catches survivors from here on.
+  -> Refs #64
 
 ## To promote
 
@@ -74,6 +78,8 @@ behavior; the protocol moves to it rather than outlawing it.
   open/closed; every consumer defers to it), and a new state rule is
   done only when every consumer's predicate is checked against the full
   state matrix, not the instance that prompted it.
+  -> promoted in 2026-07-13-1809-post-63-cleanup-drains.md (it recurred in
+  PR #63 rounds 5 and 8; promoted to devlog/README.md and the scaffold)
 
 ## Verification
 

@@ -63,7 +63,13 @@ entries are the trail of how it got that way.
   entry (new ones via a `deferral` label and `Source devlog entry` field,
   older ones in prose), open or closed, is that item's drain record (never
   its neighbors') until the `-> Refs #N` marker lands in the next
-  devlog-touching PR.
+  devlog-touching PR. This README owns the open/closed definition and every
+  consumer (the session-start grep, cleanup's escalation, drain-record
+  recognition) defers to it; when you add or change a drain-state rule,
+  check each consumer's predicate against the full state matrix (every
+  marker form and every drain-record form: a later entry, or a tracker
+  issue that is legacy-prose or labeled, open or closed) across every
+  consumer, not just the case that prompted it.
 - **Session bookends.** The operational protocol lives in AGENTS.md's
   Devlog section: read the latest entries before starting; append an entry
   and drain the open `## To promote` / deferred / needs-human queue (or
