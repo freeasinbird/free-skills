@@ -343,6 +343,36 @@ gh api repos/{owner}/{repo}/branches/{branch}/protection \
 Skip this check when branch protection isn't configured; same
 detect → report → offer rule as above, never a silent change.
 
+### Devlog escalation labels
+
+The devlog protocol escalates long-lived deferrals to tracker issues
+carrying a `deferral` origin label, and a `needs-human` label for items
+that need a maintainer action the agent can't take. On GitHub, check the
+two labels exist and offer to create any that are missing, so the first
+escalation isn't the moment a label is discovered absent; same
+detect → report → offer rule as above, never a silent create. Skip on
+non-GitHub forges and where the project doesn't use issues.
+
+```sh
+# Read the full label set in one paginated call: --paginate walks every
+# page (so no label hides past `gh label list`'s 30-item default), and a
+# successful read proves label-read scope, so a name's absence from the
+# set is a genuine absence. A failed read (private repo, under-scoped
+# token, and note GitHub returns 404 for unauthorized access, not only
+# 403) is surfaced, never inferred as "missing" and turned into a create.
+if labels=$(gh api --paginate "repos/{owner}/{repo}/labels" --jq '.[].name' 2>&1); then
+  for l in deferral needs-human; do
+    printf '%s\n' "$labels" | grep -qxF "$l" && echo "$l: exists" || echo "$l: missing"
+  done
+else
+  echo "label read failed, resolve access before auditing ($labels)"
+fi
+
+# Create any missing (only after confirming with the user)
+gh label create deferral --description 'Escalated from a devlog deferral'
+gh label create needs-human --description 'Needs a maintainer-only action'
+```
+
 ## Automated reviewer record
 
 The managed `pull-requests` section tells agents to record a noticed
