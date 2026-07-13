@@ -222,7 +222,14 @@ description) that an agent loads to execute the skill. Additional files
   **Exception:** a managed block may wrap a nested
   `<!-- agents-md:project:* -->` sub-block (here, `project:done-checks` inside
   `done`); that content is project-specific by design, so keep it local and
-  never overwrite it with the canonical template. Sections outside the managed
+  never overwrite it with the canonical template. The two-place rule also
+  covers this repo's **scaffolded files**: `devlog/README.md` (which the
+  managed devlog block points to as the authoritative protocol),
+  `CONTRIBUTING.md`, the PR template, and `CLAUDE.md` are live copies of the
+  templates in `skills/agent-setup/references/scaffolding.md`, so an edit to a
+  scaffold template must update the matching live file here too (`diff` them),
+  or the live copy silently contradicts the freshly-synced convention.
+  Sections outside the managed
   markers (Architecture invariants, Conventions, Build) are free-skills-only;
   edit those here alone.
 
