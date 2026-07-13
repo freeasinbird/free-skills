@@ -20,8 +20,10 @@ target, structure, and when an entry may be revised.
   the user asking. Also grep the devlog for the open `## To promote` /
   deferred / needs-human queue so promotions don't span sessions unnoticed:
   an item with no `->` state marker (or whose `-> re-deferred` clock has
-  run out) is open, unless a later entry or a tracker issue naming that
-  item and its source entry holds its drain record (see devlog/README.md).
+  run out) is open, unless a later entry or a tracker issue that names
+  that specific item and its source entry (new ones via a `deferral` label
+  and `Source devlog entry` field, older ones in prose) holds its drain
+  record (see devlog/README.md).
 - **Before finishing:** append `devlog/YYYY-MM-DD-HHMM-slug.md`: decisions
   (why, and what was rejected), deferrals, open questions; the entry may be
   built incrementally at checkpoints while its PR is unmerged (see
@@ -220,7 +222,14 @@ description) that an agent loads to execute the skill. Additional files
   **Exception:** a managed block may wrap a nested
   `<!-- agents-md:project:* -->` sub-block (here, `project:done-checks` inside
   `done`); that content is project-specific by design, so keep it local and
-  never overwrite it with the canonical template. Sections outside the managed
+  never overwrite it with the canonical template. The two-place rule also
+  covers this repo's **scaffolded files**: `devlog/README.md` (which the
+  managed devlog block points to as the authoritative protocol),
+  `CONTRIBUTING.md`, the PR template, and `CLAUDE.md` are live copies of the
+  templates in `skills/agent-setup/references/scaffolding.md`, so an edit to a
+  scaffold template must update the matching live file here too (`diff` them),
+  or the live copy silently contradicts the freshly-synced convention.
+  Sections outside the managed
   markers (Architecture invariants, Conventions, Build) are free-skills-only;
   edit those here alone.
 
