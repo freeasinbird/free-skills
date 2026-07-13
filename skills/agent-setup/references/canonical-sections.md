@@ -32,8 +32,10 @@ target, structure, and when an entry may be revised.
   the user asking. Also grep the devlog for the open `## To promote` /
   deferred / needs-human queue so promotions don't span sessions unnoticed:
   an item with no `->` state marker (or whose `-> re-deferred` clock has
-  run out) is open, unless a later entry or a tracker issue naming that
-  item and its source entry holds its drain record (see devlog/README.md).
+  run out) is open, unless a later entry or a tracker issue that names
+  that specific item and its source entry (new ones via a `deferral` label
+  and `Source devlog entry` field, older ones in prose) holds its drain
+  record (see devlog/README.md).
 - **Before finishing:** append `devlog/YYYY-MM-DD-HHMM-slug.md`: decisions
   (why, and what was rejected), deferrals, open questions; the entry may be
   built incrementally at checkpoints while its PR is unmerged (see
