@@ -60,20 +60,29 @@ entries are the trail of how it got that way.
   re-raising an unmarked item, check for its drain record elsewhere:
   entries that predate this rule drain by reference in later entries, and
   a cleanup-filed tracker issue naming the specific item and its source
-  entry, open or closed, is that item's drain record (never its
-  neighbors') until the `-> Refs #N` marker lands in the next
+  entry (new ones via a `deferral` label and `Source devlog entry` field,
+  older ones in prose), open or closed, is that item's drain record (never
+  its neighbors') until the `-> Refs #N` marker lands in the next
   devlog-touching PR.
 - **Session bookends.** The operational protocol lives in AGENTS.md's
   Devlog section: read the latest entries before starting; append an entry
   and drain the open `## To promote` / deferred / needs-human queue (or
   explicitly re-defer, marking the source item) before finishing.
-- **Long-lived items become tracker issues.** Promote anything
-  load-bearing into README.md or AGENTS.md: the devlog is archaeology
-  (grep it when re-litigating), never standing context. A deferral not
-  expected to drain within a session or two gets a tracker issue when the
-  entry is written, the item carrying its `-> Refs #N` marker from the
-  start (the same form cleanup recognizes, so it is never re-escalated);
-  an item needing a maintainer action you can't take (repo settings,
-  release-engineering, publishing) always does. Post-merge cleanup files issues for items that
-  outlive their PR cycle, so no item lives only under a heading the
-  start-of-session protocol won't re-read.
+- **Long-lived items become tracker issues, labeled by origin.** Promote
+  anything load-bearing into README.md or AGENTS.md: the devlog is
+  archaeology (grep it when re-litigating), never standing context. A
+  deferral not expected to drain within a session or two gets a tracker
+  issue when the entry is written, carrying its `-> Refs #N` marker from
+  the start (the same form cleanup recognizes, so it is never
+  re-escalated); an item needing a maintainer action you can't take (repo
+  settings, release-engineering, publishing) always does, and takes a
+  `needs-human` label (never agent-selected work). Every escalated issue
+  carries a `deferral` origin label, so the deferred backlog is one issue
+  query instead of devlog archaeology, and a `Source devlog entry`
+  reference naming the entry filename (ordinary, non-deferral issues omit
+  it or write `none`); with `-> Refs #N` at the devlog end, the record
+  greps from both ends. Any categorization past the `deferral` origin
+  follows the repo's existing issue-label practice, or is omitted where it
+  has none. Post-merge cleanup files issues for items that outlive their
+  PR cycle, so no item lives only under a heading the start-of-session
+  protocol won't re-read.
