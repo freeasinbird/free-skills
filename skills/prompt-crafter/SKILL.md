@@ -27,7 +27,7 @@ cross-cutting edit that spans several per-tool variants without breaking
 their alignment, and reviewing or auditing existing payloads for the defect
 classes that erode adherence.
 
-Out of scope: repo process (branches, PRs, devlogs), which belongs to the
+Out of scope: repo process (branches, PRs, decision logs), which belongs to the
 host project's own conventions; and API-level prompt engineering (tool
 schemas, system-prompt design inside applications), which is a different
 craft with different constraints.
@@ -59,10 +59,13 @@ The working knowledge lives in three references, loaded on demand:
 
 ## Workflow: review or audit an existing prompt set
 
-1. **Load prior decisions first.** Read the host project's authoring
-   conventions and decision log (devlog or equivalent) before the payloads.
-   Build an explicit "decided, do not re-litigate" list and carry it into
-   every later step, including any prompts you delegate.
+1. **Load the prior decisions relevant to the payloads under review.**
+   Read the host project's authoring conventions, then any decision
+   notes the current issue or PR links or that name the payloads under
+   review (search the project's decision log, where it keeps one, by
+   affected path, topic, or decision name, not by chronology). Build an
+   explicit prior-decision list, what was decided and why, and carry it
+   into every later step, including any prompts you delegate.
 2. **Read every payload in full**, plus the mechanical facts: character
    counts against any platform budget, greps for styles the payload bans in
    itself, and the core-parity diff for a shared-core family.
@@ -72,7 +75,7 @@ The working knowledge lives in three references, loaded on demand:
 4. **Get an independent fresh-context critique, where your platform
    supports delegation.** If you can spawn a subagent (and session policy
    permits it), give it only the payloads, the authoring constraints, the
-   do-not-re-litigate list, and the taxonomy as evaluation prompts; instruct
+   prior-decision list, and the taxonomy as evaluation prompts; instruct
    it to critique adversarially and propose draft wording. Same-context
    self-review shares the blind spots that wrote the prompt; in practice
    this step has found the highest-severity defects. Where delegation is
@@ -80,7 +83,8 @@ The working knowledge lives in three references, loaded on demand:
    external reviewer (a bot or a human), or ask the user; never emit steps
    the running agent can't perform.
 5. **Synthesize and filter on merits.** Not every finding ships: check each
-   against prior decisions, the concision bar, and whether the fix's tokens
+   against the prior-decision list (see the recorded-decisions
+   guardrail), the concision bar, and whether the fix's tokens
    earn their adherence. Fact-check any capability claim ("the agent can't
    do X", "this is a user-side control") against current vendor docs before
    acting on it.
@@ -121,10 +125,12 @@ The working knowledge lives in three references, loaded on demand:
 
 ## Guardrails
 
-- **Never re-litigate recorded decisions.** A "decided" or "deferred"
-  marker in the host project's decision log wins unless the user reopens
-  it; the wording or formatting of a decided rule may be improved, its
-  substance may not.
+- **Respect recorded decisions.** A recorded owner decision is
+  evidence, not a prohibition: never silently overturn one. If a
+  finding conflicts with it, identify the prior decision, state which
+  assumption or condition changed, and surface the proposed revision
+  to the user instead of shipping it; the wording or formatting of a
+  decided rule may be improved freely.
 - **Don't confuse repo config with payload.** The conventions governing
   work on the prompt repo are not part of any payload, and payload rules
   don't govern the repo.
@@ -139,7 +145,7 @@ The working knowledge lives in three references, loaded on demand:
 - **Don't ship a half-sweep.** A defect class found once is grepped for
   everywhere (all payloads, all variants) and fixed as a class.
 - **Read conventions from the host project, never embed them.** The
-  do-not-re-litigate list, reviewer records, and shipping process differ
+  prior-decision list, reviewer records, and shipping process differ
   per repo; this skill carries the craft, the host project carries its own
   decisions.
 
