@@ -47,6 +47,18 @@ checks green**, not a merged branch. Merging is a human decision; do not
 merge your own PR unless the user explicitly asks, or the project has adopted
 an opt-in self-merge workflow.
 
+Before implementation, establish a lightweight work contract: objective,
+testable acceptance criteria, scope, dependencies and blockers, and explicit
+non-goals. Direct user-assigned work needs no issue; the prompt, session
+devlog, and eventual PR may carry the contract together. Persist that same
+contract in a tracker issue when the work must survive a session boundary,
+coordinate concurrent workers, or join a backlog.
+
+By default, begin work only through explicit user assignment. An issue, label,
+backlog entry, satisfied dependency, or claim is not authorization to select
+and start work. Agent self-selection requires an explicit project-specific
+opt-in policy.
+
 Use this checklist for each work session:
 
 1. Read README plus the latest devlog entries. Resolve the repository's
@@ -279,6 +291,13 @@ prepend an owner segment (`bnw/feat/…`) only if multiple people or
 agents start pushing in parallel. Merged branches auto-delete where
 that repo setting is on (delete them after merge where it isn't); the
 merge commit carries the narrative.
+
+**Break down concurrency before isolating it.** Keep coupled work in one work
+unit, an explicit dependency chain, or an intentionally declared stack; a
+worktree separates checkouts but cannot make logically dependent work safe in
+parallel. Before substantive work, an assigned concurrent unit uses the
+project's forge-visible claim mechanism, when one is defined. The claim
+advertises active occupancy, not authorization; its form is project-specific.
 
 **Isolate concurrent work units.** Concurrent work units must use separate
 worktrees or checkouts. Where your platform and session support a second

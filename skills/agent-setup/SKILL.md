@@ -177,6 +177,24 @@ gotcha catalog) belongs in `docs/` behind a one-line pointer that names
 when to read it ("before editing the parser, read
 `docs/format-spec.md`"), not inlined.
 
+### Work contracts and coordination
+
+Use these defaults: direct user-assigned work needs no issue; concurrent,
+backlog, or cross-session work uses a tracker issue; agents do not self-select;
+and neither an issue nor a claim authorizes work.
+
+During init:
+
+- Ask where persistent work contracts live on the project's forge.
+- Ask whether concurrent work is expected. Identify shared contract surfaces,
+  overlapping work, and integration constraints that should become work unit
+  boundaries or explicit dependencies instead of parallel work.
+- If concurrency is expected, ask which forge-visible claim mechanism workers
+  use and how abandoned or stale claims are released or superseded. Never
+  invent a mechanism silently; a claim advertises occupancy only.
+- Ask whether an explicit project-specific policy permits agent
+  self-selection. Without one, self-selection stays disabled.
+
 ### Header/intro
 
 Write a one-paragraph intro: project name, pointer to the spec document
