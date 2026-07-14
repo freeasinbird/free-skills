@@ -2,30 +2,33 @@
 name: agent-setup
 description: >-
   Make a project agent-ready: create or update AGENTS.md with managed canonical
-  workflow sections, scaffold the devlog, CLAUDE.md pointer, CONTRIBUTING.md,
-  and PR template, and audit standard files and repo settings. Use when the
-  user asks to "set up this project for agents", "initialize AGENTS.md",
-  "create AGENTS.md", "update AGENTS.md", "sync workflow sections", "check
-  agent setup", "bootstrap devlog", "make this project agent-ready", asks
-  to add a devlog, PR template, or CONTRIBUTING.md to a repo, or discusses
+  workflow sections under one of three profiles (Standard, Decision-log,
+  High-assurance), scaffold the CLAUDE.md pointer, CONTRIBUTING.md, PR
+  template, and (under the note-keeping profiles) the decision-note devlog,
+  and audit standard files and repo settings. Use when the user asks to "set
+  up this project for agents", "initialize AGENTS.md", "create AGENTS.md",
+  "update AGENTS.md", "sync workflow sections", "check agent setup",
+  "bootstrap devlog", "make this project agent-ready", asks to add a devlog,
+  decision records, PR template, or CONTRIBUTING.md to a repo, or discusses
   managing shared development conventions across projects.
 ---
 
 # Agent Setup
 
 Ensure a project is agent-ready: AGENTS.md with canonical workflow
-sections, devlog directory, CLAUDE.md pointer, PR template, and repo
-scaffolding. Seven canonical sections encode the owner's workflow
-conventions and are managed across projects; project-specific sections
-(build/test/run, architecture invariants, conventions) are guided
-interactively during init and left untouched during updates.
+sections, CLAUDE.md pointer, PR template, and repo scaffolding, plus a
+decision-note devlog under the note-keeping profiles (see Profiles).
+Seven canonical sections encode the owner's workflow conventions and
+are managed across projects; project-specific sections (build/test/run,
+architecture invariants, conventions) are guided interactively during
+init and left untouched during updates.
 
 ## Detecting mode
 
 - No AGENTS.md in the project root → **Init mode**
 - AGENTS.md exists with `<!-- agents-md:managed:` markers → **Update mode**
 - AGENTS.md exists with no exact markers but with marker lookalikes,
-  managed or nested `project:done-checks` (update-mode step 3's
+  managed or nested `project:done-checks` (update-mode step 4's
   malformation rule: comment lines that resemble either marker in
   spacing, case, or indentation) → stop and report them; don't offer
   adoption. Wrapping sections around malformed remnants
@@ -41,44 +44,102 @@ interactively during init and left untouched during updates.
   update-mode validation requires the nested pair inside a managed
   `done` block, so a bare wrap would dead-end the adoption.
 
+## Profiles
+
+Three setups, differing only in whether the project keeps decision
+notes. Recommend Standard unless the project has a demonstrated need
+for durable decision records; a noninteractive run with no stated
+preference gets Standard. A user who explicitly asks for a devlog gets
+Decision-log, or High-assurance when they also name change classes
+that must always carry a note.
+
+- **Standard**: PRs, commits, issues, and current documentation carry
+  the record. No `devlog/` scaffold and no managed `devlog` block.
+- **Decision-log**: adds the managed `devlog` block and the
+  `devlog/README.md` scaffold (selective decision notes).
+- **High-assurance**: Decision-log plus a short project-specific list
+  of change classes for which a note is mandatory; gather that
+  concrete list from the user when this profile is chosen. A
+  noninteractive run that names High-assurance without supplying the
+  list falls back to Decision-log and flags the gap.
+
+Record the choice in an unmanaged section of the project's AGENTS.md
+as a line containing `Agent-setup profile:` and the profile name, with
+the High-assurance mandatory-note list beside it. Update mode reads
+this line; it is the profile's only record (no separate config or
+metadata file).
+
 ## Init mode
 
 1. Read the project to understand language, build system, test framework,
    and directory structure.
 2. Read `references/canonical-sections.md` for exact managed-section text.
-3. Gather the project-specific sections interactively; see
+3. Choose a profile with the user (see "Profiles" above): present the
+   three explicitly and recommend Standard; apply the Profiles defaults
+   when the run is noninteractive or the user has already stated a
+   preference.
+4. Gather the project-specific sections interactively; see
    "Project-specific section guidance" below. The conventional order
    interleaves them with the managed sections, so collect this content
    (or decide on placeholders) before writing.
-4. Write AGENTS.md once, following the conventional section order (see
-   below): each canonical section wrapped in its markers, project-specific
-   content or placeholders in place.
-5. Create scaffolding files:
-   - `devlog/README.md`: content in `references/scaffolding.md` §devlog-readme
+5. Write AGENTS.md once, following the conventional section order (see
+   below): each canonical section wrapped in its markers (the `devlog`
+   block only under Decision-log or High-assurance), project-specific
+   content or placeholders in place, and the `Agent-setup profile:`
+   line (plus the High-assurance mandatory-note list) in an unmanaged
+   section.
+6. Create scaffolding files:
+   - `devlog/README.md`: content in `references/scaffolding.md`
+     §devlog-readme (Decision-log and High-assurance profiles only)
    - `.github/pull_request_template.md`: content in `references/scaffolding.md` §pr-template
    - `CONTRIBUTING.md`: content in `references/scaffolding.md` §contributing
    - `CLAUDE.md`: content in `references/scaffolding.md` §claude-md
 
    For any that already exist, don't recreate them: compare against the
    template and, on drift, show the diff and offer to refresh (the same
-   rule as update-mode step 8); never overwrite silently.
+   rule as update-mode step 9); never overwrite silently.
 
-6. Audit standard project files; see "Standard project files" below.
+7. Audit standard project files; see "Standard project files" below.
    Report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
    Also check for an automated-reviewer record; see "Automated reviewer
    record" below.
-7. Check the repo settings the conventions depend on and offer to align
+8. Check the repo settings the conventions depend on and offer to align
    them; see "Repo settings" below. Report any that can't be checked or
    set (wrong permissions, non-GitHub forge).
-8. Summarize what was created, what the user should fill in, which
+9. Summarize what was created, what the user should fill in, which
    standard files are missing, and which repo settings need attention.
 
 ## Update mode
 
 1. Read `references/canonical-sections.md` for current canonical text.
 2. Read the project's AGENTS.md.
-3. Validate the markers before touching anything: every opening
+3. Discover the profile: look for the `Agent-setup profile:` line.
+   - Recorded: preserve it and scope the steps below to it. A Standard
+     project's missing `devlog` block and scaffold are its profile,
+     not drift; never switch a recorded profile without the user's
+     explicit choice.
+   - Absent, but a managed `devlog` block, a `devlog/` scaffold, or a
+     session-bookend protocol exists: a legacy setup. Offer migration
+     to Decision-log (or High-assurance when the user names mandatory
+     change classes), showing the resulting managed-block and scaffold
+     diffs before applying anything. On acceptance, the block and
+     scaffold changes and the new profile line land through the normal
+     steps below, only after step 4's marker validation passes; on
+     decline, change and record nothing (the offer recurs on the next
+     update run). Never delete an existing devlog or switch the
+     project to Standard without the user's explicit choice; the
+     historical entries stay untouched either way. When migrating a
+     queue-era devlog, walk the
+     apparently open queue items (`## To promote` bullets, deferrals,
+     needs-human notes without a drain record) once, in prose with the
+     user: already resolved or promoted needs nothing; still
+     actionable gets an existing or new tracker issue linked; only
+     conditionally relevant stays as a historical observation. Never
+     automate this by parsing or mutating old entries.
+   - Absent with no devlog anywhere: treat as Standard and offer to
+     record the line.
+4. Validate the markers before touching anything: every opening
    `<!-- agents-md:managed:KEY -->` has a matching close after it, no KEY
    appears twice, every KEY is a known one, any line that merely
    resembles a managed marker or the nested `project:done-checks` marker
@@ -90,46 +151,50 @@ interactively during init and left untouched during updates.
    markers".) On any malformation, stop and report it; never refresh
    (a broken boundary would pull project-specific text into the managed
    region, and the refresh would delete it).
-4. Protect the reviewer record before refreshing: if an automated-reviewer
+5. Protect the reviewer record before refreshing: if an automated-reviewer
    record appears inside a managed block, resolve its location first; see
    "Automated reviewer record".
-5. For each managed block:
+6. For each managed block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`,
      exclude the nested `project:done-checks` block from both sides
-     (matching its exact marker lines only, per step 3) and compare only
+     (matching its exact marker lines only, per step 4) and compare only
      the text around it; never modify the nested block.
    - If different, show the diff and ask whether to update.
-6. Leave all unmarked (project-specific) content untouched.
-7. If a canonical section is missing entirely, offer to insert it at its
-   conventional position.
-8. Check scaffolding files (devlog/README.md, CLAUDE.md, CONTRIBUTING.md,
-   PR template): offer to create any that are missing; for any that exist,
-   compare against the templates in `references/scaffolding.md` and, on
-   drift, show the diff and offer to refresh. These files carry no markers
-   and may hold local customizations, so never overwrite silently; let the
-   user decide per file. (Watch `devlog/README.md` especially: the managed
-   `devlog` and `commits` blocks rely on its protocol, and a stale copy
-   contradicts freshly-synced blocks.)
-9. Audit standard project files (see below) and flag any newly missing;
-   also check that an automated-reviewer record is present; see
-   "Automated reviewer record".
-10. Check the repo settings the conventions depend on (see "Repo settings")
+7. Leave all unmarked (project-specific) content untouched.
+8. If a canonical section is missing entirely, offer to insert it at its
+   conventional position; a `devlog` block absent under the Standard
+   profile is the profile, not a gap, so don't offer it.
+9. Check scaffolding files (CLAUDE.md, CONTRIBUTING.md, PR template,
+   and, under a note-keeping profile, devlog/README.md): offer to
+   create any that are missing; for any that exist, compare against the
+   templates in `references/scaffolding.md` and, on drift, show the
+   diff and offer to refresh. These files carry no markers and may hold
+   local customizations, so never overwrite silently; let the user
+   decide per file. (Watch `devlog/README.md` especially: the managed
+   `devlog` block points to it as the protocol, and a stale copy
+   contradicts a freshly-synced block.)
+10. Audit standard project files (see below) and flag any newly missing;
+    also check that an automated-reviewer record is present; see
+    "Automated reviewer record".
+11. Check the repo settings the conventions depend on (see "Repo settings")
     and offer to align any that have drifted.
 
 Where the running agent can execute shell scripts, run
 `scripts/compare-managed-blocks.sh path/to/AGENTS.md` (from this skill's
-directory) to perform steps 3 and 5's mechanical parts in one
+directory) to perform steps 4 and 6's mechanical parts in one
 deterministic pass: it validates markers and prints a per-block diff,
 excluding the nested block, and treats a missing block as the documented
-opt-out. Review its diffs with the user as step 5 describes. Without
-shell access, follow the steps manually as written.
+opt-out; for a Standard project, `missing: devlog` in its output is the
+expected profile, not drift. Review its diffs with the user as step 6
+describes. Without shell access, follow the steps manually as written.
 
 ## Conventional section order
 
 ```text
 1. Header/intro                          (project-specific)
-2. Devlog (session bookends)             (managed: devlog)
+2. Decision notes                        (managed: devlog;
+                                          note-keeping profiles only)
 3. Default agent finish line             (managed: finish-line)
 4. Context discipline                    (managed: context)
 5. Build, test, run                      (project-specific)
@@ -160,7 +225,9 @@ Keys: `devlog`, `finish-line`, `context`, `branches`, `pull-requests`,
 To opt a section out of management, remove its markers. The update mode
 will note it as missing and offer to re-add, but will not force it.
 Opting out `done` this way leaves the nested `project:done-checks`
-markers behind as plain project content; that is expected and fine.
+markers behind as plain project content; that is expected and fine. A
+`devlog` block absent in a Standard-profile project is that project's
+profile, not an opt-out; update mode doesn't offer to re-add it.
 
 ## Project-specific section guidance
 
@@ -267,13 +334,13 @@ detected." Don't create a CI config (too project-specific), just warn.
 
 ### Scaffolded by this skill (created, not just audited)
 
-| File                               | Purpose                                  |
-| ---------------------------------- | ---------------------------------------- |
-| `CLAUDE.md`                        | Agent entry point; `@`-imports AGENTS.md |
-| `AGENTS.md`                        | Development conventions (single source)  |
-| `CONTRIBUTING.md`                  | Human contribution guide                 |
-| `devlog/README.md`                 | Devlog protocol                          |
-| `.github/pull_request_template.md` | PR body scaffold                         |
+| File                               | Purpose                                                   |
+| ---------------------------------- | --------------------------------------------------------- |
+| `CLAUDE.md`                        | Agent entry point; `@`-imports AGENTS.md                  |
+| `AGENTS.md`                        | Development conventions (single source)                   |
+| `CONTRIBUTING.md`                  | Human contribution guide                                  |
+| `devlog/README.md`                 | Decision-note protocol (Decision-log/High-assurance only) |
+| `.github/pull_request_template.md` | PR body scaffold                                          |
 
 ### docs/ (project-specific, no canonical content)
 
@@ -375,36 +442,6 @@ or their read is unavailable because of forge support, plan, or permissions,
 report the limitation and point to the canonical manual freshness procedure.
 A forge merge queue may be reported as an optional capability for a busy
 repository, but it is not a canonical requirement.
-
-### Devlog escalation labels
-
-The devlog protocol escalates long-lived deferrals to tracker issues
-carrying a `deferral` origin label, and a `needs-human` label for items
-that need a maintainer action the agent can't take. On GitHub, check the
-two labels exist and offer to create any that are missing, so the first
-escalation isn't the moment a label is discovered absent; same
-detect → report → offer rule as above, never a silent create. Skip on
-non-GitHub forges and where the project doesn't use issues.
-
-```sh
-# Read the full label set in one paginated call: --paginate walks every
-# page (so no label hides past `gh label list`'s 30-item default), and a
-# successful read proves label-read scope, so a name's absence from the
-# set is a genuine absence. A failed read (private repo, under-scoped
-# token, and note GitHub returns 404 for unauthorized access, not only
-# 403) is surfaced, never inferred as "missing" and turned into a create.
-if labels=$(gh api --paginate "repos/{owner}/{repo}/labels" --jq '.[].name' 2>&1); then
-  for l in deferral needs-human; do
-    printf '%s\n' "$labels" | grep -qxF "$l" && echo "$l: exists" || echo "$l: missing"
-  done
-else
-  echo "label read failed, resolve access before auditing ($labels)"
-fi
-
-# Create any missing (only after confirming with the user)
-gh label create deferral --description 'Escalated from a devlog deferral'
-gh label create needs-human --description 'Needs a maintainer-only action'
-```
 
 ## Automated reviewer record
 
