@@ -3,7 +3,7 @@
 
 ## Why
 
-<!-- One to three short prose sentences. Link the devlog entry when one
+<!-- One to three short prose sentences. Link the decision note when one
      exists; don't duplicate it. Add a close keyword immediately before each
      issue number the PR fully resolves or finishes: `Closes #11`, repeating
      the keyword to close several (`Closes #11, closes #12`), since a bare
@@ -16,7 +16,8 @@
 <!-- Bullets required. Describe work-unit outcomes, not file-by-file churn.
      For multi-commit PRs, include a compact commit map, keyed by commit
      subject not SHA (folding review fixes rewrites SHAs). Say rejected
-     alternatives live in the devlog when they do; don't duplicate them. -->
+     alternatives live in the decision note when they do; don't duplicate
+     them. -->
 
 ## Screenshots
 
