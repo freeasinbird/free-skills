@@ -270,22 +270,23 @@ flagging; everything else is project-specific.
 
 ## Repo settings
 
-Several canonical conventions name repository settings as the intended
-setup: merged branches auto-delete, a real merge commit is the only
-merge method, and the merge commit message is the PR title alone. The
-audit keeps that setup true so the canonical text's manual fallbacks
-stay rare. Treat this as **detect → report → offer to enable**,
-never a silent mutation. Changing repo settings needs admin rights the
-agent may not have, so confirm before applying; otherwise tell the user
-the desired state and where to set it.
+Several canonical conventions name or benefit from repository settings:
+merged branches auto-delete, a real merge commit is the only merge method,
+the merge commit message is the PR title alone, and stale PR branches are
+surfaced for an explicit update. The audit keeps that setup true so the
+canonical text's manual fallbacks stay rare. Treat this as
+**detect → report → offer to enable**, never a silent mutation. Changing repo
+settings needs admin rights the agent may not have, so confirm before applying;
+otherwise tell the user the desired state and where to set it.
 
-Settings the conventions depend on:
+Settings the conventions use or benefit from:
 
-| Setting                                   | Why it matters                                                                              |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Auto-delete head branches on merge        | `branches`/`pull-requests` state merged branches auto-delete                                |
-| Merge-commit-only (squash and rebase off) | `commits` needs real merge commits for the `--first-parent` history                         |
-| Merge commit message = PR title only      | keeps the body's review material out of history; the title carries the `--first-parent` log |
+| Setting                                       | Why it matters                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Auto-delete head branches on merge            | `branches`/`pull-requests` state merged branches auto-delete                                |
+| Merge-commit-only (squash and rebase off)     | `commits` needs real merge commits for the `--first-parent` history                         |
+| Merge commit message = PR title only          | keeps the body's review material out of history; the title carries the `--first-parent` log |
+| Always suggest updating pull request branches | surfaces a stale branch and offers an explicit refresh action                               |
 
 These toggles are forge-specific. On GitHub, check and (after confirming)
 set them with `gh`; skip or adapt this on other forges, which expose
@@ -295,7 +296,8 @@ equivalent settings:
 # Check current state
 gh api repos/{owner}/{repo} \
   --jq '{delete_branch_on_merge, allow_merge_commit, allow_squash_merge,
-         allow_rebase_merge, merge_commit_title, merge_commit_message}'
+         allow_rebase_merge, merge_commit_title, merge_commit_message,
+         allow_update_branch}'
 
 # Align (only after confirming with the user)
 gh api -X PATCH repos/{owner}/{repo} \
@@ -303,13 +305,17 @@ gh api -X PATCH repos/{owner}/{repo} \
   -F allow_merge_commit=true \
   -F allow_squash_merge=false \
   -F allow_rebase_merge=false \
+  -F allow_update_branch=true \
   -f merge_commit_title=PR_TITLE \
   -f merge_commit_message=BLANK
 ```
 
-If the agent lacks permission or the forge isn't GitHub, report the
-desired state and point the user at the setting (on GitHub: Settings →
-General → Pull Requests).
+On GitHub, `allow_update_branch` is the **Always suggest updating pull request
+branches** setting under Settings → General → Pull Requests. On other forges,
+look for the equivalent stale-branch/update suggestion. If the setting or its
+read is unavailable because of the forge, plan, or permissions, report that
+limitation clearly and point to the canonical "Handing off the PR" manual
+freshness procedure; never infer that an unread setting is disabled.
 
 ### Required checks and CI matrices
 
@@ -331,17 +337,26 @@ check:
     - run: test "${{ needs.test.result }}" = "success"
 ```
 
-During the audit, compare the protected branch's required contexts
-against the workflow job names and flag any context no job reports, and
-any bare fan-in guarding a matrix. On GitHub:
+During the audit, compare the protected branch's required contexts against the
+workflow job names and flag any context no job reports, and any bare fan-in
+guarding a matrix. Also inspect whether required checks enforce current-base
+freshness. On GitHub, `.required_status_checks.strict: true` is **Require
+branches to be up to date before merging**:
 
 ```sh
 gh api repos/{owner}/{repo}/branches/{branch}/protection \
-  --jq '.required_status_checks.contexts'
+  --jq '{strict: .required_status_checks.strict,
+         contexts: .required_status_checks.contexts,
+         checks: .required_status_checks.checks}'
 ```
 
-Skip this check when branch protection isn't configured; same
-detect → report → offer rule as above, never a silent change.
+When required checks exist and strict freshness is off, report it and offer to
+enable it, preserving the existing check names and app bindings if the user
+accepts. Never change protection silently. If branch protection, strict checks,
+or their read is unavailable because of forge support, plan, or permissions,
+report the limitation and point to the canonical manual freshness procedure.
+A forge merge queue may be reported as an optional capability for a busy
+repository, but it is not a canonical requirement.
 
 ### Devlog escalation labels
 
