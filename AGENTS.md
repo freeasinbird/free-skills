@@ -233,6 +233,15 @@ description) that an agent loads to execute the skill. Additional files
   welcome hardening. Verify with any YAML parser when unsure. (Surfaced by a P1
   review on the visual-evidence skill; see the 2026-06-26 devlog.)
 
+- **Agent-setup profile: High-assurance.** Decision notes live in
+  `devlog/` per the Decision notes section. A note is mandatory for:
+  changes to the canonical managed workflow conventions or scaffold
+  templates; changes to branch, PR, review, merge, or release policy;
+  changes on destructive, credential-leak, or returned-object
+  trust-boundary paths; and cross-project prompt decisions that
+  downstream repositories inherit. Routine skill documentation and
+  mechanical syncs are exempt unless they meet a general note trigger.
+
 - **This repo dogfoods agent-setup; edit managed conventions in two places.**
   free-skills' own AGENTS.md is built from the agent-setup skill, so its
   `<!-- agents-md:managed:* -->` blocks (devlog, finish-line, context,
