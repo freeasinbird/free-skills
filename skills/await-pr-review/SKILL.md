@@ -84,6 +84,14 @@ would replay them and exit the wait instantly. Anchor that case to the
 **trigger/request time** instead: snapshot the reviews that exist _at the moment
 you request_ as already-seen, and treat only the reviewer's pass dated after that
 request as the awaited one.
+
+At the same cycle boundary, the main agent records the PR's expected head
+commit plus its base branch and current base-tip commit, resolved from the host
+rather than a possibly stale local ref. Pass the expected head to the watcher so
+it can reject a superseded review; retain the base commit for step 6's final
+reporting guard. Capturing the base does not make branch updates part of the
+watcher's role.
+
 Capture **three** things, because they are separate connections: top-level
 **reviews** (a bot can complete a review with a summary/approval and _no_ inline
 findings: that round shows up only here, not under threads), the inline
@@ -484,6 +492,15 @@ mixed-class declining-severity nits, a small change, or a single-surface diff,
 where there is no class to preempt.
 
 ### 6. Report
+
+Before any final report calls the PR ready for handoff, the main agent resolves
+the PR's current base branch and tip from the host again and compares them with
+the cycle's recorded base. If either changed, report that the automated-review
+round is complete but the PR's integration evidence is stale, then return
+control to the project's handoff/freshness convention instead of claiming
+readiness. The watcher must not rebase, merge, push, or otherwise update the
+branch. After the branch owner refreshes it and pushes, start the ordinary new
+head review cycle again from step 1.
 
 Summarize: what the reviewer raised, what was fixed (with SHAs), what was
 declined and why, what was surfaced for the user, and the PR's state (threads
