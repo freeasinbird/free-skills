@@ -7,8 +7,7 @@ description: >-
   landed". Deletes the remote branch if the forge's auto-delete didn't,
   resyncs the branch the PR merged into, deletes the local branch, prunes
   stale tracking refs, verifies that issues the PR claimed to close actually
-  closed (surfacing any that need manual closing), escalates devlog queue
-  items that outlived their PR cycle into tracker issues, and shuts down any
+  closed (surfacing any that need manual closing), and shuts down any
   still-running review watch for that PR where the platform has one. Not
   for performing the merge itself (that is the self-merge skill's job), and
   not for cleaning up branches of PRs that are still open.
@@ -19,8 +18,7 @@ description: >-
 Post-merge housekeeping for a pull request that has already merged: restore
 the workspace to a clean state on the branch the PR merged into (its base,
 usually the default branch), check that the PR's
-issue-closing keywords actually closed their issues, escalate devlog queue
-items that outlived their PR cycle into tracker issues, and stop any review
+issue-closing keywords actually closed their issues, and stop any review
 watch still running for the PR.
 
 This skill assumes git and a shell. A PR host CLI (such as `gh`) enables
@@ -282,54 +280,6 @@ truly resolved is the human's call. Plain "Refs #N" mentions are
 intentionally non-closing; don't flag them. Without a PR host CLI, say the
 check could not run instead of skipping it silently.
 
-## Devlog queue escalation
-
-When the repo keeps a devlog with a promotion queue (a `devlog/` directory
-whose README defines the `## To promote` header), grep it for queue items
-still open: promote / deferred / needs-human items carrying no `->` state
-marker (`-> promoted in ...`, `-> re-deferred in ...`, `-> declined in ...`,
-`-> Refs #N`). Give the just-merged PR's own entry a pass; its items get one
-PR cycle to drain in the normal session flow. Anything unmarked in an older
-merged entry is a survivor: prose re-deferral rationale inside the entry
-does not exempt an item, only markers do, or the item could live in the
-grep queue forever on the strength of its own prose. An explicit
-`-> re-deferred in <entry>` marker restarts the item's grace at the entry
-it names, not permanently: treat the item as if it lived unmarked in the
-named entry, so once that entry is older than the just-merged PR the item
-is a survivor again, and only a marker pointing at the just-merged PR's
-entry still has its grace running. `-> Refs #N` means already escalated.
-For entries that predate the marker rule, check later entries for a drain
-record before treating an item as open. Each survivor gets a tracker issue so it carries
-real open/closed state instead of living only in a grep over frozen files:
-title from the item, body quoting it and carrying a `Source devlog entry`
-field naming the source entry file, and a `deferral` origin label (plus
-`needs-human` when the item needs a maintainer action you can't take), so
-the issue matches the devlog protocol's drain-record contract and a later
-session recognizes it. File the issue in the base repository, and create
-whichever of these labels it will use there if that repo lacks it, so the
-filing isn't blocked on a missing label; pin the create to that same repo,
-since a fork clone's default `gh` repo may differ
-(`gh label create deferral --repo '<base-repo>'`, and the same with
-`needs-human` for a maintainer-only item). Search existing issues first, open
-and closed, by the entry filename or the item's key phrase, not by the
-`deferral` label (survivors filed before this rule carry no label, so a
-label filter would miss them and duplicate the issue): an issue naming the
-specific item is its drain record whether or not it is still open (a
-closed one means it was escalated and resolved before its marker landed),
-so file nothing new for it. The match is per item, never per file: an issue naming only the
-source entry exempts nothing, or one escalated item would shadow every
-other survivor in the same entry. Do not commit the item's `-> Refs #N`
-marker during cleanup: all work lands through a PR, so the marker rides the
-next PR that touches the devlog. Until it lands, the filed issue itself is
-the item's drain record: the devlog protocol has sessions check the
-tracker for an issue naming the specific item before re-raising it, so the
-filed issue must name that item and its source entry for exactly this
-lookup; the `deferral` label and `Source devlog entry` field the issue
-also carries are for discoverability and greppable provenance, not the
-match the lookup requires (which would exclude pre-label survivors). List each filed issue and its owed marker in the summary so the
-next devlog-touching PR carries them. Without a PR host CLI, surface the
-survivors instead of filing issues silently.
-
 ## Review-watch shutdown
 
 If a review watch for this PR is still running (a backgrounded poller, a
@@ -343,8 +293,6 @@ so a later wake-up reporting nothing is expected noise, not a failure.
 ## Summarize
 
 Close with a short report: what was deleted and resynced, what the merge
-verification showed, any issues that still need manual closing, any devlog
-survivors escalated (or surfaced) with their issue numbers and the `->`
-markers still owed to the next devlog-touching PR, any watch
+verification showed, any issues that still need manual closing, any watch
 stopped or left to expire, and anything that blocked a step (dirty tree,
 unverifiable merge, undeletable branch) that now needs the user.
