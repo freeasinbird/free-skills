@@ -347,10 +347,46 @@ essentials, project-agnostic:
 - **Fix the class, not just the cited line.** Sweep the file/repo for the same
   class and fix every instance in the same push, so the next re-review doesn't
   flag the siblings one at a time.
-- **Reply and resolve.** Reply inline with the disposition and the fixing commit
-  SHA (or the reasoned decline), then resolve the thread. A decline pushes no
-  commit, so a round of only declines leaves a push-triggered reviewer with
-  nothing to re-fire on; step 5 covers re-triggering the next pass.
+- **Reply and resolve, in fold-then-reply order.** Where the project's commit
+  conventions fold review fixes into their originating commits, the order is a
+  gate, not a preference: **fix, fold, push, verify, reply, resolve.** Fold
+  the fix into the commit it belongs to (mechanism per the project's
+  convention or your judgment: a `fixup!` commit squashed by
+  `git rebase --autosquash <target>~1`, noting that plain `--autosquash`
+  squashes without `-i` only on Git 2.44+, that older Git needs the
+  interactive form driven by a no-op editor, as in
+  `git -c sequence.editor=true rebase -i --autosquash <target>~1`, with
+  `-c core.editor=true` added when the range holds a `squash!` (on
+  those versions its combined-message editor still opens, which fails
+  or hangs an editor-less agent), and
+  that a range holding a merge (a base-branch merge after `<target>`)
+  needs `--rebase-merges` added, or the rebase silently flattens the
+  merge; an `--amend`; or an equivalent rebase), push the
+  rewritten branch (`--force-with-lease`), and **verify against the pushed
+  ref, not local state**, that the SHA you are about to cite is reachable
+  from the pushed head and actually contains the fix: run
+  `git branch -r --contains <sha>`, confirm the PR head's
+  remote-tracking ref is listed (resolve the head's actual remote and
+  branch from the host; a fork PR's head is not `origin`), then inspect
+  the commit on that ref (a botched fold can silently drop the edit).
+  Only then reply inline with the
+  disposition and that final commit SHA, and resolve the thread. When a
+  round accepts several findings, the gate binds the round, not each
+  finding: fold every accepted fix, push once, verify each SHA you will
+  cite against that one final head, then write all the replies and
+  resolve, since a per-finding reply lets the next finding's fold
+  rewrite the SHA already cited. (A _later round's_ fold still rewrites
+  earlier-cited SHAs; that churn is inherent to folding and accepted:
+  each reply is a point-in-time record, and the PR body's subject-keyed
+  commit map is the reference that stays stable.) Never write
+  the reply first: a standalone fix commit's SHA is rewritten by the later
+  fold, so a pre-fold reply cites a commit that will not exist, and a
+  standalone "address review" commit left on the branch is an unfinished
+  round, not a done one. Where the project instead appends fix commits, cite
+  the fix commit as-is; the verify-on-pushed-ref step still applies. A
+  decline pushes no commit, so reply with the reasoned decline alone; a
+  round of only declines leaves a push-triggered reviewer with nothing to
+  re-fire on, and step 5 covers re-triggering the next pass.
 - **Auto-address the clear-cut; surface the judgment calls.** Apply the
   obviously-correct fixes yourself. **Pause and surface** anything ambiguous,
   contentious, or design-altering for the user to decide; do not silently make
@@ -375,7 +411,10 @@ deciding them**: the same auto/surface split as above, relocated. Only the
 fixer's final report crosses back into the main context, so hold it to the
 watcher's compactness contract (fixing commit SHAs, a one-line disposition
 per finding, judgment calls with just enough quoted context to decide, never
-full diffs); the main agent acts on that report and spot-checks only the
+full diffs). The fixer's reported SHAs are bound by the same
+fold-then-reply gate as above: post-fold, pushed, and verified against the
+pushed ref, never a SHA a later fold will rewrite. The main agent acts on
+that report and spot-checks only the
 judgment calls, since re-verifying clear-cut fixes from the main context pays
 for the round twice. Skip delegation when the round is short, the main
 context is small, or the round is mostly judgment calls (each escalation
@@ -501,6 +540,14 @@ control to the project's handoff/freshness convention instead of claiming
 readiness. The watcher must not rebase, merge, push, or otherwise update the
 branch. After the branch owner refreshes it and pushes, start the ordinary new
 head review cycle again from step 1.
+
+Where the project folds review fixes, the report has a second blocker:
+confirm the pushed branch carries no leftover autosquash subjects
+(`fixup!`, `squash!`, or the `amend!` form that `--fixup=amend:` and
+`--fixup=reword:` create) and no standalone review-fix commits (an
+"address review" commit that never got folded into its concern). Any
+found means step 4's fold gate is unfinished; complete the fold and
+re-push before declaring the round done.
 
 Summarize: what the reviewer raised, what was fixed (with SHAs), what was
 declined and why, what was surfaced for the user, and the PR's state (threads
