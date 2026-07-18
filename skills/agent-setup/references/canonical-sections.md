@@ -331,7 +331,12 @@ arc.
   fix real findings; push back, _with a one-line reason_, on contrived,
   speculative, or already-fixed ones; never reflexively comply. Reply
   inline with the disposition and the fixing commit SHA ("Fixed in
-  `<sha>`" / a reasoned decline), then resolve the thread. Resolving every
+  `<sha>`" / a reasoned decline), then resolve the thread; where review
+  fixes fold into their commits, the fold and push come first (the
+  fold-then-reply gate in Commits), so the cited SHA is the final,
+  pushed one, and a round that accepts several findings folds them all
+  and pushes once before any reply, since a later fold in the round
+  rewrites an already-cited SHA. Resolving every
   thread is _not_ a hard merge gate; evaluate-on-merits is.
 - **Fix the class, not just the cited line.** When a finding names one
   location, sweep the file and repo mechanically (grep for the finding's
@@ -507,7 +512,12 @@ log tells the project's evolution). Rules:
   `--force-with-lease`, **feature branch only, never force-push `main`**;
   only while the PR is unmerged (once merged, a fix is a new commit);
   update the matching decision note, when one exists, in the same
-  operation. The mechanism (reset/amend/rebase) is your judgement.
+  operation. The mechanism (reset/amend/rebase) is your judgement. The
+  fold-then-reply order is a gate: fold and push before writing the
+  inline reply to the review thread, so the reply cites the final
+  commit SHA, verified reachable from the pushed head; a standalone
+  review-fix commit still on the branch at handoff is an unfinished
+  fold, not a done round.
 - **Never squash-merge multi-commit work**: it destroys the atomic
   structure above. Merge with a real merge commit so
   `git log --first-parent` reads as the work-unit narrative and the full
