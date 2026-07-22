@@ -104,9 +104,9 @@ metadata file).
    that apply. Don't create them (content is project-specific); just flag.
    Also check for an automated-reviewer record; see "Automated reviewer
    record" below.
-8. Check the repo settings the conventions depend on and offer to align
-   them; see "Repo settings" below. Report any that can't be checked or
-   set (wrong permissions, non-GitHub forge).
+8. Check the settings listed under "Repo settings" below and offer to align
+   them. Report any that can't be checked or set (wrong permissions,
+   non-GitHub forge).
 9. Summarize what was created, what the user should fill in, which
    standard files are missing, and which repo settings need attention.
 
@@ -177,8 +177,8 @@ metadata file).
 10. Audit standard project files (see below) and flag any newly missing;
     also check that an automated-reviewer record is present; see
     "Automated reviewer record".
-11. Check the repo settings the conventions depend on (see "Repo settings")
-    and offer to align any that have drifted.
+11. Check the settings listed under "Repo settings" and offer to align any
+    that have drifted.
 
 Where the running agent can execute shell scripts, run
 `scripts/compare-managed-blocks.sh path/to/AGENTS.md` (from this skill's
@@ -358,20 +358,24 @@ flagging; everything else is project-specific.
 Several canonical conventions name or benefit from repository settings:
 merged branches auto-delete, a real merge commit is the only merge method,
 the merge commit message is the PR title alone, and stale PR branches are
-surfaced for an explicit update. The audit keeps that setup true so the
-canonical text's manual fallbacks stay rare. Treat this as
-**detect → report → offer to enable**, never a silent mutation. Changing repo
+surfaced for an explicit update. Restricted Actions workflow permissions also
+keep the repository token at least privilege unless a workflow declares a
+specific need. The audit keeps that setup true so the canonical text's manual
+fallbacks stay rare. Treat this as
+**detect → report → offer to align**, never a silent mutation. Changing repo
 settings needs admin rights the agent may not have, so confirm before applying;
 otherwise tell the user the desired state and where to set it.
 
-Settings the conventions use or benefit from:
+Settings the conventions use or the audit recommends:
 
-| Setting                                       | Why it matters                                                                              |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Auto-delete head branches on merge            | `branches`/`pull-requests` state merged branches auto-delete                                |
-| Merge-commit-only (squash and rebase off)     | `commits` needs real merge commits for the `--first-parent` history                         |
-| Merge commit message = PR title only          | keeps the body's review material out of history; the title carries the `--first-parent` log |
-| Always suggest updating pull request branches | surfaces a stale branch and offers an explicit refresh action                               |
+| Setting                                        | Why it matters                                                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Auto-delete head branches on merge             | `branches`/`pull-requests` state merged branches auto-delete                                |
+| Merge-commit-only (squash and rebase off)      | `commits` needs real merge commits for the `--first-parent` history                         |
+| Merge commit message = PR title only           | keeps the body's review material out of history; the title carries the `--first-parent` log |
+| Always suggest updating pull request branches  | surfaces a stale branch and offers an explicit refresh action                               |
+| Default workflow token permissions = read      | makes workflows declare the specific write permissions they need                            |
+| Actions cannot create or approve pull requests | prevents the repository workflow token from creating or approving changes by default        |
 
 These toggles are forge-specific. On GitHub, check and (after confirming)
 set them with `gh`; skip or adapt this on other forges, which expose
@@ -384,6 +388,9 @@ gh api repos/{owner}/{repo} \
          allow_rebase_merge, merge_commit_title, merge_commit_message,
          allow_update_branch}'
 
+gh api repos/{owner}/{repo}/actions/permissions/workflow \
+  --jq '{default_workflow_permissions, can_approve_pull_request_reviews}'
+
 # Align (only after confirming with the user)
 gh api -X PATCH repos/{owner}/{repo} \
   -F delete_branch_on_merge=true \
@@ -393,6 +400,10 @@ gh api -X PATCH repos/{owner}/{repo} \
   -F allow_update_branch=true \
   -f merge_commit_title=PR_TITLE \
   -f merge_commit_message=BLANK
+
+gh api --method PUT repos/{owner}/{repo}/actions/permissions/workflow \
+  -f default_workflow_permissions=read \
+  -F can_approve_pull_request_reviews=false
 ```
 
 On GitHub, `allow_update_branch` is the **Always suggest updating pull request
@@ -401,6 +412,17 @@ look for the equivalent stale-branch/update suggestion. If the setting or its
 read is unavailable because of the forge, plan, or permissions, report that
 limitation clearly and point to the canonical "Handing off the PR" manual
 freshness procedure; never infer that an unread setting is disabled.
+
+Before offering to restrict Actions workflow permissions, inspect
+`.github/workflows/` for jobs that rely on implicit write access or use the
+repository workflow token to create pull requests. Report each affected
+workflow. Prefer explicit workflow or job-level `permissions` for required
+write scopes while retaining the read-only default. If creating pull requests
+from Actions is intentional, surface the conflict and ask whether to keep that
+repository-level exception; a workflow cannot override the repository setting
+that prevents Actions from creating or approving pull requests. An owning
+organization or enterprise may also lock either value. Report that policy
+constraint instead of treating the setting as unsupported or disabled.
 
 ### Required checks and CI matrices
 
