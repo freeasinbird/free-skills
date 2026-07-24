@@ -279,8 +279,9 @@ the pointer."
 - Ask for: targets or entry points, language/runtime version, CI file location.
 - Ask about enforced constraints (e.g., "no force unwraps", "strict mode").
 - **Lint and format are required, not optional.** The workflow conventions
-  depend on them: definition of done says "lint/format clean," commits
-  assume CI catches unformatted code. Ask which tools the project uses.
+  depend on them: definition of done expects a successful build, passing
+  tests, and clean lint and formatting; commits assume CI catches unformatted
+  code. Ask which tools the project uses.
   If the user has none, help them choose and configure one appropriate
   for the language (e.g., `swift-format` for Swift, `prettier` +
   `eslint` for JS/TS, `black` + `ruff` for Python, `rustfmt` +
@@ -300,11 +301,12 @@ the pointer."
 
 ### Definition of done: project checks
 
-The managed `done` section includes a principle block and a placeholder
-for project-specific verification steps. During init, fill the
+The managed `done` section includes a tool-agnostic expectation that the
+build succeeds, tests pass, and lint and formatting are clean, followed by
+a placeholder for project-specific verification steps. During init, fill the
 `<!-- agents-md:project:done-checks -->` block with the project's actual
-verification commands (test command, lint command, visual check method,
-schema round-trip if applicable).
+verification commands (build command, test command, lint/format command,
+visual check method, schema round-trip if applicable).
 
 ## Standard project files
 
@@ -326,7 +328,8 @@ note why it matters.
 
 The workflow conventions assume CI exists: the finish line polls
 required checks, the commits section requires every commit green, and
-the definition of done starts with tests and lint. Check for any of:
+the definition of done expects a successful build, passing tests, and clean
+lint and formatting. Check for any of:
 `.github/workflows/`, `.circleci/`, `Jenkinsfile`, `.gitlab-ci.yml`,
 `Makefile` with a `ci` target, or equivalent. If none is found, flag it:
 "Your workflow conventions depend on CI but no CI configuration was
