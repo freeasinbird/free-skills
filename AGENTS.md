@@ -636,6 +636,8 @@ Each increment is something actively used by the end of the work session:
 not "code complete" or "tests pass" alone, but running and exercised.
 Before calling work done:
 
+The build succeeds, tests pass, and lint and formatting are clean.
+
 <!-- agents-md:project:done-checks -->
 
 - Markdown lint clean (`npx markdownlint-cli2 '**/*.md'`)
