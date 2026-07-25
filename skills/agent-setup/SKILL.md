@@ -145,14 +145,17 @@ metadata file).
 2. Read the project's AGENTS.md.
 3. Validate the markers before touching anything: every opening
    `<!-- agents-md:managed:KEY -->` has a matching close after it, no KEY
-   appears twice, every KEY is a known one, any line that merely
+   appears twice, every KEY is a known one, no two blocks overlap (a
+   block that opens inside another's range crosses a boundary even
+   though both keys pair correctly), any line that merely
    resembles a managed marker or the nested `project:done-checks` marker
-   (indentation, case, or spacing variants, a mistyped key) is treated
-   as a malformation, and, when a managed `done` block is present, the
-   nested `<!-- agents-md:project:done-checks -->` block sits inside it,
-   once, exact. (Nested markers with no managed `done` block are the
-   documented opt-out, not a malformation; see "Managed section
-   markers".) On any malformation, stop and report it; never refresh
+   (indentation, case, or spacing variants, a mistyped or unknown key,
+   or a marker's text carried inside a longer line) is treated
+   as a malformation, the nested `project:done-checks` markers are
+   either absent or exactly one correctly ordered pair, and, when a
+   managed `done` block is present, that pair sits inside it. (One exact
+   pair with no managed `done` block is the documented opt-out, not a
+   malformation; see "Managed section markers".) On any malformation, stop and report it; never refresh
    (a broken boundary would pull project-specific text into the managed
    region, and the refresh would delete it). Nothing below reads the file
    for meaning until its boundaries are trusted, so this precedes the
