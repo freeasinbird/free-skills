@@ -53,7 +53,17 @@
 #   CAP_EXPIRED <json>      no reviewer activity within the cap
 # The report is compact by design (the caller's context holds it for the
 # rest of the session); the main agent refetches bodies and threads itself.
-# Persistent API failure surfaces as CAP_EXPIRED: the cap is the backstop.
+# Persistent API failure surfaces as CAP_EXPIRED too: the cap is the
+# backstop. Read the coverage fields in that payload before reporting the
+# result; each failing poll also names its failure on stderr.
+#   last_poll_ok  the final poll scanned all three sources. Every poll
+#                 rescans from the baseline, so that one scan covers the
+#                 whole wait: true means "no review arrived" is sound, and
+#                 false means coverage stops at some earlier poll and the
+#                 tail of the wait is unobserved, whatever polls_ok says.
+#   polls_ok      how many polls scanned all three sources. Only 0 is a
+#                 verdict on its own: no poll ever observed the PR, so the
+#                 honest report is "could not watch this PR".
 #
 # Exit codes: 0 review activity; 3 clean pass; 2 cap expired; 64 usage
 # error; 69 gh (GitHub CLI) not found on PATH.
@@ -283,12 +293,25 @@ scan_asc_tail() {
 }
 
 seen_progress=false
+polls_ok=0
+last_poll_ok=false
 while :; do
+  # Every poll rescans each source from the fixed baseline (both scanners
+  # restart and terminate on it), so one successful poll observes the whole
+  # window from the baseline to now. Coverage therefore rests on the *last*
+  # poll, not on how many succeeded: an early success followed by failures
+  # leaves the tail of the wait unobserved, while a mid-run blip followed by
+  # a success costs nothing. Reset per poll and report both.
+  last_poll_ok=false
   read -r n_reviews n_reactions <<< "$(gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount}}}}' \
     -F o="$OWNER" -F r="$NAME" -F n="$PR" \
     --jq '"\(.data.repository.pullRequest.reviews.totalCount) \(.data.repository.pullRequest.reactions.totalCount)"' 2>/dev/null)"
   case "${n_reviews:-x}${n_reactions:-x}" in *[!0-9]*)
-    # Count query failed; retry next poll. The cap is the backstop.
+    # Count query failed; retry next poll. The cap is the backstop. Say so
+    # on stderr: this failure skips every scan below, so a run that fails
+    # here on every poll would otherwise reach the cap in total silence and
+    # read as "no review arrived" when nothing was ever observed.
+    echo "watch-review.sh: count query failed (bad token, missing scope, rate limit, or wrong repo?); retrying" >&2
     n_reviews='' ;;
   esac
   if [ -n "$n_reviews" ]; then
@@ -305,9 +328,19 @@ while :; do
     # persistent failure.
     if [ "$c_status" = ok ] && [ "$v_status" = ok ]; then
       read -r clean eyes r_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/issues/$PR/reactions?" "$JQ_REACTIONS" "$n_reactions")"
-      if [ "$r_status" = ok ] && [ "$clean" -gt 0 ]; then
-        echo "CLEAN_PASS {\"clean_reactions\":$clean}"
-        exit 3
+      if [ "$r_status" != ok ]; then
+        echo "watch-review.sh: reactions scan failed; retrying" >&2
+      else
+        # Only now has this poll observed all three sources. Counting it
+        # after the review and comment scans alone would call a run "watched"
+        # while the clean-pass signal, which for some reviewers is the only
+        # artifact of a clean round, was never read.
+        polls_ok=$((polls_ok + 1))
+        last_poll_ok=true
+        if [ "$clean" -gt 0 ]; then
+          echo "CLEAN_PASS {\"clean_reactions\":$clean}"
+          exit 3
+        fi
       fi
       [ "$eyes" -gt 0 ] && seen_progress=true
     else
@@ -323,5 +356,5 @@ while :; do
   fi
 done
 
-echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"in_progress_seen\":$seen_progress}"
+echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"polls_ok\":$polls_ok,\"last_poll_ok\":$last_poll_ok,\"in_progress_seen\":$seen_progress}"
 exit 2
