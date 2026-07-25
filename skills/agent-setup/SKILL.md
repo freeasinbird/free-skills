@@ -495,18 +495,3 @@ flag it before any managed-block refresh and offer, in order:
 2. If relocation is declined: refresh the block and re-insert the record
    verbatim at its prior position, flagged for later relocation.
 3. If both are declined: skip refreshing that block and report the conflict.
-
-## Additional Resources
-
-### Reference Files
-
-- **`references/canonical-sections.md`**: exact text of all managed
-  sections, ready to paste
-- **`references/scaffolding.md`**: content for all scaffolded files
-  (devlog README, PR template, CONTRIBUTING.md, CLAUDE.md pointer)
-
-### Scripts
-
-- **`scripts/compare-managed-blocks.sh`**: read-only comparator for
-  update mode's mechanical parts (marker validation, per-block diff);
-  requires a shell, with the manual steps as the fallback
