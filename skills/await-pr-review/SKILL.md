@@ -206,16 +206,59 @@ Watcher side, cheapest first:
   waiting and wakes the main agent exactly once: the loop only answers "is
   there reviewer activity after the baseline?", a timestamp comparison that
   needs no model. On GitHub, don't write the loop by hand: this skill ships
-  `watch-review.sh` alongside this file, parameterized on the PR, baseline,
-  reviewer login (both API forms), expected head SHA (so a stale pass
-  against a superseded head does not end the wait), signal contents,
-  cadence, and cap. It
+  `watch-review.sh` next to this file. Invoke it **by path, from a checkout
+  of the PR's repository**, where `<skill-dir>` is the directory holding
+  this file (its path differs per platform and install):
+
+  ```sh
+  <skill-dir>/watch-review.sh --pr 46 --baseline 2026-07-02T05:07:30Z \
+    --login chatgpt-codex-connector --head 9c346ab \
+    --interval 75 --cap-minutes 25
+  ```
+
+  Don't change directory into the skill to run it. `--repo` defaults to
+  whatever repository the working directory belongs to, so from a globally
+  installed skill's own directory (the usual install) that default either
+  finds no repository or silently resolves the wrong one and watches _its_
+  PR 46. **Pass `--repo owner/name` explicitly whenever the working
+  directory is not the PR's checkout.**
+
+  `--login` takes either login form; the watcher reads REST only, so it
+  derives the one REST-form login it matches all three sources on (override
+  with `--rest-login <login>` for a machine-user reviewer, which carries no
+  `[bot]` suffix). `--head` is the expected head SHA, so a stale pass
+  against a superseded head does not end the wait. Also available:
+  `--clean-content` /
+  `--progress-content` for a reviewer whose status reactions differ from
+  👍/👀, and `--interval` / `--cap-minutes` for cadence and cap. It
   implements the step-1 detection and the matching rules below, and exits with a
-  distinct code plus a compact one-line report for review activity (0),
-  clean pass (3), or cap expiry (2), so the caller branches on the exit code
-  without parsing prose. Where `gh` or a shell is missing, hand-roll the
-  watch from the specification in `references/detection.md`; it is the same
-  detection the script implements.
+  distinct code plus a compact one-line report, so the caller branches on
+  the exit code without parsing prose:
+
+  | Exit | Report          | Meaning                                             |
+  | ---- | --------------- | --------------------------------------------------- |
+  | 0    | REVIEW_ACTIVITY | reviewer review or review comment past the baseline |
+  | 3    | CLEAN_PASS      | clean-pass signal past the baseline, nothing else   |
+  | 2    | CAP_EXPIRED     | the cap ran out (see `polls_ok` below)              |
+  | 64   | usage on stderr | bad or missing flags: fix the call, don't retry     |
+  | 69   | note on stderr  | `gh` not on PATH: this environment cannot watch     |
+
+  Branch on all five: treating 64 or 69 as "no review arrived" reports a
+  broken call as a quiet reviewer. **Exit 2 is not by itself a quiet PR**,
+  so read the payload's coverage fields before reporting one. `polls_ok:0`
+  means no poll ever observed the PR (bad token, missing scope, rate limit,
+  wrong repo, each logged on stderr): report "could not watch." Otherwise
+  `last_poll_ok` decides, because every poll rescans each source from the
+  baseline, so the final poll's scan is what covers the whole wait: `true`
+  means the window really was quiet, while `false` means coverage stops at
+  an earlier poll and the tail went unobserved, however many polls
+  succeeded. Report an incomplete watch as incomplete; a source that never
+  scanned is not a source that was quiet, and a reviewer whose clean pass
+  leaves only a reaction is exactly the one such a gap hides. Where `gh`
+  or a shell is missing, hand-roll the watch from the specification in
+  `references/detection.md`; it is the same detection the script
+  implements.
+
 - **Delegated watcher / subagent (only where background processes are absent
   but subagents are available and permitted).** If the session policy permits
   delegation without asking, and the platform will reliably notify or

@@ -15,7 +15,14 @@
 # Usage:
 #   watch-review.sh --pr N --baseline 2026-07-02T05:07:30Z \
 #     --login chatgpt-codex-connector \   # plain or name[bot]; normalized
-#     [--repo owner/name]                 # default: current repo
+#     [--repo owner/name]                 # default: the repo the working
+#                                         # directory belongs to. Pass it
+#                                         # explicitly unless that is the
+#                                         # PR's checkout: run from
+#                                         # elsewhere (this script's own
+#                                         # install directory, say) and the
+#                                         # default resolves that repo's
+#                                         # PR N instead, or no repo at all.
 #     [--rest-login 'name[bot]']          # the REST login form matched
 #                                         # against ALL three sources;
 #                                         # default '<plain login>[bot]'.
