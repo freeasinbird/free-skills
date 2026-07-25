@@ -340,11 +340,14 @@ like the acknowledgement rule above: its presence means keep waiting; its
 absence proves nothing (the reviewer may remove it when the review
 completes). Two caveats. Reactions are one-per-user-per-emoji and mutable, so
 match on the signal's `createdAt` being after the baseline, never on bare
-presence: a leftover clean-pass reaction from an earlier round predates the
-baseline and does not count, and the wait cap stays as the backstop when the
-signals are ambiguous. And reactions expose their author under `user.login`
-in both APIs, in the `name[bot]` form for an App bot, per the canonical
-login rule above; the GraphQL review-author form matches no reactions.
+presence. That governs **both** signals: a leftover clean-pass reaction from
+an earlier round predates the baseline and does not count, and a leftover
+in-progress reaction likewise means nothing about this round, so reading it
+by presence alone stretches the wait for a pass that already finished. The
+wait cap stays as the backstop when the signals are ambiguous. And
+reactions expose their author under `user.login` in both APIs, in the
+`name[bot]` form for an App bot, per the canonical login rule above; the
+GraphQL review-author form matches no reactions.
 
 ### 4. Address the feedback: auto clear-cut, surface judgment calls
 

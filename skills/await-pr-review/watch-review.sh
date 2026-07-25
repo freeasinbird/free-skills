@@ -210,7 +210,10 @@ DEADLINE=$(( SECONDS + CAP_MINUTES * 60 ))
 # summable match counts and the page's baseline-side edge timestamp (the
 # oldest item on a newest-first page, the first item on an ascending page),
 # or "none" for an empty page. PENDING reviews have no submitted_at; treat
-# them as not submitted.
+# them as not submitted. Every count is baseline-gated, the in-progress
+# reaction included: reactions are mutable and one-per-user-per-emoji, so a
+# leftover eyes from an earlier round would otherwise read as a review in
+# progress and stretch the wait for a pass that already finished.
 # With --head, a review must be of that commit, and a comment must anchor
 # to it — except replies to existing threads (in_reply_to_id set), which
 # keep their old anchor yet are a genuine completion signal. startswith()
@@ -223,7 +226,7 @@ if [ -n "$HEAD" ]; then
 fi
 JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .created_at > \"$BASELINE\"$HEAD_COMMENTS)] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
 JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at // \"\") > \"$BASELINE\"$HEAD_REVIEWS)] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
-JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
+JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\" and .created_at > \"$BASELINE\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
 
 # Both scanners report "t1 t2 status". A malformed page (transient API
 # error, rate limit, missing scope) yields status=err: an error is not
