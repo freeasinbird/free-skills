@@ -148,11 +148,3 @@ The working knowledge lives in three references, loaded on demand:
   prior-decision list, reviewer records, and shipping process differ
   per repo; this skill carries the craft, the host project carries its own
   decisions.
-
-## Additional resources
-
-- `references/defect-taxonomy.md`: review lens; the seven defect classes
-  with live examples.
-- `references/authoring-rules.md`: write lens; authoring rules, per-tool
-  tilt table (with sources and last-verified date), shared-core pattern.
-- `references/verification.md`: the pre-ship check battery as commands.
