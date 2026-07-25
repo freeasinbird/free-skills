@@ -28,7 +28,10 @@ gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$
 
 Note `comments(last:1)`: the **newest** comment per thread, not the first; a
 reviewer reply on an _existing_ thread is the latest comment, and using the
-oldest would miss it.
+oldest would miss it. Note also the two author fields this query already
+shows: in GraphQL, reviews and thread comments expose their author under
+`author{login}`, reactions under `user{login}` (the login rule in SKILL.md
+step 3).
 
 ## Time, not enumeration; pages, not windows
 
@@ -45,11 +48,13 @@ other authors can push the item you are looking for out of it. When
 detecting, read each source through a **paged** feed until you are past the
 baseline: on REST,
 `gh api "repos/OWNER/REPO/pulls/PR/comments?per_page=100&page=N"` and the
-matching `pulls/PR/reviews` and `issues/PR/reactions` endpoints (authors
-there carry the `name[bot]` form; the login-form rule is in SKILL.md
-step 3); on GraphQL, cursor-page with `pageInfo{hasNextPage endCursor}` /
-`after:`. Reach for the full thread set only when you actually need it
-(e.g. to resolve threads).
+matching `pulls/PR/reviews` and `issues/PR/reactions` endpoints; on GraphQL,
+cursor-page with `pageInfo{hasNextPage endCursor}` / `after:`. **All three
+REST payloads carry their author under `user.login`, in the `name[bot]`
+form** (there is no `author` field on REST, so a review filtered on
+`author.login` matches nothing; the login rule is in SKILL.md step 3).
+Reach for the full thread set only when you actually need it (e.g. to
+resolve threads).
 
 ## Detecting an unrecorded reviewer
 
@@ -62,7 +67,7 @@ The scan procedure behind SKILL.md step 2's detection fallback:
 - Once reviews identify the bot, scan recent PRs' description reactions by
   that same bot too, and record any status signals you observe; match the
   reactions on the **reaction form** of its login (the plain review login
-  plus the `[bot]` suffix for an App bot; login-form rule in SKILL.md
+  plus the `[bot]` suffix for an App bot; login rule in SKILL.md
   step 3), since the review-author form matches no reactions. A reviewer
   that posts reviews only on findings rounds marks clean passes out of
   band, and a record missing the clean-pass signal still burns the full

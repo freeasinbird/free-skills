@@ -121,8 +121,8 @@ derivation, and the REST/GraphQL paging mechanics) is in
 ### 2. Identify the reviewer, then ensure it's requested
 
 You need enough **identity to match the reviewer's future reviews**: its account
-login (the login you filter on in step 3, via `author.login` for reviews and
-`user.login` for reactions), not merely "some bot will
+login (the login you filter on in step 3, under a field name and a login form
+that both depend on which API you read), not merely "some bot will
 review." Establish it in this order; the **recorded identity is the primary
 source, detection only a fallback**:
 
@@ -142,7 +142,7 @@ source, detection only a fallback**:
   every clean PR. A repo with no bot review on any PR can still have a
   clean-pass-only reviewer, detectable by its recurring reaction on PR
   descriptions shortly after they open (step 3); its reaction login yields
-  the identity; record both login forms (login-form rule in step 3). Either
+  the identity; record both login forms (login rule in step 3). Either
   way the scan yields both the gate (a reviewer exists) and the login to
   match; the full procedure (the commands, and deriving each login form) is
   in `references/detection.md`. **If the scan finds more than one distinct bot
@@ -287,17 +287,26 @@ review-comment on an existing thread** (a reply leaves no new thread and no new
 submitted review, so this case is easy to miss; it is why the step-1
 snapshot reads each thread's newest comment, not its first), or the
 reviewer's **clean-pass status signal** (next
-paragraph). All four must be **authored by the configured reviewer**: match
-the target bot against `author.login` for reviews and thread comments, but
-against `user.login` for reactions (the field GraphQL exposes a reaction's
-author under). **Mind the login form** (the canonical login-form rule the
-rest of this skill points at): GitHub returns a bot as `name` in GraphQL but
-`name[bot]` in REST (e.g. `chatgpt-codex-connector` via the GraphQL
-`reviewThreads` vs `chatgpt-codex-connector[bot]` via
-`gh api repos/.../pulls/N/reviews`); a _reaction_ author carries the
-REST-style `name[bot]` form for an App-based bot even in GraphQL; and a
-reviewer running as a regular machine-user account carries its plain login
-everywhere. Match the right form per API and per field, or the filter
+paragraph). All four must be **authored by the configured reviewer**, and
+**the field you filter on, like the login form, follows the API you read,
+not the kind of item** (the canonical login rule the rest of this skill
+points at):
+
+- **Field.** In GraphQL, reviews and thread comments expose their author
+  under `author.login` while reactions expose theirs under `user.login`. On
+  the REST feeds `references/detection.md` prescribes for paging
+  (`pulls/N/reviews`, `pulls/N/comments`, `issues/N/reactions`), **all
+  three** expose it under `user.login`; those payloads carry no `author`
+  field at all, so a REST review filtered on `author.login` matches nothing.
+- **Form.** GitHub returns an App-based bot as `name` in GraphQL review
+  authorship but `name[bot]` in REST (e.g. `chatgpt-codex-connector` via the
+  GraphQL `reviewThreads` vs `chatgpt-codex-connector[bot]` via
+  `gh api repos/.../pulls/N/reviews`); its _reaction_ author carries the
+  REST-style `name[bot]` form even in GraphQL; and a reviewer running as a
+  regular machine-user account carries its plain login everywhere, under
+  both APIs.
+
+Match the field and the form to the API you are querying, or the filter
 silently matches nothing and a real review
 looks like "no activity." A human review, or a _different_ bot, posting after
 the baseline is **not** the awaited pass: this skill is scoped to the automated
@@ -333,8 +342,9 @@ completes). Two caveats. Reactions are one-per-user-per-emoji and mutable, so
 match on the signal's `createdAt` being after the baseline, never on bare
 presence: a leftover clean-pass reaction from an earlier round predates the
 baseline and does not count, and the wait cap stays as the backstop when the
-signals are ambiguous. And reaction authors carry the reaction form of the
-canonical login-form rule above, not the review-author form.
+signals are ambiguous. And reactions expose their author under `user.login`
+in both APIs, in the `name[bot]` form for an App bot, per the canonical
+login rule above; the GraphQL review-author form matches no reactions.
 
 ### 4. Address the feedback: auto clear-cut, surface judgment calls
 
