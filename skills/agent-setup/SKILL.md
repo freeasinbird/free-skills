@@ -201,6 +201,23 @@ metadata file).
    decide per file. (Watch `devlog/README.md` especially: the managed
    `devlog` block points to it as the protocol, and a stale copy
    contradicts a freshly-synced block.)
+
+   An existing file that holds substantive content the template doesn't
+   is not drift to refresh: refreshing it would delete material the
+   project relies on. Report the difference and leave such a file as it
+   stands unless the user asks otherwise. `CONTRIBUTING.md` and the PR
+   template are meant to be customized, so a fuller local copy is the
+   project's own documentation, not drift to reduce. `CLAUDE.md` is the
+   one file that gets a further offer, because its template is a
+   five-line pointer to AGENTS.md as the single source, so any CLAUDE.md
+   carrying real guidance diffs as a total rewrite. For that file, offer
+   migrate-then-reduce: move the durable, tool-agnostic instructions
+   into the matching project-specific AGENTS.md sections (never into a
+   managed block), keep anything genuinely Claude-specific below the
+   `@AGENTS.md` import, and only then reduce the file toward the
+   template. Never delete the content, and on decline leave the file as
+   it stands and report it.
+
 10. Audit standard project files (see below) and flag any newly missing;
     also check that an automated-reviewer record is present; see
     "Automated reviewer record".
