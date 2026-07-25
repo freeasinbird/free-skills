@@ -27,13 +27,20 @@ init and left untouched during updates.
 
 - No AGENTS.md in the project root → **Init mode**
 - AGENTS.md exists with `<!-- agents-md:managed:` markers → **Update mode**
-- AGENTS.md exists with no exact markers but with marker lookalikes,
-  managed or nested `project:done-checks` (update-mode step 4's
-  malformation rule: comment lines that resemble either marker in
-  spacing, case, or indentation) → stop and report them; don't offer
-  adoption. Wrapping sections around malformed remnants
-  leaves a partially adopted file that only fails later, so the user
-  should fix or remove the lookalikes first.
+- AGENTS.md exists with no exact managed markers but with marker
+  remnants → stop and report them; don't offer adoption. A remnant is
+  either a lookalike of the managed or the nested `project:done-checks`
+  marker (update-mode step 3's malformation rule: comment lines that
+  resemble either marker in spacing, case, or indentation, or carry its
+  text inside a longer line), or any nested `project:done-checks`
+  markers other than exactly one correctly ordered pair: a lone opener
+  or closer, a duplicate, a close before its open. Wrapping sections
+  around malformed remnants leaves a partially adopted file that only
+  fails later, so the user should fix or remove them first. One exact,
+  correctly ordered nested pair with no managed `done` block is not a
+  remnant: that is the documented opt-out (see "Managed section
+  markers"), so it doesn't trigger this stop, and such a file falls to
+  the adoption bullet below.
 - AGENTS.md exists without markers → ask whether to adopt management or
   leave unmanaged. To adopt: match sections to canonical keys by heading,
   wrap each match's existing text as-is in markers, then immediately run
@@ -42,7 +49,10 @@ init and left untouched during updates.
   wrap its existing project checks in the nested
   `<!-- agents-md:project:done-checks -->` markers (text unchanged);
   update-mode validation requires the nested pair inside a managed
-  `done` block, so a bare wrap would dead-end the adoption.
+  `done` block, so a bare wrap would dead-end the adoption. Where an
+  exact nested pair is already present (the opt-out routed here by the
+  bullet above), keep it as it stands and wrap the managed `done` block
+  around it; adding a second pair fails that same validation.
 
 ## Profiles
 
@@ -54,7 +64,10 @@ Decision-log, or High-assurance when they also name change classes
 that must always carry a note.
 
 - **Standard**: PRs, commits, issues, and current documentation carry
-  the record. No `devlog/` scaffold and no managed `devlog` block.
+  the record. No `devlog/` scaffold and no managed `devlog` block. That
+  absence is the profile, not drift, an opt-out, or a gap: update mode
+  neither offers to insert the block nor counts it as missing content,
+  and the comparator's `missing: devlog` line is the expected output.
 - **Decision-log**: adds the managed `devlog` block and the
   `devlog/README.md` scaffold (selective decision notes).
 - **High-assurance**: Decision-log plus a short project-specific list
@@ -88,6 +101,22 @@ metadata file).
    content or placeholders in place, and the `Agent-setup profile:`
    line (plus the High-assurance mandatory-note list) in an unmanaged
    section.
+
+   Verify that write before moving on: init pastes the managed blocks by
+   hand, and every comparison update mode makes depends on their
+   byte-exactness. Where the running agent can execute shell scripts, run
+   the comparator described under "Update mode". Under Decision-log or
+   High-assurance, pass `--require-all` and require exit 0. Under
+   Standard, drop the flag: the run must exit 0 with `missing: devlog`
+   as its only missing line and every other key reporting `ok:`. Without
+   shell access, make the comparator's comparison by hand: read each
+   managed block's whole text back against
+   `references/canonical-sections.md`, excluding the nested
+   `project:done-checks` payload from both sides as step 6 does. A
+   dropped or reworded sentence inside a block is exactly the drift this
+   check exists to catch; the project's own checks in the nested block
+   are not drift.
+
 6. Create scaffolding files:
    - `devlog/README.md`: content in `references/scaffolding.md`
      §devlog-readme (Decision-log and High-assurance profiles only)
@@ -114,24 +143,39 @@ metadata file).
 
 1. Read `references/canonical-sections.md` for current canonical text.
 2. Read the project's AGENTS.md.
-3. Discover the profile: look for the `Agent-setup profile:` line.
-   - Recorded: preserve it and scope the steps below to it. A Standard
-     project's missing `devlog` block and scaffold are its profile,
-     not drift; never switch a recorded profile without the user's
-     explicit choice.
+3. Validate the markers before touching anything: every opening
+   `<!-- agents-md:managed:KEY -->` has a matching close after it, no KEY
+   appears twice, every KEY is a known one, no two blocks overlap (a
+   block that opens inside another's range crosses a boundary even
+   though both keys pair correctly), any line that merely
+   resembles a managed marker or the nested `project:done-checks` marker
+   (indentation, case, or spacing variants, a mistyped or unknown key,
+   or a marker's text carried inside a longer line) is treated
+   as a malformation, the nested `project:done-checks` markers are
+   either absent or exactly one correctly ordered pair, and, when a
+   managed `done` block is present, that pair sits inside it. (One exact
+   pair with no managed `done` block is the documented opt-out, not a
+   malformation; see "Managed section markers".) On any malformation, stop and report it; never refresh
+   (a broken boundary would pull project-specific text into the managed
+   region, and the refresh would delete it). Nothing below reads the file
+   for meaning until its boundaries are trusted, so this precedes the
+   profile discovery that can negotiate a migration with the user.
+4. Discover the profile: look for the `Agent-setup profile:` line.
+   - Recorded: preserve it and scope the steps below to it (see
+     Profiles for what Standard's absent `devlog` block means); never
+     switch a recorded profile without the user's explicit choice.
    - Absent, but a managed `devlog` block, a `devlog/` scaffold, or a
      session-bookend protocol exists: a legacy setup. Offer migration
      to Decision-log (or High-assurance when the user names mandatory
      change classes), showing the resulting managed-block and scaffold
      diffs before applying anything. On acceptance, the block and
      scaffold changes and the new profile line land through the normal
-     steps below, only after step 4's marker validation passes; on
-     decline, change and record nothing (the offer recurs on the next
-     update run). Never delete an existing devlog or switch the
-     project to Standard without the user's explicit choice; the
-     historical entries stay untouched either way. When migrating a
-     queue-era devlog, walk the
-     apparently open queue items (`## To promote` bullets, deferrals,
+     steps below; on decline, change and record nothing (the offer
+     recurs on the next update run). Never delete an existing devlog or
+     switch the project to Standard without the user's explicit choice;
+     the historical entries stay untouched either way. When migrating a
+     queue-era devlog, walk the apparently open queue items
+     (`## To promote` bullets, deferrals,
      needs-human notes without a drain record) once, in prose with the
      user: already resolved or promoted needs nothing; still
      actionable gets an existing or new tracker issue linked; only
@@ -139,18 +183,6 @@ metadata file).
      automate this by parsing or mutating old entries.
    - Absent with no devlog anywhere: treat as Standard and offer to
      record the line.
-4. Validate the markers before touching anything: every opening
-   `<!-- agents-md:managed:KEY -->` has a matching close after it, no KEY
-   appears twice, every KEY is a known one, any line that merely
-   resembles a managed marker or the nested `project:done-checks` marker
-   (indentation, case, or spacing variants, a mistyped key) is treated
-   as a malformation, and, when a managed `done` block is present, the
-   nested `<!-- agents-md:project:done-checks -->` block sits inside it,
-   once, exact. (Nested markers with no managed `done` block are the
-   documented opt-out, not a malformation; see "Managed section
-   markers".) On any malformation, stop and report it; never refresh
-   (a broken boundary would pull project-specific text into the managed
-   region, and the refresh would delete it).
 5. Protect the reviewer record before refreshing: if an automated-reviewer
    record appears inside a managed block, resolve its location first; see
    "Automated reviewer record".
@@ -158,13 +190,13 @@ metadata file).
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`,
      exclude the nested `project:done-checks` block from both sides
-     (matching its exact marker lines only, per step 4) and compare only
+     (matching its exact marker lines only, per step 3) and compare only
      the text around it; never modify the nested block.
    - If different, show the diff and ask whether to update.
 7. Leave all unmarked (project-specific) content untouched.
 8. If a canonical section is missing entirely, offer to insert it at its
-   conventional position; a `devlog` block absent under the Standard
-   profile is the profile, not a gap, so don't offer it.
+   conventional position; under Standard, `devlog` is not such a gap
+   (see Profiles).
 9. Check scaffolding files (CLAUDE.md, CONTRIBUTING.md, PR template,
    and, under a note-keeping profile, devlog/README.md): offer to
    create any that are missing; for any that exist, compare against the
@@ -174,19 +206,49 @@ metadata file).
    decide per file. (Watch `devlog/README.md` especially: the managed
    `devlog` block points to it as the protocol, and a stale copy
    contradicts a freshly-synced block.)
+
+   An existing file that holds substantive content the template doesn't
+   is not drift to refresh: refreshing it would delete material the
+   project relies on. Report the difference and leave such a file as it
+   stands unless the user asks otherwise. `CONTRIBUTING.md` and the PR
+   template are meant to be customized, so a fuller local copy is the
+   project's own documentation, not drift to reduce. `CLAUDE.md` is the
+   one file that gets a further offer, because its template is a
+   five-line pointer to AGENTS.md as the single source, so any CLAUDE.md
+   carrying real guidance diffs as a total rewrite. For that file, offer
+   migrate-then-reduce: move the durable, tool-agnostic instructions
+   into the matching project-specific AGENTS.md sections (never into a
+   managed block), keep anything genuinely Claude-specific below the
+   `@AGENTS.md` import, and only then reduce the file toward the
+   template. Never delete the content, and on decline leave the file as
+   it stands and report it.
+
 10. Audit standard project files (see below) and flag any newly missing;
     also check that an automated-reviewer record is present; see
     "Automated reviewer record".
 11. Check the settings listed under "Repo settings" and offer to align any
     that have drifted.
 
-Where the running agent can execute shell scripts, run
-`scripts/compare-managed-blocks.sh path/to/AGENTS.md` (from this skill's
-directory) to perform steps 4 and 6's mechanical parts in one
-deterministic pass: it validates markers and prints a per-block diff,
-excluding the nested block, and treats a missing block as the documented
-opt-out; for a Standard project, `missing: devlog` in its output is the
-expected profile, not drift. Review its diffs with the user as step 6
+Where the running agent can execute shell scripts, run this skill's
+`scripts/compare-managed-blocks.sh` **from the project root**, giving it
+the script's path inside the skill directory and the project's AGENTS.md
+path (which defaults to `AGENTS.md`):
+
+```sh
+/path/to/agent-setup/scripts/compare-managed-blocks.sh AGENTS.md
+```
+
+The script resolves the canonical sections relative to itself, so it runs
+from any working directory, but the AGENTS.md argument resolves from the
+caller's: run it from the skill directory and a relative project path
+resolves inside the skill instead of the project. It performs steps 3 and
+6's mechanical parts in one deterministic pass, validating markers and
+printing a per-block diff that excludes the nested block, with one
+`ok:`, `drift:`, or `missing:` line per key. A missing block is tolerated
+as the documented opt-out unless `--require-all` is passed, which turns
+it into a failure; that flag fits a note-keeping profile (and init's
+post-write check), not a Standard project, whose absent `devlog` block
+would fail it (see Profiles). Review its diffs with the user as step 6
 describes. Without shell access, follow the steps manually as written.
 
 ## Conventional section order
@@ -225,9 +287,9 @@ Keys: `devlog`, `finish-line`, `context`, `branches`, `pull-requests`,
 To opt a section out of management, remove its markers. The update mode
 will note it as missing and offer to re-add, but will not force it.
 Opting out `done` this way leaves the nested `project:done-checks`
-markers behind as plain project content; that is expected and fine. A
-`devlog` block absent in a Standard-profile project is that project's
-profile, not an opt-out; update mode doesn't offer to re-add it.
+markers behind as plain project content; that is expected and fine. An
+absent `devlog` block under Standard is that project's profile rather
+than an opt-out (see Profiles).
 
 ## Project-specific section guidance
 
