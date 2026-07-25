@@ -91,8 +91,10 @@ difference between the two images must be the change itself. Hold constant:
   responsive (it affects layout across widths), capture desktop and mobile
   as a viewport matrix in the same run (one command where your tooling
   supports it; see the reference capture script) instead of re-driving the
-  app once per width; each width is its own before/after pair. Prefer 2x
-  DPR so text stays legible when the image is scaled down.
+  app once per width; each width is its own before/after pair, named per
+  width (`before-1280x720.png` / `after-1280x720.png`,
+  `before-390x844.png` / `after-390x844.png`). Prefer 2x DPR so text stays
+  legible when the image is scaled down.
 - **Theme**: capture **both light and dark** as separate pairs when the
   change affects appearance in both.
 - **Interactive state**: default / hover / focus / active / error / empty /
@@ -177,8 +179,14 @@ node capture.mjs --url http://localhost:3000/cards --out after.png \
   --viewport 1280x720,390x844 --wait-for '#card-list' --clip '#card-list'
 ```
 
-It prints one line per written file with the image's actual dimensions,
-which is the input to the step 6 dimension check. The timeout budget
+**The output filenames follow the viewport count**: one viewport writes
+exactly `--out`, and several insert the size before the extension, so the
+run above writes `after-1280x720.png` and `after-390x844.png`, never
+`after.png`. Look for the names the run actually reports, not the `--out`
+you passed.
+
+The script prints one line per written file with the image's actual
+dimensions, which is the input to the step 6 dimension check. The timeout budget
 (default 90 seconds, `--timeout-budget`) keeps the whole run under the
 roughly 2-minute cap common to agent shell tools (see step 5), and its
 exit codes are explicit: 64 usage, 69 no usable Chrome or Node, 1 capture
