@@ -50,6 +50,27 @@ run_case() { # run_case <name> <expected-exit> <file> [comparator args...]
   fi
 }
 
+run_output_case() { # run_output_case <name> <expected-exit> <regex> <file> [args...]
+  # A leading '!' on the regex asserts the output does NOT match it.
+  local name=$1 expected=$2 pattern=$3 file=$4
+  shift 4
+  local out actual=0
+  out=$("$comparator" "$@" "$file" 2>&1) || actual=$?
+  total=$((total + 1))
+  if [ "$actual" -ne "$expected" ]; then
+    echo "FAIL: $name (expected exit $expected, got $actual)"
+    fails=$((fails + 1))
+  elif [ "${pattern#!}" != "$pattern" ]; then
+    if grep -qE "${pattern#!}" <<<"$out"; then
+      echo "FAIL: $name (output matched /${pattern#!}/, expected not to)"
+      fails=$((fails + 1))
+    fi
+  elif ! grep -qE "$pattern" <<<"$out"; then
+    echo "FAIL: $name (output missing /$pattern/)"
+    fails=$((fails + 1))
+  fi
+}
+
 mutate() { # mutate <python-snippet>: fixture -> $work/mutated.md via stdin/out
   python3 -c "import sys; t = sys.stdin.read(); $1; sys.stdout.write(t)" \
     <"$fixture" >"$work/mutated.md"
@@ -63,10 +84,19 @@ NC='<!-- /agents-md:project:done-checks -->'
 # --- healthy states ---
 run_case 'clean fixture' 0 "$fixture"
 run_case 'clean fixture, strict' 0 "$fixture" --require-all
+run_output_case 'clean fixture reports ok per key' 0 '^ok: branches$' "$fixture"
+
+# --- argument handling ---
+run_output_case 'unknown long flag rejected' 1 '^usage:' "$fixture" --require_all
+run_output_case 'unknown flag not read as a path' 1 '!AGENTS.md not found' \
+  "$fixture" --require_all
+run_output_case 'unknown short flag rejected' 1 '^usage:' "$fixture" -x
+run_output_case 'extra positional rejected' 1 '^usage:' "$fixture" "$fixture"
 
 mutate "t = t.replace('$(printf "$O" done)\n', '').replace('$(printf "$C" done)\n', '')"
 run_case 'done opt-out, tolerant' 0 "$work/mutated.md"
 run_case 'done opt-out, strict' 1 "$work/mutated.md" --require-all
+run_output_case 'opt-out reports the missing key' 0 '^missing: done' "$work/mutated.md"
 
 mutate "import re; t = re.sub(r'(?s)\n$(printf "$O" branches).*?$(printf "$C" branches)\n', '\n', t)"
 run_case 'whole-block opt-out, tolerant' 0 "$work/mutated.md"
@@ -81,6 +111,8 @@ run_case 'innocent agents+managed comment' 0 "$work/mutated.md"
 # --- drift ---
 mutate "t = t.replace('$(printf "$O" branches)\n', '$(printf "$O" branches)\nDRIFT LINE\n', 1)"
 run_case 'content drift inside a block' 1 "$work/mutated.md"
+run_output_case 'drift names its key beside the diff' 1 '^drift: branches$' \
+  "$work/mutated.md"
 
 mutate "t = t.replace('$NO\n', '$NO\nEXTRA CHECK\n', 1)"
 run_case 'nested-only change stays excluded' 0 "$work/mutated.md"

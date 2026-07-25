@@ -10,19 +10,48 @@
 #                  (default: missing is reported but tolerated, since
 #                  removing a block's markers is the documented opt-out)
 #
+# Run it from the project root: the canonical sections resolve relative
+# to this script, but the AGENTS.md path resolves from the caller's
+# working directory (it defaults to AGENTS.md there).
+#
+# Reports one line per key, scannable together: "ok:", "drift:" (after
+# that key's diff), or "missing:"; boundary problems print "marker
+# error:" and stop the run before any comparison.
+#
 # Exit 0: no drift, no malformed markers (and, with --require-all, no
-# missing blocks). Exit 1 otherwise.
+# missing blocks). Exit 1 otherwise, including a usage error.
 set -euo pipefail
+
+usage() {
+  echo "usage: compare-managed-blocks.sh [--require-all] [path/to/AGENTS.md]" >&2
+}
 
 canon="$(cd "$(dirname "$0")/.." && pwd)/references/canonical-sections.md"
 require_all=0
-agents=AGENTS.md
+agents=
 for arg in "$@"; do
   case "$arg" in
     --require-all) require_all=1 ;;
-    *) agents="$arg" ;;
+    # An unknown flag must not fall through to the path arm: a typo like
+    # --require_all was otherwise read as a filename, so alone it failed
+    # with a misleading "AGENTS.md not found" and ahead of a real path it
+    # was overwritten, running tolerantly while looking strict.
+    -*)
+      echo "unknown option: $arg" >&2
+      usage
+      exit 1
+      ;;
+    *)
+      if [ -n "$agents" ]; then
+        echo "unexpected extra argument: $arg" >&2
+        usage
+        exit 1
+      fi
+      agents="$arg"
+      ;;
   esac
 done
+agents="${agents:-AGENTS.md}"
 if [ ! -f "$canon" ]; then
   echo "canonical sections not found: $canon"
   exit 1
@@ -177,6 +206,7 @@ for key in "${keys[@]}"; do
     <(extract "$canon" "$key") <(extract "$agents" "$key"); then
     echo "ok: $key"
   else
+    echo "drift: $key"
     status=1
   fi
 done
