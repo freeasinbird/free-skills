@@ -155,6 +155,18 @@ run_case 'embedded nested fragment' 1 "$work/mutated.md"
 mutate "t = t.replace('$NO\n', '').replace('$NC\n', '')"
 run_case 'nested pair missing, done present' 1 "$work/mutated.md"
 
+# Every nested configuration other than one correctly ordered pair is
+# malformed, not a variant of the opt-out: a half pair or a reversed one
+# would otherwise reach adoption and be "fixed" by adding a second pair.
+mutate "t = t.replace('$NC\n', '', 1)"
+run_output_case 'lone nested opener, done present' 1 'exactly once' "$work/mutated.md"
+
+mutate "t = t.replace('$NO\n', '', 1)"
+run_output_case 'lone nested closer, done present' 1 'exactly once' "$work/mutated.md"
+
+mutate "t = t.replace('$NO', '@@T@@', 1).replace('$NC', '$NO', 1).replace('@@T@@', '$NC', 1)"
+run_output_case 'inverted nested pair, done present' 1 'precedes open' "$work/mutated.md"
+
 mutate "import re; m = re.search(r'(?s)($(printf "$O" done)\n)(.*?)($NO.*?$NC\n)(.*?)($(printf "$C" done))', t); t = t[:m.start()] + m.group(1) + m.group(3) + m.group(2) + m.group(4) + m.group(5) + t[m.end():]"
 run_case 'nested pair moved within done' 1 "$work/mutated.md"
 
