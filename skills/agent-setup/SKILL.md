@@ -27,13 +27,20 @@ init and left untouched during updates.
 
 - No AGENTS.md in the project root → **Init mode**
 - AGENTS.md exists with `<!-- agents-md:managed:` markers → **Update mode**
-- AGENTS.md exists with no exact markers but with marker lookalikes,
-  managed or nested `project:done-checks` (update-mode step 4's
-  malformation rule: comment lines that resemble either marker in
-  spacing, case, or indentation) → stop and report them; don't offer
-  adoption. Wrapping sections around malformed remnants
-  leaves a partially adopted file that only fails later, so the user
-  should fix or remove the lookalikes first.
+- AGENTS.md exists with no exact managed markers but with marker
+  remnants → stop and report them; don't offer adoption. A remnant is
+  either a lookalike of the managed or the nested `project:done-checks`
+  marker (update-mode step 4's malformation rule: comment lines that
+  resemble either marker in spacing, case, or indentation, or carry its
+  text inside a longer line), or any nested `project:done-checks`
+  markers other than exactly one correctly ordered pair: a lone opener
+  or closer, a duplicate, a close before its open. Wrapping sections
+  around malformed remnants leaves a partially adopted file that only
+  fails later, so the user should fix or remove them first. One exact,
+  correctly ordered nested pair with no managed `done` block is not a
+  remnant: that is the documented opt-out (see "Managed section
+  markers"), so it doesn't trigger this stop, and such a file falls to
+  the adoption bullet below.
 - AGENTS.md exists without markers → ask whether to adopt management or
   leave unmanaged. To adopt: match sections to canonical keys by heading,
   wrap each match's existing text as-is in markers, then immediately run
@@ -42,7 +49,10 @@ init and left untouched during updates.
   wrap its existing project checks in the nested
   `<!-- agents-md:project:done-checks -->` markers (text unchanged);
   update-mode validation requires the nested pair inside a managed
-  `done` block, so a bare wrap would dead-end the adoption.
+  `done` block, so a bare wrap would dead-end the adoption. Where an
+  exact nested pair is already present (the opt-out routed here by the
+  bullet above), keep it as it stands and wrap the managed `done` block
+  around it; adding a second pair fails that same validation.
 
 ## Profiles
 
