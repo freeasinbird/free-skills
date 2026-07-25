@@ -7,15 +7,23 @@
 # crossed**, never to a fixed page ceiling: review comments walk a
 # newest-first feed forward, and the ascending reviews/reactions endpoints
 # walk backward from their last page (located via the connections'
-# totalCounts). Authors match the reviewer's REST-style name[bot] login
-# form, and every signal counts only when dated after the baseline.
+# totalCounts). This watcher reads REST only, where reviews, review
+# comments, and reactions all carry their author under user.login in the
+# same name[bot] form, so one login matches all three sources; every signal
+# counts only when dated after the baseline.
 #
 # Usage:
 #   watch-review.sh --pr N --baseline 2026-07-02T05:07:30Z \
 #     --login chatgpt-codex-connector \   # plain or name[bot]; normalized
 #     [--repo owner/name]                 # default: current repo
-#     [--reaction-login 'name[bot]']      # default: '<plain login>[bot]';
-#                                         # set for a machine-user reviewer
+#     [--rest-login 'name[bot]']          # the REST login form matched
+#                                         # against ALL three sources;
+#                                         # default '<plain login>[bot]'.
+#                                         # Set it to the plain login for a
+#                                         # machine-user reviewer, which
+#                                         # carries no [bot] suffix.
+#                                         # (--reaction-login: deprecated
+#                                         # alias, same meaning.)
 #     [--clean-content THUMBS_UP]         # clean-pass reaction constant
 #     [--progress-content EYES]           # in-progress reaction constant
 #     [--interval 75]                     # seconds between checks
@@ -51,7 +59,7 @@
 # error; 69 gh (GitHub CLI) not found on PATH.
 set -u
 
-PR="" BASELINE="" LOGIN="" REPO="" REACTION_LOGIN="" HEAD=""
+PR="" BASELINE="" LOGIN="" REPO="" REST_LOGIN="" REACTION_LOGIN="" HEAD=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
 INTERVAL=75 CAP_MINUTES=25
 
@@ -65,7 +73,7 @@ usage() {
 while [ $# -gt 0 ]; do
   opt="$1"
   case "$opt" in
-    --pr|--baseline|--login|--repo|--reaction-login|--clean-content|--progress-content|--interval|--cap-minutes|--head) ;;
+    --pr|--baseline|--login|--repo|--rest-login|--reaction-login|--clean-content|--progress-content|--interval|--cap-minutes|--head) ;;
     *) echo "watch-review.sh: unknown option: $opt" >&2; usage ;;
   esac
   [ $# -ge 2 ] || { echo "watch-review.sh: $opt requires a value" >&2; usage; }
@@ -75,6 +83,7 @@ while [ $# -gt 0 ]; do
     --baseline) BASELINE="$val" ;;
     --login) LOGIN="$val" ;;
     --repo) REPO="$val" ;;
+    --rest-login) REST_LOGIN="$val" ;;
     --reaction-login) REACTION_LOGIN="$val" ;;
     --clean-content) CLEAN_CONTENT="$val" ;;
     --progress-content) PROGRESS_CONTENT="$val" ;;
@@ -112,6 +121,11 @@ LOGIN_PLAIN="${LOGIN%\[bot\]}"
 case "$LOGIN_PLAIN" in ''|*[!A-Za-z0-9-]*)
   echo "watch-review.sh: --login must be a GitHub login, optionally with a [bot] suffix" >&2; usage ;;
 esac
+if [ -n "$REST_LOGIN" ]; then
+  case "${REST_LOGIN%\[bot\]}" in ''|*[!A-Za-z0-9-]*)
+    echo "watch-review.sh: --rest-login must be a GitHub login, optionally with a [bot] suffix" >&2; usage ;;
+  esac
+fi
 if [ -n "$REACTION_LOGIN" ]; then
   case "${REACTION_LOGIN%\[bot\]}" in ''|*[!A-Za-z0-9-]*)
     echo "watch-review.sh: --reaction-login must be a GitHub login, optionally with a [bot] suffix" >&2; usage ;;
@@ -159,13 +173,17 @@ if [ -z "$CLEAN_REST" ] || [ -z "$PROGRESS_REST" ]; then
   usage
 fi
 
-# Normalize: reaction-only detection hands callers the REST-style name[bot]
-# form, while GraphQL review authors use the plain name. Strip a passed
-# suffix so --login accepts either form, then derive the reaction form from
-# the plain base. A reviewer running as a machine user (no [bot] suffix)
-# needs an explicit --reaction-login.
+# Normalize: detection hands callers either login form (GraphQL review
+# authors use the plain name, REST and reaction authors the name[bot] form).
+# Strip a passed suffix so --login accepts either, then derive the single
+# REST form every filter below matches on. A reviewer running as a machine
+# user carries no [bot] suffix anywhere and needs an explicit --rest-login.
+# --reaction-login is the former name of that flag: it never scoped to
+# reactions (all three REST sources share one login), so it stays as an
+# alias rather than a second, independently settable identity that a caller
+# could set for reactions while reviews silently matched a different one.
 LOGIN="${LOGIN%\[bot\]}"
-REACTION_LOGIN="${REACTION_LOGIN:-${LOGIN}[bot]}"
+REST_LOGIN="${REST_LOGIN:-${REACTION_LOGIN:-${LOGIN}[bot]}}"
 # Preflight the host CLI: without it every poll would fail silently and
 # the watcher would sit out the full cap looking like "no reviewer
 # activity", when the honest answer is that this environment cannot watch
@@ -203,9 +221,9 @@ if [ -n "$HEAD" ]; then
   HEAD_REVIEWS=" and ((.commit_id // \"\") | startswith(\"$HEAD\"))"
   HEAD_COMMENTS=" and (((.commit_id // \"\") | startswith(\"$HEAD\")) or .in_reply_to_id != null)"
 fi
-JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REACTION_LOGIN\" and .created_at > \"$BASELINE\"$HEAD_COMMENTS)] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
-JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REACTION_LOGIN\" and (.submitted_at // \"\") > \"$BASELINE\"$HEAD_REVIEWS)] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
-JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REACTION_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REACTION_LOGIN\" and .content == \"$PROGRESS_REST\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
+JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .created_at > \"$BASELINE\"$HEAD_COMMENTS)] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
+JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at // \"\") > \"$BASELINE\"$HEAD_REVIEWS)] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
+JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
 
 # Both scanners report "t1 t2 status". A malformed page (transient API
 # error, rate limit, missing scope) yields status=err: an error is not

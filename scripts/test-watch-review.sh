@@ -35,7 +35,8 @@ t() {
 # Valid inputs pass validation and cap out against the dead shim (exit 2).
 t 2 "minimal valid invocation" --pr 46 $BASE --login some-bot --repo owner/name --interval 1 --cap-minutes 0
 t 2 "login in [bot] form" --pr 46 $BASE --login 'some-bot[bot]' --repo owner/name --interval 1 --cap-minutes 0
-t 2 "explicit reaction login" $VALID --reaction-login 'some-bot[bot]'
+t 2 "explicit rest login" $VALID --rest-login 'some-bot[bot]'
+t 2 "deprecated reaction-login alias" $VALID --reaction-login 'some-bot[bot]'
 t 2 "full-length lowercase head" $VALID --head 9c346ab0eeaba5e706345c12fabeb1ceddec8be0
 t 2 "abbreviated head" $VALID --head 9c346ab
 t 2 "uppercase head normalized" $VALID --head 9C346AB
@@ -70,6 +71,8 @@ t 64 "login mid-string bracket" --pr 46 $BASE --login 'bad[form]' --repo owner/n
 t 64 "login bracket not suffix" --pr 46 $BASE --login 'a[bot]b' --repo owner/name
 t 64 "login bare suffix" --pr 46 $BASE --login '[bot]' --repo owner/name
 t 64 "login quote injection" --pr 46 $BASE --login 'foo"bar' --repo owner/name
+t 64 "rest-login quote injection" $VALID --rest-login 'a" or true or "'
+t 64 "rest-login malformed bracket" $VALID --rest-login 'bad[form]x'
 t 64 "reaction-login quote injection" $VALID --reaction-login 'a" or true or "'
 t 64 "reaction-login malformed bracket" $VALID --reaction-login 'bad[form]x'
 
