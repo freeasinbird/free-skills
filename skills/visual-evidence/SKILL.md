@@ -10,8 +10,9 @@ description: >-
   the fix lands. This skill owns capture craft and workflow timing (deciding to
   capture, getting a clean deterministic pair, framing/cropping tight); it hands
   the finished images to the gh-imgup skill to upload and attach. Review each
-  image for sensitive data before uploading; that mandatory step lives in
-  gh-imgup. Not for non-visual work (logic, backend, or docs with no output).
+  image for sensitive data before uploading; that mandatory step is gh-imgup's,
+  and it is written out in full here so it survives when that skill isn't
+  loaded. Not for non-visual work (logic, backend, or docs with no output).
 ---
 
 # Visual Evidence
@@ -21,7 +22,9 @@ by looking at it instead of reading the diff. This skill owns the _capture
 craft and timing_: deciding a screenshot is warranted, getting a clean
 deterministic before/after pair, and framing it tightly on the change. It does
 **not** upload: once the images are ready it hands them to the **gh-imgup**
-skill, which owns safe upload and the mandatory pre-upload secret review.
+skill, which owns safe upload and the mandatory pre-upload secret review
+(written out under _Compose & attach_ so the review survives even where that
+skill isn't loaded).
 
 Two skills, one clean seam:
 
@@ -159,7 +162,7 @@ difference between the two images must be the change itself. Hold constant:
   shot of a very tall page renders as an illegible strip. Reserve full-page
   capture for genuinely page-level changes, and even then prefer the
   relevant section. Use a reasonable resolution / DPR for legibility, but
-  mind GitHub's size limits and gh-imgup's `--max-size` (default 25 MB).
+  mind GitHub's size limits and gh-imgup's `--max-size` cap.
 
 These tools are examples for common host setups, not requirements: use
 whatever capture mechanism your environment provides, applying the same
@@ -209,9 +212,10 @@ provides.
 - Use **seeded / fixture data**; avoid timestamps, random values, and live
   customer data that add noise.
 - Hygiene here is about _clean, comparable_ shots. **Secret and PII safety is
-  gh-imgup's mandatory pre-upload review**: defer to it; don't restate a
-  weaker version here. (The two reinforce each other: fixture data also keeps
-  secrets out of the frame.)
+  the mandatory pre-upload review under _Compose & attach_**, which is
+  gh-imgup's step and runs before any upload; that checklist is the one to
+  apply, so read it there rather than working from memory here. (The two
+  reinforce each other: fixture data also keeps secrets out of the frame.)
 
 ### 6. Check the shots before handing off
 
@@ -238,8 +242,9 @@ verified. Confirm:
   pair. Flag absurd sizes for re-capture: a multi-thousand-pixel-tall
   full-page scroll, or a sub-100px sliver that cropped away the subject.
 
-This is the capture-quality pass and is separate from gh-imgup's secret review
-(a different axis). You'll open each image again at upload time for that review;
+This is the capture-quality pass and is separate from the pre-upload secret
+review under _Compose & attach_ (a different axis). You'll open each image
+again at upload time for that review;
 doing the quality check now means one look covers both before you hand off.
 
 ## Compose & attach
@@ -247,29 +252,46 @@ doing the quality check now means one look covers both before you hand off.
 Hand the captured files to the **gh-imgup skill**, which uploads them and
 returns renderable Markdown. Do not re-implement upload or invent a host here.
 If that skill isn't loaded in your environment, the underlying tool is the
-`@freeasinbird/gh-imgup` **CLI**: run it with `npx -y @freeasinbird/gh-imgup`
-(the `-y` skips npx's interactive first-run prompt; Node 22+). Its `--help`
-notes the upload contract and the secret review, but only tersely; apply the
-full review below (or read the gh-imgup skill's review section) before
-uploading; don't treat `--help` as the complete checklist. Either way, the
-upload step is gh-imgup's; this skill only produces the images.
+`@freeasinbird/gh-imgup` **CLI**. Apply the full pre-upload review below to
+every image _before_ you run any of it. Images are positional arguments, and
+**upload-only is simply omitting `--pr`/`--issue`**:
+
+```sh
+# GITHUB_TOKEN in the environment; --repo is inferred from the origin remote
+npx -y @freeasinbird/gh-imgup before.png after.png
+```
+
+The `-y` skips npx's interactive first-run prompt, and the CLI needs Node 22+.
+It prints one Markdown image line per file to stdout, in the order given, for
+you to compose into the body; progress goes to stderr, so capturing stdout
+gets you the links alone. Add `--repo <owner>/<repo>` when running outside the
+target repository, and `--pr <n>` / `--issue <n>` only when you want the
+images posted as a follow-up comment instead. `--help` lists the full option
+surface and carries the same review in condensed form. Either way, the upload
+step is gh-imgup's; this skill only produces the images.
+
+- **Review each image before uploading, and not only for "secrets."** This is
+  gh-imgup's mandatory, load-bearing step; there is no un-publish, so it comes
+  before any step that puts bytes on the wire. It is written out in full here,
+  at gh-imgup's own bar, because this is the copy that survives when neither
+  the gh-imgup skill nor its `--help` is in front of you; **this is the
+  checklist to apply**, and nothing softer or narrower substitutes for it.
+  Screenshots leak more than API keys, so open each image and check it for:
+  - API keys, tokens, passwords, session cookies, `.env` contents
+  - internal hostnames, IPs, private URLs, infrastructure details
+  - customer or personal data (PII), real names, emails, account numbers
+  - anything from a terminal, editor, browser devtools, or notification that
+    wasn't meant to be shared
+
+  If an image contains any of these, **do not upload it**: stop, tell the user
+  exactly what you found and where, and ask them to crop, redact, or pick a
+  different image. When in doubt, ask before uploading.
 
 - **Default placement: the PR description**, most visible to reviewers. A
   comment is the fallback, for after-the-fact additions or for issues.
-- **Review each image before uploading, and not only for "secrets."** This is
-  gh-imgup's mandatory, load-bearing step; there is no un-publish, so it comes
-  before any step that puts bytes on the wire. Screenshots
-  leak more than API keys, so check every image for: credentials, tokens, and
-  keys; internal hostnames, IPs, and infrastructure details; customer data or
-  PII (names, emails, account numbers); and anything else not meant to be
-  shared. The gh-imgup skill carries the canonical checklist; defer to it when
-  it's loaded, and never substitute a softer or narrower version. (The CLI's
-  `--help` states the requirement only in one line; it's a reminder, not the
-  full checklist.)
-- Use gh-imgup's preferred body-composition flow: run it **upload-only** (no
-  `--pr`/`--issue`) and compose the Markdown URLs it prints to stdout into the
-  PR/issue body. Use `--pr`/`--issue` only for a follow-up comment on an
-  existing thread.
+- Prefer gh-imgup's **upload-only** mode and compose the Markdown it returns
+  into the body yourself; that is what puts the images where a reviewer reads
+  them, rather than in a trailing comment.
 - **Label clearly**: a **Before** / **After** pair, with captions naming the
   state shown (e.g. "Empty state, dark mode"). Show **both palettes** when the
   change affects appearance in light and dark.
