@@ -88,6 +88,22 @@ metadata file).
    content or placeholders in place, and the `Agent-setup profile:`
    line (plus the High-assurance mandatory-note list) in an unmanaged
    section.
+
+   Verify that write before moving on: init pastes the managed blocks by
+   hand, and every comparison update mode makes depends on their
+   byte-exactness. Where the running agent can execute shell scripts, run
+   the comparator described under "Update mode". Under Decision-log or
+   High-assurance, pass `--require-all` and require exit 0. Under
+   Standard, drop the flag: the run must exit 0 with `missing: devlog`
+   as its only missing line and every other key reporting `ok:`. Without
+   shell access, make the comparator's comparison by hand: read each
+   managed block's whole text back against
+   `references/canonical-sections.md`, excluding the nested
+   `project:done-checks` payload from both sides as step 6 does. A
+   dropped or reworded sentence inside a block is exactly the drift this
+   check exists to catch; the project's own checks in the nested block
+   are not drift.
+
 6. Create scaffolding files:
    - `devlog/README.md`: content in `references/scaffolding.md`
      §devlog-readme (Decision-log and High-assurance profiles only)
@@ -180,13 +196,27 @@ metadata file).
 11. Check the settings listed under "Repo settings" and offer to align any
     that have drifted.
 
-Where the running agent can execute shell scripts, run
-`scripts/compare-managed-blocks.sh path/to/AGENTS.md` (from this skill's
-directory) to perform steps 4 and 6's mechanical parts in one
-deterministic pass: it validates markers and prints a per-block diff,
-excluding the nested block, and treats a missing block as the documented
-opt-out; for a Standard project, `missing: devlog` in its output is the
-expected profile, not drift. Review its diffs with the user as step 6
+Where the running agent can execute shell scripts, run this skill's
+`scripts/compare-managed-blocks.sh` **from the project root**, giving it
+the script's path inside the skill directory and the project's AGENTS.md
+path (which defaults to `AGENTS.md`):
+
+```sh
+/path/to/agent-setup/scripts/compare-managed-blocks.sh AGENTS.md
+```
+
+The script resolves the canonical sections relative to itself, so it runs
+from any working directory, but the AGENTS.md argument resolves from the
+caller's: run it from the skill directory and a relative project path
+resolves inside the skill instead of the project. It performs steps 4 and
+6's mechanical parts in one deterministic pass, validating markers and
+printing a per-block diff that excludes the nested block, with one
+`ok:`, `drift:`, or `missing:` line per key. A missing block is tolerated
+as the documented opt-out unless `--require-all` is passed, which turns
+it into a failure; that flag fits a note-keeping profile (and init's
+post-write check), not a Standard project, whose absent `devlog` block
+would fail it. For a Standard project, `missing: devlog` in the output is
+the expected profile, not drift. Review its diffs with the user as step 6
 describes. Without shell access, follow the steps manually as written.
 
 ## Conventional section order
