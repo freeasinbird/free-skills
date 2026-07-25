@@ -658,6 +658,8 @@ The build succeeds, tests pass, and lint and formatting are clean.
   (`./scripts/test-check-prose-tics.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
   changed (`./scripts/test-capture.sh`)
+- Self-merge validation matrix green when self-merge's `self-merge.sh`
+  changed (`./scripts/test-self-merge.sh`)
 
 <!-- /agents-md:project:done-checks -->
 
