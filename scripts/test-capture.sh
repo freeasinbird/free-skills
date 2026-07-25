@@ -8,7 +8,25 @@
 # Chrome and Node 22+ exist (SKIP otherwise, never FAIL). Grown one
 # adversarial case per review finding; add a case with every future
 # validation fix so the class stops recurring one finding at a time.
+#
+# The whole run is bounded by one deadline, because agent shell tools
+# commonly cap a command around 2 minutes and a run killed at the cap
+# loses its summary. Every phase draws from that one budget: the matrix
+# and shim cases stop once they would eat the smoke's reserve (reporting
+# what they skipped, never silently), and the smoke's captures are handed
+# whatever remains. A per-phase or per-capture bound would not hold, since
+# it multiplies by however many cases the suite grows to.
 set -u
+
+SUITE_BUDGET_S=90 # whole run, comfortably inside the ~2-minute cap
+SMOKE_RESERVE_S=45 # of that, kept for the live smoke's captures
+suite_deadline=$(($(date +%s) + SUITE_BUDGET_S))
+
+suite_left() { # whole seconds until the suite deadline, floored at 0
+  left=$((suite_deadline - $(date +%s)))
+  [ "$left" -lt 0 ] && left=0
+  echo "$left"
+}
 
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/skills/visual-evidence/capture.mjs"
 [ -f "$SCRIPT" ] || { echo "not found: $SCRIPT" >&2; exit 1; }
@@ -22,9 +40,16 @@ trap 'rm -rf "$TMP"' EXIT
 
 VALID="--url https://example.invalid/x --out $TMP/out.png"
 
-pass=0; fail=0
+pass=0; fail=0; skipped=0
 t() {
   expected="$1"; desc="$2"; shift 2
+  # Out of budget: a slow host (cold container, network filesystem, an
+  # antivirus scanning every node spawn) can stretch 47 node startups far
+  # enough to crowd out the live smoke, so stop rather than overrun.
+  if [ "$(suite_left)" -le "$SMOKE_RESERVE_S" ]; then
+    skipped=$((skipped + 1))
+    return
+  fi
   CHROME=/nonexistent/chrome node "$SCRIPT" "$@" >/dev/null 2>&1
   got=$?
   if [ "$got" -eq "$expected" ]; then
@@ -113,6 +138,10 @@ if node -e 'process.exit(typeof WebSocket === "function" ? 0 : 1)'; then
   printf '#!/bin/sh\nsleep 60\n' > "$TMP/mute-chrome"
   chmod +x "$TMP/dead-chrome" "$TMP/mute-chrome"
   for shim in dead-chrome mute-chrome; do
+    if [ "$(suite_left)" -le "$SMOKE_RESERVE_S" ]; then
+      skipped=$((skipped + 1))
+      continue
+    fi
     CHROME="$TMP/$shim" node "$SCRIPT" $VALID --timeout-budget 3 >/dev/null 2>&1
     got=$?
     if [ "$got" -eq 1 ]; then
@@ -126,7 +155,13 @@ else
   echo "SKIP: launch-path cases (Node without built-in WebSocket)"
 fi
 
-echo "capture validation matrix: $pass passed, $fail failed"
+if [ "$skipped" -gt 0 ]; then
+  echo "capture validation matrix: $pass passed, $fail failed," \
+    "$skipped NOT RUN (suite time budget; this host is too slow to" \
+    "verify the full matrix)" >&2
+else
+  echo "capture validation matrix: $pass passed, $fail failed"
+fi
 
 # Live smoke: end-to-end capture against a local fixture, only where the
 # script's own discovery finds a real Chrome (and Node has WebSocket).
@@ -135,7 +170,13 @@ cat > "$TMP/fixture.html" <<'EOF'
 <!doctype html>
 <html><head><style>
 body { margin: 0; font-family: sans-serif; }
-#target { width: 300px; margin: 40px auto; padding: 20px; border: 2px solid steelblue; }
+/* Both axes are pinned, so every asserted dimension is fixed geometry
+   rather than font metrics: a fractional text height would round
+   independently at each DPR and make the doubling check host-dependent. */
+#target { width: 300px; height: 200px; margin: 40px auto; padding: 20px; border: 2px solid steelblue; }
+/* Widen under dark so the emulated color scheme is observable as a
+   dimension: the clipped capture is 368px wide light, 568px dark. */
+@media (prefers-color-scheme: dark) { #target { width: 500px; } }
 #late { display: none; }
 </style></head>
 <body>
@@ -148,8 +189,38 @@ png_dims() {
   node -e 'const b = require("fs").readFileSync(process.argv[1]); console.log(b.readUInt32BE(16) + "x" + b.readUInt32BE(20));' "$1"
 }
 
-env -u CHROME node "$SCRIPT" --url "file://$TMP/fixture.html" --out "$TMP/smoke.png" \
-  --viewport 1280x720,390x844 --dpr 1 --wait-for '#late' --timeout-budget 60 >/dev/null 2>&1
+# Capture the fixture inside what is left of the suite budget, so a hung
+# capture costs the remainder once rather than a fresh budget per call (a
+# local file:// fixture captures in about a second, so the reserve is
+# roughly 40x headroom for the whole set). Returns capture.mjs's exit
+# status, or 1 when the budget is already spent.
+capture_fixture() { # <out> [extra capture.mjs flags...]
+  out="$1"; shift
+  left=$(suite_left)
+  [ "$left" -lt 3 ] && return 1
+  env -u CHROME node "$SCRIPT" --url "file://$TMP/fixture.html" --out "$out" \
+    --wait-for '#late' --timeout-budget "$left" "$@" >/dev/null 2>&1
+}
+
+# Capture the fixture's #target clipped, then print the PNG's WxH; 0x0
+# when the capture itself failed, so the caller reports a dimension
+# mismatch instead of comparing against nothing.
+clip_png() { # <out> [extra capture.mjs flags...]
+  out="$1"; shift
+  capture_fixture "$out" --clip '#target' "$@" || { echo 0x0; return; }
+  png_dims "$out"
+}
+
+check() { # <expected> <actual> <description>
+  if [ "$2" = "$1" ]; then
+    smoke_pass=$((smoke_pass + 1))
+  else
+    smoke_fail=$((smoke_fail + 1))
+    echo "FAIL: $3: expected $1, got $2" >&2
+  fi
+}
+
+capture_fixture "$TMP/smoke.png" --viewport 1280x720,390x844 --dpr 1
 got=$?
 if [ "$got" -eq 69 ]; then
   echo "SKIP: live smoke (no Chrome or no Node 22+ on this host)"
@@ -170,16 +241,25 @@ else
       echo "FAIL: expected $f at $dims, got $([ -f "$f" ] && png_dims "$f" || echo missing)" >&2
     fi
   done
-  # A clipped capture must be meaningfully smaller than the viewport.
-  env -u CHROME node "$SCRIPT" --url "file://$TMP/fixture.html" --out "$TMP/clip.png" \
-    --dpr 1 --wait-for '#late' --clip '#target' --timeout-budget 60 >/dev/null 2>&1 \
-    && clip_w=$(png_dims "$TMP/clip.png" | cut -dx -f1) && [ "$clip_w" -lt 640 ]
-  if [ $? -eq 0 ]; then
-    smoke_pass=$((smoke_pass + 1))
-  else
-    smoke_fail=$((smoke_fail + 1))
-    echo "FAIL: clipped capture missing or not tighter than the viewport" >&2
-  fi
+  # Clipped captures land on the fixture's pinned geometry: the 300x200
+  # element + 2x20 padding + 2x2 border + 2x12 --clip-pad = 368x268 CSS
+  # px, well inside the 1280x720 viewport, and fixed on both axes so no
+  # assertion below depends on font metrics or on the other captures.
+  check 368x268 "$(clip_png "$TMP/clip.png" --dpr 1)" \
+    "clipped capture at --dpr 1"
+
+  # The documented default is --dpr 2, so passing no --dpr must double
+  # both axes of that same clip. This DPR-and-clip scaling interaction is
+  # what the skill's step 6 dimension check exists to catch.
+  check 736x536 "$(clip_png "$TMP/clip-dpr-default.png")" \
+    "clipped capture at the default --dpr 2"
+
+  # --dark must reach the page as prefers-color-scheme: dark, which the
+  # fixture widens #target to 500px under (568 clipped). The unflagged runs
+  # above assert the light branch of that same pinning (only on a
+  # light-themed host does an unpinned capture land there by accident).
+  check 568x268 "$(clip_png "$TMP/clip-dark.png" --dpr 1 --dark)" \
+    "clipped capture under --dark"
 fi
 echo "capture live smoke: $smoke_pass passed, $smoke_fail failed"
 [ $((fail + smoke_fail)) -eq 0 ]
