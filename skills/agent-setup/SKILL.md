@@ -64,7 +64,10 @@ Decision-log, or High-assurance when they also name change classes
 that must always carry a note.
 
 - **Standard**: PRs, commits, issues, and current documentation carry
-  the record. No `devlog/` scaffold and no managed `devlog` block.
+  the record. No `devlog/` scaffold and no managed `devlog` block. That
+  absence is the profile, not drift, an opt-out, or a gap: update mode
+  neither offers to insert the block nor counts it as missing content,
+  and the comparator's `missing: devlog` line is the expected output.
 - **Decision-log**: adds the managed `devlog` block and the
   `devlog/README.md` scaffold (selective decision notes).
 - **High-assurance**: Decision-log plus a short project-specific list
@@ -155,10 +158,9 @@ metadata file).
    for meaning until its boundaries are trusted, so this precedes the
    profile discovery that can negotiate a migration with the user.
 4. Discover the profile: look for the `Agent-setup profile:` line.
-   - Recorded: preserve it and scope the steps below to it. A Standard
-     project's missing `devlog` block and scaffold are its profile,
-     not drift; never switch a recorded profile without the user's
-     explicit choice.
+   - Recorded: preserve it and scope the steps below to it (see
+     Profiles for what Standard's absent `devlog` block means); never
+     switch a recorded profile without the user's explicit choice.
    - Absent, but a managed `devlog` block, a `devlog/` scaffold, or a
      session-bookend protocol exists: a legacy setup. Offer migration
      to Decision-log (or High-assurance when the user names mandatory
@@ -190,8 +192,8 @@ metadata file).
    - If different, show the diff and ask whether to update.
 7. Leave all unmarked (project-specific) content untouched.
 8. If a canonical section is missing entirely, offer to insert it at its
-   conventional position; a `devlog` block absent under the Standard
-   profile is the profile, not a gap, so don't offer it.
+   conventional position; under Standard, `devlog` is not such a gap
+   (see Profiles).
 9. Check scaffolding files (CLAUDE.md, CONTRIBUTING.md, PR template,
    and, under a note-keeping profile, devlog/README.md): offer to
    create any that are missing; for any that exist, compare against the
@@ -243,8 +245,7 @@ printing a per-block diff that excludes the nested block, with one
 as the documented opt-out unless `--require-all` is passed, which turns
 it into a failure; that flag fits a note-keeping profile (and init's
 post-write check), not a Standard project, whose absent `devlog` block
-would fail it. For a Standard project, `missing: devlog` in the output is
-the expected profile, not drift. Review its diffs with the user as step 6
+would fail it (see Profiles). Review its diffs with the user as step 6
 describes. Without shell access, follow the steps manually as written.
 
 ## Conventional section order
@@ -283,9 +284,9 @@ Keys: `devlog`, `finish-line`, `context`, `branches`, `pull-requests`,
 To opt a section out of management, remove its markers. The update mode
 will note it as missing and offer to re-add, but will not force it.
 Opting out `done` this way leaves the nested `project:done-checks`
-markers behind as plain project content; that is expected and fine. A
-`devlog` block absent in a Standard-profile project is that project's
-profile, not an opt-out; update mode doesn't offer to re-add it.
+markers behind as plain project content; that is expected and fine. An
+absent `devlog` block under Standard is that project's profile rather
+than an opt-out (see Profiles).
 
 ## Project-specific section guidance
 
