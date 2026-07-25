@@ -92,17 +92,12 @@ it can reject a superseded review; retain the base commit for step 6's final
 reporting guard. Capturing the base does not make branch updates part of the
 watcher's role.
 
-Capture **three** things, because they are separate connections: top-level
-**reviews** (a bot can complete a review with a summary/approval and _no_ inline
-findings: that round shows up only here, not under threads), the inline
-**review threads**, and the PR-description **reactions**, where some reviewers
-signal review status out of band (see the status signals in step 3). Snapshot
-the latest reviewer review time, the current thread IDs, and the reviewer's
-reactions. The exact snapshot query and its field caveats (such as reading each
-thread's **newest** comment, not its first: a reviewer reply on an _existing_
-thread lands as the latest comment, and reading the oldest would miss it) are
-specified in `references/detection.md`; `watch-review.sh` (step 3) implements
-the same detection.
+Capture **three** things, because they are separate connections and a round
+can show up in any one of them alone: top-level **reviews** (a bot can
+complete a review with a summary or approval and _no_ inline findings), the
+inline **review threads**, and the PR-description **reactions**, where some
+reviewers signal review status out of band (see the status signals in
+step 3).
 
 Two rules govern the detection. **Prefer time, not enumeration**: treat a
 round as arrived when the configured reviewer has a review `submittedAt`, a
@@ -112,11 +107,12 @@ first-vs-last comment, author filtering). And **page every source past the
 baseline**: a single page is a window, not the collection, so enough newer
 activity by other authors can push the item you are looking for out of it.
 Reach for the full thread set only when you actually need it (e.g. to resolve
-threads). The bundled `watch-review.sh` (step 3) is the executable form of
-this detection, with every source paged; prefer it over re-deriving it. The
-full prose specification (the snapshot query, the windowed-connection
-derivation, and the REST/GraphQL paging mechanics) is in
-`references/detection.md`.
+threads).
+
+`watch-review.sh` (step 3) is the executable form of this detection, with
+every source paged; prefer it over re-deriving anything. The snapshot query,
+its field caveats, and the REST/GraphQL paging mechanics are specified once,
+in `references/detection.md`; read it when the script cannot run.
 
 ### 2. Identify the reviewer, then ensure it's requested
 
