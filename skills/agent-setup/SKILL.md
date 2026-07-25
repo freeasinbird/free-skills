@@ -30,7 +30,7 @@ init and left untouched during updates.
 - AGENTS.md exists with no exact managed markers but with marker
   remnants → stop and report them; don't offer adoption. A remnant is
   either a lookalike of the managed or the nested `project:done-checks`
-  marker (update-mode step 4's malformation rule: comment lines that
+  marker (update-mode step 3's malformation rule: comment lines that
   resemble either marker in spacing, case, or indentation, or carry its
   text inside a longer line), or any nested `project:done-checks`
   markers other than exactly one correctly ordered pair: a lone opener
@@ -140,32 +140,7 @@ metadata file).
 
 1. Read `references/canonical-sections.md` for current canonical text.
 2. Read the project's AGENTS.md.
-3. Discover the profile: look for the `Agent-setup profile:` line.
-   - Recorded: preserve it and scope the steps below to it. A Standard
-     project's missing `devlog` block and scaffold are its profile,
-     not drift; never switch a recorded profile without the user's
-     explicit choice.
-   - Absent, but a managed `devlog` block, a `devlog/` scaffold, or a
-     session-bookend protocol exists: a legacy setup. Offer migration
-     to Decision-log (or High-assurance when the user names mandatory
-     change classes), showing the resulting managed-block and scaffold
-     diffs before applying anything. On acceptance, the block and
-     scaffold changes and the new profile line land through the normal
-     steps below, only after step 4's marker validation passes; on
-     decline, change and record nothing (the offer recurs on the next
-     update run). Never delete an existing devlog or switch the
-     project to Standard without the user's explicit choice; the
-     historical entries stay untouched either way. When migrating a
-     queue-era devlog, walk the
-     apparently open queue items (`## To promote` bullets, deferrals,
-     needs-human notes without a drain record) once, in prose with the
-     user: already resolved or promoted needs nothing; still
-     actionable gets an existing or new tracker issue linked; only
-     conditionally relevant stays as a historical observation. Never
-     automate this by parsing or mutating old entries.
-   - Absent with no devlog anywhere: treat as Standard and offer to
-     record the line.
-4. Validate the markers before touching anything: every opening
+3. Validate the markers before touching anything: every opening
    `<!-- agents-md:managed:KEY -->` has a matching close after it, no KEY
    appears twice, every KEY is a known one, any line that merely
    resembles a managed marker or the nested `project:done-checks` marker
@@ -176,7 +151,33 @@ metadata file).
    documented opt-out, not a malformation; see "Managed section
    markers".) On any malformation, stop and report it; never refresh
    (a broken boundary would pull project-specific text into the managed
-   region, and the refresh would delete it).
+   region, and the refresh would delete it). Nothing below reads the file
+   for meaning until its boundaries are trusted, so this precedes the
+   profile discovery that can negotiate a migration with the user.
+4. Discover the profile: look for the `Agent-setup profile:` line.
+   - Recorded: preserve it and scope the steps below to it. A Standard
+     project's missing `devlog` block and scaffold are its profile,
+     not drift; never switch a recorded profile without the user's
+     explicit choice.
+   - Absent, but a managed `devlog` block, a `devlog/` scaffold, or a
+     session-bookend protocol exists: a legacy setup. Offer migration
+     to Decision-log (or High-assurance when the user names mandatory
+     change classes), showing the resulting managed-block and scaffold
+     diffs before applying anything. On acceptance, the block and
+     scaffold changes and the new profile line land through the normal
+     steps below; on decline, change and record nothing (the offer
+     recurs on the next update run). Never delete an existing devlog or
+     switch the project to Standard without the user's explicit choice;
+     the historical entries stay untouched either way. When migrating a
+     queue-era devlog, walk the apparently open queue items
+     (`## To promote` bullets, deferrals,
+     needs-human notes without a drain record) once, in prose with the
+     user: already resolved or promoted needs nothing; still
+     actionable gets an existing or new tracker issue linked; only
+     conditionally relevant stays as a historical observation. Never
+     automate this by parsing or mutating old entries.
+   - Absent with no devlog anywhere: treat as Standard and offer to
+     record the line.
 5. Protect the reviewer record before refreshing: if an automated-reviewer
    record appears inside a managed block, resolve its location first; see
    "Automated reviewer record".
@@ -184,7 +185,7 @@ metadata file).
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`,
      exclude the nested `project:done-checks` block from both sides
-     (matching its exact marker lines only, per step 4) and compare only
+     (matching its exact marker lines only, per step 3) and compare only
      the text around it; never modify the nested block.
    - If different, show the diff and ask whether to update.
 7. Leave all unmarked (project-specific) content untouched.
@@ -218,7 +219,7 @@ path (which defaults to `AGENTS.md`):
 The script resolves the canonical sections relative to itself, so it runs
 from any working directory, but the AGENTS.md argument resolves from the
 caller's: run it from the skill directory and a relative project path
-resolves inside the skill instead of the project. It performs steps 4 and
+resolves inside the skill instead of the project. It performs steps 3 and
 6's mechanical parts in one deterministic pass, validating markers and
 printing a per-block diff that excludes the nested block, with one
 `ok:`, `drift:`, or `missing:` line per key. A missing block is tolerated
