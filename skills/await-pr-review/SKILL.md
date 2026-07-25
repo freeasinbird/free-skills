@@ -92,17 +92,12 @@ it can reject a superseded review; retain the base commit for step 6's final
 reporting guard. Capturing the base does not make branch updates part of the
 watcher's role.
 
-Capture **three** things, because they are separate connections: top-level
-**reviews** (a bot can complete a review with a summary/approval and _no_ inline
-findings: that round shows up only here, not under threads), the inline
-**review threads**, and the PR-description **reactions**, where some reviewers
-signal review status out of band (see the status signals in step 3). Snapshot
-the latest reviewer review time, the current thread IDs, and the reviewer's
-reactions. The exact snapshot query and its field caveats (such as reading each
-thread's **newest** comment, not its first: a reviewer reply on an _existing_
-thread lands as the latest comment, and reading the oldest would miss it) are
-specified in `references/detection.md`; `watch-review.sh` (step 3) implements
-the same detection.
+Capture **three** things, because they are separate connections and a round
+can show up in any one of them alone: top-level **reviews** (a bot can
+complete a review with a summary or approval and _no_ inline findings), the
+inline **review threads**, and the PR-description **reactions**, where some
+reviewers signal review status out of band (see the status signals in
+step 3).
 
 Two rules govern the detection. **Prefer time, not enumeration**: treat a
 round as arrived when the configured reviewer has a review `submittedAt`, a
@@ -112,17 +107,18 @@ first-vs-last comment, author filtering). And **page every source past the
 baseline**: a single page is a window, not the collection, so enough newer
 activity by other authors can push the item you are looking for out of it.
 Reach for the full thread set only when you actually need it (e.g. to resolve
-threads). The bundled `watch-review.sh` (step 3) is the executable form of
-this detection, with every source paged; prefer it over re-deriving it. The
-full prose specification (the snapshot query, the windowed-connection
-derivation, and the REST/GraphQL paging mechanics) is in
-`references/detection.md`.
+threads).
+
+`watch-review.sh` (step 3) is the executable form of this detection, with
+every source paged; prefer it over re-deriving anything. The snapshot query,
+its field caveats, and the REST/GraphQL paging mechanics are specified once,
+in `references/detection.md`; read it when the script cannot run.
 
 ### 2. Identify the reviewer, then ensure it's requested
 
 You need enough **identity to match the reviewer's future reviews**: its account
-login (the login you filter on in step 3, via `author.login` for reviews and
-`user.login` for reactions), not merely "some bot will
+login (the login you filter on in step 3, under a field name and a login form
+that both depend on which API you read), not merely "some bot will
 review." Establish it in this order; the **recorded identity is the primary
 source, detection only a fallback**:
 
@@ -142,7 +138,7 @@ source, detection only a fallback**:
   every clean PR. A repo with no bot review on any PR can still have a
   clean-pass-only reviewer, detectable by its recurring reaction on PR
   descriptions shortly after they open (step 3); its reaction login yields
-  the identity; record both login forms (login-form rule in step 3). Either
+  the identity; record both login forms (login rule in step 3). Either
   way the scan yields both the gate (a reviewer exists) and the login to
   match; the full procedure (the commands, and deriving each login form) is
   in `references/detection.md`. **If the scan finds more than one distinct bot
@@ -206,16 +202,59 @@ Watcher side, cheapest first:
   waiting and wakes the main agent exactly once: the loop only answers "is
   there reviewer activity after the baseline?", a timestamp comparison that
   needs no model. On GitHub, don't write the loop by hand: this skill ships
-  `watch-review.sh` alongside this file, parameterized on the PR, baseline,
-  reviewer login (both API forms), expected head SHA (so a stale pass
-  against a superseded head does not end the wait), signal contents,
-  cadence, and cap. It
+  `watch-review.sh` next to this file. Invoke it **by path, from a checkout
+  of the PR's repository**, where `<skill-dir>` is the directory holding
+  this file (its path differs per platform and install):
+
+  ```sh
+  <skill-dir>/watch-review.sh --pr 46 --baseline 2026-07-02T05:07:30Z \
+    --login chatgpt-codex-connector --head 9c346ab \
+    --interval 75 --cap-minutes 25
+  ```
+
+  Don't change directory into the skill to run it. `--repo` defaults to
+  whatever repository the working directory belongs to, so from a globally
+  installed skill's own directory (the usual install) that default either
+  finds no repository or silently resolves the wrong one and watches _its_
+  PR 46. **Pass `--repo owner/name` explicitly whenever the working
+  directory is not the PR's checkout.**
+
+  `--login` takes either login form; the watcher reads REST only, so it
+  derives the one REST-form login it matches all three sources on (override
+  with `--rest-login <login>` for a machine-user reviewer, which carries no
+  `[bot]` suffix). `--head` is the expected head SHA, so a stale pass
+  against a superseded head does not end the wait. Also available:
+  `--clean-content` /
+  `--progress-content` for a reviewer whose status reactions differ from
+  👍/👀, and `--interval` / `--cap-minutes` for cadence and cap. It
   implements the step-1 detection and the matching rules below, and exits with a
-  distinct code plus a compact one-line report for review activity (0),
-  clean pass (3), or cap expiry (2), so the caller branches on the exit code
-  without parsing prose. Where `gh` or a shell is missing, hand-roll the
-  watch from the specification in `references/detection.md`; it is the same
-  detection the script implements.
+  distinct code plus a compact one-line report, so the caller branches on
+  the exit code without parsing prose:
+
+  | Exit | Report          | Meaning                                             |
+  | ---- | --------------- | --------------------------------------------------- |
+  | 0    | REVIEW_ACTIVITY | reviewer review or review comment past the baseline |
+  | 3    | CLEAN_PASS      | clean-pass signal past the baseline, nothing else   |
+  | 2    | CAP_EXPIRED     | the cap ran out (see `polls_ok` below)              |
+  | 64   | usage on stderr | bad or missing flags: fix the call, don't retry     |
+  | 69   | note on stderr  | `gh` not on PATH: this environment cannot watch     |
+
+  Branch on all five: treating 64 or 69 as "no review arrived" reports a
+  broken call as a quiet reviewer. **Exit 2 is not by itself a quiet PR**,
+  so read the payload's coverage fields before reporting one. `polls_ok:0`
+  means no poll ever observed the PR (bad token, missing scope, rate limit,
+  wrong repo, each logged on stderr): report "could not watch." Otherwise
+  `last_poll_ok` decides, because every poll rescans each source from the
+  baseline, so the final poll's scan is what covers the whole wait: `true`
+  means the window really was quiet, while `false` means coverage stops at
+  an earlier poll and the tail went unobserved, however many polls
+  succeeded. Report an incomplete watch as incomplete; a source that never
+  scanned is not a source that was quiet, and a reviewer whose clean pass
+  leaves only a reaction is exactly the one such a gap hides. Where `gh`
+  or a shell is missing, hand-roll the watch from the specification in
+  `references/detection.md`; it is the same detection the script
+  implements.
+
 - **Delegated watcher / subagent (only where background processes are absent
   but subagents are available and permitted).** If the session policy permits
   delegation without asking, and the platform will reliably notify or
@@ -287,17 +326,26 @@ review-comment on an existing thread** (a reply leaves no new thread and no new
 submitted review, so this case is easy to miss; it is why the step-1
 snapshot reads each thread's newest comment, not its first), or the
 reviewer's **clean-pass status signal** (next
-paragraph). All four must be **authored by the configured reviewer**: match
-the target bot against `author.login` for reviews and thread comments, but
-against `user.login` for reactions (the field GraphQL exposes a reaction's
-author under). **Mind the login form** (the canonical login-form rule the
-rest of this skill points at): GitHub returns a bot as `name` in GraphQL but
-`name[bot]` in REST (e.g. `chatgpt-codex-connector` via the GraphQL
-`reviewThreads` vs `chatgpt-codex-connector[bot]` via
-`gh api repos/.../pulls/N/reviews`); a _reaction_ author carries the
-REST-style `name[bot]` form for an App-based bot even in GraphQL; and a
-reviewer running as a regular machine-user account carries its plain login
-everywhere. Match the right form per API and per field, or the filter
+paragraph). All four must be **authored by the configured reviewer**, and
+**the field you filter on, like the login form, follows the API you read,
+not the kind of item** (the canonical login rule the rest of this skill
+points at):
+
+- **Field.** In GraphQL, reviews and thread comments expose their author
+  under `author.login` while reactions expose theirs under `user.login`. On
+  the REST feeds `references/detection.md` prescribes for paging
+  (`pulls/N/reviews`, `pulls/N/comments`, `issues/N/reactions`), **all
+  three** expose it under `user.login`; those payloads carry no `author`
+  field at all, so a REST review filtered on `author.login` matches nothing.
+- **Form.** GitHub returns an App-based bot as `name` in GraphQL review
+  authorship but `name[bot]` in REST (e.g. `chatgpt-codex-connector` via the
+  GraphQL `reviewThreads` vs `chatgpt-codex-connector[bot]` via
+  `gh api repos/.../pulls/N/reviews`); its _reaction_ author carries the
+  REST-style `name[bot]` form even in GraphQL; and a reviewer running as a
+  regular machine-user account carries its plain login everywhere, under
+  both APIs.
+
+Match the field and the form to the API you are querying, or the filter
 silently matches nothing and a real review
 looks like "no activity." A human review, or a _different_ bot, posting after
 the baseline is **not** the awaited pass: this skill is scoped to the automated
@@ -331,10 +379,14 @@ like the acknowledgement rule above: its presence means keep waiting; its
 absence proves nothing (the reviewer may remove it when the review
 completes). Two caveats. Reactions are one-per-user-per-emoji and mutable, so
 match on the signal's `createdAt` being after the baseline, never on bare
-presence: a leftover clean-pass reaction from an earlier round predates the
-baseline and does not count, and the wait cap stays as the backstop when the
-signals are ambiguous. And reaction authors carry the reaction form of the
-canonical login-form rule above, not the review-author form.
+presence. That governs **both** signals: a leftover clean-pass reaction from
+an earlier round predates the baseline and does not count, and a leftover
+in-progress reaction likewise means nothing about this round, so reading it
+by presence alone stretches the wait for a pass that already finished. The
+wait cap stays as the backstop when the signals are ambiguous. And
+reactions expose their author under `user.login` in both APIs, in the
+`name[bot]` form for an App bot, per the canonical login rule above; the
+GraphQL review-author form matches no reactions.
 
 ### 4. Address the feedback: auto clear-cut, surface judgment calls
 

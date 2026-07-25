@@ -7,15 +7,30 @@
 # crossed**, never to a fixed page ceiling: review comments walk a
 # newest-first feed forward, and the ascending reviews/reactions endpoints
 # walk backward from their last page (located via the connections'
-# totalCounts). Authors match the reviewer's REST-style name[bot] login
-# form, and every signal counts only when dated after the baseline.
+# totalCounts). This watcher reads REST only, where reviews, review
+# comments, and reactions all carry their author under user.login in the
+# same name[bot] form, so one login matches all three sources; every signal
+# counts only when dated after the baseline.
 #
 # Usage:
 #   watch-review.sh --pr N --baseline 2026-07-02T05:07:30Z \
 #     --login chatgpt-codex-connector \   # plain or name[bot]; normalized
-#     [--repo owner/name]                 # default: current repo
-#     [--reaction-login 'name[bot]']      # default: '<plain login>[bot]';
-#                                         # set for a machine-user reviewer
+#     [--repo owner/name]                 # default: the repo the working
+#                                         # directory belongs to. Pass it
+#                                         # explicitly unless that is the
+#                                         # PR's checkout: run from
+#                                         # elsewhere (this script's own
+#                                         # install directory, say) and the
+#                                         # default resolves that repo's
+#                                         # PR N instead, or no repo at all.
+#     [--rest-login 'name[bot]']          # the REST login form matched
+#                                         # against ALL three sources;
+#                                         # default '<plain login>[bot]'.
+#                                         # Set it to the plain login for a
+#                                         # machine-user reviewer, which
+#                                         # carries no [bot] suffix.
+#                                         # (--reaction-login: deprecated
+#                                         # alias, same meaning.)
 #     [--clean-content THUMBS_UP]         # clean-pass reaction constant
 #     [--progress-content EYES]           # in-progress reaction constant
 #     [--interval 75]                     # seconds between checks
@@ -45,13 +60,23 @@
 #   CAP_EXPIRED <json>      no reviewer activity within the cap
 # The report is compact by design (the caller's context holds it for the
 # rest of the session); the main agent refetches bodies and threads itself.
-# Persistent API failure surfaces as CAP_EXPIRED: the cap is the backstop.
+# Persistent API failure surfaces as CAP_EXPIRED too: the cap is the
+# backstop. Read the coverage fields in that payload before reporting the
+# result; each failing poll also names its failure on stderr.
+#   last_poll_ok  the final poll scanned all three sources. Every poll
+#                 rescans from the baseline, so that one scan covers the
+#                 whole wait: true means "no review arrived" is sound, and
+#                 false means coverage stops at some earlier poll and the
+#                 tail of the wait is unobserved, whatever polls_ok says.
+#   polls_ok      how many polls scanned all three sources. Only 0 is a
+#                 verdict on its own: no poll ever observed the PR, so the
+#                 honest report is "could not watch this PR".
 #
 # Exit codes: 0 review activity; 3 clean pass; 2 cap expired; 64 usage
 # error; 69 gh (GitHub CLI) not found on PATH.
 set -u
 
-PR="" BASELINE="" LOGIN="" REPO="" REACTION_LOGIN="" HEAD=""
+PR="" BASELINE="" LOGIN="" REPO="" REST_LOGIN="" REACTION_LOGIN="" HEAD=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
 INTERVAL=75 CAP_MINUTES=25
 
@@ -65,7 +90,7 @@ usage() {
 while [ $# -gt 0 ]; do
   opt="$1"
   case "$opt" in
-    --pr|--baseline|--login|--repo|--reaction-login|--clean-content|--progress-content|--interval|--cap-minutes|--head) ;;
+    --pr|--baseline|--login|--repo|--rest-login|--reaction-login|--clean-content|--progress-content|--interval|--cap-minutes|--head) ;;
     *) echo "watch-review.sh: unknown option: $opt" >&2; usage ;;
   esac
   [ $# -ge 2 ] || { echo "watch-review.sh: $opt requires a value" >&2; usage; }
@@ -75,6 +100,7 @@ while [ $# -gt 0 ]; do
     --baseline) BASELINE="$val" ;;
     --login) LOGIN="$val" ;;
     --repo) REPO="$val" ;;
+    --rest-login) REST_LOGIN="$val" ;;
     --reaction-login) REACTION_LOGIN="$val" ;;
     --clean-content) CLEAN_CONTENT="$val" ;;
     --progress-content) PROGRESS_CONTENT="$val" ;;
@@ -112,6 +138,11 @@ LOGIN_PLAIN="${LOGIN%\[bot\]}"
 case "$LOGIN_PLAIN" in ''|*[!A-Za-z0-9-]*)
   echo "watch-review.sh: --login must be a GitHub login, optionally with a [bot] suffix" >&2; usage ;;
 esac
+if [ -n "$REST_LOGIN" ]; then
+  case "${REST_LOGIN%\[bot\]}" in ''|*[!A-Za-z0-9-]*)
+    echo "watch-review.sh: --rest-login must be a GitHub login, optionally with a [bot] suffix" >&2; usage ;;
+  esac
+fi
 if [ -n "$REACTION_LOGIN" ]; then
   case "${REACTION_LOGIN%\[bot\]}" in ''|*[!A-Za-z0-9-]*)
     echo "watch-review.sh: --reaction-login must be a GitHub login, optionally with a [bot] suffix" >&2; usage ;;
@@ -159,13 +190,17 @@ if [ -z "$CLEAN_REST" ] || [ -z "$PROGRESS_REST" ]; then
   usage
 fi
 
-# Normalize: reaction-only detection hands callers the REST-style name[bot]
-# form, while GraphQL review authors use the plain name. Strip a passed
-# suffix so --login accepts either form, then derive the reaction form from
-# the plain base. A reviewer running as a machine user (no [bot] suffix)
-# needs an explicit --reaction-login.
+# Normalize: detection hands callers either login form (GraphQL review
+# authors use the plain name, REST and reaction authors the name[bot] form).
+# Strip a passed suffix so --login accepts either, then derive the single
+# REST form every filter below matches on. A reviewer running as a machine
+# user carries no [bot] suffix anywhere and needs an explicit --rest-login.
+# --reaction-login is the former name of that flag: it never scoped to
+# reactions (all three REST sources share one login), so it stays as an
+# alias rather than a second, independently settable identity that a caller
+# could set for reactions while reviews silently matched a different one.
 LOGIN="${LOGIN%\[bot\]}"
-REACTION_LOGIN="${REACTION_LOGIN:-${LOGIN}[bot]}"
+REST_LOGIN="${REST_LOGIN:-${REACTION_LOGIN:-${LOGIN}[bot]}}"
 # Preflight the host CLI: without it every poll would fail silently and
 # the watcher would sit out the full cap looking like "no reviewer
 # activity", when the honest answer is that this environment cannot watch
@@ -192,7 +227,10 @@ DEADLINE=$(( SECONDS + CAP_MINUTES * 60 ))
 # summable match counts and the page's baseline-side edge timestamp (the
 # oldest item on a newest-first page, the first item on an ascending page),
 # or "none" for an empty page. PENDING reviews have no submitted_at; treat
-# them as not submitted.
+# them as not submitted. Every count is baseline-gated, the in-progress
+# reaction included: reactions are mutable and one-per-user-per-emoji, so a
+# leftover eyes from an earlier round would otherwise read as a review in
+# progress and stretch the wait for a pass that already finished.
 # With --head, a review must be of that commit, and a comment must anchor
 # to it — except replies to existing threads (in_reply_to_id set), which
 # keep their old anchor yet are a genuine completion signal. startswith()
@@ -203,9 +241,9 @@ if [ -n "$HEAD" ]; then
   HEAD_REVIEWS=" and ((.commit_id // \"\") | startswith(\"$HEAD\"))"
   HEAD_COMMENTS=" and (((.commit_id // \"\") | startswith(\"$HEAD\")) or .in_reply_to_id != null)"
 fi
-JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REACTION_LOGIN\" and .created_at > \"$BASELINE\"$HEAD_COMMENTS)] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
-JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REACTION_LOGIN\" and (.submitted_at // \"\") > \"$BASELINE\"$HEAD_REVIEWS)] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
-JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REACTION_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REACTION_LOGIN\" and .content == \"$PROGRESS_REST\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
+JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .created_at > \"$BASELINE\"$HEAD_COMMENTS)] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
+JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at // \"\") > \"$BASELINE\"$HEAD_REVIEWS)] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
+JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\" and .created_at > \"$BASELINE\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
 
 # Both scanners report "t1 t2 status". A malformed page (transient API
 # error, rate limit, missing scope) yields status=err: an error is not
@@ -262,12 +300,25 @@ scan_asc_tail() {
 }
 
 seen_progress=false
+polls_ok=0
+last_poll_ok=false
 while :; do
+  # Every poll rescans each source from the fixed baseline (both scanners
+  # restart and terminate on it), so one successful poll observes the whole
+  # window from the baseline to now. Coverage therefore rests on the *last*
+  # poll, not on how many succeeded: an early success followed by failures
+  # leaves the tail of the wait unobserved, while a mid-run blip followed by
+  # a success costs nothing. Reset per poll and report both.
+  last_poll_ok=false
   read -r n_reviews n_reactions <<< "$(gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount}}}}' \
     -F o="$OWNER" -F r="$NAME" -F n="$PR" \
     --jq '"\(.data.repository.pullRequest.reviews.totalCount) \(.data.repository.pullRequest.reactions.totalCount)"' 2>/dev/null)"
   case "${n_reviews:-x}${n_reactions:-x}" in *[!0-9]*)
-    # Count query failed; retry next poll. The cap is the backstop.
+    # Count query failed; retry next poll. The cap is the backstop. Say so
+    # on stderr: this failure skips every scan below, so a run that fails
+    # here on every poll would otherwise reach the cap in total silence and
+    # read as "no review arrived" when nothing was ever observed.
+    echo "watch-review.sh: count query failed (bad token, missing scope, rate limit, or wrong repo?); retrying" >&2
     n_reviews='' ;;
   esac
   if [ -n "$n_reviews" ]; then
@@ -284,9 +335,19 @@ while :; do
     # persistent failure.
     if [ "$c_status" = ok ] && [ "$v_status" = ok ]; then
       read -r clean eyes r_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/issues/$PR/reactions?" "$JQ_REACTIONS" "$n_reactions")"
-      if [ "$r_status" = ok ] && [ "$clean" -gt 0 ]; then
-        echo "CLEAN_PASS {\"clean_reactions\":$clean}"
-        exit 3
+      if [ "$r_status" != ok ]; then
+        echo "watch-review.sh: reactions scan failed; retrying" >&2
+      else
+        # Only now has this poll observed all three sources. Counting it
+        # after the review and comment scans alone would call a run "watched"
+        # while the clean-pass signal, which for some reviewers is the only
+        # artifact of a clean round, was never read.
+        polls_ok=$((polls_ok + 1))
+        last_poll_ok=true
+        if [ "$clean" -gt 0 ]; then
+          echo "CLEAN_PASS {\"clean_reactions\":$clean}"
+          exit 3
+        fi
       fi
       [ "$eyes" -gt 0 ] && seen_progress=true
     else
@@ -302,5 +363,5 @@ while :; do
   fi
 done
 
-echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"in_progress_seen\":$seen_progress}"
+echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"polls_ok\":$polls_ok,\"last_poll_ok\":$last_poll_ok,\"in_progress_seen\":$seen_progress}"
 exit 2
