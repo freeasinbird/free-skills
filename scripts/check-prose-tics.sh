@@ -15,9 +15,19 @@
 #
 # Exit codes: 0 clean, 1 findings, 2 usage/environment error.
 set -euo pipefail
+
+# Resolve caller-relative arguments before moving: the paths belong to the
+# directory the check was invoked from, and reading them after the cd would
+# silently scan this repository's like-named files instead.
+files=()
+for arg in "$@"; do
+  case "$arg" in
+    /*) files+=("$arg") ;;
+    *) files+=("$PWD/$arg") ;;
+  esac
+done
 cd "$(dirname "$0")/.."
 
-files=("$@")
 if [ "${#files[@]}" -eq 0 ]; then
   while IFS= read -r -d '' f; do
     files+=("$f")
