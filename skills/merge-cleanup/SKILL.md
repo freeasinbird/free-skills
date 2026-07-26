@@ -175,7 +175,12 @@ not run the destructive sequence blindly here:
 - **Relocate the sequence across the worktrees**: perform the resync
   (steps 2-3) in the worktree that already holds the base branch, **and**
   `git worktree remove` the feature branch's worktree before deleting that
-  branch (step 4).
+  branch (step 4). Remove it from wherever the resync left you, never from
+  inside the worktree being removed: git has no self-target check, so a
+  worktree clean enough to remove is unlinked out from under its own session
+  at exit 0, and a `-C` aimed elsewhere does not spare the session's own
+  directory. Every later command then runs from a path that no longer exists
+  (`references/hazards.md` §worktree-refusals).
 - **Inventory that worktree before removing it, with this skill's
   `worktree-inventory.sh`, and treat any non-zero exit as a stop.** Removal
   deletes the directory outright, and git's own refusal covers less than it
@@ -193,9 +198,7 @@ not run the destructive sequence blindly here:
   it to git. That refusal costs nothing real: `git worktree list` reports
   absolute paths, so such an argument is a mistyped invocation rather than a
   worktree you would lose access to. Terminate the removal's own path anyway
-  (`git worktree remove -- '<worktree-path>'`). Run the removal from outside
-  that worktree too: from inside, git unlinks it and exits 0, leaving the
-  shell on a path that no longer exists.
+  (`git worktree remove -- '<worktree-path>'`).
 - **The inventory ships as a script because its rules are a program, not a
   checklist.** They are easy to state and easy to get wrong: the tag column
   decides (`H` is an ordinary cached file, so an unfiltered reading stops on
