@@ -113,28 +113,30 @@ them before anything else runs.
 
 ## Verify the merge before deleting anything
 
-Confirm the PR is actually merged, not merely closed, before any deletion:
-a closed-unmerged PR's branch may hold the only copy of the work. Check
-with the PR host CLI (`mergedAt` non-null, state `MERGED`) or by confirming
-the branch tip is reachable from the PR's base branch, usually the default
-branch
-(`git merge-base --is-ancestor 'refs/heads/<branch>' 'refs/remotes/<base-remote>/<base-branch>'`,
-after fetching the base remote so the ref is current). In a squash- or
-rebase-merge repo the branch tip never becomes an
-ancestor of the base (`references/hazards.md` §merged-not-ancestor), so
-there only the forge's `MERGED` state counts as verification. When the tools can check, never proceed on the user's word
-alone. Step 1's guards match and lease the remote branch against a
-**verified head OID**: with the CLI that is `headRefOid`; on the git-only
-ancestry path no CLI supplied it, so use the local branch tip you just
-confirmed merged (`git rev-parse 'refs/heads/<branch>'`), which on a
-merge-commit or fast-forward merge is the commit that merged. (The
-squash/rebase path has no git-only verification, so it always carries the
-CLI and its `headRefOid`, and a git-only run there stops at the paragraph
-above rather than reaching step 1.) If no tool can confirm the merge, do
-not delete the remote branch:
-say so, and hand the user the exact deletion command to run once the forge
-shows the PR as merged (confirming a branch's name is not confirming that
-it merged).
+- **Confirm the PR is actually merged, not merely closed, before any
+  deletion**: a closed-unmerged PR's branch may hold the only copy of the
+  work.
+- **Check with the PR host CLI** (`mergedAt` non-null, state `MERGED`) **or
+  by confirming the branch tip is reachable from the PR's base branch**,
+  usually the default branch
+  (`git merge-base --is-ancestor 'refs/heads/<branch>' 'refs/remotes/<base-remote>/<base-branch>'`,
+  after fetching the base remote so the ref is current).
+- **In a squash- or rebase-merge repo, only the forge's `MERGED` state counts
+  as verification**, since there the branch tip never becomes an ancestor of
+  the base (`references/hazards.md` §merged-not-ancestor).
+- **When the tools can check, never proceed on the user's word alone.**
+- **Step 1's guards match and lease the remote branch against a verified head
+  OID**: with the CLI that is `headRefOid`; on the git-only ancestry path no
+  CLI supplied it, so use the local branch tip you just confirmed merged
+  (`git rev-parse 'refs/heads/<branch>'`), which on a merge-commit or
+  fast-forward merge is the commit that merged. (The squash/rebase path has
+  no git-only verification, so it always carries the CLI and its
+  `headRefOid`, and a git-only run there stops at the verification
+  requirement above rather than reaching step 1.)
+- **If no tool can confirm the merge, do not delete the remote branch**: say
+  so, and hand the user the exact deletion command to run once the forge
+  shows the PR as merged (confirming a branch's name is not confirming that
+  it merged).
 
 ## Git cleanup sequence
 
@@ -147,15 +149,20 @@ so the base branch is often already checked out in the primary worktree
 while cleanup runs in the feature branch's worktree. That layout breaks the
 switch-and-resync steps below: the checkout, the fetch or merge into the
 base branch, and the local branch delete all refuse
-(`references/hazards.md` §worktree-refusals). So when `git worktree list` shows the
-base branch, or `<branch>` itself, held by another worktree, do not run the
-destructive sequence blindly here: perform the resync (steps 2-3) in the
-worktree that already holds the base branch, and `git worktree remove` the
-feature branch's worktree before deleting that branch (step 4); or, if that
-cannot be arranged, stop and surface the worktree layout with the remaining
-steps rather than deleting the remote branch (step 1) into a sequence that
-stalls half-done. Proceed straight into step 1 only when neither the base
-branch nor `<branch>` is checked out in another worktree.
+(`references/hazards.md` §worktree-refusals). So when `git worktree list`
+shows the base branch, or `<branch>` itself, held by another worktree, do
+not run the destructive sequence blindly here:
+
+- **Relocate the sequence across the worktrees**: perform the resync
+  (steps 2-3) in the worktree that already holds the base branch, **and**
+  `git worktree remove` the feature branch's worktree before deleting that
+  branch (step 4).
+- **If that cannot be arranged, stop and surface the worktree layout with the
+  remaining steps rather than deleting the remote branch (step 1)** into a
+  sequence that stalls half-done.
+
+Proceed straight into step 1 only when neither the base branch nor
+`<branch>` is checked out in another worktree.
 
 1. **Delete the remote branch only if auto-delete didn't.** Check whether
    it still exists and where it points, with
