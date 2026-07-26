@@ -1082,6 +1082,66 @@ want_rc 2
 want_out 'STOP worktree-flagged'
 if [ "$(cat "$WT/feat.txt")" = edited ]; then ok; else bad "the flagged edit was destroyed"; fi
 
+scenario "a sparse checkout's absent skip-worktree paths are not flagged state"
+std_setup; std_fixtures
+G "$SRC" push origin --delete "refs/heads/$HB"
+WT="$SCEN/featwt"
+G "$WORK" worktree add "$WT" "$HB"
+G "$WT" sparse-checkout set --no-cone /base.txt   # leaves feat.txt `S`, absent
+if [ -e "$WT/feat.txt" ]; then bad "the sparse fixture left the excluded path present"; fi
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 2
+# The preservation stop, not worktree-flagged: a sparse checkout marks every
+# excluded path `S` while leaving it absent, so nothing is there to lose.
+want_out 'STOP head-worktree-present'
+
+scenario "a sparse checkout spelled with a non-canonical boolean is still sparse"
+std_setup; std_fixtures
+G "$SRC" push origin --delete "refs/heads/$HB"
+WT="$SCEN/featwt"
+G "$WORK" worktree add "$WT" "$HB"
+G "$WT" sparse-checkout set --no-cone /base.txt
+G "$WT" config --worktree core.sparseCheckout yes   # `--get` returns yes, not true
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP head-worktree-present'
+
+scenario "an assume-unchanged deletion blocks worktree removal"
+std_setup; std_fixtures
+G "$SRC" push origin --delete "refs/heads/$HB"
+WT="$SCEN/featwt"
+G "$WORK" worktree add "$WT" "$HB"
+G "$WT" update-index --assume-unchanged feat.txt
+rm "$WT/feat.txt"
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 2
+# An absent flagged path is a hidden deletion unless sparse checkout explains
+# it; status reports neither the flag nor the missing file.
+want_out 'STOP worktree-flagged'
+
+scenario "a skip-worktree deletion outside a sparse checkout blocks removal"
+std_setup; std_fixtures
+G "$SRC" push origin --delete "refs/heads/$HB"
+WT="$SCEN/featwt"
+G "$WORK" worktree add "$WT" "$HB"
+G "$WT" update-index --skip-worktree feat.txt
+rm "$WT/feat.txt"
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP worktree-flagged'
+
+scenario "a present skip-worktree file still blocks worktree removal"
+std_setup; std_fixtures
+G "$SRC" push origin --delete "refs/heads/$HB"
+WT="$SCEN/featwt"
+G "$WORK" worktree add "$WT" "$HB"
+G "$WT" update-index --skip-worktree feat.txt
+echo edited > "$WT/feat.txt"
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP worktree-flagged'
+if [ "$(cat "$WT/feat.txt")" = edited ]; then ok; else bad "the flagged edit was destroyed"; fi
+
 scenario "a newline-bearing remote URL cannot be validated: stop"
 std_setup; std_fixtures
 G "$WORK" remote add nlrem "$SCEN/x"$'\n'

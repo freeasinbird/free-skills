@@ -452,7 +452,7 @@ op_probe() { # op_probe <dir>: returns 0 and sets OP_FOUND when one is paused
 # Diagnose state that makes even manual worktree removal unsafe. Automated
 # cleanup stops afterward even when this inventory is clean.
 worktree_preservation_preflight() { # worktree_preservation_preflight <dir>
-  local d="$1" inv flagged_out flagged
+  local d="$1" inv flagged
   if op_probe "$d"; then
     stop worktree-op-in-progress "$OP_FOUND exists in the linked head worktree at $d"
   fi
@@ -460,14 +460,45 @@ worktree_preservation_preflight() { # worktree_preservation_preflight <dir>
     || lookup_failed worktree-inventory "could not inventory $d"
   [ -z "$inv" ] \
     || stop worktree-dirty "the worktree at $d holds untracked or ignored files; move them before it is removed"
-  # The read's own failure must not count as "no flagged files": a
-  # pipeline into grep -c reports grep's status, and zero matches and a
-  # failed git read print the same 0.
-  flagged_out=$(git -C "$d" ls-files -v 2>/dev/null) \
-    || lookup_failed worktree-inventory "could not read the index of $d"
-  flagged=$(printf '%s\n' "$flagged_out" | grep -c -E '^[a-z]|^S') || true
-  [ "${flagged:-0}" -eq 0 ] \
-    || stop worktree-flagged "$flagged tracked file(s) in $d carry assume-unchanged or skip-worktree; their edits are invisible to status"
+  # A flagged row is hidden state unless something explains its absence.
+  # Sparse checkout marks every excluded path skip-worktree (`S`) and leaves
+  # it absent, which is the one benign absence: an absent assume-unchanged
+  # row is an uncommitted deletion, and status reports neither. So exempt an
+  # absent row only when it is `S` and this worktree has sparse checkout on
+  # (the setting is per-worktree, so it is read from there). Read
+  # NUL-terminated (`-vz`) rather than line-wise, and stream through a temp
+  # file, because a path can hold a newline and command substitution drops
+  # NUL bytes outright; `--full-name` keeps each path relative to the
+  # worktree root that `$d/` then anchors. The read's own failure must not
+  # count as "no flagged files": a pipeline into grep -c reports grep's
+  # status, and zero matches and a failed git read print the same 0.
+  # --bool because git accepts every boolean spelling (`yes`, `on`, `1`) while
+  # --get returns the raw string, so a raw comparison reports an ordinary
+  # sparse worktree as hidden work. A failed read is not sparse, which exempts
+  # nothing.
+  local tmp rec tag sparse=false sparse_cfg
+  flagged=0
+  out_exact sparse_cfg git -C "$d" config --bool --get core.sparseCheckout || sparse_cfg=false
+  [ "$sparse_cfg" != true ] || sparse=true
+  tmp=$(mktemp) || lookup_failed worktree-inventory "mktemp failed"
+  git -C "$d" ls-files -vz --full-name > "$tmp" 2>/dev/null \
+    || { rm -f "$tmp"; lookup_failed worktree-inventory "could not read the index of $d"; }
+  while IFS= read -r -d '' rec; do
+    case "$rec" in
+      [a-z]\ *|S\ *) ;;
+      *) continue ;;
+    esac
+    tag="${rec%% *}"
+    rec="${rec#? }"
+    if ! [ -e "$d/$rec" ] && ! [ -L "$d/$rec" ] \
+      && [ "$tag" = S ] && [ "$sparse" = true ]; then
+      continue
+    fi
+    flagged=$((flagged + 1))
+  done < "$tmp"
+  rm -f "$tmp"
+  [ "$flagged" -eq 0 ] \
+    || stop worktree-flagged "$flagged tracked file(s) in $d carry assume-unchanged or skip-worktree; their edits and deletions are invisible to status"
 }
 
 # Parse `git worktree list --porcelain -z` NUL-aware: the output is
