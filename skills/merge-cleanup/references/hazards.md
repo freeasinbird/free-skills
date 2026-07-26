@@ -187,6 +187,19 @@ worktree, three steps of the sequence refuse, all verified against git:
   in a worktree (re-verified in the terminated form the identify section now
   requires).
 
+A fourth interaction, the removal the remedy prescribes, is not on that list:
+it does not refuse on the caller's account. Git weighs the target worktree's
+contents, never the caller's location, so a removal aimed at the worktree the
+session is standing in succeeds exactly when it would have succeeded from
+anywhere else, unlinking the directory at exit 0 and leaving the next git
+command to die with "Unable to read current working directory" (re-verified on
+git 2.50.1 for the absolute path, `.`, and a symlink to the same worktree; the
+repro sits with the other removal hazards in §worktree-remove-destroys). The
+refusal it does have, on a dirty target, fires the same from inside as from
+outside, so it is the under-covering refusal that section documents and not a
+guard against this. Naming the worktree the removal runs from is the
+preflight's only guard here.
+
 Relied on by the worktree preflight.
 
 ---
