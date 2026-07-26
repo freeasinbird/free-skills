@@ -211,6 +211,16 @@ run "$SCEN"
 want_rc 4
 want_out 'LOOKUP_FAILED worktree'   # a failed read is not an established absence
 
+scenario "an option-shaped path is refused by rule, not handed to git"
+G "$REPO" worktree add -b hyph "$SCEN/-wt"
+OUT=$( cd "$SCEN" && "$SUT" -wt 2>&1 ); RC=$?
+# Discriminating: without the refusal `git -C` takes the path as its value and
+# the script reports `OK inventory`, releasing a removal whose own path git
+# would then read as an option.
+want_rc 64
+want_out 'Usage:'
+if [ -d "$SCEN/-wt" ]; then ok; else bad "the refusal removed something"; fi
+
 scenario "a missing argument is a usage error, not a clean report"
 OUT=$("$SUT" 2>&1 >/dev/null); RC=$?
 want_rc 0   # --help default prints usage on stdout and exits 0
