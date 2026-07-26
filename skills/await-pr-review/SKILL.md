@@ -345,6 +345,74 @@ wakes, so waits up to ~45 minutes. Otherwise the single cold wake wins. The
 cache-TTL arithmetic behind these numbers is derived in
 `references/cost-model.md`.
 
+**A scheduled wake changes the re-entry mechanism, not the detector.** Each
+wake invokes `watch-review.sh` with the frozen step-1 baseline and a
+`--cap-minutes` sized just under the wake gap, then branches on the exit
+code. Rebuilding the review, thread, and reaction queries inside every wake
+pays model tokens for a timestamp comparison, drifts from the script's paging
+and login-form matching, and conflates the two cadences below; hand-roll from
+`references/detection.md` only where the script cannot run at all. An
+example, platform-neutral, on a 5-minute wake gap:
+
+```text
+Every 5 minutes until told to stop, run exactly this command for detection.
+Do not rebuild the queries it already runs.
+
+<skill-dir>/watch-review.sh --repo owner/name --pr 46 \
+  --login chatgpt-codex-connector --head 9c346ab \
+  --baseline 2026-07-02T05:07:30Z --interval 75 --cap-minutes 4
+
+--baseline is the host's push-event time for head 9c346ab. Never recompute
+it: pass this exact string on every wake.
+
+0  REVIEW_ACTIVITY -> first refetch the matching review or comment and
+   confirm it covers this round (step 1), whatever the baseline's source;
+   nothing later re-checks this. Covered: cancel the schedule and go to
+   step 4. Stale, or you cannot tell: read the reactions yourself, because
+   a review or comment match ends the script's poll before it ever scans
+   them, so a genuine clean-pass reaction stays hidden behind the stale
+   item for as long as it sits there. A clean pass you can tie to this
+   round finishes the round: cancel and report it. Only when that scan
+   finds nothing, or nothing you can place, re-arm; expect this same exit
+   every wake, because the script is stateless and that item stays past
+   the baseline. The deadline below is what ends that loop.
+3  CLEAN_PASS      -> same confirmation first, and it is harder here,
+   since a reaction carries no head at all. Covered: cancel the schedule
+   and report the clean pass (step 6). Otherwise re-arm, as above.
+2  CAP_EXPIRED     -> nothing yet: re-arm. polls_ok:0 means this one wake
+   observed nothing (rate limit, bad token, wrong repo, on stderr): re-arm
+   anyway, and cancel only if the next wake is also polls_ok:0, since a
+   few polls is too short a window to call a watch broken.
+64 usage error     -> cancel the schedule. The call is wrong, not the PR;
+   fix the flags before arming anything again.
+69 gh missing      -> cancel the schedule; nothing here can run the script.
+   Watch by hand from references/detection.md, or hand back.
+
+The deadline bounds the schedule, not any one branch. At 25 minutes past
+the baseline, whichever branch has been re-arming, run one final wake with
+--cap-minutes 0 so a poll lands at the deadline itself: a wake stops
+polling at its own cap, so the gap before the deadline would otherwise go
+unscanned. Then stop and report. Quiet if that poll's last_poll_ok is
+true; incomplete if it is false, or if activity is still replaying that
+you could not tie to this round. in_progress_seen needs one distinction:
+inside a multi-poll wake it is history, since the script sets it once and
+never resets it, but the final wake runs a single poll, so a true there
+means the reviewer was mid-review at the deadline itself. Report that as
+pending rather than quiet.
+```
+
+Pass the **same** baseline on every wake. Each poll rescans all three sources
+from it, so consecutive wakes leave no hole between them, while recomputing
+it per wake drops exactly the review that landed in the last gap. Step 5
+advances the baseline once per _round_, after a fix lands, never once per
+wake. The script runs a final poll _at_ its deadline, so a wake's worst case
+is the cap plus one poll: leave that much headroom in the gap, and have a
+wake do nothing if the previous run is somehow still live. Detection is all
+the script covers; required checks stay the separate poll they already were.
+Every branch above cancels, so this path needs a scheduler the agent can also
+**cancel**; without one, or without a scheduler at all, take the single wake
+above or the bounded foreground poll below.
+
 Remaining fallbacks, in order:
 
 - **Bounded foreground poll (blocking fallback).** Only where none of the
