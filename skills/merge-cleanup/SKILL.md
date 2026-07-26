@@ -157,6 +157,40 @@ not run the destructive sequence blindly here:
   (steps 2-3) in the worktree that already holds the base branch, **and**
   `git worktree remove` the feature branch's worktree before deleting that
   branch (step 4).
+- **Inventory that worktree before removing it, with this skill's
+  `worktree-inventory.sh`, and treat any non-zero exit as a stop.** Removal
+  deletes the directory outright, and git's own refusal covers less than it
+  looks: an ignored file does not trigger it, and a tracked file flagged
+  `assume-unchanged` or `skip-worktree` is invisible to every porcelain form
+  while removal destroys its edit, or its deletion, with exit 0
+  (`references/hazards.md` §worktree-remove-destroys). Run the script by
+  path, from outside the worktree it names
+  (`<skill-dir>/worktree-inventory.sh '<worktree-path>'`; `--help`, or `-h`,
+  prints its contract). Exit 0 and `OK inventory` mean nothing is hidden and
+  the removal is yours to make; `STOP <guard>` (exit 2) and `LOOKUP_FAILED`
+  (exit 4) both mean do not remove it, and the line it printed is what to
+  surface to the user. Run the removal itself from outside that worktree too:
+  from inside, git unlinks it and exits 0, leaving the shell on a path that
+  no longer exists.
+- **The inventory ships as a script because its rules are a program, not a
+  checklist.** They are easy to state and easy to get wrong: the tag column
+  decides (`H` is an ordinary cached file, so an unfiltered reading stops on
+  every worktree), presence decides for most rows but not all (a sparse
+  checkout marks each excluded path `S` and leaves it absent, while an absent
+  `assume-unchanged` row is a hidden deletion), and every path has to be read
+  NUL-terminated and resolved against the worktree rather than your own
+  directory. Each of those is a reproduced hazard, listed in
+  `references/hazards.md` §worktree-remove-destroys. **Where the script
+  cannot run** (no bash, or a platform that will not execute it), stop and
+  hand the worktree to the user rather than reconstructing the check by hand.
+- **Take the worktree path itself from `git worktree list --porcelain -z`,
+  read NUL-aware**, not from the human-readable listing: a command
+  substitution drops NUL bytes and strips a trailing newline, and a
+  line-oriented parse mis-pairs a path that contains one, which points the
+  inventory and then the removal at a sibling worktree. `read -r -d ''` does
+  this in bash and zsh but is not POSIX (dash rejects it); where no
+  NUL-capable reader is available (that, or a tool such as python3), stop
+  rather than removing on a parse you cannot trust.
 - **If that cannot be arranged, stop and surface the worktree layout with the
   remaining steps rather than deleting the remote branch (step 1)** into a
   sequence that stalls half-done.
@@ -166,10 +200,19 @@ Proceed straight into step 1 only when neither the base branch nor
 
 1. **Delete the remote branch only if auto-delete didn't.** Check whether
    it still exists and where it points, with
-   `git ls-remote --heads '<head-remote>' 'refs/heads/<branch>'`, accepting the
-   result only when it is exactly one line naming `refs/heads/<branch>`;
-   many repos auto-delete on
-   merge. If the ref exists, its OID
+   `git ls-remote --heads '<head-remote>' 'refs/heads/<branch>'`, comparing
+   each line's ref column (the text after the tab) against
+   `refs/heads/<branch>` as a whole string and accepting only a single exact
+   match; many repos auto-delete on merge. Qualifying the pattern does not
+   make the match exact, and any further line it returns is a stop rather
+   than noise to filter out: a ref that merely suffix-matches (one literally
+   named `refs/heads/refs/heads/<branch>`) makes the delete inexpressible,
+   since both `--delete` and the `:ref` form then refuse with "dst refspec
+   matches more than one" (`references/hazards.md`
+   §push-refspec-ambiguity). Surface that shape rather than reaching for a
+   forge-API ref delete, which re-runs neither the OID check nor the lease
+   below.
+   If the ref exists, its OID
    must match the verified head OID from the verify section (`headRefOid`
    with a CLI, else the local verified branch tip): deleting a remote
    ref removes whatever it points at now, and a mismatch means the branch
@@ -209,10 +252,14 @@ Proceed straight into step 1 only when neither the base branch nor
    into** (its base, usually the default branch); that is the branch that
    moved, and the later steps validate against the current `HEAD`. A
    checkout can succeed over uncommitted changes and silently carry them
-   along, so check first (`git status --porcelain`). If the tree is dirty,
+   along, so check first (`git status -uall --porcelain`). The `-uall` is
+   load-bearing: a status read inherits repository configuration, so
+   `status.showUntrackedFiles=no` empties the porcelain forms and switches
+   this guard off from inside the repository it is protecting
+   (`references/hazards.md` §status-config). If the tree is dirty,
    stop and surface the uncommitted work rather than switching over it or
    stashing silently; the user decides what happens to their changes.
-   `git status --porcelain` also does not report ignored files, and a plain
+   That status read also does not report ignored files, and a plain
    checkout silently overwrites an ignored file the base branch tracks
    (`references/hazards.md` §ignored-file-overwrite), so both switches below
    pass `--no-overwrite-ignore`, which aborts the checkout rather than
