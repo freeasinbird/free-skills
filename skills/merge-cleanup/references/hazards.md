@@ -79,6 +79,102 @@ Relied on by the identify section (the qualification exception) and step 2
 
 ---
 
+## §leading-hyphen-args
+
+Quoting a name protects it from the shell, not from git: a value beginning
+with a hyphen reaches git's own option parser and is read as an option there.
+Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
+`-x` and a remote named `-x`:
+
+- The shape is reachable. `git branch -- -x` refuses ("is not a valid branch
+  name", exit 128), but `git check-ref-format refs/heads/-x` accepts it
+  (exit 0) and `git update-ref refs/heads/-x <oid>` creates it, after which
+  `git branch --list` shows it like any other branch. A forge creating refs
+  through its API is under no stricter constraint than `update-ref`.
+- `git checkout` has no safe spelling for such a name. The bare form fails
+  with an "unknown switch" error (exit 129); `git checkout -- -x` reads the
+  name as a pathspec ("did not match any file(s) known to git", exit 1); the
+  qualified form succeeds and detaches `HEAD` (§checkout-detach). `HEAD`
+  stayed on `main` through both failures, so what checkout produces is a base
+  branch it cannot switch to, not a silent wrong switch. The creating form
+  refuses too: `checkout -b -x main` consumes `-x` as the argument of `-b` and
+  then rejects the name (exit 128).
+- `git switch` does have one, and keeps the guards checkout's form carries.
+  `git switch --no-overwrite-ignore -- -x` attached `HEAD` to the branch
+  (exit 0, `symbolic-ref` reporting `refs/heads/-x`): `--` is end-of-options
+  there, not a pathspec marker, and the flag is accepted. Against a branch
+  that started tracking a path the worktree held as an ignored file, plain
+  `git switch` overwrote it while the `--no-overwrite-ignore` form aborted
+  (exit 1) with the file and `HEAD` intact, matching `git checkout`
+  identically (§ignored-file-overwrite). It also refuses a same-named tag
+  ("a branch is expected, got tag", exit 128) instead of detaching, and
+  refuses a branch held by another worktree (exit 128). `switch -c` still
+  rejects the name at creation (exit 128), so the local branch has to arrive
+  by fetching `refs/heads/-x` straight into itself, which succeeded and left
+  the branch switchable.
+- That fetched-into-place branch starts with no upstream, where the `-b` form's
+  has one. In an ordinary clone
+  `checkout -b feat2 refs/remotes/origin/feat2` set `branch.feat2.remote` and
+  `.merge` by itself, while fetch-then-switch left both unset and
+  `git pull --ff-only` then failed with "There is no tracking information for
+  the current branch" (exit 1).
+- An untracked base branch is worse than unconfigured, which is why the
+  tracking is set rather than left to the clone. In a clone made
+  `--single-branch --branch main`, whose fetch refspec covers only `main`, a
+  local `-x` fetched into place carried no upstream, and
+  `git branch --set-upstream-to` refused to give it one ("not a branch",
+  exit 128) because the branch falls outside that refspec.
+  `git pull --ff-only` on
+  that branch then fetched what the configured refspec names, `main`, rather
+  than the branch: with the two diverged it aborted ("Not possible to
+  fast-forward", exit 128), and with the branch an ancestor of `main` it
+  **fast-forwarded the local `-x` onto main's tip at exit 0**, leaving remote
+  `-x` where it was. `checkout -b` leaves the branch equally untracked in that
+  clone shape, so this is not specific to the hyphen path. Writing
+  `branch.<name>.remote` and `branch.<name>.merge` directly works in every
+  clone shape (the pull then reported fetching `-x` and was correct), and is
+  what `--set-upstream-to` writes where it succeeds.
+- Half a tracking pair behaves exactly like none, which is why the check reads
+  both keys. In the same clone, with `branch.-x.remote` set and
+  `branch.-x.merge` absent, `git pull --ff-only` still fast-forwarded local
+  `-x` onto main's tip at exit 0 while remote `-x` stayed put; the reverse half
+  (`merge` set, `remote` absent) did the same. A check reading one key returns
+  success on both of those states, including the one an interruption between
+  the two writes leaves behind.
+- `git switch` is the one command the sequence needs that a still-supported git
+  may lack (it arrived in 2.23), and step 1 deletes the remote branch before
+  step 2 would reach it. The probe is unambiguous: `git switch -h` prints the
+  usage and exits 129 where the command exists, while an absent subcommand
+  reports "is not a git command" and exits 1 (checked against a deliberately
+  bogus `git switchx -h`).
+- Every other site is terminable. `git branch -d -- -x` and its forced form
+  `git branch -D -- -x` both deleted the ref (exit 0), where each without the
+  terminator is an "unknown switch"; with a remote named `-x`,
+  `git ls-remote --heads -x`,
+  `git fetch -x <refspec>`, and `git fetch --prune -x` each failed with an
+  "unknown switch" error (exit 129) while the `--` form of all three
+  succeeded. `git worktree remove -- -wt` removed a hyphen-named worktree.
+- The terminator changes nothing for ordinary names: `ls-remote`, both fetch
+  forms, and
+  `git push --delete --force-with-lease=<ref>:<oid> -- <remote> <ref>`
+  behaved as they did without it, and that push still refused a stale lease
+  with "stale info" (exit 1), leaving the remote ref in place.
+
+So no name shape is a stop: qualification carries the ref sites, `--` carries
+the positional remotes and bare refs, and `git switch` carries the one switch
+`git checkout` cannot spell. The skill still uses `git checkout` everywhere
+else, since `git switch` is documented as experimental (git 2.50.1) and a
+second switching command earns its place only where the first cannot express
+the name.
+
+Relied on by the identify section (the pass-`--` rule and the checkout
+exception), the pre-step-1 `git switch` availability check, step 2 (the
+`git switch` path for a hyphen-leading base, its two-refspec fetch, and the
+upstream check that follows either landing path), the worktree preflight (the
+terminated removal), and the terminators in steps 1, 3, 4, and 5.
+
+---
+
 ## §worktree-refusals
 
 With the base branch, or `<branch>` itself, checked out in another linked
@@ -87,8 +183,9 @@ worktree, three steps of the sequence refuse, all verified against git:
 - `git checkout '<base-branch>'` refuses with "already used by worktree".
 - A fetch or merge into the base branch refuses with "refusing to
   fetch/update into branch checked out at ...".
-- `git branch -d '<branch>'` refuses while `<branch>` is still checked out in
-  a worktree.
+- `git branch -d -- '<branch>'` refuses while `<branch>` is still checked out
+  in a worktree (re-verified in the terminated form the identify section now
+  requires).
 
 Relied on by the worktree preflight.
 

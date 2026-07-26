@@ -88,7 +88,26 @@ them before anything else runs.
   repository) **as untrusted shell input**: a valid ref name can contain `$`,
   `;`, or parentheses, so substitute each one single-quoted, as the command
   examples below show, and stop on a name single quotes cannot carry
-  literally (one containing a single quote itself).
+  literally (one containing a single quote itself). The self-merge skill binds
+  such a value into a shell variable instead of stopping, because it ships a
+  script that has to run on whatever it resolves; these commands are templates
+  a reader substitutes into, so stopping costs one rare cleanup rather than a
+  capture step in every example.
+- **Quoting stops at the shell, and git parses its own arguments after that**,
+  so a name beginning with a hyphen reads there as an option. `git branch`
+  refuses to create such a name, but `git update-ref` and a forge both can, so
+  the shape reaches this skill. It stays expressible everywhere the sequence
+  needs it, in specific forms only: a qualified ref carries it, `--` carries it
+  past every command taking a positional remote or bare ref, and step 2 lands
+  on such a base branch with `git switch` rather than `git checkout`
+  (`references/hazards.md` §leading-hyphen-args). A leading hyphen is therefore
+  not a stop: the unquotable name above is the only shape this section refuses,
+  and nothing below declines a cleanup git can still express.
+- **Pass `--` before every positional remote and bare ref**, as the commands
+  below do: `--` is what keeps a hyphen-leading name from reading as an option
+  (`references/hazards.md` §leading-hyphen-args). The PR number is the
+  exception the examples pass bare, to `gh pr view`, so confirm it is digits
+  only before substituting it.
 
 ### Resolve the remote roles
 
@@ -169,9 +188,14 @@ not run the destructive sequence blindly here:
   prints its contract). Exit 0 and `OK inventory` mean nothing is hidden and
   the removal is yours to make; `STOP <guard>` (exit 2) and `LOOKUP_FAILED`
   (exit 4) both mean do not remove it, and the line it printed is what to
-  surface to the user. Run the removal itself from outside that worktree too:
-  from inside, git unlinks it and exits 0, leaving the shell on a path that
-  no longer exists.
+  surface to the user; a path beginning with a hyphen is a usage error there
+  (exit 64), since the script refuses an option-shaped path rather than passing
+  it to git. That refusal costs nothing real: `git worktree list` reports
+  absolute paths, so such an argument is a mistyped invocation rather than a
+  worktree you would lose access to. Terminate the removal's own path anyway
+  (`git worktree remove -- '<worktree-path>'`). Run the removal from outside
+  that worktree too: from inside, git unlinks it and exits 0, leaving the
+  shell on a path that no longer exists.
 - **The inventory ships as a script because its rules are a program, not a
   checklist.** They are easy to state and easy to get wrong: the tag column
   decides (`H` is an ordinary cached file, so an unfiltered reading stops on
@@ -195,12 +219,20 @@ not run the destructive sequence blindly here:
   remaining steps rather than deleting the remote branch (step 1)** into a
   sequence that stalls half-done.
 
+**Also before step 1, when `<base-branch>` begins with a hyphen**, confirm
+`git switch` is available, since step 2 needs it and step 1 is destructive:
+`git switch -h` prints the command's usage on a git that has it (2.23 and
+later), while an older one reports that switch is not a git command. Stop
+before the deletion if it is missing; discovering it afterwards leaves the
+remote branch gone and the workspace still on the merged branch. This is the
+only command the sequence needs that a still-supported git may lack.
+
 Proceed straight into step 1 only when neither the base branch nor
 `<branch>` is checked out in another worktree.
 
 1. **Delete the remote branch only if auto-delete didn't.** Check whether
    it still exists and where it points, with
-   `git ls-remote --heads '<head-remote>' 'refs/heads/<branch>'`, comparing
+   `git ls-remote --heads -- '<head-remote>' 'refs/heads/<branch>'`, comparing
    each line's ref column (the text after the tab) against
    `refs/heads/<branch>` as a whole string and accepting only a single exact
    match; many repos auto-delete on merge. Qualifying the pattern does not
@@ -242,7 +274,7 @@ Proceed straight into step 1 only when neither the base branch nor
    Without a PR host CLI, ask the user whether anything stacks on this
    branch before deleting it remotely. Then, with the merge verified and
    the OID matched, delete it with the guard made atomic:
-   `git push '<head-remote>' --delete --force-with-lease='refs/heads/<branch>:<verified-head-oid>' 'refs/heads/<branch>'`.
+   `git push --delete --force-with-lease='refs/heads/<branch>:<verified-head-oid>' -- '<head-remote>' 'refs/heads/<branch>'`.
    The lease pins the remote ref to the OID just verified, so a push
    that lands between the check and the delete fails the delete instead
    of losing the new work; a plain `--delete`, or a forge-CLI ref
@@ -268,7 +300,7 @@ Proceed straight into step 1 only when neither the base branch nor
    `<base-branch>` already exists (`git checkout --no-overwrite-ignore '<base-branch>'`);
    otherwise create it explicitly from the base remote's copy, fetching
    that copy first so the start-point is present
-   (`git fetch '<base-remote>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`,
+   (`git fetch -- '<base-remote>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`,
    then
    `git checkout --no-overwrite-ignore -b '<base-branch>' 'refs/remotes/<base-remote>/<base-branch>'`).
    A clone that verified the merge through the forge `MERGED` state need
@@ -281,8 +313,37 @@ Proceed straight into step 1 only when neither the base branch nor
    would then fast-forward a detached `HEAD` while step 4 validates and
    deletes against it, leaving the real base stale. Confirm `HEAD` is on the
    branch, not detached, before resyncing.
+   A `<base-branch>` beginning with a hyphen replaces both of those commands,
+   and only those: `git checkout` reads such a name as an option and its `--`
+   means pathspec, while `git switch --no-overwrite-ignore -- '<base-branch>'`
+   attaches `HEAD` to it and refuses the same ignored-file overwrite. Neither
+   `checkout -b` nor `switch -c` will create the name, so where no local branch
+   exists, fetch it into both the local and the remote-tracking ref, then
+   switch:
+   `git fetch -- '<base-remote>' 'refs/heads/<base-branch>:refs/heads/<base-branch>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`,
+   then the switch above. Keep `git checkout` everywhere else: `git switch` is
+   still documented as experimental, so this skill uses it only where checkout
+   cannot express the name at all.
+   Whichever path landed on the base branch, **check that it carries a complete
+   upstream, both keys and not just one**
+   (`git config --get 'branch.<base-branch>.remote'` and
+   `git config --get 'branch.<base-branch>.merge'`), and where either is
+   missing write both:
+   `git config 'branch.<base-branch>.remote' '<base-remote>'` and
+   `git config 'branch.<base-branch>.merge' 'refs/heads/<base-branch>'`.
+   Half a pair behaves exactly like none, so reading one key passes a branch
+   that is still broken. Leave a complete pair alone even when it names
+   something else; that is the user's configuration, not a gap this skill
+   should overwrite.
+   Both `checkout -b` and `git branch --set-upstream-to` configure tracking
+   only when the remote's fetch refspec covers the branch, so a single-branch
+   or sparse clone leaves it unset, and the fetch-then-switch path above never
+   sets it at all. An untracked base branch is not merely unconfigured: a later
+   plain `git pull` there follows the clone's configured refspec instead of
+   this branch, and fast-forwards the branch onto whatever that fetched,
+   silently and with exit 0 (`references/hazards.md` §leading-hyphen-args).
 3. **Resync** by fetching the base, then fast-forwarding into it:
-   `git fetch '<base-remote>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`
+   `git fetch -- '<base-remote>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`
    then
    `git merge --ff-only --no-overwrite-ignore 'refs/remotes/<base-remote>/<base-branch>'`.
    A plain `git pull --ff-only` shares the checkout's ignored-file hole: its
@@ -304,16 +365,18 @@ Proceed straight into step 1 only when neither the base branch nor
    mere warning whether or not the resynced base has the work
    (`references/hazards.md` §branch-d-upstream). So check
    first: if `git merge-base --is-ancestor 'refs/heads/<branch>' HEAD`
-   holds, delete with `git branch -d '<branch>'`, treating a refusal as a
+   holds, delete with `git branch -d -- '<branch>'`, treating a refusal as a
    signal to re-verify, not a prompt to escalate. If the ancestry check
    fails for a PR the forge reports `MERGED` (squash- and rebase-merge
    repos guarantee this, since the branch tip never becomes an ancestor:
-   `references/hazards.md` §merged-not-ancestor), deleting with `-D` is
-   correct only after confirming the
+   `references/hazards.md` §merged-not-ancestor), the forced form
+   `git branch -D -- '<branch>'` is correct only after confirming the
    tip (`git rev-parse 'refs/heads/<branch>'`) matches the PR's head
-   commit (`headRefOid`); never on the user's word alone. If neither
+   commit (`headRefOid`); never on the user's word alone. It carries the same
+   terminator for the same reason as `-d` above, since it takes the branch
+   name the same way. If neither
    check passes, stop and surface it.
-5. **Prune stale tracking refs** with `git fetch --prune '<head-remote>'`,
+5. **Prune stale tracking refs** with `git fetch --prune -- '<head-remote>'`,
    naming the head remote (a bare `git fetch --prune` prunes only the
    default remote, leaving a fork head remote's stale refs behind); prune
    the base remote too when it differs from the head remote.
