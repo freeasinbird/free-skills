@@ -200,10 +200,19 @@ Proceed straight into step 1 only when neither the base branch nor
 
 1. **Delete the remote branch only if auto-delete didn't.** Check whether
    it still exists and where it points, with
-   `git ls-remote --heads '<head-remote>' 'refs/heads/<branch>'`, accepting the
-   result only when it is exactly one line naming `refs/heads/<branch>`;
-   many repos auto-delete on
-   merge. If the ref exists, its OID
+   `git ls-remote --heads '<head-remote>' 'refs/heads/<branch>'`, comparing
+   each line's ref column (the text after the tab) against
+   `refs/heads/<branch>` as a whole string and accepting only a single exact
+   match; many repos auto-delete on merge. Qualifying the pattern does not
+   make the match exact, and any further line it returns is a stop rather
+   than noise to filter out: a ref that merely suffix-matches (one literally
+   named `refs/heads/refs/heads/<branch>`) makes the delete inexpressible,
+   since both `--delete` and the `:ref` form then refuse with "dst refspec
+   matches more than one" (`references/hazards.md`
+   §push-refspec-ambiguity). Surface that shape rather than reaching for a
+   forge-API ref delete, which re-runs neither the OID check nor the lease
+   below.
+   If the ref exists, its OID
    must match the verified head OID from the verify section (`headRefOid`
    with a CLI, else the local verified branch tip): deleting a remote
    ref removes whatever it points at now, and a mismatch means the branch

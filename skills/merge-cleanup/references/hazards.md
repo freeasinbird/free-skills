@@ -36,8 +36,33 @@ deletion:
 A bare fetch or pull refspec is exposed the same way.
 
 Relied on by the identify section (fully qualify every ref a guard resolves
-or compares), step 1 (accepting the `ls-remote` result only when it is
-exactly one line), and step 3 (the qualified fetch refspec).
+or compares), step 1 (why the `ls-remote` pattern is qualified at all), and
+step 3 (the qualified fetch refspec).
+
+---
+
+## §push-refspec-ambiguity
+
+Git suffix-matches a push destination against the remote's refs, so a sibling
+ref that ends in the same components makes the delete inexpressible rather
+than merely noisy. Verified in scratch repos on git 2.50.1, against a bare
+remote holding both `refs/heads/feat` and a decoy literally named
+`refs/heads/refs/heads/feat`:
+
+- `git ls-remote --heads <remote> 'refs/heads/feat'` returned both refs, so
+  the qualified pattern is not an exact match and the ref column has to be
+  compared as a whole string.
+- `git push <remote> --delete --force-with-lease=... 'refs/heads/feat'` and
+  `git push <remote> :refs/heads/feat` both failed with "error: dst refspec
+  refs/heads/feat matches more than one", exit 1, leaving every remote ref in
+  place. Removing the decoy made the identical delete succeed.
+
+No push refspec expresses the delete while the decoy exists, and a forge-API
+ref delete would run neither the OID comparison nor the lease, so this is a
+stop rather than a workaround.
+
+Relied on by step 1 (the whole-string ref-column comparison and the
+suffix-match stop).
 
 ---
 
