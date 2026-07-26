@@ -222,7 +222,9 @@ Watcher side, cheapest first:
   `--login` takes either login form; the watcher reads REST only, so it
   derives the one REST-form login it matches all three sources on (override
   with `--rest-login <login>` for a machine-user reviewer, which carries no
-  `[bot]` suffix). `--head` is the expected head SHA, so a stale pass
+  `[bot]` suffix; `--reaction-login` is a deprecated alias for the same
+  option, kept for callers written before the flag covered all three
+  sources). `--head` is the expected head SHA, so a stale pass
   against a superseded head does not end the wait. Also available:
   `--clean-content` /
   `--progress-content` for a reviewer whose status reactions differ from

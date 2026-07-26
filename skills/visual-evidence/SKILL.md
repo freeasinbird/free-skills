@@ -182,6 +182,24 @@ node capture.mjs --url http://localhost:3000/cards --out after.png \
   --viewport 1280x720,390x844 --wait-for '#card-list' --clip '#card-list'
 ```
 
+`--url` and `--out` are required; every other option has a default that
+suits an ordinary capture:
+
+| Option              | Default    | Effect                                                           |
+| ------------------- | ---------- | ---------------------------------------------------------------- |
+| `--viewport`        | `1280x720` | comma-separated list; widths ≤ 600 get Chrome's mobile emulation |
+| `--wait-for`        | none       | CSS selector to wait on until present and visible                |
+| `--clip`            | none       | CSS selector to crop to, its bounding box                        |
+| `--clip-pad`        | `12`       | px of context padding around `--clip`                            |
+| `--settle-ms`       | `500`      | quiet period after readiness, before the shot                    |
+| `--dpr`             | `2`        | device pixel ratio, 1 to 4                                       |
+| `--dark`            | off        | emulate `prefers-color-scheme: dark`                             |
+| `--timeout-budget`  | `90`       | total seconds across all viewports and retries                   |
+| `--attempt-timeout` | `30`       | per-attempt seconds, clamped to the remaining budget             |
+| `--retries`         | `2`        | extra attempts per viewport                                      |
+| `--chrome`          | autodetect | Chrome binary path (also read from `$CHROME`)                    |
+| `--chrome-flag`     | none       | repeatable extra Chrome flag, e.g. `--no-sandbox` in a container |
+
 **The output filenames follow the viewport count**: one viewport writes
 exactly `--out`, and several insert the size before the extension, so the
 run above writes `after-1280x720.png` and `after-390x844.png`, never
