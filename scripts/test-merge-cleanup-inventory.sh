@@ -149,6 +149,23 @@ want_out 'STOP flagged'
 # hand the user to go look at.
 want_out 'starting with odd\nname'
 
+# Discriminating: escaping each UTF-8 byte as its own \u emits two escapes
+# that decode to mojibake, so the path the caller is handed to go look at is
+# one that does not exist. JSON is UTF-8, so the bytes belong in the line as
+# they are. The escaper's other branch, a byte that starts no valid sequence
+# and so gets escaped lossily, has no case here: a path holding one cannot be
+# created on a filesystem that enforces UTF-8 names (APFS rejects it), so the
+# fixture is unbuildable on some of the machines this matrix runs on.
+scenario "a flagged path holding non-ASCII keeps its real name"
+printf 'x\n' > "$WT/café.txt"
+G "$WT" add .
+G "$WT" commit -m accented
+G "$WT" update-index --assume-unchanged 'café.txt'
+printf 'EDITED\n' > "$WT/café.txt"
+run "$WT"
+want_rc 2
+want_out 'starting with café.txt'
+
 scenario "a flagged dangling symlink is still found"
 ln -s nowhere "$WT/link"
 G "$WT" add .
