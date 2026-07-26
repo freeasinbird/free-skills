@@ -78,6 +78,38 @@ for, not the moment the watch starts.**
 - **Do not use the head commit's authored/committed time as a proxy for the
   push**: a locally created commit may predate already-handled reviews and
   only be pushed later.
+- **A clock reading taken after the push is not the push time either.**
+  Stamping `date -u` once `git push` returns puts the baseline later than the
+  event, so a review landing in that gap is banked as pre-existing and the
+  watch burns its whole cap waiting for a pass it already missed. Read the
+  event from the host instead: the repository events feed carries a
+  `PushEvent` with its own timestamp and the pushed head, and a force-push
+  also lands a timestamped entry on the PR timeline. Both queries, and their
+  caveats, are in `references/detection.md`.
+- **Where no host event resolves, bound the baseline _before_ the push, not
+  after.** Early is the recoverable direction: with `--head` passed (below),
+  reviews of the superseded commit are filtered out, so much of the reopened
+  window is inert. Late is silent, and drops the review you are waiting for.
+  But the head filter is **best-effort**, and three things cross it: replies
+  on existing threads are exempt by design (they keep an old anchor yet are a
+  real completion signal), reactions carry no commit at all, and GitHub
+  re-anchors a comment's `commit_id` as the PR advances.
+- **So take two readings under this fallback, and keep their roles apart.**
+  The pre-push one is the baseline you pass to the watcher. Take a second
+  immediately _after_ the push and keep it only for disambiguation, never
+  passing it as the baseline, which is what the clock-reading bullet above
+  rejects. Then a signal later than the post-push reading provably postdates
+  the push and is this round's; one falling between the two readings cannot
+  be resolved, though that window is only as wide as the push took. Refetch
+  the matching review, comment, or reaction to compare, and keep waiting
+  while it stays unresolved. Take both readings from the **host's clock**,
+  never the local one: you are comparing them against host-authored
+  timestamps across a window only as wide as a push, so ordinary skew is
+  enough to invert the ordering and admit a previous round's signal. Every
+  API response carries the server time; `references/detection.md` has it.
+  Holding neither reading, because you joined after the push, means you
+  cannot disambiguate at all: say that at handoff rather than reporting the
+  round quiet or incomplete as though you could.
 - **Start the watch promptly**, before waiting on anything else (such as
   CI), so the window where a review can slip in unbaselined stays small.
   Reviewer activity after the captured open/push timestamp is new.
@@ -88,6 +120,19 @@ for, not the moment the watch starts.**
   snapshot the reviews that exist _at the moment you request_ as
   already-seen, and treat only the reviewer's pass dated after that request
   as the awaited one.
+
+**Whatever the baseline's source, confirm which head a pass actually covered
+before treating it as this round's.** A correct host-event baseline is not
+enough on its own: GitHub stamps a review with the head current at
+_submission_, not the head it analyzed, so a review already running when you
+push finishes afterwards and carries your new head, clearing both the
+baseline and the `--head` gate while the push-triggered pass is still
+outstanding. `watch-review.sh` documents that attribution as best-effort and
+puts the confirmation on the caller. **The check is yours and nothing
+downstream repeats it**: step 4 evaluates findings and step 6 reports,
+neither re-validates which round arrived. The pre-push fallback only makes it
+harder, since a clean-pass reaction carries no head at all and ends the wait
+on an absence-based verdict with no review to read.
 
 At the same cycle boundary, the main agent records the PR's expected head
 commit plus its base branch and current base-tip commit, resolved from the host
