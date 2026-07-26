@@ -85,6 +85,24 @@ Relied on by step 2 (both switches) and step 3 (the resync).
 
 ---
 
+## §status-config
+
+A status read inherits repository configuration, so the repository a guard
+protects can switch that guard off. Verified in scratch repos on git 2.50.1,
+with `status.showUntrackedFiles=no` set in the repository config:
+
+- `git status --porcelain` and `git status --porcelain --ignored` both came
+  back empty on a worktree holding an untracked file and an ignored `.env`.
+  `-uall` restored both listings.
+- `git worktree remove` then deleted that worktree with exit 0, the
+  untracked-file refusal described above having stopped firing too; under the
+  default configuration the same removal refused with exit 128.
+
+Relied on by step 2 (the dirty-tree check) and the worktree preflight (the
+inventory), which pass `-uall` explicitly for this reason.
+
+---
+
 ## §branch-d-upstream
 
 `git branch -d` checks the branch against its _upstream_ when one is set, and

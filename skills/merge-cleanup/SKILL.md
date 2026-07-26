@@ -209,10 +209,14 @@ Proceed straight into step 1 only when neither the base branch nor
    into** (its base, usually the default branch); that is the branch that
    moved, and the later steps validate against the current `HEAD`. A
    checkout can succeed over uncommitted changes and silently carry them
-   along, so check first (`git status --porcelain`). If the tree is dirty,
+   along, so check first (`git status -uall --porcelain`). The `-uall` is
+   load-bearing: a status read inherits repository configuration, so
+   `status.showUntrackedFiles=no` empties the porcelain forms and switches
+   this guard off from inside the repository it is protecting
+   (`references/hazards.md` §status-config). If the tree is dirty,
    stop and surface the uncommitted work rather than switching over it or
    stashing silently; the user decides what happens to their changes.
-   `git status --porcelain` also does not report ignored files, and a plain
+   That status read also does not report ignored files, and a plain
    checkout silently overwrites an ignored file the base branch tracks
    (`references/hazards.md` §ignored-file-overwrite), so both switches below
    pass `--no-overwrite-ignore`, which aborts the checkout rather than
