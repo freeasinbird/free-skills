@@ -321,11 +321,13 @@ checkout (a native worktree tool or session flag, or plain
 `git worktree add <path> -b <type>/<slug> <default-branch>`), create each
 worktree explicitly from the freshly updated default-branch tip, not from
 whatever branch is checked out; prefer the same isolation for a single work
-unit. Remove the worktree once its branch merges
-(`git worktree remove <path>`). Where isolated checkouts are unavailable
-(no multi-checkout support, or a sandbox pinned to one directory), serialize
-the work units and use one correctly based branch at a time in the primary
-checkout. Never run concurrent work units in one checkout.
+unit. Remove the worktree once its branch merges, standing outside the one
+being removed (`git worktree remove <path>`): git does not stop a session
+from unlinking its own working directory. Where isolated checkouts are
+unavailable (no multi-checkout support, or a sandbox pinned to one
+directory), serialize the work units and use one correctly based branch at
+a time in the primary checkout. Never run concurrent work units in one
+checkout.
 
 Follow-up work that depends on an open PR can stack on its branch instead
 of waiting; see the Stacked PRs pattern under Pull requests.
@@ -549,7 +551,11 @@ the fork's stale copy.
 When the work ran in a dedicated worktree (see Branches)
 `git checkout main` refuses with "already used by worktree", so resync
 `main` in the primary checkout and `git worktree remove <path>` the
-feature worktree before deleting its branch.
+feature worktree before deleting its branch. Run that removal from the
+primary checkout too, never from inside the worktree being removed: git
+has no self-target check, so a removal that would otherwise succeed
+unlinks the directory the session is standing in and exits 0, leaving
+every later command on a path that no longer exists.
 
 ### Reviewing a PR
 
