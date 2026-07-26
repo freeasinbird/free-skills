@@ -531,12 +531,25 @@ explicitly instead of inheriting the forge default:
 `gh pr merge <n> --merge --subject '<PR title> (#<n>)' --body ''`),
 delete the remote branch if the
 auto-delete setting didn't, then resync the base branch, delete the
-local branch (`git branch -d <branch>`), and `git fetch --prune`. In a
-single checkout the resync is `git checkout main && git pull --ff-only`;
-when the work ran in a dedicated worktree (see Branches) `git checkout main`
-refuses with "already used by worktree", so resync `main` in the primary
-checkout and `git worktree remove <path>` the feature worktree before
-deleting its branch.
+local branch (`git branch -d <branch>`), and `git fetch --prune`.
+
+In a single checkout, fetch the base first
+(`git fetch <remote> refs/heads/main`), then land on the branch: with a
+local `main` present (`git show-ref --verify --quiet refs/heads/main`)
+that is `git checkout --no-overwrite-ignore main`, and without one
+`git checkout --no-overwrite-ignore -b main FETCH_HEAD`, because a bare
+checkout detaches `HEAD` at a same-named tag. Fast-forward with
+`git merge --ff-only --no-overwrite-ignore FETCH_HEAD`. Not
+`git checkout main && git pull --ff-only`: a plain checkout and pull's
+merge step both overwrite an ignored file the base has started tracking
+rather than aborting (`git pull` rejects `--no-overwrite-ignore`), and a
+bare pull follows the configured upstream, which in a fork clone can be
+the fork's stale copy.
+
+When the work ran in a dedicated worktree (see Branches)
+`git checkout main` refuses with "already used by worktree", so resync
+`main` in the primary checkout and `git worktree remove <path>` the
+feature worktree before deleting its branch.
 
 ### Reviewing a PR
 
