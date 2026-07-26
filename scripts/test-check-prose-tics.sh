@@ -89,6 +89,24 @@ if ! grep -q "e1.md:1: em dash" <<<"$out"; then
   fails=$((fails + 1))
 fi
 
+# --- caller-relative paths belong to the caller's directory ---
+# The checker cds to its own repo root, so a path argument read after that
+# cd would resolve against this repository instead of where it was invoked:
+# a like-named file here gets scanned, and the caller's file never does.
+rel=$work/rel
+mkdir -p "$rel"
+printf 'A pause — then more.\n' >"$rel/relative.md"
+relative_case() { # relative_case <expected-exit>
+  local expected=$1 actual=0
+  (cd "$rel" && "$checker" relative.md) >/dev/null 2>&1 || actual=$?
+  total=$((total + 1))
+  if [ "$actual" -ne "$expected" ]; then
+    echo "FAIL: caller-relative path (expected exit $expected, got $actual)"
+    fails=$((fails + 1))
+  fi
+}
+relative_case 1
+
 # --- no-args file set: devlog/, .claude/, and gitignored files excluded ---
 # The checker cds to its own repo root, so exercise no-args mode by
 # planting a copy of the script inside a synthetic git repo.
