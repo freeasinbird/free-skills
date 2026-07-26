@@ -678,6 +678,9 @@ The build succeeds, tests pass, and lint and formatting are clean.
   changed (`./scripts/test-capture.sh`)
 - Self-merge validation matrix green when self-merge's `self-merge.sh`
   changed (`./scripts/test-self-merge.sh`)
+- Inventory validation matrix green when merge-cleanup's
+  `worktree-inventory.sh` changed
+  (`./scripts/test-merge-cleanup-inventory.sh`)
 
 <!-- /agents-md:project:done-checks -->
 
