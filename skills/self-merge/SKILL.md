@@ -86,6 +86,18 @@ judgment between them left to you:
 <skill-dir>/self-merge.sh cleanup --pr <n> --repo <owner/name> --head <oid>
 ```
 
+Four optional overrides exist for the cases where the defaults do not fit;
+none is needed on an ordinary same-repository PR:
+
+- `--base-remote <name>` and `--head-remote <name>`: name the remote for the
+  base or head repository instead of letting the script resolve it, for a
+  layout where the resolution is ambiguous (several remotes point at the same
+  repository) or wrong.
+- `--interval <seconds>` and `--cap-minutes <n>`: merge phase only, the
+  spacing between MERGED polls and the total time to wait for the forge to
+  report the merge (defaults 10 and 15). Raise the cap for a slow merge
+  queue.
+
 1. **check**, before merging: PR open, workspace clean, no git operation
    in progress, no competing worktree, no head/base name collision, no
    open PR sharing or stacked on the head branch, and any merge queue's
