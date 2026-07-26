@@ -431,6 +431,17 @@ cache warm). Either way, cap the total wait (e.g. **20–30 minutes**) before
 reporting that no review arrived; a reviewer with a clean-pass signal (below)
 usually ends the wait in single-digit minutes.
 
+Those are two layers, not two options, and a scheduled wake runs both at
+once: the **model cadence** is the wake gap, one full re-entry apiece, and
+belongs in the 4–5 minute band, while the script's `--interval` is the
+**API cadence inside a single wake**, 60–90 seconds and no model. Size
+`--cap-minutes` just under the wake gap so a wake's script has exited before
+the next wake starts, and keep the overall 20–30 minute cap in the scheduler:
+the script caps only its own wake and knows nothing of the wakes before it.
+Layering them this way is also why the next paragraph's warning about a
+coarse ~270s grid does not indict a 5-minute wake gap: the grid it faults is
+one that _detects_ at 270s, and here detection still happens at 75s.
+
 The tight no-model cadence has a second payoff beyond latency: observed Codex
 reviews landed 2m54s–4m46s after each push, so a ~75s poll tends to fire the
 single wake while the main context is still cache-warm, where a coarse ~270s
