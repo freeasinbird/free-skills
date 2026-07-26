@@ -687,6 +687,9 @@ The build succeeds, tests pass, and lint and formatting are clean.
 - Inventory validation matrix green when merge-cleanup's
   `worktree-inventory.sh` changed
   (`./scripts/test-merge-cleanup-inventory.sh`)
+- Landing validation matrix green when merge-cleanup's
+  `base-landing-plan.sh` changed
+  (`./scripts/test-merge-cleanup-landing.sh`)
 
 <!-- /agents-md:project:done-checks -->
 
