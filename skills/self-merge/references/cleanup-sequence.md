@@ -144,11 +144,21 @@ sequence stops:
   preflight, against the worktree.
 - Inventory the other worktree from outside it: removal deletes the directory
   outright, an ignored file does not trigger git's own untracked-file refusal,
-  and a tracked file carrying `assume-unchanged` or `skip-worktree`
-  (`git ls-files -v`, lowercase letters or `S`) is invisible to every
-  porcelain form while removal destroys it with exit 0. Anything found is a
-  stop; never remove the worktree the shell stands in (git deletes the current
-  worktree without complaint).
+  and a tracked file carrying `assume-unchanged` or `skip-worktree` is
+  invisible to every porcelain form while removal destroys it with exit 0.
+  Read `git ls-files -vz --full-name` and keep the rows whose first column is
+  a lowercase letter (assume-unchanged) or `S` (skip-worktree); `H` is an
+  ordinary cached file, so an unfiltered reading flags every worktree. Test
+  each kept row with `[ -e ]` or `[ -L ]` against its path prefixed with the
+  worktree's own, since rows are relative to that worktree rather than to the
+  caller, and a dangling symlink fails `-e` while removal still takes it.
+  Exempt an absent path only when its tag is `S` and that worktree reports
+  `core.sparseCheckout=true`: sparse checkout leaves every excluded path
+  absent, while an absent assume-unchanged row is an uncommitted deletion.
+  Keep `-z` throughout, because the plain form C-quotes a path holding a
+  newline or tab and an existence test on that spelling fails. Anything found
+  is a stop; never remove the worktree the shell stands in (git deletes the
+  current worktree without complaint).
 - A separate linked head worktree is a stop **before any remote or local
   branch mutation**. Inventory its operation and file state so hidden work
   gets a specific diagnosis, but leave even a clean worktree intact. Git
