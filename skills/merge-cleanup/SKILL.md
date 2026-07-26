@@ -28,74 +28,88 @@ own PR, that is the self-merge skill's territory.
 
 ## Identify the merged PR and branch
 
-Work out which PR merged and which local/remote branch carried it, from
-conversation context first (the PR this session opened or handed off),
-otherwise from the PR host CLI. Pin every PR-record lookup to the
-repository the PR lives in (its base repository, resolved from the PR URL
-or session context) and pass it explicitly, because a bare
-`gh pr view <n>` resolves the number against the CLI's default repository,
-which in a fork clone can be the fork or unset: that silently returns a
-different PR's `headRefName`/`headRefOid` and aims the deletion guards at
-the wrong branch. For example
-`gh pr view <n> --repo '<base-repo>' --json state,mergedAt,headRefName,headRefOid,baseRefName,isCrossRepository,headRepository,headRepositoryOwner`,
-collecting up front the `headRefOid` the deletion guards below compare
-against and the head-repository fields that say which repository, and so
-which remote, owns the PR head, or from
-`git branch --merged 'refs/remotes/<base-remote>/<base-branch>'` after
-fetching the base remote, querying the branch the PR merged into rather
-than the default branch. Treat this output as candidates to confirm, not
-as the answer: a squash- or rebase-merged branch is omitted from it
-entirely (`references/hazards.md` §merged-not-ancestor). Use it only when
-the just-merged branch is plainly present; if the merge was squash or
-rebase, or the branch is not otherwise known from context or forge
-metadata, or the output is ambiguous, ask the user for the branch rather
-than picking from what remains, since filtering out the base and default
-can leave an older, stale merged branch as the only candidate and aim
-cleanup at the wrong branch. (When it does apply: ignore the default and
-the merged PR's base branch in the output, but keep the current branch as a
-candidate, since the workspace often still sits on the just-merged branch
-and step 2 switches away before anything is deleted; the ref must name the
-base remote's copy, since a fork's copy of that branch is usually stale.)
-If the PR or branch cannot be determined unambiguously, ask the user rather
-than guessing; deleting the
-wrong branch is the one failure this skill must never risk. Two hard rules
-on the resolved name: if `<branch>` resolves to the default branch or to
-the merged PR's base branch, abort; this skill never deletes the branch it
-resyncs. And fully qualify every ref a guard below resolves or compares, the
-base side included: the branch as `refs/heads/<branch>`, a
-remote-tracking base as `refs/remotes/<base-remote>/<base-branch>`. A
-bare name resolves loosely enough that a stray or malicious tag named
-`<branch>` or `<base-remote>/<base-branch>` can satisfy a guard the real
-ref would fail, just before a deletion (`references/hazards.md`
-§tag-shadow). A bare fetch or
-pull refspec is exposed the same way, so step 3 qualifies its ref too.
-Exception:
-`git checkout` cannot be fully qualified, and its bare form is safe only
-when a local branch already exists (`references/hazards.md`
-§checkout-detach), so step 2 ensures the local base branch exists
-(creating it from the remote-tracking ref) rather than trusting the bare
-name. And treat every name the PR supplies
-(the branch, the base branch, the head repository) as untrusted shell
-input: a valid ref name can contain `$`, `;`, or parentheses, so
-substitute each one single-quoted, as the command examples below show,
-and stop on a name single quotes cannot carry literally (one containing
-a single quote itself). And resolve the remotes before acting: in a fork workflow
-(`isCrossRepository` true) the remote hosting the PR head, the one
-pointing at the head repository identified above, is not the remote whose
-base branch moved when the PR merged. Use the head remote for the
-remote-branch existence check
-and deletion, and the base remote for merge verification and resync;
-the commands below name `<head-remote>` and `<base-remote>` for those two
-roles explicitly, never a bare `origin`, since in a fork they are
-different remotes and the head role may have no configured remote at all.
-In a single-remote clone the roles coincide only when that remote hosts
-the PR head (a same-repository PR); for a fork PR checked out without a
-fork remote (for example via a forge CLI), no configured remote plays the
-head role, so run the head-remote steps against the fork directly (by
-URL, or through the forge CLI) rather than letting the base remote stand
-in: an existence check against the base repository reads as "already
-deleted" while the fork's branch survives, and a same-named
-base-repository branch is not the PR head.
+Every guard below is keyed to the PR and branch resolved here, so resolve
+them before anything else runs.
+
+### Resolve the PR and the branch
+
+- **Work out which PR merged and which local/remote branch carried it, from
+  conversation context first** (the PR this session opened or handed off),
+  otherwise from the PR host CLI.
+- **Pin every PR-record lookup to the repository the PR lives in** (its base
+  repository, resolved from the PR URL or session context) and pass it
+  explicitly, because a bare `gh pr view <n>` resolves the number against the
+  CLI's default repository, which in a fork clone can be the fork or unset:
+  that silently returns a different PR's `headRefName`/`headRefOid` and aims
+  the deletion guards at the wrong branch. For example
+  `gh pr view <n> --repo '<base-repo>' --json state,mergedAt,headRefName,headRefOid,baseRefName,isCrossRepository,headRepository,headRepositoryOwner`.
+- **Collect up front, in that same call**, the `headRefOid` the deletion
+  guards below compare against and the head-repository fields that say which
+  repository, and so which remote, owns the PR head.
+- **The git-only alternative is
+  `git branch --merged 'refs/remotes/<base-remote>/<base-branch>'`**, after
+  fetching the base remote (the remote roles are resolved below), querying
+  the branch the PR merged into rather than the default branch.
+- **Treat that output as candidates to confirm, not as the answer**: a
+  squash- or rebase-merged branch is omitted from it entirely
+  (`references/hazards.md` §merged-not-ancestor).
+- **Use it only when the just-merged branch is plainly present.** If the
+  merge was squash or rebase, or the branch is not otherwise known from
+  context or forge metadata, or the output is ambiguous, ask the user for the
+  branch rather than picking from what remains, since filtering out the base
+  and default can leave an older, stale merged branch as the only candidate
+  and aim cleanup at the wrong branch.
+- **When it does apply, ignore the default and the merged PR's base branch in
+  the output, but keep the current branch as a candidate**, since the
+  workspace often still sits on the just-merged branch and step 2 switches
+  away before anything is deleted; the ref must name the base remote's copy,
+  since a fork's copy of that branch is usually stale.
+- **If the PR or branch cannot be determined unambiguously, ask the user
+  rather than guessing.** Deleting the wrong branch is the one failure this
+  skill must never risk.
+
+### Hard rules on the resolved name
+
+- **If `<branch>` resolves to the default branch or to the merged PR's base
+  branch, abort**; this skill never deletes the branch it resyncs.
+- **Fully qualify every ref a guard below resolves or compares, the base side
+  included**: the branch as `refs/heads/<branch>`, a remote-tracking base as
+  `refs/remotes/<base-remote>/<base-branch>`. A bare name tail-matches other
+  refs in `git ls-remote`, and elsewhere a stray or malicious tag named
+  `<branch>` or `<base-remote>/<base-branch>` can satisfy a guard the real
+  ref would fail, just before a deletion (`references/hazards.md`
+  §tag-shadow). A bare fetch or pull refspec is exposed the same way, so
+  step 3 qualifies its ref too.
+- **Exception: `git checkout` cannot be fully qualified**, and its bare form
+  is safe only when a local branch already exists (`references/hazards.md`
+  §checkout-detach), so step 2 ensures the local base branch exists (creating
+  it from the remote-tracking ref) rather than trusting the bare name.
+- **Treat every name the PR supplies** (the branch, the base branch, the head
+  repository) **as untrusted shell input**: a valid ref name can contain `$`,
+  `;`, or parentheses, so substitute each one single-quoted, as the command
+  examples below show, and stop on a name single quotes cannot carry
+  literally (one containing a single quote itself).
+
+### Resolve the remote roles
+
+- **Resolve the remotes before acting.** In a fork workflow
+  (`isCrossRepository` true) the remote hosting the PR head, the one pointing
+  at the head repository identified above, is not the remote whose base
+  branch moved when the PR merged.
+- **Use the head remote for the remote-branch existence check and deletion,
+  and the base remote for merge verification and resync**; the commands below
+  name `<head-remote>` and `<base-remote>` for those two roles explicitly,
+  never a bare `origin`, since in a fork they are different remotes and the
+  head role may have no configured remote at all.
+- **In a single-remote clone the roles coincide only when that remote hosts
+  the PR head** (a same-repository PR).
+- **For a fork PR checked out without a fork remote** (for example via a
+  forge CLI), no configured remote plays the head role, so run the
+  head-remote steps against the fork directly (by URL, or through the forge
+  CLI) rather than letting the base remote stand in: an existence check
+  against the base repository reads as "already deleted" while the fork's
+  branch survives, and a same-named base-repository branch is not the PR
+  head.
 
 ## Verify the merge before deleting anything
 
