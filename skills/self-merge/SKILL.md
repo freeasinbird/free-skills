@@ -159,6 +159,22 @@ exists: stop at the open PR and hand the merge to the user, per the
 prerequisite above. The specification is also the place to read when you
 need to understand or explain why a guard stopped.
 
-Then summarize what merged, what was deleted and resynced, and anything a
-guard stopped (dirty tree, worktree layout, OID mismatch, diverged base)
-that now needs the user.
+## Review-watch shutdown
+
+Once the PR is merged, a review watch still running for it (a backgrounded
+poller, a scheduled wake-up, or a delegated watcher from a skill like
+await-pr-review) is watching a finished PR. Self-merge is the likeliest
+place for one to outlive its PR, since the watch starts when the PR opens
+and the merge follows minutes later. The trigger is the merge, not a clean
+cleanup run: the watch is stale the moment the PR merges, so the step still
+applies when a guard stopped the cleanup partway. Where the platform lets
+you list and stop background tasks, stop the watch and say so. Where it
+doesn't, don't invent a mechanism: note that the watch will end on its own
+(such watchers self-terminate on activity or when their time cap expires)
+so a later wake-up reporting nothing is expected noise, not a failure.
+
+## Summarize
+
+Summarize what merged, what was deleted and resynced, any watch stopped or
+left to expire, and anything a guard stopped (dirty tree, worktree layout,
+OID mismatch, diverged base) that now needs the user.
