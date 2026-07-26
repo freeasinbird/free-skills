@@ -177,10 +177,22 @@ animation kill switch, a pinned color scheme (`--dark` for the dark
 variant of a theme pair), a viewport matrix, DPR, element clipping with
 padding, retries, and a total timeout budget.
 
+Invoke it **by path, from the project directory the screenshots belong
+in**, where `<skill-dir>` is the directory holding this file (its path
+differs per platform and install):
+
 ```sh
-node capture.mjs --url http://localhost:3000/cards --out after.png \
-  --viewport 1280x720,390x844 --wait-for '#card-list' --clip '#card-list'
+node <skill-dir>/capture.mjs --url http://localhost:3000/cards \
+  --out after.png --viewport 1280x720,390x844 --wait-for '#card-list' \
+  --clip '#card-list'
 ```
+
+Don't change directory into the skill to run it. `--out` (and `--chrome`,
+where you pass a relative one) resolves from the working directory, not
+the script's, so from a globally installed skill's own directory (the
+usual install) the run writes its screenshots into the skill's install
+directory, where the upload step under _Compose & attach_ will not find
+them.
 
 `--url` and `--out` are required; every other option has a default that
 suits an ordinary capture:
