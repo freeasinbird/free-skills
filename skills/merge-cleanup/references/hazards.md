@@ -36,8 +36,9 @@ deletion:
 A bare fetch or pull refspec is exposed the same way.
 
 Relied on by the identify section (fully qualify every ref a guard resolves
-or compares), step 1 (why the `ls-remote` pattern is qualified at all), and
-step 3 (the qualified fetch refspec).
+or compares), step 1 (why the `ls-remote` pattern is qualified at all), step 3
+(the qualified fetch refspec), and `base-landing-plan.sh` (which reports a
+same-named tag, and qualifies both ref reads for this reason).
 
 ---
 
@@ -74,8 +75,10 @@ the branch. The bare form prefers a local branch only when one exists; with
 no local branch and a same-named tag, `git checkout <base-branch>` detaches
 `HEAD` at the tag.
 
-Relied on by the identify section (the qualification exception) and step 2
-(the local-branch-exists switch and the detached-`HEAD` confirmation).
+Relied on by the identify section (the qualification exception),
+`base-landing-plan.sh` (which reports whether a local branch exists and
+whether a tag shares the name), and step 2 (the detached-`HEAD` confirmation
+that reads it).
 
 ---
 
@@ -134,6 +137,55 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
   `branch.<name>.remote` and `branch.<name>.merge` directly works in every
   clone shape (the pull then reported fetching `-x` and was correct), and is
   what `--set-upstream-to` writes where it succeeds.
+- A case-folding filesystem removes the landing entirely for a base whose name
+  differs from an existing branch only in case, and it does so twice over.
+  Verified on APFS (`core.ignoreCase` true), holding only `refs/heads/main`:
+  `git show-ref --verify --quiet refs/heads/Main` answers yes, because a loose
+  ref folds, so an existence probe built on it plans `create:false` and the
+  landing attaches `HEAD` to a name in no ref listing; while an exact probe
+  plans `create:true` and the prescribed
+  `git checkout --no-overwrite-ignore -b Main refs/remotes/origin/Main` fails
+  with "a branch named 'Main' already exists" (exit 128), the switch path's
+  fetch into `refs/heads/Main` failing likewise. Packed refs do not fold, so the
+  first answer also depends on whether the repository has been packed. Both
+  failures land after step 1, which is why `base-landing-plan.sh` reads refs
+  exactly and then stops on a case collision before the deletion rather than
+  planning a create git will refuse.
+- The aliasing is the filesystem's, not just case: APFS resolves
+  `refs/heads/café` onto an existing `refs/heads/CAFÉ`, and `checkout -b` then
+  fails at exit 128. A fold written in the shell cannot see that, so the guard
+  stats the ref path and lets the filesystem answer; the fold survives only for
+  packed refs, which have no file to stat, and is ASCII-only there.
+- What decides that collision is the ref store, not `core.ignoreCase`, which
+  describes the working tree. Checked as a matrix over both volume types and
+  both ref storages, using a case-sensitive APFS disk image alongside an
+  ordinary folding one: `git show-ref --verify` answers yes exactly where
+  `checkout -b` then fails (folding volume, loose ref) and no in the other
+  three, including a folding volume whose ref is packed, where the create
+  succeeds and makes both refs. On a case-sensitive volume with
+  `core.ignoreCase` forced true, the create also succeeds, so a guard reading
+  the flag refuses a landing git performs. The stop therefore probes what git
+  resolves rather than what the flag claims.
+- Configuration is not fixed across a checkout, and this reaches further than
+  the tracking keys: an `includeIf "onbranch:<name>"` section can supply any
+  key, `remote.<name>.url` included. Verified on git 2.50.1 with the URL moved
+  into such a section: the pre-step-1 plan validated it while `feature` was
+  checked out and the post-landing plan reported `LOOKUP_FAILED remote`, by
+  which point step 1 had already deleted the branch. Nothing the preflight can
+  read predicts this, because git evaluates `onbranch` against whichever branch
+  is checked out at the time, so **every config-derived field in the plan is an
+  answer about the branch that was checked out when it ran**. The tracking write
+  is taken after the landing for exactly this reason; the remote check cannot be
+  moved the same way, since step 1 needs it and step 1 precedes the landing.
+  What remains is a property of the sequence, not of the check.
+- Tracking configuration is not fixed across a checkout, which is why the
+  decision to write it is taken after the landing rather than from the plan
+  that preceded it. An `includeIf "onbranch:<name>"` section applies only while
+  that branch is the checked-out one, so on git 2.50.1, with such a section
+  supplying `branch.main.remote` and `.merge` while `feature` was checked out,
+  both keys read back normally there and were gone the moment `main` was
+  checked out, leaving `git pull --ff-only` reporting "There is no tracking
+  information for the current branch".
 - Half a tracking pair behaves exactly like none, which is why the check reads
   both keys. In the same clone, with `branch.-x.remote` set and
   `branch.-x.merge` absent, `git pull --ff-only` still fast-forwarded local
@@ -143,10 +195,21 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
   the two writes leaves behind.
 - `git switch` is the one command the sequence needs that a still-supported git
   may lack (it arrived in 2.23), and step 1 deletes the remote branch before
-  step 2 would reach it. The probe is unambiguous: `git switch -h` prints the
-  usage and exits 129 where the command exists, while an absent subcommand
-  reports "is not a git command" and exits 1 (checked against a deliberately
-  bogus `git switchx -h`).
+  step 2 would reach it. `git switch -h` distinguishes the two (usage and exit
+  129 where the command exists; "is not a git command" and exit 1 where it does
+  not, checked against a deliberately bogus `git switchx -h`), but invoking the
+  command is the wrong way to ask, and `base-landing-plan.sh` does not: where
+  switch is not a builtin an `alias.switch` is expanded in its place, and git
+  runs a `!`-prefixed alias as a shell command with the `-h` appended.
+  Reproduced on git 2.50.1 against a stand-in alias name: `git <alias> -h` with
+  `alias.<name>=!touch <path>` created the file, so the probe would have
+  executed arbitrary code inside a preflight that promises to touch nothing.
+  `git --list-cmds=builtins` answers the same question and expands no alias;
+  an alias cannot shadow a builtin, so where switch exists the list is also
+  honest (verified: `alias.switch` was ignored on 2.50.1). A read that fails
+  counts as absent, which is fail-safe because absence is a stop taken while
+  nothing has been deleted, and `--list-cmds` predates switch by five releases
+  (2.18), so a git too old to answer is too old to have the command.
 - Every other site is terminable. `git branch -d -- -x` and its forced form
   `git branch -D -- -x` both deleted the ref (exit 0), where each without the
   terminator is an "unknown switch"; with a remote named `-x`,
@@ -160,18 +223,42 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
   behaved as they did without it, and that push still refused a stale lease
   with "stale info" (exit 1), leaving the remote ref in place.
 
-So no name shape is a stop: qualification carries the ref sites, `--` carries
-the positional remotes and bare refs, and `git switch` carries the one switch
-`git checkout` cannot spell. The skill still uses `git checkout` everywhere
-else, since `git switch` is documented as experimental (git 2.50.1) and a
-second switching command earns its place only where the first cannot express
-the name.
+- Three names defeat the switch anyway, and not through option parsing, so no
+  terminator reaches them: git resolves `-` (the previous branch), `@` (a
+  synonym for HEAD), and `HEAD` as revision shorthand before it looks in
+  `refs/heads`. Each was created as a real branch on git 2.50.1 with another
+  branch checked out. `git switch --no-overwrite-ignore -- -` switched to the
+  previous branch and exited 0; `git checkout --no-overwrite-ignore @` stayed
+  where it was and exited 0; the `HEAD` spelling attached to
+  `refs/heads/heads/HEAD`. The `@` result was re-checked with the branches
+  deliberately at different commits, since same-commit branches make a silent
+  no-op hard to tell from a successful switch: with `refs/heads/@` at main's
+  commit and `other` checked out, the checkout left `HEAD` on `other` at
+  `other`'s commit, and the switch spelling refused outright with "a branch is
+  expected, got 'refs/heads/other'", which is git naming the expansion it
+  performed. No spelling tried lands on them:
+  `switch refs/heads/-` and its terminated form both exit 128, and
+  `checkout refs/heads/-` detaches. The rest of the awkward space is fine,
+  checked the same way: `--`, `-x`, `-h`, `--all`, `a/b`, and each of
+  `FETCH_HEAD`, `ORIG_HEAD`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REBASE_HEAD`,
+  `REVERT_HEAD`, `BISECT_HEAD`, and `AUTO_MERGE` all attach correctly, so the
+  refusal is three literals and not a pattern.
+
+So exactly one shape is a stop, and it is a stop because git has no spelling
+for it rather than because this skill declines to write one: qualification
+carries the ref sites, `--` carries the positional remotes and bare refs,
+`git switch` carries the one switch `git checkout` cannot spell, and `-`, `@`,
+and `HEAD` carry nothing, since two of the three land silently on the wrong
+branch. The skill still uses `git checkout` everywhere else, since `git switch`
+is documented as experimental (git 2.50.1) and a second switching command earns
+its place only where the first cannot express the name.
 
 Relied on by the identify section (the pass-`--` rule and the checkout
-exception), the pre-step-1 `git switch` availability check, step 2 (the
-`git switch` path for a hyphen-leading base, its two-refspec fetch, and the
-upstream check that follows either landing path), the worktree preflight (the
-terminated removal), and the terminators in steps 1, 3, 4, and 5.
+exception), `base-landing-plan.sh` (every decision above: the verb the name
+shape picks, the two-refspec fetch that creates it, the `git switch` probe, and
+the two-key upstream check), step 2 (running the plan the script prints), the
+worktree preflight (the terminated removal), and the terminators in steps 1, 3,
+4, and 5.
 
 ---
 
@@ -294,7 +381,10 @@ repo, against an ignored `.env` that the base branch still tracks:
   `git merge --ff-only --no-overwrite-ignore` aborts and preserves it;
   `git pull` itself rejects `--no-overwrite-ignore`.
 
-Relied on by step 2 (both switches) and step 3 (the resync).
+Relied on by step 2 (every landing command it may run) and step 3 (the
+resync). `base-landing-plan.sh` deliberately does not read ignored files: the
+flag makes git itself abort, so predicting the overwrite would add a stop where
+git already has one.
 
 ---
 
@@ -311,8 +401,8 @@ with `status.showUntrackedFiles=no` set in the repository config:
   untracked-file refusal described above having stopped firing too; under the
   default configuration the same removal refused with exit 128.
 
-Relied on by step 2 (the dirty-tree check) and by `worktree-inventory.sh`,
-which pass `-uall` explicitly for this reason.
+Relied on by `base-landing-plan.sh` (the dirty-tree guard step 2 reads) and by
+`worktree-inventory.sh`, which pass `-uall` explicitly for this reason.
 
 ---
 

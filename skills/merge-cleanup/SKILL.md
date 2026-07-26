@@ -101,8 +101,14 @@ them before anything else runs.
   past every command taking a positional remote or bare ref, and step 2 lands
   on such a base branch with `git switch` rather than `git checkout`
   (`references/hazards.md` §leading-hyphen-args). A leading hyphen is therefore
-  not a stop: the unquotable name above is the only shape this section refuses,
-  and nothing below declines a cleanup git can still express.
+  not a stop by itself, and nothing below declines a cleanup git can express.
+- **A base branch named `-`, `@`, or `HEAD` is the exception, and the plan
+  script stops on it.** Those three are valid branch names that git resolves as
+  revision shorthand before it reaches `refs/heads`, so no terminator helps and
+  no spelling lands on them: two of the three switch somewhere else at exit 0
+  (`references/hazards.md` §leading-hyphen-args). That is a refusal of what git
+  cannot express, not of an awkward name; every other shape tested, `--` and
+  `-h` and `--all` among them, plans normally.
 - **Pass `--` before every positional remote and bare ref**, as the commands
   below do: `--` is what keeps a hyphen-leading name from reading as an option
   (`references/hazards.md` §leading-hyphen-args). The PR number is the
@@ -222,13 +228,64 @@ not run the destructive sequence blindly here:
   remaining steps rather than deleting the remote branch (step 1)** into a
   sequence that stalls half-done.
 
-**Also before step 1, when `<base-branch>` begins with a hyphen**, confirm
-`git switch` is available, since step 2 needs it and step 1 is destructive:
-`git switch -h` prints the command's usage on a git that has it (2.23 and
-later), while an older one reports that switch is not a git command. Stop
-before the deletion if it is missing; discovering it afterwards leaves the
-remote branch gone and the workspace still on the merged branch. This is the
-only command the sequence needs that a still-supported git may lack.
+**Also before step 1, plan step 2's landing, with this skill's
+`base-landing-plan.sh`, and treat any non-zero exit as a stop.** Landing on the
+base branch chooses between two switching commands over three axes (the base
+name's shape, whether a local branch exists, and whether that branch carries a
+complete upstream), behind two guards: a clean tree, and a git that has
+`git switch` where the name needs it. The script reads all of that and prints
+the plan step 2 runs.
+
+Run it by path, from the checkout the resync will run in,
+which under the relocate rule above is the worktree already holding the base
+branch (`<skill-dir>/base-landing-plan.sh '<base-remote>' '<base-branch>'`;
+`--help`, or `-h`, prints its contract). Exit 0 and `OK landing` carry the plan
+into step 2; `STOP <guard>` (exit 2) and `LOOKUP_FAILED` (exit 4) both mean do
+not proceed, and the line it printed on stdout is what to surface to the user.
+A usage error (exit 64) and an environment failure (exit 69) report on stderr
+instead; 69 is the "cannot run" case below. Unlike the inventory above, an
+option-shaped argument is not a usage error here: a base branch beginning with
+a hyphen is the case this script exists for.
+
+**Every config-derived field in the plan describes the branch that was checked
+out when it ran.** Git evaluates an `includeIf "onbranch:…"` section against the
+currently checked-out branch, so a repository that configures a remote URL or
+tracking keys that way gives one answer before the landing and another after
+(`references/hazards.md` §leading-hyphen-args). The tracking write is taken from
+the post-landing run for that reason. The remote check cannot be: step 1 needs
+it and step 1 runs first, so in such a repository the sequence can still strand
+after the deletion. Treat a `LOOKUP_FAILED remote` from the post-landing run as
+that case, and surface it rather than retrying.
+
+**It runs here because one of its guards cannot be recovered from later.**
+`git switch` is the only command the sequence needs that a still-supported git
+may lack (it arrived in 2.23), and step 2 needs it for a base branch whose name
+begins with a hyphen; discovering its absence after step 1 leaves the remote
+branch gone and the workspace still on the merged branch. The script switches
+nothing, creates nothing, fetches nothing, and writes no configuration, so
+running it this early costs nothing. A `STOP dirty` here is an early exit
+rather than a false alarm: the tree has to be clean at step 2 in any case, and
+stopping now leaves the remote branch intact. Step 2 still runs the script
+again, because the tree can change in between and the plan it executes has to
+describe the tree it is about to switch.
+
+**The landing ships as a script because its rules are a program, not a
+checklist.** They are easy to state and easy to get wrong: `git checkout`
+cannot spell an option-shaped name and neither creating form will create one,
+so such a name has to arrive by fetching it straight into `refs/heads`
+(`references/hazards.md` §leading-hyphen-args); a same-named tag turns a bare
+checkout into a detached `HEAD` (`references/hazards.md` §checkout-detach); a
+status read inherits repository configuration, so the repository can switch
+that guard off from inside (`references/hazards.md` §status-config); and half a
+tracking pair behaves exactly like none. Each of those is a reproduced hazard,
+checked by the script rather than left as a clause a reader has to apply.
+
+**Where the script cannot run** (no bash, or a platform that will not execute
+it; exit 69 is that case), stop and hand step 2 to the user **rather than
+deleting the remote branch (step 1)** and reconstructing the decision by hand.
+The landing no longer exists in prose to fall back on, so a sequence that
+starts anyway strands the cleanup exactly where the placement above is meant
+to prevent.
 
 Proceed straight into step 1 only when neither the base branch nor
 `<branch>` is checked out in another worktree.
@@ -283,68 +340,63 @@ Proceed straight into step 1 only when neither the base branch nor
    of losing the new work; a plain `--delete`, or a forge-CLI ref
    delete, re-runs no check and would re-open that race, so prefer the
    lease-protected push wherever git can reach the head remote.
-2. **Check the tree is clean, then switch to the branch the PR merged
-   into** (its base, usually the default branch); that is the branch that
-   moved, and the later steps validate against the current `HEAD`. A
-   checkout can succeed over uncommitted changes and silently carry them
-   along, so check first (`git status -uall --porcelain`). The `-uall` is
-   load-bearing: a status read inherits repository configuration, so
-   `status.showUntrackedFiles=no` empties the porcelain forms and switches
-   this guard off from inside the repository it is protecting
-   (`references/hazards.md` §status-config). If the tree is dirty,
-   stop and surface the uncommitted work rather than switching over it or
-   stashing silently; the user decides what happens to their changes.
-   That status read also does not report ignored files, and a plain
-   checkout silently overwrites an ignored file the base branch tracks
-   (`references/hazards.md` §ignored-file-overwrite), so both switches below
-   pass `--no-overwrite-ignore`, which aborts the checkout rather than
-   clobbering; treat that abort as a stop-and-surface, like a dirty tree.
-   Only then land on the base branch: switch by bare name only when a local
-   `<base-branch>` already exists (`git checkout --no-overwrite-ignore '<base-branch>'`);
-   otherwise create it explicitly from the base remote's copy, fetching
-   that copy first so the start-point is present
-   (`git fetch -- '<base-remote>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`,
-   then
-   `git checkout --no-overwrite-ignore -b '<base-branch>' 'refs/remotes/<base-remote>/<base-branch>'`).
-   A clone that verified the merge through the forge `MERGED` state need
-   never have fetched the base, so in a fresh, single-branch, or sparse
-   clone the remote-tracking ref can be absent; without the fetch,
-   `checkout -b` aborts on the missing start-point after step 1 already
-   deleted the remote branch, leaving cleanup half-done.
-   Never trust a bare `git checkout '<base-branch>'` blindly: with no local
-   branch and a same-named tag it detaches `HEAD` at the tag, and step 3
-   would then fast-forward a detached `HEAD` while step 4 validates and
-   deletes against it, leaving the real base stale. Confirm `HEAD` is on the
-   branch, not detached, before resyncing.
-   A `<base-branch>` beginning with a hyphen replaces both of those commands,
-   and only those: `git checkout` reads such a name as an option and its `--`
-   means pathspec, while `git switch --no-overwrite-ignore -- '<base-branch>'`
-   attaches `HEAD` to it and refuses the same ignored-file overwrite. Neither
-   `checkout -b` nor `switch -c` will create the name, so where no local branch
-   exists, fetch it into both the local and the remote-tracking ref, then
-   switch:
-   `git fetch -- '<base-remote>' 'refs/heads/<base-branch>:refs/heads/<base-branch>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`,
-   then the switch above. Keep `git checkout` everywhere else: `git switch` is
-   still documented as experimental, so this skill uses it only where checkout
-   cannot express the name at all.
-   Whichever path landed on the base branch, **check that it carries a complete
-   upstream, both keys and not just one**
-   (`git config --get 'branch.<base-branch>.remote'` and
-   `git config --get 'branch.<base-branch>.merge'`), and where either is
-   missing write both:
+2. **Land on the branch the PR merged into** (its base, usually the default
+   branch); that is the branch that moved, and the later steps validate
+   against the current `HEAD`. Re-run `base-landing-plan.sh` (above) here,
+   then run what it prints: it is read-only, and the plan taken before step 1
+   describes the tree as it was before a push rather than the tree about to
+   be switched. A `STOP dirty` means surface the uncommitted work rather than
+   switching over it or stashing silently; the user decides what happens to
+   their changes.
+   Fetch first, running every refspec the plan's `fetch` lists in one command
+   (`git fetch -- '<base-remote>' <refspec> …`). Skip the command entirely
+   when the list is empty, which it is unless the landing has to create the
+   branch; a bare `git fetch` would follow the clone's configured refspec
+   instead of the base, the shape this sequence avoids everywhere else. Where
+   the list is not empty, it is what makes the start-point exist: a clone that
+   verified the merge through the forge
+   `MERGED` state need never have fetched the base, so in a fresh,
+   single-branch, or sparse clone the ref the create needs can be absent, and
+   the create then aborts after step 1 already deleted the remote branch,
+   leaving cleanup half-done.
+   Then land with the command the plan's `verb` and `create` name. With
+   `checkout` and `create` false,
+   `git checkout --no-overwrite-ignore '<base-branch>'`; with `checkout` and
+   `create` true,
+   `git checkout --no-overwrite-ignore -b '<base-branch>' 'refs/remotes/<base-remote>/<base-branch>'`;
+   with `switch`,
+   `git switch --no-overwrite-ignore -- '<base-branch>'` either way: where
+   `create` is true the fetch above put that name in place, and where it is
+   false the branch was already there. Every form passes
+   `--no-overwrite-ignore`, which aborts rather than overwriting an ignored
+   file the base branch tracks (`references/hazards.md`
+   §ignored-file-overwrite); treat that abort as a stop-and-surface, like a
+   dirty tree.
+   **Confirm `HEAD` is on the branch, not detached**, before resyncing, and do
+   it whatever the plan said: step 3 would otherwise fast-forward a detached
+   `HEAD` while step 4 validates and deletes against it, leaving the real base
+   stale. None of the three commands above can detach (a bare checkout prefers
+   an existing local branch, the creating form names its start-point, and
+   `git switch` refuses a tag outright), so the plan's `tag_shadow` is context
+   for reading a failure, not a branch in the instructions.
+   Finally, **run the plan once more, now that the base branch is checked
+   out**, and take `tracking` from that run rather than from the one before the
+   switch. Configuration is not fixed across a checkout: an
+   `includeIf "onbranch:…"` section applies only while its branch is the
+   checked-out one, so tracking keys supplied that way are visible before the
+   landing and gone after it, and a plan that read them earlier would say `ok`
+   over a branch left with no upstream at all. This is the same reason step 2
+   re-runs the plan rather than trusting the pre-step-1 one: read the state at
+   the moment the decision turns on it.
+   Where that last run says `write`, write both keys:
    `git config 'branch.<base-branch>.remote' '<base-remote>'` and
-   `git config 'branch.<base-branch>.merge' 'refs/heads/<base-branch>'`.
-   Half a pair behaves exactly like none, so reading one key passes a branch
-   that is still broken. Leave a complete pair alone even when it names
-   something else; that is the user's configuration, not a gap this skill
-   should overwrite.
-   Both `checkout -b` and `git branch --set-upstream-to` configure tracking
-   only when the remote's fetch refspec covers the branch, so a single-branch
-   or sparse clone leaves it unset, and the fetch-then-switch path above never
-   sets it at all. An untracked base branch is not merely unconfigured: a later
-   plain `git pull` there follows the clone's configured refspec instead of
-   this branch, and fast-forwards the branch onto whatever that fetched,
-   silently and with exit 0 (`references/hazards.md` §leading-hyphen-args).
+   `git config 'branch.<base-branch>.merge' 'refs/heads/<base-branch>'`. An
+   untracked base branch is not merely unconfigured: a later plain `git pull`
+   there follows the clone's configured refspec instead of this branch, and
+   fast-forwards the branch onto whatever that fetched, silently and with exit
+   0 (`references/hazards.md` §leading-hyphen-args). Where it says `ok`, leave
+   the configuration alone even when it names something else; that is the
+   user's, not a gap this skill should overwrite.
 3. **Resync** by fetching the base, then fast-forwarding into it:
    `git fetch -- '<base-remote>' 'refs/heads/<base-branch>:refs/remotes/<base-remote>/<base-branch>'`
    then
