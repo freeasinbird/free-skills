@@ -29,6 +29,18 @@ This break-even assumes current typical pricing multipliers (cached read on
 the order of 0.1x a cold read); re-derive the ten-wake figure if those
 multipliers shift.
 
+## Detection inside a timer wake (step 3)
+
+The section above prices the wake; this one prices what runs inside it. A
+wake that rebuilds the detection itself pays, per wake, the tool-call round
+trips for reviews, threads, and reactions plus every payload they return, and
+those payloads then sit in the main context for the rest of the session, so
+the cost compounds across wakes rather than resetting at each one.
+`watch-review.sh` collapses those three sources to one command and one exit
+code, leaving the wake's marginal cost as the context replay it was going to
+pay anyway. Over a 25-minute wait on a 5-minute gap that is five hand-rolled
+query rounds traded for five exit codes.
+
 ## Observed reviewer latency and the warm-wake swing (step 3)
 
 Observed Codex reviews landed 2m54s–4m46s after each push, right around a

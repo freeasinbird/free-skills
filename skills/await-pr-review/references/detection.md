@@ -86,3 +86,44 @@ The scan procedure behind SKILL.md step 2's detection fallback:
 The decision rules that govern this scan (multi-bot ambiguity, the
 trigger-is-not-revealed caveat, when to fall through or hand back) stay in
 SKILL.md step 2; this file only carries the mechanics.
+
+## Anchoring the baseline to the push event
+
+Two host feeds carry a real push timestamp, where `git push` returning does
+not. The paging rule above governs both: `gh api` returns a single page
+unless you pass `--paginate`, and both endpoints default to 30 items, so an
+unpaged read is a window that a busy repository or a long PR pushes your
+event straight out of.
+
+- `gh api --paginate "repos/<owner>/<name>/events?per_page=100" --jq '.[] |
+select(.type == "PushEvent") | {created_at, ref: .payload.ref, head:
+.payload.head}'` returns push events with the pushed head SHA. The feed is
+  cached (roughly a minute of lag) and bounded (300 events, 90 days), so
+  allow a moment after pushing rather than expecting the event immediately,
+  and select on the head you pushed rather than taking the newest entry. It
+  records pushes made to _that_ repository, so a PR from a fork leaves no
+  matching `PushEvent` in the base repo's feed.
+- `gh api --paginate "repos/<owner>/<name>/issues/<pr>/timeline?per_page=100"`
+  emits `head_ref_force_pushed` with a real `created_at`. That covers a
+  force-push, the usual shape wherever review fixes are folded into the
+  commit they belong to. A plain push lands no timestamped entry of its own,
+  and the timeline's `committed` entries cannot stand in: they carry a null
+  top-level `created_at`.
+
+Where neither resolves, fall back to the pair of bounds SKILL.md step 1
+describes, which states why the pre-push one is the safe baseline and what it
+can still mismatch on.
+
+Read both of those bounds from the host, not the local clock. They are
+compared against host-authored timestamps across a window only as wide as a
+push, so runner skew alone can invert the ordering. Every response carries
+the server time in its `Date` header, so any endpoint will do:
+
+```sh
+gh api -i rate_limit 2>/dev/null | awk 'tolower($1)=="date:"{sub(/^[^ ]* /,""); print}'
+```
+
+That yields RFC 7231 form (`Sun, 26 Jul 2026 21:11:26 GMT`); convert it to the
+whole-second UTC form `--baseline` takes, with `date -u -d` on GNU or
+`date -u -j -f` on BSD and macOS. One request removes clock skew from the
+comparison entirely.

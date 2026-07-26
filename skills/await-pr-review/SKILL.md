@@ -78,6 +78,38 @@ for, not the moment the watch starts.**
 - **Do not use the head commit's authored/committed time as a proxy for the
   push**: a locally created commit may predate already-handled reviews and
   only be pushed later.
+- **A clock reading taken after the push is not the push time either.**
+  Stamping `date -u` once `git push` returns puts the baseline later than the
+  event, so a review landing in that gap is banked as pre-existing and the
+  watch burns its whole cap waiting for a pass it already missed. Read the
+  event from the host instead: the repository events feed carries a
+  `PushEvent` with its own timestamp and the pushed head, and a force-push
+  also lands a timestamped entry on the PR timeline. Both queries, and their
+  caveats, are in `references/detection.md`.
+- **Where no host event resolves, bound the baseline _before_ the push, not
+  after.** Early is the recoverable direction: with `--head` passed (below),
+  reviews of the superseded commit are filtered out, so much of the reopened
+  window is inert. Late is silent, and drops the review you are waiting for.
+  But the head filter is **best-effort**, and three things cross it: replies
+  on existing threads are exempt by design (they keep an old anchor yet are a
+  real completion signal), reactions carry no commit at all, and GitHub
+  re-anchors a comment's `commit_id` as the PR advances.
+- **So take two readings under this fallback, and keep their roles apart.**
+  The pre-push one is the baseline you pass to the watcher. Take a second
+  immediately _after_ the push and keep it only for disambiguation, never
+  passing it as the baseline, which is what the clock-reading bullet above
+  rejects. Then a signal later than the post-push reading provably postdates
+  the push and is this round's; one falling between the two readings cannot
+  be resolved, though that window is only as wide as the push took. Refetch
+  the matching review, comment, or reaction to compare, and keep waiting
+  while it stays unresolved. Take both readings from the **host's clock**,
+  never the local one: you are comparing them against host-authored
+  timestamps across a window only as wide as a push, so ordinary skew is
+  enough to invert the ordering and admit a previous round's signal. Every
+  API response carries the server time; `references/detection.md` has it.
+  Holding neither reading, because you joined after the push, means you
+  cannot disambiguate at all: say that at handoff rather than reporting the
+  round quiet or incomplete as though you could.
 - **Start the watch promptly**, before waiting on anything else (such as
   CI), so the window where a review can slip in unbaselined stays small.
   Reviewer activity after the captured open/push timestamp is new.
@@ -88,6 +120,19 @@ for, not the moment the watch starts.**
   snapshot the reviews that exist _at the moment you request_ as
   already-seen, and treat only the reviewer's pass dated after that request
   as the awaited one.
+
+**Whatever the baseline's source, confirm which head a pass actually covered
+before treating it as this round's.** A correct host-event baseline is not
+enough on its own: GitHub stamps a review with the head current at
+_submission_, not the head it analyzed, so a review already running when you
+push finishes afterwards and carries your new head, clearing both the
+baseline and the `--head` gate while the push-triggered pass is still
+outstanding. `watch-review.sh` documents that attribution as best-effort and
+puts the confirmation on the caller. **The check is yours and nothing
+downstream repeats it**: step 4 evaluates findings and step 6 reports,
+neither re-validates which round arrived. The pre-push fallback only makes it
+harder, since a clean-pass reaction carries no head at all and ends the wait
+on an absence-based verdict with no review to read.
 
 At the same cycle boundary, the main agent records the PR's expected head
 commit plus its base branch and current base-tip commit, resolved from the host
@@ -300,6 +345,74 @@ wakes, so waits up to ~45 minutes. Otherwise the single cold wake wins. The
 cache-TTL arithmetic behind these numbers is derived in
 `references/cost-model.md`.
 
+**A scheduled wake changes the re-entry mechanism, not the detector.** Each
+wake invokes `watch-review.sh` with the frozen step-1 baseline and a
+`--cap-minutes` sized just under the wake gap, then branches on the exit
+code. Rebuilding the review, thread, and reaction queries inside every wake
+pays model tokens for a timestamp comparison, drifts from the script's paging
+and login-form matching, and conflates the two cadences below; hand-roll from
+`references/detection.md` only where the script cannot run at all. An
+example, platform-neutral, on a 5-minute wake gap:
+
+```text
+Every 5 minutes until told to stop, run exactly this command for detection.
+Do not rebuild the queries it already runs.
+
+<skill-dir>/watch-review.sh --repo owner/name --pr 46 \
+  --login chatgpt-codex-connector --head 9c346ab \
+  --baseline 2026-07-02T05:07:30Z --interval 75 --cap-minutes 4
+
+--baseline is the host's push-event time for head 9c346ab. Never recompute
+it: pass this exact string on every wake.
+
+0  REVIEW_ACTIVITY -> first refetch the matching review or comment and
+   confirm it covers this round (step 1), whatever the baseline's source;
+   nothing later re-checks this. Covered: cancel the schedule and go to
+   step 4. Stale, or you cannot tell: read the reactions yourself, because
+   a review or comment match ends the script's poll before it ever scans
+   them, so a genuine clean-pass reaction stays hidden behind the stale
+   item for as long as it sits there. A clean pass you can tie to this
+   round finishes the round: cancel and report it. Only when that scan
+   finds nothing, or nothing you can place, re-arm; expect this same exit
+   every wake, because the script is stateless and that item stays past
+   the baseline. The deadline below is what ends that loop.
+3  CLEAN_PASS      -> same confirmation first, and it is harder here,
+   since a reaction carries no head at all. Covered: cancel the schedule
+   and report the clean pass (step 6). Otherwise re-arm, as above.
+2  CAP_EXPIRED     -> nothing yet: re-arm. polls_ok:0 means this one wake
+   observed nothing (rate limit, bad token, wrong repo, on stderr): re-arm
+   anyway, and cancel only if the next wake is also polls_ok:0, since a
+   few polls is too short a window to call a watch broken.
+64 usage error     -> cancel the schedule. The call is wrong, not the PR;
+   fix the flags before arming anything again.
+69 gh missing      -> cancel the schedule; nothing here can run the script.
+   Watch by hand from references/detection.md, or hand back.
+
+The deadline bounds the schedule, not any one branch. At 25 minutes past
+the baseline, whichever branch has been re-arming, run one final wake with
+--cap-minutes 0 so a poll lands at the deadline itself: a wake stops
+polling at its own cap, so the gap before the deadline would otherwise go
+unscanned. Then stop and report. Quiet if that poll's last_poll_ok is
+true; incomplete if it is false, or if activity is still replaying that
+you could not tie to this round. in_progress_seen needs one distinction:
+inside a multi-poll wake it is history, since the script sets it once and
+never resets it, but the final wake runs a single poll, so a true there
+means the reviewer was mid-review at the deadline itself. Report that as
+pending rather than quiet.
+```
+
+Pass the **same** baseline on every wake. Each poll rescans all three sources
+from it, so consecutive wakes leave no hole between them, while recomputing
+it per wake drops exactly the review that landed in the last gap. Step 5
+advances the baseline once per _round_, after a fix lands, never once per
+wake. The script runs a final poll _at_ its deadline, so a wake's worst case
+is the cap plus one poll: leave that much headroom in the gap, and have a
+wake do nothing if the previous run is somehow still live. Detection is all
+the script covers; required checks stay the separate poll they already were.
+Every branch above cancels, so this path needs a scheduler the agent can also
+**cancel**; without one, or without a scheduler at all, take the single wake
+above or the bounded foreground poll below.
+
 Remaining fallbacks, in order:
 
 - **Bounded foreground poll (blocking fallback).** Only where none of the
@@ -317,6 +430,17 @@ re-check about every **4–5 minutes** (~270s also keeps a 5-minute prompt
 cache warm). Either way, cap the total wait (e.g. **20–30 minutes**) before
 reporting that no review arrived; a reviewer with a clean-pass signal (below)
 usually ends the wait in single-digit minutes.
+
+Those are two layers, not two options, and a scheduled wake runs both at
+once: the **model cadence** is the wake gap, one full re-entry apiece, and
+belongs in the 4–5 minute band, while the script's `--interval` is the
+**API cadence inside a single wake**, 60–90 seconds and no model. Size
+`--cap-minutes` just under the wake gap so a wake's script has exited before
+the next wake starts, and keep the overall 20–30 minute cap in the scheduler:
+the script caps only its own wake and knows nothing of the wakes before it.
+Layering them this way is also why the next paragraph's warning about a
+coarse ~270s grid does not indict a 5-minute wake gap: the grid it faults is
+one that _detects_ at 270s, and here detection still happens at 75s.
 
 The tight no-model cadence has a second payoff beyond latency: observed Codex
 reviews landed 2m54s–4m46s after each push, so a ~75s poll tends to fire the
