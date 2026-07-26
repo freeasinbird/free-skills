@@ -644,8 +644,11 @@ The build succeeds, tests pass, and lint and formatting are clean.
 - Format clean (`npx prettier --check '**/*.md'`)
 - Prose-tic check clean (`./scripts/check-prose-tics.sh`): no em dashes,
   misused en dashes, or stock AI openers in markdown outside `devlog/`
-- New or changed skills have a valid `SKILL.md` with parse-safe YAML
-  frontmatter (`description` as a `>-` block scalar; see Conventions)
+- Skill structure check clean (`./scripts/check-skill-structure.sh`): valid
+  `SKILL.md` frontmatter (`description` as a `>-` block scalar; see
+  Conventions), no prose paragraph over 15 lines, script flags and their
+  `SKILL.md` documentation in step (shell and JavaScript scripts), and every
+  `references/<file>.md` §slug pointer resolving both ways
 - Skill prompts reviewed for platform-agnostic language (no
   Claude-Code-only or Codex-only assumptions without explicit gates)
 - Managed blocks in sync with the canonical source
@@ -656,6 +659,8 @@ The build succeeds, tests pass, and lint and formatting are clean.
   changed (`./scripts/test-watch-review.sh`)
 - Prose-tics matrix green when the prose-tic check changed
   (`./scripts/test-check-prose-tics.sh`)
+- Skill-structure matrix green when the structure check changed
+  (`./scripts/test-check-skill-structure.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
   changed (`./scripts/test-capture.sh`)
 - Self-merge validation matrix green when self-merge's `self-merge.sh`

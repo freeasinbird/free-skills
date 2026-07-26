@@ -68,22 +68,26 @@ the gate is the available permitted mechanism, not whether to engage.)
 Find the PR for the current branch (`gh pr view --json number,url`). Record a
 **baseline** of what already exists so later you detect only _new_ activity.
 **Anchor that baseline to the event that will produce the pass you're waiting
-for, not the moment the watch starts.** For an open/push-triggered wait, capture
-the PR open/ready or actual push event timestamp at the event boundary (or read
-that event timestamp from the host). The reviewer often fires on PR open or push,
-so a pass can land after that event but _before_ you start the watcher; anchoring
-to watch-start would bank it as pre-existing and hand off unhandled. Do **not**
-use the head commit's authored/committed time as a proxy for the push: a locally
-created commit may predate already-handled reviews and only be pushed later.
-Treat reviewer activity after the captured open/push timestamp as new, and start
-the watch promptly, before waiting on anything else (such as CI), so the window
-where a review can slip in unbaselined stays small. **But when you _manually
-re-trigger_ a recheck with no new push** (the request-it-once path in step 2),
-the last push predates reviews you've already handled, so last-push anchoring
-would replay them and exit the wait instantly. Anchor that case to the
-**trigger/request time** instead: snapshot the reviews that exist _at the moment
-you request_ as already-seen, and treat only the reviewer's pass dated after that
-request as the awaited one.
+for, not the moment the watch starts.**
+
+- **For an open/push-triggered wait**, capture the PR open/ready or actual
+  push event timestamp at the event boundary (or read that event timestamp
+  from the host). The reviewer often fires on PR open or push, so a pass can
+  land after that event but _before_ you start the watcher; anchoring to
+  watch-start would bank it as pre-existing and hand off unhandled.
+- **Do not use the head commit's authored/committed time as a proxy for the
+  push**: a locally created commit may predate already-handled reviews and
+  only be pushed later.
+- **Start the watch promptly**, before waiting on anything else (such as
+  CI), so the window where a review can slip in unbaselined stays small.
+  Reviewer activity after the captured open/push timestamp is new.
+- **But when you _manually re-trigger_ a recheck with no new push** (the
+  request-it-once path in step 2), the last push predates reviews you've
+  already handled, so last-push anchoring would replay them and exit the
+  wait instantly. Anchor that case to the **trigger/request time** instead:
+  snapshot the reviews that exist _at the moment you request_ as
+  already-seen, and treat only the reviewer's pass dated after that request
+  as the awaited one.
 
 At the same cycle boundary, the main agent records the PR's expected head
 commit plus its base branch and current base-tip commit, resolved from the host
@@ -222,7 +226,9 @@ Watcher side, cheapest first:
   `--login` takes either login form; the watcher reads REST only, so it
   derives the one REST-form login it matches all three sources on (override
   with `--rest-login <login>` for a machine-user reviewer, which carries no
-  `[bot]` suffix). `--head` is the expected head SHA, so a stale pass
+  `[bot]` suffix; `--reaction-login` is a deprecated alias for the same
+  option, kept for callers written before the flag covered all three
+  sources). `--head` is the expected head SHA, so a stale pass
   against a superseded head does not end the wait. Also available:
   `--clean-content` /
   `--progress-content` for a reviewer whose status reactions differ from
@@ -346,23 +352,26 @@ points at):
   both APIs.
 
 Match the field and the form to the API you are querying, or the filter
-silently matches nothing and a real review
-looks like "no activity." A human review, or a _different_ bot, posting after
-the baseline is **not** the awaited pass: this skill is scoped to the automated
-reviewer, so unrelated activity must not finish the round (else you stop early
-or auto-address the wrong feedback while the target reviewer is still pending).
-Do **not** treat an **acknowledgement** as completion either: some reviewers
-post a placeholder or react before the real review (Codex, for one, acknowledges
-an `@codex review` request and posts the actual review, with any inline
-findings, _afterward_); a reaction on your trigger comment or a placeholder is
-still _pending_, so keep waiting. But don't depend on an ack either: not
-every reviewer posts one, so key off the reviewer's actual response (any of
-the four signals above), never an acknowledgement that may never come. Treat
-it as "reviewed, nothing to address" only when the latest review adds no new
-unresolved threads **and** its `state` / `body` carry no actionable feedback:
-a `CHANGES_REQUESTED`, or a `COMMENTED` review with a substantive summary
-body, can hold findings with no inline thread at all, so read the review's
-state and body before declaring clean.
+silently matches nothing and a real review looks like "no activity." Then:
+
+- **Only the target reviewer finishes the round.** A human review, or a
+  _different_ bot, posting after the baseline is **not** the awaited pass:
+  this skill is scoped to the automated reviewer, so unrelated activity must
+  not finish the round (else you stop early or auto-address the wrong
+  feedback while the target reviewer is still pending).
+- **An acknowledgement is not completion.** Some reviewers post a
+  placeholder or react before the real review (Codex, for one, acknowledges
+  an `@codex review` request and posts the actual review, with any inline
+  findings, _afterward_); a reaction on your trigger comment or a
+  placeholder is still _pending_, so keep waiting.
+- **But don't depend on an ack either**: not every reviewer posts one, so
+  key off the reviewer's actual response (any of the four signals above),
+  never an acknowledgement that may never come.
+- **Read state and body before declaring clean.** Treat it as "reviewed,
+  nothing to address" only when the latest review adds no new unresolved
+  threads **and** its `state` / `body` carry no actionable feedback: a
+  `CHANGES_REQUESTED`, or a `COMMENTED` review with a substantive summary
+  body, can hold findings with no inline thread at all.
 
 Some reviewers also signal status **out of band**, on the PR itself rather
 than through a review, and some post no review at all when a pass finds
@@ -372,21 +381,23 @@ Codex, for one, reacts on the PR description: eyes (👀) while a review is in
 progress, thumbs-up (👍) when a pass found nothing; on a clean first pass
 that thumbs-up, minutes after open, is the only artifact the reviewer leaves.
 Learn your reviewer's signals, record them with its identity (step 2), and
-include the PR-description reactions in the step-1 snapshot. A **clean-pass
-signal dated after the baseline** is the fourth completion signal: the round
-finished as "reviewed, nothing to address." An **in-progress signal** works
-like the acknowledgement rule above: its presence means keep waiting; its
-absence proves nothing (the reviewer may remove it when the review
-completes). Two caveats. Reactions are one-per-user-per-emoji and mutable, so
-match on the signal's `createdAt` being after the baseline, never on bare
-presence. That governs **both** signals: a leftover clean-pass reaction from
-an earlier round predates the baseline and does not count, and a leftover
-in-progress reaction likewise means nothing about this round, so reading it
-by presence alone stretches the wait for a pass that already finished. The
-wait cap stays as the backstop when the signals are ambiguous. And
-reactions expose their author under `user.login` in both APIs, in the
-`name[bot]` form for an App bot, per the canonical login rule above; the
-GraphQL review-author form matches no reactions.
+include the PR-description reactions in the step-1 snapshot.
+
+- A **clean-pass signal dated after the baseline** is the fourth completion
+  signal: the round finished as "reviewed, nothing to address."
+- An **in-progress signal** works like the acknowledgement rule above: its
+  presence means keep waiting; its absence proves nothing (the reviewer may
+  remove it when the review completes).
+- **Match on `createdAt`, never bare presence.** Reactions are
+  one-per-user-per-emoji and mutable, and this governs **both** signals: a
+  leftover clean-pass reaction from an earlier round predates the baseline
+  and does not count, and a leftover in-progress reaction likewise means
+  nothing about this round, so reading it by presence alone stretches the
+  wait for a pass that already finished. The wait cap stays as the backstop
+  when the signals are ambiguous.
+- **Reactions expose their author under `user.login` in both APIs**, in the
+  `name[bot]` form for an App bot, per the canonical login rule above; the
+  GraphQL review-author form matches no reactions.
 
 ### 4. Address the feedback: auto clear-cut, surface judgment calls
 
@@ -446,33 +457,38 @@ essentials, project-agnostic:
 
 **Where to run the rounds.** By default the main agent addresses the feedback
 itself: the watcher has already woken it, its context is warm, and it holds
-the diff and the session's understanding of the change. Delegation adds
-main-agent wakes and a context rebuild before it saves anything
-(`references/cost-model.md` derives this break-even and the persistent-fixer
-amortization below), so the trade pays off only when both hold: the round is
-long (many findings, a wide class sweep, dozens of tool calls) **and** the
-main context dwarfs the fixer's brief. A short round (a few edits) is cheaper
-in the already-awake main agent, overhead included. When both do hold, and the platform supports
-delegation with write access (and session policy permits it without asking),
-run the fix round in a fresh, compact fixer context: brief it with the repo,
-the PR, the reviewer's identity and status signals, the current baseline, and
-a pointer to the project's review-response conventions. The fixer
-auto-addresses the clear-cut findings, runs the project's verification checks
-itself and reports facts, and **reports judgment calls back rather than
-deciding them**: the same auto/surface split as above, relocated. Only the
-fixer's final report crosses back into the main context, so hold it to the
-watcher's compactness contract (fixing commit SHAs, a one-line disposition
-per finding, judgment calls with just enough quoted context to decide, never
-full diffs). The fixer's reported SHAs are bound by the same
-fold-then-reply gate as above: post-fold, pushed, and verified against the
-pushed ref, never a SHA a later fold will rewrite. The main agent acts on
-that report and spot-checks only the
-judgment calls, since re-verifying clear-cut fixes from the main context pays
-for the round twice. Skip delegation when the round is short, the main
-context is small, or the round is mostly judgment calls (each escalation
-wakes the main agent anyway, so the savings evaporate), and note that unlike
-the watcher, the fixer needs a capable model class: the savings come from
-context size, not model tier.
+the diff and the session's understanding of the change.
+
+- **Delegate only when both hold**: the round is long (many findings, a wide
+  class sweep, dozens of tool calls) **and** the main context dwarfs the
+  fixer's brief. Delegation adds main-agent wakes and a context rebuild
+  before it saves anything (`references/cost-model.md` derives this
+  break-even and the persistent-fixer amortization below), so a short round
+  (a few edits) is cheaper in the already-awake main agent, overhead
+  included.
+- **Gate it on the platform**: delegation with write access, permitted by
+  session policy without asking.
+- **Run the round in a fresh, compact fixer context**, briefed with the
+  repo, the PR, the reviewer's identity and status signals, the current
+  baseline, and a pointer to the project's review-response conventions.
+- **The fixer inherits the auto/surface split above**, relocated: it
+  auto-addresses the clear-cut findings, runs the project's verification
+  checks itself and reports facts, and **reports judgment calls back rather
+  than deciding them**.
+- **Hold its report to the watcher's compactness contract**: fixing commit
+  SHAs, a one-line disposition per finding, judgment calls with just enough
+  quoted context to decide, never full diffs. Only that report crosses back
+  into the main context.
+- **Its reported SHAs are bound by the fold-then-reply gate** above:
+  post-fold, pushed, and verified against the pushed ref, never a SHA a
+  later fold will rewrite.
+- **The main agent spot-checks only the judgment calls**, since re-verifying
+  clear-cut fixes from the main context pays for the round twice.
+- **Skip delegation** when the round is short, the main context is small, or
+  the round is mostly judgment calls (each escalation wakes the main agent
+  anyway, so the savings evaporate).
+- **Unlike the watcher, the fixer needs a capable model class**: the savings
+  come from context size, not model tier.
 
 That break-even is stated **per round**, which makes short rounds look like
 they never justify delegation. But a convergence loop is many rounds, and a
@@ -482,14 +498,17 @@ findings and fixes) out of the main context, since only the compact reports
 cross back (the amortization arithmetic is in `references/cost-model.md`).
 So a persistent fixer likely wins on any longer exchange (roughly 4+ rounds)
 even when each round on its own falls below the per-round break-even above;
-the per-round rule still governs a one-shot round. Two honest caveats. It needs a platform that
-can keep a subagent **resumable across the main agent's turns** (in Claude
-Code, re-messaging the same agent instead of spawning a new one), so gate it
-like the delegated-fixer path above and fall back to in-main rounds where that
-is unavailable. And the judgment calls still wake the main agent every round
-regardless. The fixer's own context grows across the loop, which is the point,
-not a cost: that growth lands in the small, cheap context instead of the fat
-main one.
+the per-round rule still governs a one-shot round. Two honest caveats:
+
+- It needs a platform that can keep a subagent **resumable across the main
+  agent's turns** (in Claude Code, re-messaging the same agent instead of
+  spawning a new one), so gate it like the delegated-fixer path above and
+  fall back to in-main rounds where that is unavailable.
+- The judgment calls still wake the main agent every round regardless.
+
+The fixer's own context grows across the loop, which is the point, not a
+cost: that growth lands in the small, cheap context instead of the fat main
+one.
 
 Where delegation with write access is unavailable or not permitted, run the
 rounds in the main agent as usual; for a long review loop from an
@@ -567,20 +586,23 @@ That second same-class finding is also when to spend one **adversarial refute
 pass**, where the platform permits **read-only** fresh-context delegation: a
 few fresh-context lenses, run in parallel, each tasked to _disprove_ the change,
 to surface the rest of the class in one shot before the reviewer serializes it
-over more rounds. This is a lighter grant than step 4's write-capable fixer:
-like the watcher, the lenses only disprove and report evidence, never edit,
-commit, or push, so gate them on read-only delegation (as step 4's fixer is
-gated on write access), not on the fixer's gate. The economics: a review round
-costs on the order of 1.5–3x the main context in token-equivalents plus ~10 min
-of latency, while a three-lens refute pass costs about one round's tokens and one
-round's wall clock, so it pays once the odds of two or more further preemptable
-rounds clear roughly 0.3–0.5, a bar a recurring class empirically meets.
-Guardrails: one such pass per PR, re-armed only if a class recurs after it;
-platform-gated on read-only delegation, with plain serial sweeping as the
-fallback where even that is unavailable; and evidence-or-drop on whatever it
-raises, no speculative findings. Don't fire it on
-mixed-class declining-severity nits, a small change, or a single-surface diff,
-where there is no class to preempt.
+over more rounds.
+
+- **It is a lighter grant than step 4's write-capable fixer**: like the
+  watcher, the lenses only disprove and report evidence, never edit, commit,
+  or push, so gate them on read-only delegation (as step 4's fixer is gated
+  on write access), not on the fixer's gate.
+- **The economics**: a review round costs on the order of 1.5–3x the main
+  context in token-equivalents plus ~10 min of latency, while a three-lens
+  refute pass costs about one round's tokens and one round's wall clock, so
+  it pays once the odds of two or more further preemptable rounds clear
+  roughly 0.3–0.5, a bar a recurring class empirically meets.
+- **Guardrails**: one such pass per PR, re-armed only if a class recurs
+  after it; platform-gated on read-only delegation, with plain serial
+  sweeping as the fallback where even that is unavailable; and
+  evidence-or-drop on whatever it raises, no speculative findings.
+- **Don't fire it** on mixed-class declining-severity nits, a small change,
+  or a single-surface diff, where there is no class to preempt.
 
 ### 6. Report
 
@@ -612,20 +634,23 @@ The non-blocking mechanisms above are **platform-specific**: subagents,
 backgrounded re-invocation, and scheduled wake-ups are not universal. Gate on
 what the running agent actually supports and what its session policy permits,
 then pick the cheapest permitted mechanism per step 3's cost model; never emit
-steps the agent cannot perform or is
-not allowed to start without permission. The grants form a ladder: the
-delegated watcher needs read-only delegation whose completion reliably
-notifies or re-enters the main agent (that gate, and the skip rule when it
-fails, live in step 3's delegated-watcher path), while step 4's delegated
-fixer needs delegation _with write access_, a larger grant (its gate lives
-in step 4); where a grant is not both supported and permitted, take the next
-permitted path. An agent with background re-invocation or
-scheduled wake-ups (e.g. Claude Code) runs the **non-blocking** path for that
-environment; an agent whose turn is synchronous and lacks a reliable
-subagent/background re-entry path (e.g. a plain Codex CLI session) degrades to
-the **bounded foreground poll** (still hands-off within the turn, just
-blocking) or hands back. Everything else here (resolving the PR, detecting activity via
-`gh`, addressing, converging) is platform-neutral and behaves the same across
+steps the agent cannot perform or is not allowed to start without permission.
+
+- **The grants form a ladder.** The delegated watcher needs read-only
+  delegation whose completion reliably notifies or re-enters the main agent
+  (that gate, and the skip rule when it fails, live in step 3's
+  delegated-watcher path), while step 4's delegated fixer needs delegation
+  _with write access_, a larger grant (its gate lives in step 4). Where a
+  grant is not both supported and permitted, take the next permitted path.
+- **An agent with background re-invocation or scheduled wake-ups** (e.g.
+  Claude Code) runs the **non-blocking** path for that environment.
+- **An agent whose turn is synchronous** and that lacks a reliable
+  subagent/background re-entry path (e.g. a plain Codex CLI session)
+  degrades to the **bounded foreground poll** (still hands-off within the
+  turn, just blocking) or hands back.
+
+Everything else here (resolving the PR, detecting activity via `gh`,
+addressing, converging) is platform-neutral and behaves the same across
 agents.
 
 This skill assumes a reviewer bot, a PR host CLI (such as `gh`), and a shell;

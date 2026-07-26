@@ -275,23 +275,28 @@ Proceed straight into step 1 only when neither the base branch nor
 
 Merging is supposed to close the issues the PR body referenced with close
 keywords ("Closes #N"), but the mechanism fails silently for cross-repo
-references, merges to a non-default branch, and keyword typos. With a PR
-host CLI, list the issues the forge linked as closing references (for
-example `gh pr view <n> --repo '<base-repo>' --json closingIssuesReferences,body`,
-the same base-repository pin as the identify step). Request `body` in that
-same call: the silent-failure cases (cross-repo references, a non-default
-base, keyword typos) are exactly when `closingIssuesReferences` comes back
-empty, leaving the merged PR body as the only text left to scan for the
-close keywords the forge did not parse. `closingIssuesReferences` returns
-each issue's identity (number, repository, url) but not its state, so check
-the state of each linked or body-scanned issue with a per-issue lookup
-(`gh issue view '<n>' --repo '<issue-repo>' --json state`), pinning the
-repository the reference names, since a cross-repo issue lives outside the
-base repository. Surface any still open for the user to
-close; do not close them yourself unless asked, since whether an issue is
-truly resolved is the human's call. Plain "Refs #N" mentions are
-intentionally non-closing; don't flag them. Without a PR host CLI, say the
-check could not run instead of skipping it silently.
+references, merges to a non-default branch, and keyword typos.
+
+- **List the linked closing references** with a PR host CLI, for example
+  `gh pr view <n> --repo '<base-repo>' --json closingIssuesReferences,body`,
+  the same base-repository pin as the identify step.
+- **Request `body` in that same call.** The silent-failure cases (cross-repo
+  references, a non-default base, keyword typos) are exactly when
+  `closingIssuesReferences` comes back empty, leaving the merged PR body as
+  the only text left to scan for the close keywords the forge did not parse.
+- **Check each issue's state separately.** `closingIssuesReferences` returns
+  each issue's identity (number, repository, url) but not its state, so look
+  up each linked or body-scanned issue
+  (`gh issue view '<n>' --repo '<issue-repo>' --json state`), pinning the
+  repository the reference names, since a cross-repo issue lives outside the
+  base repository.
+- **Surface any still open for the user to close**; do not close them
+  yourself unless asked, since whether an issue is truly resolved is the
+  human's call.
+- **Plain "Refs #N" mentions are intentionally non-closing**; don't flag
+  them.
+- **Without a PR host CLI**, say the check could not run instead of skipping
+  it silently.
 
 ## Review-watch shutdown
 

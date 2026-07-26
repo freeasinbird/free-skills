@@ -40,19 +40,21 @@ first-vs-last comment, author filtering), so **prefer time, not
 enumeration**: treat a round as arrived when the configured reviewer has a
 `submittedAt` (from `reviews` above), any review-comment `createdAt`, or a
 status-signal reaction `createdAt` (SKILL.md step 3) _after_ the baseline.
-That single timestamp comparison sidesteps every snippet edge except one,
-and it applies to **every windowed connection in the snapshot**
-(`reviews(last:20)`, `reviewThreads(first:50)`, `reactions(last:20)`): a
-single page is a window, not the collection, so enough newer activity by
-other authors can push the item you are looking for out of it. When
-detecting, read each source through a **paged** feed until you are past the
-baseline: on REST,
-`gh api "repos/OWNER/REPO/pulls/PR/comments?per_page=100&page=N"` and the
-matching `pulls/PR/reviews` and `issues/PR/reactions` endpoints; on GraphQL,
-cursor-page with `pageInfo{hasNextPage endCursor}` / `after:`. **All three
-REST payloads carry their author under `user.login`, in the `name[bot]`
-form** (there is no `author` field on REST, so a review filtered on
-`author.login` matches nothing; the login rule is in SKILL.md step 3).
+That single timestamp comparison sidesteps every snippet edge except one:
+
+- **A window is not the collection.** The exception applies to **every
+  windowed connection in the snapshot** (`reviews(last:20)`,
+  `reviewThreads(first:50)`, `reactions(last:20)`): enough newer activity by
+  other authors can push the item you are looking for out of a single page.
+- **So page each source until you are past the baseline.** On REST,
+  `gh api "repos/OWNER/REPO/pulls/PR/comments?per_page=100&page=N"` and the
+  matching `pulls/PR/reviews` and `issues/PR/reactions` endpoints; on
+  GraphQL, cursor-page with `pageInfo{hasNextPage endCursor}` / `after:`.
+- **All three REST payloads carry their author under `user.login`, in the
+  `name[bot]` form** (there is no `author` field on REST, so a review
+  filtered on `author.login` matches nothing; the login rule is in SKILL.md
+  step 3).
+
 Reach for the full thread set only when you actually need it (e.g. to
 resolve threads).
 
