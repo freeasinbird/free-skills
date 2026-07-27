@@ -342,10 +342,19 @@ Proceed straight into step 1 only when neither the base branch nor
    lease-protected push wherever git can reach the head remote.
 2. **Land on the branch the PR merged into** (its base, usually the default
    branch); that is the branch that moved, and the later steps validate
-   against the current `HEAD`. Re-run `base-landing-plan.sh` (above) here,
+   against the current `HEAD`. Treat every plan run below as a snapshot, and
+   keep one exclusivity window from the first run through step 3's final fetch
+   and fast-forward: do not let another Git process mutate refs in this
+   repository. Do not release that window after the switch or the second plan.
+   No read-only preflight can reserve a ref name across later commands, so a
+   concurrent fetch, branch operation, or other ref writer can invalidate an
+   `OK` after the destructive step has run. If exclusive control of the
+   repository is unavailable for that whole interval, stop and surface the
+   constraint rather than relying on the snapshot. Re-run
+   `base-landing-plan.sh` (above) here,
    then run what it prints: it is read-only, and the plan taken before step 1
-   describes the tree as it was before a push rather than the tree about to
-   be switched. A `STOP dirty` means surface the uncommitted work rather than
+   describes the tree as it was before a push rather than the tree about to be
+   switched. A `STOP dirty` means surface the uncommitted work rather than
    switching over it or stashing silently; the user decides what happens to
    their changes.
    Fetch first, running every refspec the plan's `fetch` lists in one command

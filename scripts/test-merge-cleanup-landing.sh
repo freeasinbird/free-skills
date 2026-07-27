@@ -10,25 +10,32 @@
 # `git branch -D`, off this path. A case that only passes is not enough, so the
 # ones marked
 # "discriminating" were also run against degraded copies of the script and fail
-# against them: no switch verb, one fetch refspec, one tracking key, a plain
-# --porcelain status, an --ignored status, an unconditional switch probe, a
-# probe moved after the dirty guard, a probe that invokes `git switch -h`, a
-# remote check scoped to the landing, a
-# remote read without its `--`, a config check reading only an exit code, a
-# help check using the colon form of the default, a help flag scanned across
-# every argument, byte-wise `\u` escaping of UTF-8, no UTF-8 validation of the
-# arguments, `show-ref --verify` as the existence probe, a stray `git fetch`, a
-# stray write to FETCH_HEAD, no refusal of the revision-shorthand names, no
-# case-collision stop, a collision guard keyed on core.ignoreCase rather than on
-# what the ref store does, one that only folds names and so misses a Unicode
-# alias, one that trims a remote URL before testing it, a
+# against them. On the landing decision: no switch verb, one fetch refspec, one
+# tracking key, a plain --porcelain status, an --ignored status, an
+# unconditional switch probe, a probe moved after the dirty guard, a probe that
+# invokes `git switch -h`, a remote check scoped to the landing, a remote read
+# without its `--`, a config check reading only an exit code, a help check using
+# the colon form of the default, a help flag scanned across every argument,
+# byte-wise `\u` escaping of UTF-8, no UTF-8 validation of the arguments, a
 # character-counting locale with the byte count on a `local` declaration line,
 # no fsmonitor override, a tracking key read as an aggregate rather than as its
-# effective value, a
-# remote checked by existence alone, a ref
-# enumeration left in a pipeline, and a config read treating every failure as
-# "not set". Where a case does not discriminate against any of those, the
-# comment says so rather than implying coverage it lacks.
+# effective value, a remote checked by existence alone, a remote URL trimmed
+# before testing, a ref enumeration left in a pipeline, a config read treating
+# every failure as "not set", an unscoped inactive ref-storage extension, and a
+# raw repository-format string dispatch. On the ref-path guards: `show-ref
+# --verify` as the existence probe, no refusal of the revision-shorthand names,
+# no case-collision stop, a collision keyed on core.ignoreCase rather than on
+# what the ref store does, a packed-case fallback applied only to branches, one
+# that only folds names and so misses a Unicode alias, no directory/file
+# conflict guard, a scan rooted in each destination's own namespace, one relying
+# on the enumeration alone and so blind to a dangling symref, one testing
+# ancestors but not descendants, one rooting its ref stats at the worktree's
+# own git dir, one gating the tracking-destination check on create, one stopping
+# on directory existence alone, and one scanning a ref directory for regular
+# files only, plus one classifying special entries only at the destinations and
+# only after broad ref enumeration, and a blanket special-node scan that
+# includes invalid ref paths. Where a case does not discriminate against any of
+# those, the comment says so rather than implying coverage it lacks.
 #
 # Usage: test-merge-cleanup-landing.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -83,6 +90,22 @@ scenario() { # scenario <name>: a bare origin at $ORIGIN, a work repo at $REPO
   G "$REPO" push origin 'refs/heads/-x:refs/heads/-x'
 }
 
+scenario_reftable() { # scenario_reftable <name>: scenario using reftable refs
+  NAME="$1"
+  SCEN=$(mktemp -d "$TMP/scen.XXXXXX")
+  ORIGIN="$SCEN/origin.git"
+  REPO="$SCEN/work"
+  SHIM=""
+  git init -q --bare "$ORIGIN"
+  git init -q --ref-format=reftable -b main "$REPO" 2>/dev/null || return 1
+  printf 'a\n' > "$REPO/a.txt"
+  printf '.env\n' > "$REPO/.gitignore"
+  G "$REPO" add .
+  G "$REPO" commit -m seed
+  G "$REPO" remote add origin "$ORIGIN"
+  G "$REPO" push origin main
+}
+
 track() { # track <repo> <branch> <remote>: write a complete upstream pair
   G "$1" config "branch.$2.remote" "$3"
   G "$1" config "branch.$2.merge" "refs/heads/$2"
@@ -114,6 +137,22 @@ run_in() { # run_in <dir> <args...>: captures OUT and RC
   RC=$?
 }
 run() { run_in "$REPO" "$@"; }
+run_with_fifo_breaker() { # run_with_fifo_breaker <fifo> <marker> <args...>
+  local fifo="$1" marker="$2" breaker
+  shift 2
+  (
+    sleep 1
+    printf 'not-a-ref\n' > "$fifo"
+    : > "$marker"
+  ) &
+  breaker=$!
+  run "$@"
+  if kill -0 "$breaker" 2>/dev/null; then
+    kill "$breaker" 2>/dev/null
+    wait "$breaker" 2>/dev/null
+  fi
+  [ ! -e "$marker" ]
+}
 run_switchless() { # run <args...> against a git that lacks `switch`
   [ -n "$SHIM" ] || make_shim
   OUT=$(cd "$REPO" && PATH="$SHIM:$PATH" "$SUT" "$@" 2>&1)
@@ -326,6 +365,45 @@ for storage in loose packed; do
   fi
 done
 
+# The remote-tracking destination needs the same packed-ref case fallback as a
+# branch create. A loose alias is visible through the destination path itself;
+# once packed, only the enumerated name remains. On a case-sensitive filesystem
+# both spellings coexist safely, so the oracle compares the plan with what the
+# mandatory fetch leaves rather than assuming this host folds names.
+for storage in loose packed; do
+  scenario "the tracking case-alias verdict matches the fetch, $storage refs"
+  OLD=$(git -C "$REPO" rev-parse HEAD)
+  for r in $(git -C "$REPO" for-each-ref --format='%(refname)' refs/remotes/); do
+    G "$REPO" update-ref -d "$r"
+  done
+  G "$REPO" update-ref refs/remotes/Origin/main "$OLD"
+  [ "$storage" = packed ] && G "$REPO" pack-refs --all
+  printf 'second\n' > "$REPO/second.txt"
+  G "$REPO" add .
+  G "$REPO" commit -m second
+  NEW=$(git -C "$REPO" rev-parse HEAD)
+  G "$REPO" push origin HEAD:refs/heads/case-alias-fixture
+  G "$ORIGIN" update-ref refs/heads/main "$NEW"
+  G "$ORIGIN" update-ref -d refs/heads/case-alias-fixture
+  G "$REPO" update-ref -d refs/remotes/origin/case-alias-fixture
+  G "$REPO" reset --hard "$OLD"
+  run origin main
+  case "$RC" in
+    0 | 2) ok ;;
+    *) bad "neither planned nor stopped (exit $RC: $OUT)" ;;
+  esac
+  if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/main'
+  then fetched=yes; else fetched=no; fi
+  still=$(git -C "$REPO" rev-parse refs/remotes/Origin/main 2>/dev/null)
+  if [ "$fetched" = yes ] && [ "$still" = "$OLD" ]; then safe=yes; else safe=no; fi
+  if [ "$RC" -eq 2 ] && [ "$safe" = no ]; then ok
+  elif [ "$RC" -eq 0 ] && [ "$safe" = yes ]; then ok
+  elif [ "$RC" -eq 2 ]; then bad "stopped where the fetch is safe"
+  else
+    bad "planned a fetch that aliased Origin/main (plan rc $RC: $OUT; got $still, wanted $OLD; new $NEW)"
+  fi
+done
+
 # The same oracle for an alias the filesystem makes by Unicode rules rather than
 # by case: APFS resolves refs/heads/café onto an existing CAFÉ, which an ASCII
 # fold cannot see, so the guard stats the ref path instead of folding the name
@@ -371,6 +449,503 @@ G "$REPO" config remote.origin.url ""
 run origin main
 want_rc 4
 want_out 'LOOKUP_FAILED remote'
+
+# A ref name cannot also be a directory of refs, so the create fails in both
+# directions and in both storages: release blocking release/next, release/next
+# blocking release, loose or packed. Only one of the four was reported; the
+# other three came from sweeping the shape, and the two packed ones are the
+# reason this is a name comparison rather than more stats, since a packed parent
+# leaves no directory behind. Same oracle as the collision cases: the verdict
+# has to match what the create actually does.
+#
+# discriminating: against a copy without the df_conflict guard, three of the
+# four fail. The fourth, a loose release/next blocking release, still passes
+# there because the ref-path stat above catches it as a directory; it is kept
+# because the packed form of that same shape is not caught that way.
+for shape in "release|release/next" "release/next|release"; do
+  existing="${shape%%|*}"
+  want="${shape##*|}"
+  for storage in loose packed; do
+    scenario "a $storage ref $existing blocks creating $want"
+    OID=$(git -C "$REPO" rev-parse HEAD)
+    G "$REPO" update-ref "refs/heads/$existing" "$OID"
+    [ "$storage" = packed ] && G "$REPO" pack-refs --all
+    run origin "$want"
+    case "$RC" in
+      0 | 2) ok ;;
+      *) bad "neither planned nor stopped (exit $RC: $OUT)" ;;
+    esac
+    if G "$REPO" checkout --no-overwrite-ignore -b "$want" main; then made=yes; else made=no; fi
+    if [ "$RC" -eq 2 ] && [ "$made" = no ]; then ok
+    elif [ "$RC" -eq 0 ] && [ "$made" = yes ]; then ok
+    elif [ "$RC" -eq 2 ]; then bad "stopped where the create succeeds"
+    else bad "planned a create the ref store refuses"
+    fi
+  done
+done
+
+# An ancestor can sit at or above the namespace boundary, where a scan rooted in
+# the destination's own namespace cannot see it. Both verified: refs/remotes/
+# origin existing as a ref blocks the fetch's refs/remotes/origin/<base>, and
+# refs/heads existing as a ref blocks refs/heads/<base>. Reported for the remote
+# side only; the heads side came from checking whether the same shape existed
+# one level up, which it does.
+#
+# discriminating: against a copy enumerating each destination's own namespace
+# rather than refs/, which is what the first version of this guard did.
+scenario "an ancestor above the namespace boundary still blocks the landing"
+OID=$(git -C "$REPO" rev-parse HEAD)
+G "$REPO" for-each-ref --format='%(refname)' refs/remotes/
+for r in $(git -C "$REPO" for-each-ref --format='%(refname)' refs/remotes/); do
+  G "$REPO" update-ref -d "$r"
+done
+G "$REPO" update-ref refs/remotes/origin "$OID"
+run origin brandnew
+want_rc 2
+want_out 'STOP ref-conflict'
+# and the fetch the plan would otherwise have prescribed really does fail
+if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/brandnew'; then
+  bad "the fetch succeeded, so the stop is wrong"
+else ok; fi
+
+# `git for-each-ref` omits a ref it cannot resolve while still exiting 0, so an
+# enumeration cannot see a dangling symbolic ref sitting on an ancestor path,
+# even though the file is there and the ref store refuses to create beneath it.
+# The ancestor paths are therefore stated directly.
+#
+# discriminating: against a copy relying on the enumeration alone.
+scenario "a dangling symbolic ref on an ancestor path still blocks the landing"
+G "$REPO" symbolic-ref refs/heads/release refs/heads/does-not-exist
+run origin release/next
+want_rc 2
+want_out 'STOP ref-conflict'
+# and the create it would otherwise have prescribed really does fail
+if G "$REPO" checkout --no-overwrite-ignore -b release/next main; then
+  bad "the create succeeded, so the stop is wrong"
+else ok; fi
+
+# Refs beneath the destination block it as an ancestor does, and a dangling one
+# is again invisible to the enumeration, so the destination path is tested for
+# being a directory. On the remote-tracking side because that is where the plan
+# creates a ref the caller never names.
+#
+# discriminating: against a copy testing ancestors only.
+scenario "a dangling descendant of the fetch destination blocks the landing"
+G "$REPO" update-ref -d refs/remotes/origin/release
+G "$REPO" symbolic-ref refs/remotes/origin/release/next refs/heads/gone
+run origin release
+want_rc 2
+want_out 'STOP ref-conflict'
+if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/release'; then
+  bad "the fetch succeeded, so the stop is wrong"
+else ok; fi
+
+# Branches and remote-tracking refs live in the common git directory, while a
+# linked worktree's own git dir holds only its per-worktree refs, so a stat
+# rooted at the private one sees none of them. This is not a corner: the skill's
+# relocate rule runs step 2 inside a linked worktree when the base branch is
+# checked out there.
+#
+# discriminating: against a copy using --absolute-git-dir.
+scenario "the ref stats read the common git directory, not the worktree's"
+G "$REPO" symbolic-ref refs/heads/release refs/heads/gone
+G "$REPO" branch wtbranch
+git -C "$REPO" worktree add -q "$SCEN/linked" wtbranch 2>/dev/null
+run_in "$SCEN/linked" origin release/next
+want_rc 2
+want_out 'STOP ref-conflict'
+if G "$SCEN/linked" checkout --no-overwrite-ignore -b release/next main; then
+  bad "the create succeeded, so the stop is wrong"
+else ok; fi
+git -C "$REPO" worktree remove --force "$SCEN/linked" 2>/dev/null
+
+# Step 3 fetches into refs/remotes/<remote>/<base> on every cleanup, not only
+# when the local branch had to be created, so the remote-tracking conflict check
+# is not gated on create. With a local base already present nothing is created,
+# and the plan would otherwise pass a fetch that fails after step 1.
+#
+# discriminating: against a copy with that check inside the create branch.
+scenario "the tracking destination is checked even when nothing is created"
+G "$REPO" checkout main
+for r in $(git -C "$REPO" for-each-ref --format='%(refname)' refs/remotes/); do
+  G "$REPO" update-ref -d "$r"
+done
+G "$REPO" update-ref refs/remotes/origin "$(git -C "$REPO" rev-parse HEAD)"
+run origin main
+want_rc 2
+want_out 'STOP ref-conflict'
+if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/main'; then
+  bad "the fetch succeeded, so the stop is wrong"
+else ok; fi
+
+# A directory at the destination is not by itself a collision: git replaces an
+# empty one, and a tree of empty ones with it. What blocks the create is any
+# entry that is not a directory, which is git's own "non-empty directory
+# blocking reference", so a dangling symlink counts as much as a loose ref and
+# either may be invisible to the enumeration. Verdict asserted against the
+# fetch, over all four states.
+#
+# discriminating: against a copy stopping on directory existence alone (which
+# refuses two landings git performs) and against one scanning for regular files
+# only (which misses the symlink).
+for shape in "empty|no" "nested|no" "occupied|yes" "symlink|yes"; do
+  kind="${shape%%|*}"
+  blocks="${shape##*|}"
+  scenario "a $kind directory at the fetch destination"
+  G "$REPO" update-ref -d refs/remotes/origin/main
+  rm -rf "$REPO/.git/refs/remotes/origin/main"
+  case "$kind" in
+    empty) mkdir -p "$REPO/.git/refs/remotes/origin/main" ;;
+    nested) mkdir -p "$REPO/.git/refs/remotes/origin/main/deeper" ;;
+    occupied) mkdir -p "$REPO/.git/refs/remotes/origin/main"
+      printf 'ref: refs/heads/gone\n' > "$REPO/.git/refs/remotes/origin/main/next" ;;
+    symlink) mkdir -p "$REPO/.git/refs/remotes/origin/main"
+      ln -s /nowhere/at/all "$REPO/.git/refs/remotes/origin/main/next" ;;
+  esac
+  run origin main
+  if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/main'; then fetched=yes; else fetched=no; fi
+  if [ "$blocks" = yes ]; then
+    want_rc 2
+    if [ "$fetched" = no ]; then ok; else bad "the fetch succeeded, so the stop is wrong"; fi
+  else
+    want_rc 0
+    if [ "$fetched" = yes ]; then ok; else bad "the fetch failed, so planning was wrong"; fi
+  fi
+done
+
+# An exact symlink is judged by the ref update Git actually performs, not by
+# whether its target merely exists. A symlink to an enumerated direct ref is
+# replaced without changing its target file; a symlink to a directory remains
+# a blocking non-empty directory. The origin is advanced so the fetch must
+# update the destination rather than accepting an already-current ref.
+for shape in "file|no" "directory|yes"; do
+  kind="${shape%%|*}"
+  blocks="${shape##*|}"
+  scenario "an exact $kind symlink at the fetch destination"
+  OLD=$(git -C "$REPO" rev-parse HEAD)
+  printf 'second\n' > "$REPO/second.txt"
+  G "$REPO" add .
+  G "$REPO" commit -m second
+  NEW=$(git -C "$REPO" rev-parse HEAD)
+  G "$REPO" push origin main
+  G "$REPO" reset --hard "$OLD"
+  G "$REPO" update-ref -d refs/remotes/origin/main
+  mkdir -p "$REPO/.git/refs/remotes/origin"
+  case "$kind" in
+    file)
+      printf '%s\n' "$OLD" > "$SCEN/target-ref"
+      ln -s "$SCEN/target-ref" "$REPO/.git/refs/remotes/origin/main"
+      ;;
+    directory)
+      mkdir -p "$SCEN/target-dir"
+      ln -s "$SCEN/target-dir" "$REPO/.git/refs/remotes/origin/main"
+      ;;
+  esac
+  run origin main
+  if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/main'
+  then fetched=yes; else fetched=no; fi
+  if [ "$blocks" = yes ]; then
+    want_rc 2
+    if [ "$fetched" = no ]; then ok
+    else bad "the fetch succeeded, so the stop is wrong"; fi
+  else
+    want_rc 0
+    if [ "$fetched" = yes ] \
+      && [ ! -L "$REPO/.git/refs/remotes/origin/main" ] \
+      && [ "$(cat "$SCEN/target-ref")" = "$OLD" ] \
+      && [ "$(git -C "$REPO" rev-parse refs/remotes/origin/main)" = "$NEW" ]
+    then ok; else bad "the fetch did not safely replace the symlink"; fi
+  fi
+done
+
+# The branch destination follows the same empty-tree rule as the tracking
+# destination. The old exact-path stat stopped both empty shapes. At the other
+# edge, a broken symbolic ref makes checkout exit 0 while attaching HEAD to its
+# missing target, whereas a dangling filesystem symlink is safely replaced;
+# the oracle therefore checks the resulting HEAD, not only the exit status.
+for shape in "empty|no" "nested|no" "broken|yes" "symlink|no"; do
+  kind="${shape%%|*}"
+  blocks="${shape##*|}"
+  scenario "a $kind entry at the branch destination"
+  G "$REPO" update-ref -d refs/heads/release
+  rm -rf "$REPO/.git/refs/heads/release"
+  case "$kind" in
+    empty) mkdir -p "$REPO/.git/refs/heads/release" ;;
+    nested) mkdir -p "$REPO/.git/refs/heads/release/deeper" ;;
+    broken) printf 'ref: refs/heads/gone\n' > "$REPO/.git/refs/heads/release" ;;
+    symlink) ln -s /nowhere/at/all "$REPO/.git/refs/heads/release" ;;
+  esac
+  run origin release
+  if G "$REPO" checkout --no-overwrite-ignore -b release main \
+    && [ "$(git -C "$REPO" symbolic-ref -q HEAD 2>/dev/null)" = refs/heads/release ]
+  then safe=yes; else safe=no; fi
+  if [ "$blocks" = yes ]; then
+    want_rc 2
+    if [ "$safe" = no ]; then ok; else bad "the create was safe, so the stop is wrong"; fi
+  else
+    want_rc 0
+    if [ "$safe" = yes ]; then ok; else bad "the create was unsafe, so planning was wrong"; fi
+  fi
+done
+
+# A special node at the exact loose-ref path must be classified before any Git
+# command tries to read it as a ref. `git symbolic-ref` opens a FIFO, including
+# one reached through a symlink, and waits for a writer. The breaker attempts a
+# write after one second and creates the marker only after that write connects
+# to a reader; elapsed time alone is not a failure. Both destinations run
+# because the tracking ref is unconditional and an existing branch-shaped
+# entry takes a different control-flow path.
+for destination in tracking branch; do
+  for shape in direct symlink; do
+    scenario "a $shape FIFO at the $destination destination does not hang"
+    case "$destination" in
+      tracking)
+        G "$REPO" update-ref -d refs/remotes/origin/main
+        path="$REPO/.git/refs/remotes/origin/main"
+        ;;
+      branch)
+        G "$REPO" update-ref -d refs/heads/release
+        path="$REPO/.git/refs/heads/release"
+        ;;
+    esac
+    rm -rf "$path"
+    mkdir -p "$(dirname "$path")"
+    case "$shape" in
+      direct)
+        mkfifo "$path"
+        fifo="$path"
+        ;;
+      symlink)
+        fifo="$SCEN/target-fifo"
+        mkfifo "$fifo"
+        ln -s "$fifo" "$path"
+        ;;
+    esac
+    if [ "$destination" = tracking ]; then
+      if run_with_fifo_breaker "$fifo" "$SCEN/fifo-opened" origin main
+      then prompt=yes; else prompt=no; fi
+    else
+      if run_with_fifo_breaker "$fifo" "$SCEN/fifo-opened" origin release
+      then prompt=yes; else prompt=no; fi
+    fi
+    want_rc 2
+    want_out 'STOP ref-conflict'
+    if [ "$prompt" = yes ]; then ok
+    else bad "the planner opened the FIFO before classifying its path"; fi
+  done
+done
+
+# The enumerations span every ref namespace, so target-only classification is
+# still too late for a special entry elsewhere. This FIFO sits under tags,
+# outside both destinations, and must stop before for-each-ref can open it. A
+# shim makes the planner take more than the breaker's one-second delay before
+# reaching the scan, proving the marker means a connected writer, not a timer.
+scenario "an unrelated FIFO cannot hang a slow broad ref enumeration"
+fifo="$REPO/.git/refs/tags/unrelated-fifo"
+mkdir -p "$(dirname "$fifo")"
+mkfifo "$fifo"
+SHIM="$SCEN/shim"
+mkdir -p "$SHIM"
+cat > "$SHIM/git" <<EOF
+#!/bin/sh
+if [ "\$1" = remote ] && [ "\$2" = get-url ]; then sleep 2; fi
+exec $REALGIT "\$@"
+EOF
+chmod +x "$SHIM/git"
+if PATH="$SHIM:$PATH" \
+  run_with_fifo_breaker "$fifo" "$SCEN/fifo-opened" origin main
+then prompt=yes; else prompt=no; fi
+want_rc 2
+want_out 'STOP ref-conflict'
+if [ "$prompt" = yes ]; then ok
+else bad "the broad ref enumeration opened an unrelated FIFO"; fi
+
+# Git ignores a loose entry whose path is not a valid ref name, without opening
+# it. Such a special node is therefore not reachable by broad enumeration and
+# cannot justify stopping cleanup. Both filesystem shapes run because the
+# whole-tree scan classifies direct special nodes and symlink targets separately.
+for shape in direct symlink; do
+  scenario "an invalid-ref $shape FIFO does not block cleanup"
+  path="$REPO/.git/refs/tags/bad..name"
+  mkdir -p "$(dirname "$path")"
+  case "$shape" in
+    direct)
+      mkfifo "$path"
+      fifo="$path"
+      ;;
+    symlink)
+      fifo="$SCEN/target-fifo"
+      mkfifo "$fifo"
+      ln -s "$fifo" "$path"
+      ;;
+  esac
+  if run_with_fifo_breaker "$fifo" "$SCEN/fifo-opened" origin main
+  then prompt=yes; else prompt=no; fi
+  want_rc 0
+  want_out 'OK landing'
+  if [ "$prompt" = yes ]; then ok
+  else bad "the planner opened the FIFO at an invalid ref path"; fi
+  if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/main'
+  then ok; else bad "the safe tracking fetch failed"; fi
+done
+
+# A symlink on an ancestor is not only a lock conflict when dangling. Where it
+# resolves to a directory, git follows it and writes the ref outside the common
+# git directory. The plan refuses both shapes rather than blessing that escape.
+scenario "a symlinked ref ancestor cannot redirect the fetch outside git"
+G "$REPO" update-ref -d refs/remotes/origin/main
+mkdir -p "$SCEN/outside"
+rm -rf "$REPO/.git/refs/remotes/origin"
+ln -s "$SCEN/outside" "$REPO/.git/refs/remotes/origin"
+run origin main
+want_rc 2
+want_out 'STOP ref-conflict'
+if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/main' \
+  && [ -f "$SCEN/outside/main" ]
+then ok; else bad "the symlink did not reproduce the outside ref write"; fi
+
+scenario "a dangling symlink ancestor blocks a branch create"
+ln -s /nowhere/at/all "$REPO/.git/refs/heads/release"
+run origin release/next
+want_rc 2
+want_out 'STOP ref-conflict'
+if G "$REPO" checkout --no-overwrite-ignore -b release/next main
+then bad "the create succeeded, so the stop is wrong"; else ok; fi
+
+# A failed descendant scan is unknown, not empty. A PATH shim makes the failure
+# deterministic even under root, where chmod 000 would still be readable.
+scenario "a failed descendant scan is a lookup failure"
+G "$REPO" update-ref -d refs/remotes/origin/main
+mkdir -p "$REPO/.git/refs/remotes/origin/main"
+SHIM="$SCEN/shim"
+mkdir -p "$SHIM"
+cat > "$SHIM/find" <<EOF
+#!/bin/sh
+exit 1
+EOF
+chmod +x "$SHIM/find"
+OUT=$(cd "$REPO" && PATH="$SHIM:$PATH" "$SUT" origin main 2>&1)
+RC=$?
+want_rc 4
+want_out 'LOOKUP_FAILED refs'
+
+# Extension keys do not select a backend unless this repository activates
+# extensions through format version 1, and repository extensions are local:
+# neither an inactive local value nor an inherited global value changes Git's
+# files backend. Git 2.43 exposed the inactive local key while continuing to
+# use files; newer Git rejects that malformed combination before the planner
+# runs, so the shim reproduces the older config reads this guard must handle.
+#
+# discriminating: the pre-fix unscoped extension lookup consumes the shimmed
+# inactive value and reports STOP ref-storage.
+scenario "a ref-storage extension under format zero is inactive"
+SHIM="$SCEN/shim"
+mkdir -p "$SHIM"
+cat > "$SHIM/git" <<EOF
+#!/bin/sh
+if [ "\$1" = config ] && [ "\$2" = --local ] \
+  && [ "\$3" = --get ] && [ "\$4" = core.repositoryFormatVersion ]; then
+  echo 0
+  exit 0
+fi
+if [ "\$1" = config ] && [ "\$2" = --local ] \
+  && [ "\$3" = --get ] && [ "\$4" = extensions.refStorage ]; then
+  echo reftable
+  exit 0
+fi
+if [ "\$1" = config ] && [ "\$2" = --get ] \
+  && [ "\$3" = extensions.refStorage ]; then
+  echo reftable
+  exit 0
+fi
+exec $REALGIT "\$@"
+EOF
+chmod +x "$SHIM/git"
+OUT=$(cd "$REPO" && PATH="$SHIM:$PATH" "$SUT" origin main 2>&1)
+RC=$?
+want_rc 0
+want_out 'OK landing'
+
+scenario "a global ref-storage extension is not a repository extension"
+G "$REPO" config --local core.repositoryFormatVersion 1
+GLOBAL_CONFIG="$SCEN/global-config"
+git config --file "$GLOBAL_CONFIG" extensions.refStorage reftable
+OUT=$(cd "$REPO" && GIT_CONFIG_GLOBAL="$GLOBAL_CONFIG" "$SUT" origin main 2>&1)
+RC=$?
+want_rc 0
+want_out 'OK landing'
+
+# Repository format is an integer-valued key, so Git accepts alternate integer
+# spellings and normalizes them when asked for the typed value. Dispatching on
+# the raw string rejects repositories Git itself accepts.
+for shape in "01|1" "+1|1" "0x0|0"; do
+  spelling="${shape%%|*}"
+  normalized="${shape##*|}"
+  scenario "repository format $spelling normalizes to $normalized"
+  G "$REPO" config --local core.repositoryFormatVersion "$spelling"
+  run origin main
+  want_rc 0
+  want_out 'OK landing'
+done
+
+# Reftable stores a marker at .git/refs/heads, not a loose ref, and has no
+# read-only way to enumerate dangling symbolic refs. Preparing a transaction
+# writes a lock that can survive interruption, so this read-only plan names the
+# unsupported backend explicitly rather than reporting a false conflict.
+if scenario_reftable "reftable is an explicit read-only stop"; then
+  OID=$(git -C "$REPO" rev-parse HEAD)
+  G "$ORIGIN" update-ref refs/heads/release "$OID"
+  BEFORE=$(snapshot "$REPO")
+  run origin release
+  want_rc 2
+  want_out 'STOP ref-storage'
+  if [ "$BEFORE" = "$(snapshot "$REPO")" ]; then ok
+  else bad "the reftable stop changed the repository"; fi
+  G "$REPO" fetch -- origin 'refs/heads/release:refs/remotes/origin/release'
+  if G "$REPO" checkout --no-overwrite-ignore -b release refs/remotes/origin/release
+  then ok; else bad "the ordinary reftable create did not reproduce"; fi
+else
+  echo "skip: reftable ref conflicts (git init lacks --ref-format=reftable)"
+fi
+
+# A resolvable symbolic ref is more dangerous than a dangling one because the
+# commands return success. Checkout attaches HEAD to the symbolic target, and a
+# fetch into a symbolic tracking destination advances its target. Both exact
+# destinations stop before either redirection can happen.
+scenario "a symbolic branch ref cannot redirect checkout"
+G "$REPO" branch victim
+G "$REPO" symbolic-ref refs/heads/release refs/heads/victim
+run origin release
+want_rc 2
+want_out 'STOP ref-conflict'
+if G "$REPO" checkout --no-overwrite-ignore release \
+  && [ "$(git -C "$REPO" symbolic-ref -q HEAD 2>/dev/null)" = refs/heads/victim ]
+then ok; else bad "the symbolic branch did not reproduce the redirected checkout"; fi
+
+scenario "a symbolic tracking ref cannot redirect fetch"
+G "$REPO" branch victim
+VICTIM_BEFORE=$(git -C "$REPO" rev-parse refs/heads/victim)
+printf 'second\n' > "$REPO/second.txt"
+G "$REPO" add .
+G "$REPO" commit -m second
+G "$REPO" push origin main
+G "$REPO" update-ref -d refs/remotes/origin/main
+G "$REPO" symbolic-ref refs/remotes/origin/main refs/heads/victim
+run origin main
+want_rc 2
+want_out 'STOP ref-conflict'
+if G "$REPO" fetch -- origin 'refs/heads/main:refs/remotes/origin/main' \
+  && [ "$(git -C "$REPO" rev-parse refs/heads/victim)" != "$VICTIM_BEFORE" ]
+then ok; else bad "the symbolic tracking ref did not reproduce the redirected fetch"; fi
+
+# does not discriminate: the control for the four above, so a guard that stops
+# on any slash in the name would be caught rather than looking correct.
+scenario "an unrelated branch does not block a slashed name"
+OID=$(git -C "$REPO" rev-parse HEAD)
+G "$REPO" update-ref refs/heads/unrelated "$OID"
+run origin release/next
+want_rc 0
+want_out 'OK landing'
 
 # --- r4: tracking is judged by consequence, in every clone shape -------------
 
@@ -527,6 +1102,18 @@ run -r feat
 want_rc 0
 want_out '"create":true'
 want_no_out 'LOOKUP_FAILED'
+
+# `git config` can name a remote that `git remote add` rejects. It still
+# resolves through `remote get-url`, but its derived tracking ref is invalid and
+# the mandatory resync fetch rejects the refspec, so validate that destination
+# before returning a plan.
+scenario "a configured remote must form a valid tracking ref"
+G "$REPO" config 'remote.bad..remote.url' "$ORIGIN"
+run bad..remote main
+want_rc 64
+want_out 'do not form a valid remote-tracking ref'
+if G "$REPO" fetch -- bad..remote 'refs/heads/main:refs/remotes/bad..remote/main'
+then bad "the invalid tracking refspec unexpectedly fetched"; else ok; fi
 
 # --- arguments and environment ----------------------------------------------
 
