@@ -151,6 +151,104 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
   failures land after step 1, which is why `base-landing-plan.sh` reads refs
   exactly and then stops on a case collision before the deletion rather than
   planning a create git will refuse.
+- A ref name cannot also be a directory of refs, and the create fails in both
+  directions and both storages. Verified on git 2.50.1, all four exit 128: an
+  existing `release` blocks `release/next` ("'refs/heads/release' exists; cannot
+  create 'refs/heads/release/next'"), and an existing `release/next` blocks
+  `release`, each with the existing ref loose and packed. A packed parent
+  leaves no directory behind, so a path stat sees only the loose half of this;
+  the plan compares enumerated names instead, for the branch and for the
+  remote-tracking ref its fetch would write.
+- The blocking ref can sit at or above the namespace boundary, so the
+  enumeration that looks for it starts at `refs/`. Verified: with
+  `refs/remotes/origin` present as a ref and nothing beneath it, the fetch into
+  `refs/remotes/origin/<base>` fails, and with `refs/heads` present as a ref a
+  branch cannot be created at all.
+- A ref that cannot be resolved is omitted from `git for-each-ref` at exit 0,
+  so an enumeration is blind to it while the ref store is not. Verified with a
+  dangling symbolic ref at `refs/heads/release`: the enumeration listed only
+  `main`, and creating `refs/heads/release/next` still failed on the lock. Path
+  ancestors are therefore stated as well as enumerated.
+- A files repository can hold more than regular loose refs. A dangling
+  filesystem symlink on an ancestor made the plan return `OK` and the create
+  fail; the same symlink aimed at a directory made the fetch succeed while
+  writing the new ref outside `.git`. Ancestor symlinks are therefore a stop,
+  not a directory to follow. At the exact destination the rule differs: git
+  safely replaces a dangling filesystem symlink. It also replaces one that
+  resolves to an enumerated direct ref when the ref advances, leaving the target
+  file unchanged; a symlink to a directory still blocks the update. A broken
+  symbolic ref instead made `checkout -b release` exit 0 and attach `HEAD` to
+  its missing target rather than `refs/heads/release`. The resulting ref and
+  `HEAD`, not the command's exit status alone, are the oracle.
+- Special loose entries must be classified before asking Git to interpret
+  their contents. `git symbolic-ref` opens an exact FIFO, or a FIFO reached
+  through a symlink, and blocks waiting for a writer. On Git 2.43,
+  `for-each-ref` can do the same before destination-specific checks run, even
+  for a special entry outside either destination. A special-node scan of the
+  whole loose ref tree therefore runs before every ref enumeration. Each
+  candidate is first filtered through `git check-ref-format`: Git ignores an
+  entry at an invalid ref path without opening it, so that shape remains safe.
+  The destination checks still apply the narrower update semantics afterward.
+- A failed filesystem scan is not an empty namespace. With a non-empty
+  destination directory unreadable, `find ... | head` hid find's failure and
+  the plan returned `OK`; the fetch then failed on the occupied directory. The
+  scan now captures find's own status and reports `LOOKUP_FAILED`.
+- Reftable has no loose-ref tree to inspect: `.git/refs/heads` is a backend
+  marker file, and treating it as a loose ref false-stopped every missing
+  branch. Its public enumeration also omits dangling symbolic refs. Preparing
+  and aborting a ref transaction can ask the backend whether a destination is
+  available, but `prepare` writes `tables.list.lock`, and an interruption before
+  `abort` strands that lock and blocks later ref updates. A read-only planner
+  can therefore neither inspect reftable exactly nor use that transaction
+  safely; it reports `STOP ref-storage` explicitly instead of a false conflict
+  or a hidden write.
+- A ref-storage extension is active only when the repository's own
+  `core.repositoryFormatVersion` is 1, and repository extensions come from the
+  local repository config. On Git 2.43, a local
+  `extensions.refStorage=reftable` under format 0 remains on the files backend;
+  newer Git rejects that malformed combination before the planner runs. A
+  global value remains inactive even under format 1. Backend detection uses the
+  same activation and scope rules so an ignored value cannot disable cleanup.
+  It also asks Git to parse the format as an integer: valid spellings such as
+  `01`, `+1`, and `0x0` normalize to 1, 1, and 0 rather than becoming
+  unsupported raw strings.
+- Resolvable symbolic refs need an exact check independent of the namespace
+  scan. With `refs/heads/release` symbolic to `refs/heads/victim`, checkout
+  returned success while attaching `HEAD` to `victim`. With
+  `refs/remotes/origin/main` symbolic to the same victim, fetch returned success
+  while advancing the local branch instead of an ordinary tracking ref. Both
+  exact destinations now stop before the redirect.
+- Case aliases apply to remote-tracking refs as well as branches. On a
+  case-folding filesystem, a loose `refs/remotes/origin/main` written by fetch
+  aliases a packed `refs/remotes/Origin/main`, even though the packed entry
+  leaves no path for the destination stat to find. The same folded-name
+  fallback therefore checks both destinations; it excludes an exact tracking
+  ref, which is an ordinary update rather than an alias.
+- Shared refs live in the common git directory, so a ref stat rooted at
+  `git rev-parse --absolute-git-dir` sees none of them from a linked worktree,
+  where that path is `.git/worktrees/<id>`. Verified: a dangling
+  `refs/heads/release` was invisible from the linked worktree and the create
+  failed anyway. The relocate rule puts step 2 in exactly that layout, so the
+  plan resolves `--git-common-dir` instead.
+- `git rev-parse` can echo an option it does not understand while exiting 0.
+  Therefore probing `--path-format=absolute` and falling back only on failure
+  did not fall back on older Git; the echoed option and relative common-dir
+  answer became a bogus multiline path. The plan now asks only for
+  `--git-common-dir`, which is old enough for every supported shape, and
+  resolves its documented relative answer itself.
+- A configured remote name is not necessarily a valid component of a
+  remote-tracking ref. `git config remote.bad..remote.url <url>` and
+  `git remote get-url -- bad..remote` both succeeded, but the mandatory fetch
+  rejected `refs/remotes/bad..remote/main` as an invalid refspec. The complete
+  derived destination is now checked with `git check-ref-format` before the
+  plan can return `OK`.
+- The plan is necessarily a snapshot. A ref writer that runs after the check
+  can introduce the same namespace conflict before the later fetch or branch
+  create; no read-only script can retain Git's ref lock across those separate
+  commands. Step 2 therefore requires one continuous window of exclusive
+  control over ref-mutating operations from its first plan through step 3's
+  final fetch and fast-forward, including the switch and second plan. This is
+  an operating precondition, not a guarantee the script can manufacture.
 - The aliasing is the filesystem's, not just case: APFS resolves
   `refs/heads/café` onto an existing `refs/heads/CAFÉ`, and `checkout -b` then
   fails at exit 128. A fold written in the shell cannot see that, so the guard

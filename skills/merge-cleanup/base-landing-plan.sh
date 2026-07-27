@@ -157,6 +157,8 @@ json_escape() {
 # line is precisely what cannot represent the name.
 utf8_valid "$REMOTE" || usage "the base remote is not valid UTF-8"
 utf8_valid "$BASE" || usage "the base branch is not valid UTF-8"
+git check-ref-format "refs/remotes/$REMOTE/$BASE" 2>/dev/null \
+  || usage "the base remote and branch do not form a valid remote-tracking ref: refs/remotes/$REMOTE/$BASE"
 
 stop() { # stop <guard> <detail>
   echo "STOP $1 {\"detail\":\"$(json_escape "$2")\"}"
@@ -261,11 +263,6 @@ ref_exists() { # ref_exists <namespace> <full-ref>
   printf '%s\n' "$refs" | grep -qxF -- "$2"
 }
 
-# No local branch means the landing has to create one, and creating it is where
-# the two verbs diverge.
-CREATE=false
-ref_exists refs/heads/ "refs/heads/$BASE" || CREATE=true
-
 # A case-folding filesystem cannot hold refs/heads/Main as a file distinct from
 # refs/heads/main, so a base differing from an existing branch only in case has
 # no safe landing there, and the failure takes two shapes. Against a loose ref
@@ -285,32 +282,255 @@ ref_exists refs/heads/ "refs/heads/$BASE" || CREATE=true
 # `show-ref --verify`, which folds for a loose ref and not a packed one and so
 # misses exactly the hijack above. Verified over both volume types and both ref
 # storages.
-if [ "$CREATE" = true ]; then
-  gitdir=$(git rev-parse --absolute-git-dir 2>/dev/null) \
-    || lookup_failed refs "could not resolve the git directory"
-  # First, ask the filesystem. The exact ref is absent (CREATE is true), so a
-  # file already sitting at that path means the filesystem aliases the name to
-  # some other ref, and this catches every aliasing it does: case folding,
-  # Unicode normalization (APFS aliases refs/heads/café onto an existing CAFÉ),
-  # and the name being a directory of refs. One stat, no folding rules of our
-  # own. It also catches a syntactically broken loose ref, which for-each-ref
-  # skips; the detail is worded for the general condition rather than only for
-  # case.
-  if [ -e "$gitdir/refs/heads/$BASE" ]; then
-    stop case-collision "the ref path for $BASE is already occupied in this repository, by a name the filesystem treats as the same one or by a directory of refs, so the landing would either be refused or silently alias that branch"
-  fi
-  # Then the packed case, which has no file to stat: a loose ref written now
-  # would be aliased onto a packed entry at read time. That has to be a fold
-  # over the enumerated names, and it is ASCII, so a non-ASCII variant of a
-  # *packed* ref is the one shape here that goes undetected; the loose form of
-  # the same collision is caught above.
-  if [ -e "$gitdir/HEAD" ] && [ -e "$gitdir/head" ]; then
-    heads=$(git for-each-ref --format='%(refname)' refs/heads/ 2>/dev/null) \
-      || lookup_failed refs "could not enumerate refs/heads/ (git for-each-ref failed)"
-    want=$(printf '%s' "refs/heads/$BASE" | tr '[:upper:]' '[:lower:]')
-    if printf '%s\n' "$heads" | tr '[:upper:]' '[:lower:]' | grep -qxF -- "$want"; then
-      stop case-collision "$BASE differs only in case from a branch this repository already holds, on a filesystem that folds case, so the landing would silently alias that branch"
+# The *common* git directory, not this worktree's. In a linked worktree
+# --absolute-git-dir points at .git/worktrees/<id>, which holds the
+# per-worktree refs (HEAD, refs/bisect) while branches and remote-tracking
+# refs live in the common directory, so stats rooted at the private one see
+# none of the refs this guard is about. That matters here rather than in
+# theory: the skill's own relocate rule runs step 2 inside a linked worktree.
+# --git-common-dir predates --path-format=absolute and returns a path relative
+# to the current directory, so resolve that answer ourselves instead of probing
+# an option that older git echoes as data while exiting 0.
+gitdir=$(git rev-parse --git-common-dir 2>/dev/null) \
+  || lookup_failed refs "could not resolve the common git directory"
+case "$gitdir" in /*) ;; *) gitdir="$PWD/$gitdir" ;; esac
+
+# Files repositories expose loose refs beneath the common directory. Reftable
+# repositories instead put a backend marker at .git/refs/heads and expose no
+# read-only API that lists dangling symbolic refs. Extensions are active only
+# for repository format 1, and only from the repository config: an inherited
+# key, or a local key under format 0, does not select a backend for Git itself.
+repo_format=$(git config --local --type=int --get core.repositoryFormatVersion 2>/dev/null)
+rc=$?
+if [ "$rc" -eq 1 ]; then repo_format=0
+elif [ "$rc" -ne 0 ]; then
+  lookup_failed refs "could not determine the repository format (git config exited $rc)"
+fi
+case "$repo_format" in
+  0) ref_storage=files ;;
+  1)
+    ref_storage=$(git config --local --get extensions.refStorage 2>/dev/null)
+    rc=$?
+    if [ "$rc" -eq 1 ]; then ref_storage=files
+    elif [ "$rc" -ne 0 ]; then
+      lookup_failed refs "could not determine the repository's ref storage (git config exited $rc)"
     fi
+    ;;
+  *) lookup_failed refs "unsupported repository format version: $repo_format" ;;
+esac
+# A prepared-and-aborted update-ref transaction can query reftable, but it
+# writes a lock that an interruption can strand. Stop explicitly rather than
+# either misreading the backend marker as a ref conflict or violating this
+# plan's no-write contract.
+case "$ref_storage" in
+  files) ;;
+  reftable)
+    stop ref-storage "reftable cannot be checked for unresolvable namespace conflicts without preparing a ref transaction, which would write a lock inside this read-only plan"
+    ;;
+  *) lookup_failed refs "unsupported ref storage: $ref_storage" ;;
+esac
+
+# Git 2.43 can open special loose entries while enumerating refs. Inspect the
+# whole loose tree before the first for-each-ref, not only the two destinations:
+# an unrelated FIFO is still reachable from the broad refs/ scan below. Direct
+# special nodes and symlinks to anything other than a regular file block; a
+# dangling symlink fails fast in Git and remains safe for the destination rules
+# below to classify. Capture find's status so an unreadable tree is not treated
+# as clean.
+loose_refs_special() {
+  local root="$gitdir/refs" hit links link ref rc
+  [ ! -L "$root" ] || return 0
+  if [ -d "$root" ]; then :
+  elif [ -e "$root" ]; then return 0
+  else return 1
+  fi
+  hit=$(find "$root" ! -type d ! -type f ! -type l -print 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 0 ] \
+    || lookup_failed refs "could not inspect special entries beneath $root (find exited $rc)"
+  while IFS= read -r link; do
+    [ -n "$link" ] || continue
+    ref="${link#"$gitdir/"}"
+    git check-ref-format "$ref" >/dev/null 2>&1
+    rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    [ "$rc" -eq 1 ] \
+      || lookup_failed refs "could not validate loose ref path $ref (git check-ref-format exited $rc)"
+  done <<SPECIAL_EOF
+$hit
+SPECIAL_EOF
+  links=$(find "$root" -type l -print 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 0 ] \
+    || lookup_failed refs "could not inspect symlinks beneath $root (find exited $rc)"
+  while IFS= read -r link; do
+    [ -n "$link" ] || continue
+    if [ -e "$link" ] && [ ! -f "$link" ]; then
+      ref="${link#"$gitdir/"}"
+      git check-ref-format "$ref" >/dev/null 2>&1
+      rc=$?
+      [ "$rc" -eq 0 ] && return 0
+      [ "$rc" -eq 1 ] \
+        || lookup_failed refs "could not validate loose ref path $ref (git check-ref-format exited $rc)"
+    fi
+  done <<LINKS_EOF
+$links
+LINKS_EOF
+  return 1
+}
+if loose_refs_special; then
+  stop ref-conflict "the loose ref tree contains a special entry that Git ref enumeration could block on or follow outside the ref store"
+fi
+
+# No local branch means the landing has to create one, and creating it is where
+# the two verbs diverge. This enumeration runs only after the loose tree is
+# known not to contain an entry that Git could block on while reading.
+CREATE=false
+ref_exists refs/heads/ "refs/heads/$BASE" || CREATE=true
+
+# A ref cannot also be a directory of refs, so the create fails both when an
+# existing ref is a path prefix of the destination (release blocking
+# release/next) and when existing refs live beneath it (release/next blocking
+# release). The ref store enforces that for packed refs too, where there is no
+# directory to stat, so this is a comparison over enumerated names rather than
+# more stats. Ref names cannot hold glob metacharacters (check-ref-format
+# rejects them), so they are safe as `case` patterns.
+#
+# Enumerated from refs/ rather than from each destination's own namespace,
+# because an ancestor can sit at or above the namespace boundary and a
+# narrower scan cannot see it: refs/remotes/origin existing as a ref blocks
+# the fetch's refs/remotes/origin/release, and refs/heads existing as a ref
+# blocks refs/heads/release, both verified. Tags come along harmlessly, since
+# no refs/tags name can be a path prefix of a branch or remote-tracking ref.
+all_refs=$(git for-each-ref --format='%(refname)' refs/ 2>/dev/null) \
+  || lookup_failed refs "could not enumerate refs/ (git for-each-ref failed)"
+ref_listed() { # ref_listed <full-ref>
+  printf '%s\n' "$all_refs" | grep -qxF -- "$1"
+}
+ref_symbolic() { # ref_symbolic <full-ref>
+  local rc
+  git symbolic-ref -q "$1" >/dev/null 2>&1
+  rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  [ "$rc" -eq 1 ] && return 1
+  lookup_failed refs "could not inspect whether $1 is symbolic"
+}
+df_conflict() { # df_conflict <full-ref>
+  local r
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    case "$1" in "$r"/*) return 0 ;; esac
+    case "$r" in "$1"/*) return 0 ;; esac
+  done <<DF_EOF
+$all_refs
+DF_EOF
+  return 1
+}
+# A loose alias is visible by stating the destination path, but a packed ref
+# leaves no path for the filesystem to answer with. On a folding filesystem,
+# compare the enumerated names after an ASCII fold and exclude the exact name,
+# which is an ordinary ref the fetch may update. The fold is deliberately only
+# the packed fallback; non-ASCII loose aliases are caught by path_occupied.
+case_alias() { # case_alias <full-ref>
+  local want r folded
+  [ -e "$gitdir/HEAD" ] && [ -e "$gitdir/head" ] || return 1
+  want=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    [ "$r" = "$1" ] && continue
+    folded=$(printf '%s' "$r" | tr '[:upper:]' '[:lower:]')
+    [ "$folded" = "$want" ] && return 0
+  done <<CASE_EOF
+$all_refs
+CASE_EOF
+  return 1
+}
+# Every proper ancestor path, stated directly in a files repository, because an
+# enumeration cannot see a ref it fails to resolve: `git for-each-ref` omits a
+# dangling symbolic ref (or a broken one) while still exiting 0, yet the entry
+# is there and the ref store still refuses to create anything beneath it. Walk
+# top-down so a failed traversal is a lookup failure rather than a false
+# absence. Any non-directory entry blocks; a symlink is stopped even where it
+# resolves to a directory, because otherwise git follows it and writes the new
+# ref outside the common git directory.
+ancestor_occupied() { # ancestor_occupied <full-ref>
+  local rest="$1" cursor="$gitdir" component next
+  while :; do
+    case "$rest" in */*) ;; *) return 1 ;; esac
+    component="${rest%%/*}"
+    rest="${rest#*/}"
+    [ -d "$cursor" ] && [ -x "$cursor" ] \
+      || lookup_failed refs "could not inspect ref paths beneath $cursor"
+    next="$cursor/$component"
+    [ ! -L "$next" ] || return 0
+    if [ -d "$next" ]; then cursor="$next"
+    elif [ -e "$next" ]; then return 0
+    else return 1
+    fi
+  done
+}
+
+# The destination itself has three safe shapes in a files repository: absent,
+# an existing direct ref that the fetch may update, or a tree containing only
+# empty directories that git can prune. An unresolvable loose entry or any
+# non-directory descendant blocks. Capture find's own status rather than a
+# pipeline's, so an unreadable tree fails closed.
+path_occupied() { # path_occupied <full-ref>
+  local path="$gitdir/$1" hit rc
+  # At the exact destination, git replaces either a dangling symlink or one
+  # that resolves to an enumerated direct ref; it does not write through to the
+  # target file. A symlink to a directory instead blocks the update as a
+  # non-empty directory, and an unenumerated target is not known to be a ref.
+  if [ -L "$path" ]; then
+    [ ! -e "$path" ] && return 1
+    if [ -f "$path" ] && ref_listed "$1"; then return 1; fi
+    return 0
+  fi
+  if [ -d "$path" ]; then
+    hit=$(find "$path" ! -type d -print 2>/dev/null)
+    rc=$?
+    [ "$rc" -eq 0 ] \
+      || lookup_failed refs "could not inspect entries beneath $path (find exited $rc)"
+    [ -n "$hit" ]
+    return
+  fi
+  [ -e "$path" ] || return 1
+  ref_listed "$1" && return 1
+  return 0
+}
+
+# The remote-tracking destination is checked whatever the landing does, because
+# step 3 fetches into refs/remotes/<remote>/<base> on every cleanup, not only
+# when the local branch had to be created. Verified: with a local main present
+# (so nothing is created) and refs/remotes/origin occupied as a ref, the plan
+# passed and step 3's fetch failed on the lock, after step 1 had run.
+remote_ref="refs/remotes/$REMOTE/$BASE"
+if ancestor_occupied "$remote_ref" || path_occupied "$remote_ref" \
+  || df_conflict "$remote_ref"; then
+  stop ref-conflict "the remote-tracking ref the resync fetches into, refs/remotes/$REMOTE/$BASE, collides with an existing ref that is a path prefix of it or lives beneath it"
+fi
+if ref_symbolic "$remote_ref"; then
+  stop ref-conflict "the remote-tracking destination, $remote_ref, is symbolic and the resync fetch would update its target instead of an ordinary tracking ref"
+fi
+if case_alias "$remote_ref"; then
+  stop case-collision "$remote_ref differs only in case from a tracking ref this repository already holds, on a filesystem that folds case, so the resync fetch would silently alias that ref"
+fi
+
+branch_ref="refs/heads/$BASE"
+if path_occupied "$branch_ref"; then
+  stop ref-conflict "$BASE cannot be used as a branch here: its exact loose-ref path contains an entry that is not a direct ref Git can safely update"
+fi
+if ref_symbolic "$branch_ref"; then
+  stop ref-conflict "$BASE is a symbolic branch ref, so landing on it would attach HEAD to its target rather than refs/heads/$BASE"
+fi
+if [ "$CREATE" = true ]; then
+  if ancestor_occupied "$branch_ref" || df_conflict "$branch_ref"; then
+    stop ref-conflict "$BASE cannot be created as a branch here: an existing ref is either a path prefix of refs/heads/$BASE or lives beneath it, and one ref name cannot also be a directory of refs"
+  fi
+  # Then the packed case, which has no file to stat. A loose ref written now
+  # would be aliased onto the packed entry at read time.
+  if case_alias "$branch_ref"; then
+    stop case-collision "$BASE differs only in case from a branch this repository already holds, on a filesystem that folds case, so the landing would silently alias that branch"
   fi
 fi
 
