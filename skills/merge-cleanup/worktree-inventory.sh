@@ -23,6 +23,12 @@
 #   69  note on stderr           git missing, or bash too old for NUL reads
 set -u
 
+# Byte semantics, globally rather than per function: the escaping below indexes
+# strings by byte, and a `local LC_ALL=C` does not apply to expansions on its
+# own declaration line, so a byte count taken there comes back as a character
+# count under a UTF-8 locale and the tail of a multibyte path goes unexamined.
+export LC_ALL=C
+
 usage() {
   sed -n '2,/^set -u$/p' "$0" | sed '$d' >&2
   exit 64
@@ -45,21 +51,63 @@ command -v git >/dev/null 2>&1 \
 [ -n "${BASH_VERSION:-}" ] \
   || { echo "worktree-inventory.sh: needs bash for NUL-terminated reads" >&2; exit 69; }
 
+utf8_len() { # utf8_len <string> <byte index>: bytes in the valid UTF-8
+  # sequence starting there, or 0 where no valid sequence does. The
+  # second-byte ranges are RFC 3629's, so an overlong form, a surrogate, and
+  # anything past U+10FFFF all count as invalid, which is what a strict JSON
+  # reader does with them too.
+  local LC_ALL=C s="$1" i="$2" n b b2 need lo hi k
+  n=${#s}
+  b=$(($(printf '%d' "'${s:i:1}") & 255))
+  if [ "$b" -lt 128 ]; then echo 1; return; fi
+  if [ "$b" -ge 194 ] && [ "$b" -le 223 ]; then need=1; lo=128; hi=191
+  elif [ "$b" -eq 224 ]; then need=2; lo=160; hi=191
+  elif [ "$b" -ge 225 ] && [ "$b" -le 236 ]; then need=2; lo=128; hi=191
+  elif [ "$b" -eq 237 ]; then need=2; lo=128; hi=159
+  elif [ "$b" -ge 238 ] && [ "$b" -le 239 ]; then need=2; lo=128; hi=191
+  elif [ "$b" -eq 240 ]; then need=3; lo=144; hi=191
+  elif [ "$b" -ge 241 ] && [ "$b" -le 243 ]; then need=3; lo=128; hi=191
+  elif [ "$b" -eq 244 ]; then need=3; lo=128; hi=143
+  else echo 0; return
+  fi
+  [ $((i + need)) -lt "$n" ] || { echo 0; return; }
+  for ((k = 1; k <= need; k++)); do
+    b2=$(($(printf '%d' "'${s:i+k:1}") & 255))
+    if [ "$k" -eq 1 ]; then
+      { [ "$b2" -ge "$lo" ] && [ "$b2" -le "$hi" ]; } || { echo 0; return; }
+    else
+      { [ "$b2" -ge 128 ] && [ "$b2" -le 191 ]; } || { echo 0; return; }
+    fi
+  done
+  echo $((need + 1))
+}
+
 json_escape() {
-  local LC_ALL=C s="$1" out="" c i o
-  for ((i = 0; i < ${#s}; i++)); do
+  local LC_ALL=C s="$1" out="" i=0 n c o len
+  n=${#s}
+  while [ "$i" -lt "$n" ]; do
     c="${s:i:1}"
     case "$c" in
-      \\) out+='\\' ;;
-      \") out+='\"' ;;
-      $'\n') out+='\n' ;;
-      $'\t') out+='\t' ;;
-      $'\r') out+='\r' ;;
-      *)
-        o=$(($(printf '%d' "'$c") & 255))
-        if [ "$o" -ge 32 ] && [ "$o" -le 126 ]; then out+="$c"; else out+=$(printf '\\u%04x' "$o"); fi
-        ;;
+      \\) out+='\\'; i=$((i + 1)); continue ;;
+      \") out+='\"'; i=$((i + 1)); continue ;;
+      $'\n') out+='\n'; i=$((i + 1)); continue ;;
+      $'\t') out+='\t'; i=$((i + 1)); continue ;;
+      $'\r') out+='\r'; i=$((i + 1)); continue ;;
     esac
+    o=$(($(printf '%d' "'$c") & 255))
+    if [ "$o" -lt 32 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
+    if [ "$o" -lt 128 ]; then out+="$c"; i=$((i + 1)); continue; fi
+    # A whole valid sequence is copied through: JSON is UTF-8, so those bytes
+    # belong in the line as they are, where \u-escaping each one separately
+    # emits escapes that decode to mojibake and name a path that does not
+    # exist. A path is not required to be UTF-8 at all, though, and no JSON
+    # string can carry a byte that starts no valid sequence, so that byte is
+    # escaped: the name it reports back is then lossy, which beats a line the
+    # caller cannot parse when the verdict is a stop.
+    len=$(utf8_len "$s" "$i")
+    if [ "$len" -eq 0 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
+    out+="${s:i:len}"
+    i=$((i + len))
   done
   printf '%s' "$out"
 }
@@ -104,7 +152,10 @@ fi
 # -uall is load-bearing: status.showUntrackedFiles=no empties the porcelain
 # forms, so a guard that inherits repository configuration can be switched off
 # by the repository it protects (references/hazards.md §status-config).
-inv=$(git -C "$ROOT" status -uall --porcelain --ignored 2>/dev/null) \
+# -c core.fsmonitor=false because git runs a configured fsmonitor as a hook
+# during status, which would let the inspected repository's own configuration
+# execute code from inside a check that exists to be safe to run.
+inv=$(git -C "$ROOT" -c core.fsmonitor=false status -uall --porcelain --ignored 2>/dev/null) \
   || lookup_failed status "could not read the status of $ROOT"
 [ -z "$inv" ] \
   || stop dirty "$ROOT holds modified, untracked, or ignored files; removal would delete them"
