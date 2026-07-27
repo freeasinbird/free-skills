@@ -14,7 +14,10 @@ description: >-
   feedback lands), and only falls back to a bounded foreground poll when it must.
   When feedback arrives it auto-addresses the clear-cut findings and surfaces
   judgment calls for you, converging across the re-reviews that its own fixes
-  trigger but stopping once findings dwindle to marginal nits. It reuses the
+  trigger on a bar that rises with the rounds: blocking findings sustain the
+  loop, while later valid-but-non-blocking ones are fixed in a locally
+  verified final push, deferred to a tracked follow-up issue, or declined,
+  and the exchange hands off with a disposition ledger. It reuses the
   project's review-response conventions and does not replace human review. Not
   for when there is no automated reviewer, no open PR, or you only want a human
   to review.
@@ -571,9 +574,9 @@ essentials, project-agnostic:
   standalone "address review" commit left on the branch is an unfinished
   round, not a done one. Where the project instead appends fix commits, cite
   the fix commit as-is; the verify-on-pushed-ref step still applies. A
-  decline pushes no commit, so reply with the reasoned decline alone; a
-  round of only declines leaves a push-triggered reviewer with nothing to
-  re-fire on, and step 5 covers re-triggering the next pass.
+  decline pushes no commit, so reply with the reasoned decline alone; per
+  step 5, a round of only declines ends the exchange rather than
+  manufacturing a fresh pass on unchanged code.
 - **Auto-address the clear-cut; surface the judgment calls.** Apply the
   obviously-correct fixes yourself. **Pause and surface** anything ambiguous,
   contentious, or design-altering for the user to decide; do not silently make
@@ -639,59 +642,85 @@ rounds in the main agent as usual; for a long review loop from an
 already-huge session, starting a fresh session for the loop is the manual
 equivalent.
 
-### 5. Converge on value, don't cap a productive exchange
+### 5. Converge on value, with a rising bar
 
-A round ends one of two ways, and each needs a different re-trigger. **When you
-pushed a fix**, the commit re-triggers a push-triggered reviewer on its own; a
-command-triggered one still needs its command re-issued (step 2). **When the
-round produced no push** (you declined every finding, or it was a pure
-judgment-call round with no code change), no push event fires, so a
-push-triggered reviewer has nothing coming and a wait would burn the watcher's
-full cap to a timeout. Always force a fresh pass yourself before waiting:
-prefer the reviewer's manual command where it has one (for Codex, an
-`@codex review` comment; lighter, no side effects), and fall back to the host's
-mark-draft-then-ready toggle only when the reviewer has no command but its
-recorded trigger set includes ready-for-review (heavier: it can dismiss
-approvals and block merge while the PR is draft). Use only an affordance the
-reviewer's recorded trigger actually re-fires on; if none exists, hand off
-rather than wait on a pass that will never come.
+A round ends one of two ways. **When you pushed a fix**, the commit
+re-triggers a push-triggered reviewer on its own; a command-triggered one
+still needs its command re-issued (step 2). **When the round produced no push
+because every finding was declined**, the exchange is over: the declines are
+already recorded inline, so hand off with the ledger below rather than paying
+a round for the reviewer to re-confirm code that did not change. A pure
+judgment-call round pauses for the user per step 4 either way; resume the
+loop when their call lands, and if it changes code, the push re-triggers as
+usual.
 
 **Advance the baseline (step 1) before each post-fix wait**: to the review you
-just handled, or to the push you just made. For a no-push re-trigger, anchor
-instead to the trigger/request time per step 1's manual-recheck rule, so the
-reviews you already handled aren't replayed. Otherwise the already-handled
+just handled, or to the push you just made. Otherwise the already-handled
 review is still "after baseline," so the next wait returns instantly and
 reprocesses old feedback; only the reviewer's _fresh_ pass should finish the
 next round.
 
-The stop signal is **value tapering, not round count.** Keep going for as long
-as rounds keep
-surfacing **worthwhile** findings: real correctness, clarity, or safety issues,
-including the round your last fix triggered. **Never stop on a worthwhile
-round**, and **don't cap a still-valuable back-and-forth**: if each round is
-still delivering, ten useful rounds beat stopping at three. A good finding is
-the signal to continue: after each round, re-trigger as above, wait for the
-next review, and only then judge it. When the exchange runs long, keep the fixer alive across rounds
-rather than respawning it each time; step 4 covers why a persistent fixer
-amortizes its context rebuild better over a multi-round loop.
+The stop signal is **value weighed against round cost, on a bar that rises
+with the rounds.** A round is not free: it costs on the order of 1.5–3x the
+main context in token-equivalents plus ~10 minutes of latency
+(`references/cost-model.md`), and a reviewer whose findings stay individually
+valid will sustain an unbounded exchange if any worthwhile finding is enough
+to continue. So ratchet the bar. In the first two fix rounds, address
+everything worthwhile: real correctness, clarity, or safety issues, including
+the round your last fix triggered. From the third fix round on, only
+**blocking** findings (correctness, security, data-loss, broken invariants,
+red CI) justify another full round; a pass whose findings are all valid but
+non-blocking is the taper signal, not fuel. When an exchange does run long on
+blockers, keep the fixer alive across rounds rather than respawning it each
+time; step 4 covers why a persistent fixer amortizes better over a
+multi-round loop.
 
-**Stop when the value actually tapers**: a round comes back clean, or only
-marginal nits (style, micro-wording, contrived edge-cases). Decline any
-remaining nits with a one-line reason and hand off. Value captured is the bar,
-not threads-at-zero. "Stop" means stop _auto-addressing and watching_, not
-"guaranteed converged"; note that a further review may still land so the human
-knows to glance.
+A **fix round** is one that pushed fixes: a decline-only round advances
+neither the ratchet count nor the cap below, and the final triage push below
+counts as the exchange's last fix round.
 
-The only reason to interrupt a loop that is **still finding real issues** is
-**non-convergence, not a quota**: if you are thrashing (the same finding
-recurring _after a correct, complete fix_, or each fix spawning new problems
-without net progress), the change or the loop is broken, so pause and bring in
-the human with what is stuck. But distinguish true thrash from **your own
-half-fix**: a class that recurs because you patched the cited line and didn't
-sweep its siblings is not non-convergence; that is your miss, so sweep it
-properly (grep the file) and keep going. Don't rationalize a stop from a recurrence
-you caused. Any round-count ceiling is purely a guard against a pathological
-infinite loop, set far above any healthy exchange, never a target to stop at.
+**From the third fix round on, when a pass raises no blockers**, triage
+instead of looping. Fix in one final push the findings you can verify
+locally before pushing: an edit inert to behavior (a typo, or prose that
+nothing executes; wording in a prompt or instruction file is behavior, not
+inert), or a change covered by a check you run first (a rename only with
+its references swept and verified, by grep, build, or the project's
+checks). Move a valid finding that
+needs real or hard-to-verify work to the project's tracker as a follow-up
+issue linked from the PR. Decline the marginal rest (style, micro-wording,
+contrived edge-cases) with a one-line reason. Then hand off without waiting
+for the pass that final push triggers, noting that a further review may
+still land so the human knows to glance at merge.
+
+The verifiability gate is what keeps the final push from
+breeding fixes-of-fixes: a fix whose correctness would itself need a reviewer
+pass to confirm (a logic edit, parsing or validation changes, anything on a
+destructive, credential-leak, or trust-boundary path) never rides the final
+push. When such a finding is blocking, it earns the verified round or stays
+explicitly outstanding for the human at handoff, never a deferred issue;
+only a non-blocking one may defer to the tracker instead.
+
+**Hand off with a disposition ledger.** At the end of the exchange every
+finding carries exactly one recorded disposition: fixed (the pushed SHA),
+declined (the reasoned inline reply), deferred (the follow-up issue), or
+outstanding for the human. Nothing is silently dropped: deferral preserves
+the finding without another round, and the human arbitrates outstanding
+non-blockers at merge. "Stop" means stop _auto-addressing and watching_, not
+"guaranteed converged."
+
+**Backstop cap**: an exchange that reaches about five fix rounds or two hours
+of wall clock hands off regardless, ledger and all; blockers still arriving
+at that point mean the change or the loop is broken, the same signal as
+thrashing (the same finding recurring _after a correct, complete fix_, or
+each fix spawning new problems without net progress), so pause and bring in
+the human with what is stuck. The cap takes precedence over the blocker
+rule: blockers at the cap hand off as explicitly outstanding, blocking the
+merge until the human decides, never as license to merge over them. Distinguish both from **your own half-fix**: a
+class that recurs because you patched the cited line and didn't sweep its
+siblings is your miss, so sweep it properly (grep the file) and keep going,
+though the sweep round still counts toward the cap. Don't rationalize a stop
+from a recurrence you caused, and don't treat the cap as a target: a healthy
+exchange ends well under it on the rising bar alone.
 
 **Track findings by class across the whole exchange, and escalate on a
 recurrence.** Classify every finding as it arrives, from any source (a serial
@@ -705,6 +734,15 @@ that sweep, you drew the boundary too narrow, so widen it one level up and
 re-enumerate the larger class (for example "thread page", then "REST comment
 page", then the real class "any single-page read of any connection") instead of
 patching the new instance at the old width.
+
+Track recurrence by **rule as well as class**: when successive rounds keep
+landing on the same rule or prose surface, and the findings read as "the
+instructions omit a clause" rather than "the program has a bug," no
+enumeration converges, because the prose is re-deriving a program. Stop
+clause-patching and surface a medium escalation to the owner: the evidence
+(rounds, severities, what kept recurring) plus a recommendation, usually to
+move the rule into a small tested script or check, so later findings become
+ordinary program bugs a test can hold closed.
 
 That second same-class finding is also when to spend one **adversarial refute
 pass**, where the platform permits **read-only** fresh-context delegation: a
@@ -747,10 +785,11 @@ confirm the pushed branch carries no leftover autosquash subjects
 found means step 4's fold gate is unfinished; complete the fold and
 re-push before declaring the round done.
 
-Summarize: what the reviewer raised, what was fixed (with SHAs), what was
-declined and why, what was surfaced for the user, and the PR's state (threads
-resolved, checks green). Leave the PR open for human review and merge unless the
-project has opted into self-merge.
+Summarize as the exchange's disposition ledger: what the reviewer raised,
+what was fixed (with SHAs), what was declined and why, what was deferred
+(with its follow-up issue), what is outstanding or surfaced for the user, and
+the PR's state (threads resolved, checks green). Leave the PR open for human
+review and merge unless the project has opted into self-merge.
 
 ## Platform support and fallbacks
 

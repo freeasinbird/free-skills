@@ -456,15 +456,23 @@ arc.
   prefix/suffix, order, duplication, nesting), run once as tests, not a
   widening of the cited pattern: pattern-widening spent eight review
   rounds on one class before the enumeration closed it.
-- **Converge deliberately, and don't under-converge.** Automated
-  reviewers can surface ever-smaller nits indefinitely, so converge
-  and hand off rather than chasing every round to zero (value captured
-  is the bar, not threads-at-zero). But don't declare a PR "addressed"
-  while the reviewer is still raising real issues, and never treat a
-  finding that recurs from your _own_ incomplete fix as convergence;
-  that is a miss to sweep, not a stop. Bias toward continuing while
-  findings are genuinely worthwhile; the human's merge is the reliable
-  convergence signal, not your own sense that you are done.
+- **Converge on a bar that rises with the rounds.** A reviewer whose
+  findings stay individually valid can sustain an unbounded exchange,
+  so severity, not validity, sustains the loop: blocking findings
+  (correctness, security, data-loss, broken invariants, red CI) always
+  earn another round, while past the early rounds a valid but
+  non-blocking finding gets a disposition instead of a round: fixed in
+  a final push when the fix is verifiable locally before pushing,
+  deferred to a tracked follow-up issue when it needs real work, or
+  declined with a one-line reason. Don't under-converge: never declare
+  a PR "addressed" while blockers are still arriving, and a finding
+  that recurs from your _own_ incomplete fix is a miss to sweep, not a
+  stop. A project may set a backstop cap that ends even a
+  blocker-sustained exchange as broken; blockers at the cap hand off
+  as explicitly outstanding, never merged over. Hand off with every
+  finding dispositioned (fixed, declined, deferred, or explicitly
+  outstanding); the human arbitrates outstanding non-blockers at
+  merge.
 - **Keep the body current as review evolves the PR.** The body is the
   work unit's durable record on the forge (the merge commit carries only
   the title), so when review adds commits or shifts scope, update What,
@@ -521,7 +529,10 @@ no new review activity outstanding. Once the PR is up:
 - **Close out the watch before handoff**: poll for _both_ new review
   comments and CI, address in-scope findings on the branch, or record the
   bounded timeout / no-review result with the baseline; only then declare
-  done.
+  done. One exception: when the convergence rule above ends the exchange
+  with a final triage push, don't wait out the re-review that push
+  triggers; record with the baseline that it is intentionally left for
+  the human to glance at during merge, and that satisfies this closeout.
 - **Stop and summarize**: say the PR is open and green, and surface
   anything the reviewer should focus on. Leave merging, branch cleanup, and
   the `main` resync to whoever approves it.
