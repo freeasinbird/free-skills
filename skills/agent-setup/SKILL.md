@@ -18,7 +18,7 @@ description: >-
 Ensure a project is agent-ready: AGENTS.md with canonical workflow
 sections, CLAUDE.md pointer, PR template, and repo scaffolding, plus a
 decision-note devlog under the note-keeping profiles (see Profiles).
-Seven canonical sections encode the owner's workflow conventions and
+Eight canonical sections encode the owner's workflow conventions and
 are managed across projects; project-specific sections (build/test/run,
 architecture invariants, conventions) are guided interactively during
 init and left untouched during updates.
@@ -259,12 +259,13 @@ describes. Without shell access, follow the steps manually as written.
                                           note-keeping profiles only)
 3. Default agent finish line             (managed: finish-line)
 4. Context discipline                    (managed: context)
-5. Build, test, run                      (project-specific)
-6. [Other project-specific sections]     (project-specific)
-7. Branches                              (managed: branches)
-8. Pull requests + Handing off the PR    (managed: pull-requests)
-9. Commits                               (managed: commits)
-10. Definition of done for an increment  (managed: done)
+5. Writing for humans                    (managed: communication)
+6. Build, test, run                      (project-specific)
+7. [Other project-specific sections]     (project-specific)
+8. Branches                              (managed: branches)
+9. Pull requests + Handing off the PR    (managed: pull-requests)
+10. Commits                              (managed: commits)
+11. Definition of done for an increment  (managed: done)
 ```
 
 ## Managed section markers
@@ -281,8 +282,13 @@ Content...
 <!-- /agents-md:managed:KEY -->
 ```
 
-Keys: `devlog`, `finish-line`, `context`, `branches`, `pull-requests`,
-`commits`, `done`.
+Keys: `devlog`, `finish-line`, `context`, `communication`, `branches`,
+`pull-requests`, `commits`, `done`.
+
+The research basis for the `communication` section (reading behavior,
+attention limits, warning habituation, AI over-reliance) is summarized
+in `references/writing-for-humans.md`. It ships with the skill for
+maintainers revising that section; it is never copied into projects.
 
 To opt a section out of management, remove its markers. The update mode
 will note it as missing and offer to re-add, but will not force it.
