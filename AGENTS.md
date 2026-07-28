@@ -144,6 +144,48 @@ context to what the current step needs.
 
 <!-- /agents-md:managed:context -->
 
+<!-- agents-md:managed:communication -->
+
+## Writing for humans
+
+Agent-produced text works only if a human absorbs its load-bearing
+part, and humans scan rather than read: roughly a fifth of the words
+on a screen, weighted toward first lines and line-starts, with about
+four open items held in mind and rapid tune-out of repeated warnings.
+Write every human-facing artifact (a handoff, a PR body, an issue, a
+plan, a review comment, a question) for that reader; never rely on
+them digging.
+
+- **Bottom line first.** Open the artifact with its conclusion,
+  decision, or ask, along with any assumption or caveat it stands or
+  falls on; supporting material follows in descending importance. A
+  reader who stops after the opening still acts correctly.
+- **Front-load every unit.** The first words of a heading, bullet, or
+  paragraph carry its information; a key point buried mid-paragraph is
+  effectively unwritten.
+- **Layer, don't just shrink.** The artifact is also the durable
+  record: the skim layer carries the decision, while evidence,
+  alternatives, and detail live below it or in the linked note or
+  issue. Cutting the record to shorten the skim layer loses what later
+  diagnosis needs.
+- **Few asks per round, with defaults.** Surface the questions that
+  gate the work, about three at a time, each with a recommended answer
+  and a one-line reason. Convert questions a sensible default settles
+  into visible assumptions the reader can veto; queue the remaining
+  gating questions for a later round rather than assuming through
+  them. A human handed ten questions silently drops most of them.
+- **Ration flags, and calibrate them.** Tag severity, flag what
+  changes the reader's decision or how much to trust the result, and
+  make rare critical warnings visually distinct; humans habituate to
+  repeated warnings within a few exposures, and a page of routine
+  hedges buries the one that matters.
+- **Surface uncertainty; don't polish past it.** Fluent, confident
+  prose invites rubber-stamping. State what was not verified and where
+  you are unsure, so the human's attention lands where checking is
+  needed.
+
+<!-- /agents-md:managed:communication -->
+
 ## Build, test, run
 
 This is a markdown-only project: no compile or build step.
@@ -245,7 +287,8 @@ description) that an agent loads to execute the skill. Additional files
 - **This repo dogfoods agent-setup; edit managed conventions in two places.**
   free-skills' own AGENTS.md is built from the agent-setup skill, so its
   `<!-- agents-md:managed:* -->` blocks (devlog, finish-line, context,
-  branches, pull-requests, commits, done) mirror the canonical source at
+  communication, branches, pull-requests, commits, done) mirror the
+  canonical source at
   `skills/agent-setup/references/canonical-sections.md`. When you change one of
   those conventions, edit **both** the canonical source **and** this file's
   matching managed block, keeping the managed text in sync (`diff` them).

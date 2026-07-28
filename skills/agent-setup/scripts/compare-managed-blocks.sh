@@ -61,7 +61,7 @@ if [ ! -f "$agents" ]; then
   exit 1
 fi
 
-keys=(devlog finish-line context branches pull-requests commits done)
+keys=(devlog finish-line context communication branches pull-requests commits done)
 status=0
 
 # A marker namespace claim: the agents-md root, any run of separator
