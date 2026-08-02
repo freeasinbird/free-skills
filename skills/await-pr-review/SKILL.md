@@ -242,6 +242,9 @@ cheapest one the platform offers that still reliably re-enters the main agent.
 Two costs add up: what runs while waiting (the watcher), and how the main
 agent resumes (every re-entry replays the whole main context as input tokens,
 so mechanisms that wake it once beat mechanisms that wake it per check).
+When a conductor owns the loop (step 4), apply this same rule from inside
+its context, where the ranking inverts: a bounded foreground poll blocks
+only the conductor and costs nothing while it waits, so it wins there.
 
 Watcher side, cheapest first:
 
@@ -638,6 +641,89 @@ The fixer's own context grows across the loop, which is the point, not a
 cost: that growth lands in the small, cheap context instead of the fat main
 one.
 
+**Where the platform can also notify or re-enter the main agent when a
+subagent finishes, promote the persistent fixer to a conductor that owns
+the whole exchange.** Orchestration is the remaining per-round cost: even
+with every fix delegated, the watcher wakes the main agent once per round
+to advance the baseline, restart the watch, and apply the convergence
+policy, and each wake replays the full main context. A conductor keeps
+steps 1 through 5 inside the fixer's small context instead: brief it once
+with the repo, the PR, the reviewer identity and status signals, the
+current baseline and expected head, and a pointer to the project's
+review-response conventions, then let it watch, fix, advance the baseline,
+and ratchet the bar itself. The main agent then pays two wakes per
+exchange (spawn and terminal report) plus one per surfaced interruption
+(judgment call or checkpoint escalation; two when user-routed, the
+answer being a second turn), instead of one or more per round
+(`references/cost-model.md` has the whole-exchange arithmetic).
+
+Inside the conductor, re-pick the step-3 watch mechanism by the same cost
+rule, which now lands differently: a bounded foreground `watch-review.sh`
+call blocks only the conductor, costs no model tokens while it polls, and
+needs no re-entry machinery, so it becomes the preferred watch there. The
+conductor inherits everything this skill binds on whoever runs the loop:
+the step-1 baseline and attribution rules, the fold-then-reply gate, the
+step-5 ratchet, checkpoints, and thrash rule, and the compactness contract
+on what crosses back. It surfaces judgment calls, checkpoint escalations,
+and the terminal disposition ledger to the main agent rather than deciding
+them, and the main agent (or user) answers by resuming the same conductor,
+never by spawning a fresh one. The near-free wait also rescopes step 5's
+no-wait handoff: the conductor waits out the re-review its own final
+push triggers and issues the terminal ledger only at quiescence (step 5).
+
+Gate the conductor on the full grant it needs: write-capable delegation,
+resumable across the main agent's turns, whose completion reliably
+notifies or re-enters the main agent, plus checkout isolation for the
+branch it rewrites. The conductor edits, folds, and force-pushes across
+the whole exchange while the main agent's thread is free, so the two
+must never share a mutable checkout: an interleaved main-agent edit can
+be swept into a fold, and its half-finished verification invalidated
+mid-run. Give the conductor its own worktree, checkout, or clone where
+the platform supports one; otherwise grant it exclusivity over the
+shared checkout. Where any part of that grant is missing, fall back to
+the persistent fixer with the main agent keeping the loop, then
+per-round delegation, then in-main rounds, exactly as above.
+
+Whatever form the isolation takes, align it before the first write: the
+conductor verifies its checkout's HEAD equals the expected PR head
+recorded in step 1, resolved from the host, before any fix or fold. A
+fresh clone starts on its default branch and a worktree can be cut from
+any branch, and the pinned lease below cannot catch the mismatch, since
+it checks only what the remote held, not what the push would replace it
+with; a rewrite built on stale history force-pushes the PR's commits
+away. On a mismatch, stop and re-anchor on the fetched PR head rather
+than editing. The same pre-write check covers cleanliness: a checkout
+already holding tracked or untracked edits can see them swept into a
+fold and force-pushed as the PR's own work, so the conductor also
+requires a clean worktree and index before its first write, stopping
+to surface any pre-existing changes instead of committing them.
+
+Two further edges of that isolation bind for the conductor's whole run.
+Exclusivity ends when the exchange terminates with the terminal
+ledger, not when the conductor pauses: a surfaced judgment call or
+checkpoint escalation resumes the same conductor afterward, so a
+main-agent edit to the branch during the pause is exactly the
+collision above; a change the human wants on the branch mid-exchange
+goes through the conductor, or ends the exchange first. And any fetch
+of the PR branch into the conductor's checkout (a worktree shares the
+main checkout's refs, and a separate clone's own fetch advances its
+tracking ref the same way) updates the value a bare
+`git push --force-with-lease` checks against, blessing an overwrite
+of whatever that fetch brought in; so the conductor pins every
+rewrite's lease explicitly, whatever the checkout type.
+
+Pin the lease to the conductor's own last pushed head
+(`--force-with-lease=<branch>:<last-pushed-sha>`; on the first push,
+the aligned expected head from step 1), never merely to the newest
+remote head observed: a contributor can push between rounds, and a
+lease advanced to a SHA the local history does not contain would
+bless force-pushing that commit away. A failing lease therefore means
+someone else pushed; stop and re-anchor onto the observed remote
+head, incorporating it into local history, before any further
+rewrite, then advance the lease to that incorporated head for the
+retry: the pin always names the newest remote head local history
+contains.
+
 Where delegation with write access is unavailable or not permitted, run the
 rounds in the main agent as usual; for a long review loop from an
 already-huge session, starting a fresh session for the loop is the manual
@@ -701,9 +787,26 @@ hard-to-verify work to the project's tracker as a follow-up issue linked
 from the PR, quoting the finding with enough context to act on later:
 deferral preserves the work, it is not a cheaper exit. Decline the marginal
 rest (style, micro-wording, contrived edge-cases) with a one-line reason.
-Then hand off without waiting
-for the pass that final push triggers, noting that a further review may
-still land so the human knows to glance at merge.
+
+How that final push hands off depends on who owns the loop. In a
+main-agent-owned loop, hand off without waiting for the pass the push
+triggers, noting that a further review may still land so the human knows
+to glance at merge: waiting there costs another full-context round. A
+conductor's wait is a near-free foreground poll (step 3), so a
+conductor instead waits out that re-review, dispositions anything it
+raises on this same rising bar, and delivers the terminal ledger at
+quiescence: a clean pass, a capped timeout with no review (recorded in
+the ledger with its baseline), or every finding dispositioned with no
+push pending.
+
+The triage push is also what bounds that tail. Past it, a new blocker
+reopens fix rounds as usual, but further non-blocking findings take
+terminal dispositions only, deferred to the tracker or declined, never
+another push: a reviewer yielding one fresh nit per push would
+otherwise hold the conductor, and its checkout exclusivity, alive
+indefinitely. A disposition-only round pushes nothing, triggers no new
+pass, and so reaches quiescence; with the capped timeout above,
+exclusivity never outlives a bounded wait.
 
 The verifiability gate is what keeps the final push from
 breeding fixes-of-fixes: a fix whose correctness would itself need a reviewer
@@ -829,9 +932,12 @@ steps the agent cannot perform or is not allowed to start without permission.
 - **The grants form a ladder.** The delegated watcher needs read-only
   delegation whose completion reliably notifies or re-enters the main agent
   (that gate, and the skip rule when it fails, live in step 3's
-  delegated-watcher path), while step 4's delegated fixer needs delegation
-  _with write access_, a larger grant (its gate lives in step 4). Where a
-  grant is not both supported and permitted, take the next permitted path.
+  delegated-watcher path); step 4's delegated fixer needs delegation
+  _with write access_, a larger grant (its gate lives in step 4); and
+  step 4's conductor needs that write grant plus resumability across the
+  main agent's turns, completion re-entry, and checkout isolation or
+  exclusivity (step 4), the largest. Where a grant is
+  not both supported and permitted, take the next permitted path.
 - **An agent with background re-invocation or scheduled wake-ups** (e.g.
   Claude Code) runs the **non-blocking** path for that environment.
 - **An agent whose turn is synchronous** and that lacks a reliable
