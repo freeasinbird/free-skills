@@ -503,19 +503,31 @@ arc.
   findings stay individually valid can sustain an unbounded exchange,
   so severity, not validity, sustains the loop: blocking findings
   (correctness, security, data-loss, broken invariants, red CI) always
-  earn another round, while past the early rounds a valid but
-  non-blocking finding gets a disposition instead of a round: fixed in
-  a final push when the fix is verifiable locally before pushing,
-  deferred to a tracked follow-up issue when it needs real work, or
-  declined with a one-line reason. Don't under-converge: never declare
-  a PR "addressed" while blockers are still arriving, and a finding
-  that recurs from your _own_ incomplete fix is a miss to sweep, not a
-  stop. A project may set a backstop cap that ends even a
-  blocker-sustained exchange as broken; blockers at the cap hand off
-  as explicitly outstanding, never merged over. Hand off with every
-  finding dispositioned (fixed, declined, deferred, or explicitly
-  outstanding); the human arbitrates outstanding non-blockers at
-  merge.
+  earn another round. Judge that severity yourself against those
+  categories, treating the reviewer's own tag as input, not verdict,
+  and when unsure whether a finding blocks, treat it as blocking:
+  uncertainty buys a round, not an exit. Past the early rounds a valid
+  but non-blocking finding gets a disposition instead of a round:
+  fixed in a final push when the fix is verifiable locally before
+  pushing, deferred to a tracked follow-up issue that quotes the
+  finding when it needs real work, or declined with a one-line reason;
+  a round the loop pays for anyway dispositions every finding it
+  raised on those same merits, never silently carrying one forward and
+  never force-fixing one that rightly earns a decline. Don't
+  under-converge: never declare a PR "addressed" while blockers are
+  still arriving, and a finding that recurs from your _own_ incomplete
+  fix is a miss to sweep, not a stop. What ends a blocker-sustained
+  exchange is thrash, not a round count: the same finding recurring
+  after a correct, complete fix, or fixes spawning new problems
+  without net progress, means the change or the loop is broken, so
+  pause and bring in the human with what is stuck; a long run of
+  blocker-sustained rounds earns explicit, recorded
+  continue-or-escalate calls, renewed as the run stretches, rather
+  than a silent stop or autopilot continuation. Hand off with every
+  finding dispositioned (fixed,
+  declined, deferred, or explicitly outstanding) and any no-blocker
+  call that ended the exchange stated for audit; the human arbitrates
+  outstanding non-blockers at merge.
 - **Keep the body current as review evolves the PR.** The body is the
   work unit's durable record on the forge (the merge commit carries only
   the title), so when review adds commits or shifts scope, update What,

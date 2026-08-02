@@ -15,10 +15,11 @@ description: >-
   When feedback arrives it auto-addresses the clear-cut findings and surfaces
   judgment calls for you, converging across the re-reviews that its own fixes
   trigger on a bar that rises with the rounds: blocking findings sustain the
-  loop, while later valid-but-non-blocking ones are fixed in a locally
-  verified final push, deferred to a tracked follow-up issue, or declined,
-  and the exchange hands off with a disposition ledger. It reuses the
-  project's review-response conventions and does not replace human review. Not
+  loop until it thrashes or a recorded checkpoint escalates, while later
+  valid-but-non-blocking ones are fixed in a locally verified final push,
+  deferred to a tracked follow-up issue, or declined, and the exchange hands
+  off with a disposition ledger. It reuses the project's review-response
+  conventions and does not replace human review. Not
   for when there is no automated reviewer, no open PR, or you only want a human
   to review.
 ---
@@ -675,20 +676,32 @@ blockers, keep the fixer alive across rounds rather than respawning it each
 time; step 4 covers why a persistent fixer amortizes better over a
 multi-round loop.
 
-A **fix round** is one that pushed fixes: a decline-only round advances
-neither the ratchet count nor the cap below, and the final triage push below
-counts as the exchange's last fix round.
+**The severity call is yours.** Judge each finding against those blocking
+categories yourself; the reviewer's severity tag (a P1/P2 label) is input,
+not verdict, in both directions. When unsure whether a finding blocks, treat
+it as blocking: uncertainty buys a round, not an exit, so the exit never
+rewards a convenient downgrade. And a round the exchange pays for anyway
+dispositions every finding in the pass, not just the blockers that earned
+it: fix the worthwhile ones, defer or decline the rest on the triage merits
+below; never silently carry a finding to a later round, and never force-fix
+one that rightly earns a decline.
 
-**From the third fix round on, when a pass raises no blockers**, triage
-instead of looping. Fix in one final push the findings you can verify
-locally before pushing: an edit inert to behavior (a typo, or prose that
-nothing executes; wording in a prompt or instruction file is behavior, not
-inert), or a change covered by a check you run first (a rename only with
-its references swept and verified, by grep, build, or the project's
-checks). Move a valid finding that
-needs real or hard-to-verify work to the project's tracker as a follow-up
-issue linked from the PR. Decline the marginal rest (style, micro-wording,
-contrived edge-cases) with a one-line reason. Then hand off without waiting
+A **fix round** is one that pushed fixes: a decline-only round advances
+neither the ratchet count nor the checkpoint below, and the final triage
+push below counts as the exchange's last fix round.
+
+**From the third fix round on, when a pass raises no blockers on your own
+severity read**, triage instead of looping. Fix in one final push the
+findings you can verify locally before pushing: an edit inert to behavior (a
+typo, or prose that nothing executes; wording in a prompt or instruction
+file is behavior, not inert), or a change covered by a check you run first
+(a rename only with its references swept and verified, by grep, build, or
+the project's checks). Move a valid finding that needs real or
+hard-to-verify work to the project's tracker as a follow-up issue linked
+from the PR, quoting the finding with enough context to act on later:
+deferral preserves the work, it is not a cheaper exit. Decline the marginal
+rest (style, micro-wording, contrived edge-cases) with a one-line reason.
+Then hand off without waiting
 for the pass that final push triggers, noting that a further review may
 still land so the human knows to glance at merge.
 
@@ -703,24 +716,38 @@ only a non-blocking one may defer to the tracker instead.
 **Hand off with a disposition ledger.** At the end of the exchange every
 finding carries exactly one recorded disposition: fixed (the pushed SHA),
 declined (the reasoned inline reply), deferred (the follow-up issue), or
-outstanding for the human. Nothing is silently dropped: deferral preserves
-the finding without another round, and the human arbitrates outstanding
-non-blockers at merge. "Stop" means stop _auto-addressing and watching_, not
-"guaranteed converged."
+outstanding for the human. When a no-blocker call ended the exchange, the
+ledger states that call itself, so the human can audit in one glance the
+judgment that stopped the loop. Nothing is silently dropped: deferral
+preserves the finding without another round, and the human arbitrates
+outstanding non-blockers at merge. "Stop" means stop _auto-addressing and
+watching_, not "guaranteed converged."
 
-**Backstop cap**: an exchange that reaches about five fix rounds or two hours
-of wall clock hands off regardless, ledger and all; blockers still arriving
-at that point mean the change or the loop is broken, the same signal as
-thrashing (the same finding recurring _after a correct, complete fix_, or
-each fix spawning new problems without net progress), so pause and bring in
-the human with what is stuck. The cap takes precedence over the blocker
-rule: blockers at the cap hand off as explicitly outstanding, blocking the
-merge until the human decides, never as license to merge over them. Distinguish both from **your own half-fix**: a
-class that recurs because you patched the cited line and didn't sweep its
-siblings is your miss, so sweep it properly (grep the file) and keep going,
-though the sweep round still counts toward the cap. Don't rationalize a stop
-from a recurrence you caused, and don't treat the cap as a target: a healthy
-exchange ends well under it on the rising bar alone.
+**What stops a blocker-sustained exchange is thrash, not a round count**: the
+same finding recurring _after a correct, complete fix_, or each fix spawning
+new problems without net progress, means the change or the loop is broken,
+so pause and bring in the human with what is stuck. Short of thrash,
+blockers that keep landing and staying fixed keep earning rounds: a
+premature handoff saves nothing, because the human restarts the exchange,
+re-pays the remaining rounds, and pays their own attention on top.
+
+At about five blocker-sustained fix rounds, break autopilot with a
+**checkpoint**:
+record a one-line go/no-go, continuing only with a stated reason the
+exchange is converging (rounds shrinking, fixes holding), and otherwise
+escalating to the human with the ledger instead of another patch round. A go
+call buys the next few rounds, never the rest of the exchange: repeat the
+checkpoint on that same cadence for as long as blockers sustain the loop,
+since an exchange yielding one fresh blocker per round, every fix holding,
+trips neither thrash nor a one-time check. The forced assessment is the
+checkpoint's value; don't rubber-stamp it.
+
+Distinguish thrash from **your own half-fix**: a class that recurs because
+you patched the cited line and didn't sweep its siblings is your miss, so
+sweep it properly (grep the file) and keep going, though the sweep round
+still counts toward the checkpoint. Don't rationalize a stop from a
+recurrence you caused; a healthy exchange ends on the taper well before the
+checkpoint fires.
 
 **Track findings by class across the whole exchange, and escalate on a
 recurrence.** Classify every finding as it arrives, from any source (a serial
