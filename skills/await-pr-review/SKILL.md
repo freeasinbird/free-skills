@@ -12,6 +12,9 @@ description: >-
   delegated watcher/subagent that can notify or re-enter the main agent,
   backgrounded poll, or scheduled wake-up that re-invokes the agent when
   feedback lands), and only falls back to a bounded foreground poll when it must.
+  Where the platform grants write-capable, resumable delegation with checkout
+  isolation, a conductor subagent owns the whole exchange by default, waking
+  the main agent only for judgment calls and the final ledger.
   When feedback arrives it auto-addresses the clear-cut findings and surfaces
   judgment calls for you, converging across the re-reviews that its own fixes
   trigger on a bar that rises with the rounds: blocking findings sustain the
@@ -45,7 +48,9 @@ whether to watch.** Asking "should I watch for the review?" is exactly the manua
 polling this skill exists to remove; start the watch and keep working. Keep one
 active watch per PR/reviewer; after a new push, advance or replace that watch's
 baseline (anchoring rules: step 1) rather than leaving duplicate watchers
-running. (Where the platform or
+running. Who starts it is the owner decision at the top of the loop: where
+the conductor gate holds, starting the watch means spawning the conductor,
+which runs the exchange from there. (Where the platform or
 session policy can't watch non-blockingly, fall back per the ladder in step 3;
 the gate is the available permitted mechanism, not whether to engage.)
 
@@ -66,6 +71,36 @@ the gate is the available permitted mechanism, not whether to engage.)
 - You only want a human review: this watches the bot pass, not a person.
 
 ## The loop
+
+**Choose the exchange owner before step 1.** Steps 1 through 5 run inside one
+context, and the choice of that context is the largest cost lever in this
+skill, so settle ownership at invocation, not after rounds accumulate. Where
+the platform grants everything a conductor needs (the full gate in step 4:
+write-capable delegation permitted without asking, resumable across the main
+agent's turns, completion that reliably notifies or re-enters the main agent,
+and checkout isolation or exclusivity for the PR branch), **default to a
+conductor owning the whole exchange**: brief it per step 4 and let it run
+the loop while the main agent keeps working. One task stays with the main
+agent either way: it made the push, so it captures the step-1 push-time
+facts (the baseline event or the two fallback readings, the expected head,
+the base tip) at the event boundary, before or while spawning, and hands
+them in the brief; the conductor owns everything from that brief onward.
+
+Keep the exchange
+in-main only when a named gate is unmet (state which grant is missing when
+you fall back), or when the feedback is already in hand and known to need at
+most a couple of trivial operations, where a spawn buys nothing.
+
+**Don't route on a predicted one-shot exchange.** Whether the exchange stays
+one round is knowable only after the review arrives, so "probably one-shot"
+is speculation that defaults the loop into the expensive context. The
+arithmetic is asymmetric (`references/cost-model.md`): a clean pass under a
+conductor costs at most one extra main-context wake over the cheapest
+in-main watch, while one substantive fix round kept in-main replays the full
+main context per tool call, already exceeding the conductor's fixed wakes.
+The owner decision fixes where the loop runs; each step below then applies
+from inside the owner's context (step 3's mechanism ladder in particular
+re-ranks per owner).
 
 ### 1. Resolve the PR and snapshot a baseline
 
@@ -242,7 +277,8 @@ cheapest one the platform offers that still reliably re-enters the main agent.
 Two costs add up: what runs while waiting (the watcher), and how the main
 agent resumes (every re-entry replays the whole main context as input tokens,
 so mechanisms that wake it once beat mechanisms that wake it per check).
-When a conductor owns the loop (step 4), apply this same rule from inside
+When a conductor owns the loop (the default where its gate holds; chosen
+before step 1, mechanics in step 4), apply this same rule from inside
 its context, where the ranking inverts: a bounded foreground poll blocks
 only the conductor and costs nothing while it waits, so it wins there.
 
@@ -422,11 +458,13 @@ above or the bounded foreground poll below.
 
 Remaining fallbacks, in order:
 
-- **Bounded foreground poll (blocking fallback).** Only where none of the
-  above exists: poll in the foreground with a hard cap, accepting that it
-  blocks, and that it is the costliest per check: each foreground poll is a
-  full-context round whose output then stays in the context for the rest of
-  the session.
+- **Bounded foreground poll (blocking fallback in a main-agent-owned
+  loop).** Only where none of the above exists: poll in the foreground with
+  a hard cap, accepting that it blocks, and that it is the costliest per
+  check: each foreground poll is a full-context round whose output then
+  stays in the context for the rest of the session. (Inside a conductor
+  this same poll is instead the preferred mechanism, per the inversion note
+  at the top of this step.)
 - **Hand back (last resort).** Where the agent can do none of these, report the
   baseline and ask the user to re-invoke once the bot has commented.
 
@@ -586,9 +624,14 @@ essentials, project-agnostic:
   contentious, or design-altering for the user to decide; do not silently make
   a debatable change.
 
-**Where to run the rounds.** By default the main agent addresses the feedback
+**Where to run the rounds, when the main agent owns the exchange** (kept
+in-main by the owner decision before step 1: a named unmet gate, or
+trivial feedback already in hand): by default
+the main agent addresses the feedback
 itself: the watcher has already woken it, its context is warm, and it holds
-the diff and the session's understanding of the change.
+the diff and the session's understanding of the change. The per-round rules
+below govern that fallback; under a conductor the rounds already run in its
+context and none of this arises.
 
 - **Delegate only when both hold**: the round is long (many findings, a wide
   class sweep, dozens of tool calls) **and** the main context dwarfs the
@@ -641,9 +684,12 @@ The fixer's own context grows across the loop, which is the point, not a
 cost: that growth lands in the small, cheap context instead of the fat main
 one.
 
-**Where the platform can also notify or re-enter the main agent when a
-subagent finishes, promote the persistent fixer to a conductor that owns
-the whole exchange.** Orchestration is the remaining per-round cost: even
+**The conductor is that persistent fixer scaled up to own the whole
+exchange, and it is the default owner chosen before step 1, not a promotion
+earned by round count.** What follows is its operating contract, applied
+from the first round wherever the full gate below holds.
+
+Orchestration is the remaining per-round cost: even
 with every fix delegated, the watcher wakes the main agent once per round
 to advance the baseline, restart the watch, and apply the convergence
 policy, and each wake replays the full main context. A conductor keeps
@@ -680,7 +726,14 @@ must never share a mutable checkout: an interleaved main-agent edit can
 be swept into a fold, and its half-finished verification invalidated
 mid-run. Give the conductor its own worktree, checkout, or clone where
 the platform supports one; otherwise grant it exclusivity over the
-shared checkout. Where any part of that grant is missing, fall back to
+shared checkout.
+
+Map the gate against what the platform actually offers
+rather than inferring vaguely (in Claude Code, for example, every part is
+native: a background subagent with write access satisfies delegation and
+completion notification, re-messaging the same agent satisfies
+resumability, and worktree isolation at spawn satisfies the checkout
+grant). Where any part is missing, name the unmet gate and fall back to
 the persistent fixer with the main agent keeping the loop, then
 per-round delegation, then in-main rounds, exactly as above.
 
@@ -757,10 +810,11 @@ everything worthwhile: real correctness, clarity, or safety issues, including
 the round your last fix triggered. From the third fix round on, only
 **blocking** findings (correctness, security, data-loss, broken invariants,
 red CI) justify another full round; a pass whose findings are all valid but
-non-blocking is the taper signal, not fuel. When an exchange does run long on
-blockers, keep the fixer alive across rounds rather than respawning it each
-time; step 4 covers why a persistent fixer amortizes better over a
-multi-round loop.
+non-blocking is the taper signal, not fuel. When an exchange runs long on
+blockers in a main-agent-owned loop, keep the fixer alive across rounds
+rather than respawning it each time (step 4 covers why a persistent fixer
+amortizes better over a multi-round loop); a conductor already holds the
+whole exchange in one context.
 
 **The severity call is yours.** Judge each finding against those blocking
 categories yourself; the reviewer's severity tag (a P1/P2 label) is input,
@@ -936,8 +990,11 @@ steps the agent cannot perform or is not allowed to start without permission.
   _with write access_, a larger grant (its gate lives in step 4); and
   step 4's conductor needs that write grant plus resumability across the
   main agent's turns, completion re-entry, and checkout isolation or
-  exclusivity (step 4), the largest. Where a grant is
-  not both supported and permitted, take the next permitted path.
+  exclusivity (step 4), the largest. The ladder reads bottom-up at
+  invocation: where the largest grant holds, the owner decision before
+  step 1 defaults the exchange to the conductor; where a grant is
+  not both supported and permitted, name it and take the next permitted
+  path.
 - **An agent with background re-invocation or scheduled wake-ups** (e.g.
   Claude Code) runs the **non-blocking** path for that environment.
 - **An agent whose turn is synchronous** and that lacks a reliable
