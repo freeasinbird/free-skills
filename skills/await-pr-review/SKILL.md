@@ -282,6 +282,12 @@ before step 1, mechanics in step 4), apply this same rule from inside
 its context, where the ranking inverts: a bounded foreground poll blocks
 only the conductor and costs nothing while it waits, so it wins there.
 
+For the conductor the background poll is not merely dispreferred but
+off the ladder entirely: the re-entry that makes a backgrounded watch
+non-blocking runs at the main agent's layer, and a subagent that ends
+its turn waiting on its own background process may never be re-entered
+(step 4's turn discipline).
+
 Watcher side, cheapest first:
 
 - **Backgrounded no-model poll (preferred wherever the platform can run a
@@ -712,10 +718,34 @@ the step-1 baseline and attribution rules, the fold-then-reply gate, the
 step-5 ratchet, checkpoints, and thrash rule, and the compactness contract
 on what crosses back. It surfaces judgment calls, checkpoint escalations,
 and the terminal disposition ledger to the main agent rather than deciding
-them, and the main agent (or user) answers by resuming the same conductor,
-never by spawning a fresh one. The near-free wait also rescopes step 5's
+them; the main agent (or user) answers a judgment call or checkpoint
+escalation by resuming the same conductor, never by spawning a fresh one,
+while the terminal ledger is not answered at all: it ends the exchange.
+The near-free wait also rescopes step 5's
 no-wait handoff: the conductor waits out the re-review its own final
 push triggers and issues the terminal ledger only at quiescence (step 5).
+
+A turn discipline follows: **the conductor stays awake for the whole
+exchange.** It ends a turn only to surface a judgment call, a checkpoint
+escalation, or the terminal ledger; the first two are answered by
+resuming it, while the ledger is terminal, ending the exchange with
+nothing to resume; it never ends one to "wait" on its own
+backgrounded watcher. The re-entry that backgrounding relies on runs at
+the main agent's layer, not inside a subagent: a subagent that stops has
+completed as far as its platform is concerned, its completion notice
+goes to the agent that spawned it, and its own background process wakes
+nothing (a conductor was observed live stranding an exchange exactly
+this way, stopping "to wait" and firing its completion notification
+with the exchange incomplete). Block on the foreground poll instead;
+occupying the conductor's thread is the point of conductor ownership.
+
+The main agent, for its part, treats a conductor completion notice
+whose report is a wait, not a ledger or a surfaced question, as a
+stranded exchange: resume the conductor with the foreground-poll
+instruction rather than waiting alongside it, telling it to first
+terminate or reuse the watcher it abandoned; one active watch per
+PR/reviewer holds here too, and a leftover backgrounded watcher can
+fire a redundant wake later.
 
 Gate the conductor on the full grant it needs: write-capable delegation,
 resumable across the main agent's turns, whose completion reliably
