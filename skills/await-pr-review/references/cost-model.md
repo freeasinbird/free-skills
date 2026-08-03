@@ -1,6 +1,7 @@
 # Cost model: the derivations
 
-The decision rules and their headline numbers live in `SKILL.md` (steps 3–4);
+The decision rules and their headline numbers live in `SKILL.md` (the owner
+decision at the top of The loop, and steps 3–4);
 an agent that never opens this file makes the same choices. This file holds
 the arithmetic behind those numbers: read it when a call is genuinely
 borderline, or when re-deriving the break-evens after a pricing change.
@@ -104,12 +105,25 @@ that,
 since a single fix round of a few dozen tool calls replays roughly
 `20 × C_main` when run in-main against `20 × C_cond` under a conductor,
 and at the measured 5x to 25x ratio that one round's difference already
-exceeds the conductor's two fixed wakes (`2 × C_main`). The comparison
+exceeds the conductor's two fixed wakes (`2 × C_main`).
+
+The comparison
 stays governed by the formula, not a blanket rule: rounds carrying real
 fix work favor the conductor, while an exchange whose interruptions
 rival its rounds (`J + J_user` large against N, e.g. two one-call
-rounds each pausing for the user) or a one-round exchange favors the
-already-awake main agent, which is the per-round rule above.
+rounds each pausing for the user) favors the already-awake main agent.
+A one-round exchange favors the main agent only when that round is
+itself trivial (a couple of calls); by the ratio above, a single
+substantive fix round already repays the conductor's fixed wakes.
+
+N and J are unknowable at invocation, when the owner is chosen, so the
+formula audits an exchange in hindsight; it does not route one upfront.
+Routing lives in SKILL.md's owner decision, which defaults to the
+conductor on the platform gate alone: the asymmetry above means a clean
+pass under a conductor wastes at most one main-context wake over the
+cheapest in-main watch (its two fixed wakes against the watcher's one),
+while a substantive exchange wrongly kept in-main pays the 5x to 25x
+per-call ratio on every tool call of every round.
 
 Inside the conductor the step-3 mechanism ladder inverts at the bottom: the
 bounded foreground poll, costliest on the main thread, is free while
