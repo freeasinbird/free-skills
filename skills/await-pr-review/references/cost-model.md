@@ -1,10 +1,19 @@
 # Cost model: the derivations
 
-The decision rules and their headline numbers live in `SKILL.md` (the owner
-decision at the top of The loop, and steps 3–4);
-an agent that never opens this file makes the same choices. This file holds
-the arithmetic behind those numbers: read it when a call is genuinely
-borderline, or when re-deriving the break-evens after a pricing change.
+The routing and waiting decisions live in `SKILL.md`; fix-round decisions live
+in `review-response.md`, which the exchange owner reads before addressing
+findings. This file holds only the arithmetic behind those rules: read it when
+a call is genuinely borderline, or when re-deriving the break-evens after a
+pricing change.
+
+## Contents
+
+- [Single wake vs cache-keepalive wakes](#single-wake-vs-cache-keepalive-wakes-step-3)
+- [Detection inside a timer wake](#detection-inside-a-timer-wake-step-3)
+- [Observed reviewer latency](#observed-reviewer-latency-and-the-warm-wake-swing-step-3)
+- [Delegated fix round](#delegated-fix-round-what-delegation-actually-saves-step-4)
+- [Persistent fixer amortization](#persistent-fixer-amortization-step-4)
+- [Conductor accounting](#conductor-whole-exchange-accounting)
 
 ## Single wake vs cache-keepalive wakes (step 3)
 
@@ -17,9 +26,9 @@ instead re-enter the agent on a timer (a scheduled wake-up or self-paced
 loop), each wake replays the main context itself, which is normally the
 costliest pattern.
 
-Timer re-entry becomes the cheaper pattern only in the narrow case SKILL.md
-states (large main context, steep cached-read discount behind a short cache
-TTL, short expected wait). Then waking at the cache-keepalive cadence costs
+Timer re-entry becomes the cheaper pattern only in a narrow case: a large main
+context, a steep cached-read discount behind a short cache TTL, and a short
+expected wait. Then waking at the cache-keepalive cadence costs
 the cached-read fraction of a cold read per wake, and keepalive wins while
 wakes times the cached-read price stay under one cold read (at typical
 pricing roughly ten cache-cadence wakes, so waits up to ~45 minutes). With a
@@ -61,9 +70,9 @@ fresh fixer must first rebuild working context the main agent already has
 (re-reading the diff, the touched files, the conventions). What delegation
 saves is everything in between: each tool call replays the calling agent's
 context, so a long round replays the main context once per call while a
-fixer replays only its own small one. That is why SKILL.md's break-even
-requires both a long round (many findings, a wide class sweep, dozens of
-tool calls) and a main context that dwarfs the fixer's brief.
+fixer replays only its own small one. That is why `review-response.md` requires
+both a long round (many findings, a wide class sweep, dozens of tool calls) and
+a main context that dwarfs the fixer's brief.
 
 ## Persistent fixer amortization (step 4)
 
@@ -79,7 +88,7 @@ a persistent fixer likely wins on any longer exchange (roughly 4+ rounds)
 even when each round on its own falls below the per-round break-even, while
 the per-round rule still governs a one-shot round.
 
-## Conductor: whole-exchange accounting (step 4)
+## Conductor: whole-exchange accounting
 
 The sections above price a single round. Over an exchange, orchestration is
 itself a per-round cost: with the main agent owning the loop, each round
@@ -125,7 +134,12 @@ cheapest in-main watch (its two fixed wakes against the watcher's one),
 while a substantive exchange wrongly kept in-main pays the 5x to 25x
 per-call ratio on every tool call of every round.
 
-Inside the conductor the step-3 mechanism ladder inverts at the bottom: the
-bounded foreground poll, costliest on the main thread, is free while
-waiting there (no model tokens while the script polls, nothing user-facing
-blocked), so it becomes the preferred watch mechanism under a conductor.
+Inside the conductor a script-backed bounded foreground poll, costliest on the
+main thread, is free while waiting (no model tokens while the script polls,
+nothing user-facing blocked). A connector-only conductor pays for model wakes
+but still keeps fix-round state out of the main context when those wakes resume
+the same conductor without releasing ownership. `SKILL.md` therefore selects a
+conductor-local detector directly, using the script where available and an
+equivalent connector or API loop otherwise. A connector with instantaneous
+reads but no conductor-local wait or scheduled same-conductor wake fails the
+gate and uses the main-owned mechanism ladder.
