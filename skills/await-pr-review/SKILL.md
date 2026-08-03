@@ -12,8 +12,9 @@ description: >-
   delegated watcher/subagent that can notify or re-enter the main agent,
   backgrounded poll, or scheduled wake-up that re-invokes the agent when
   feedback lands), and only falls back to a bounded foreground poll when it must.
-  Where the platform grants write-capable, resumable delegation with checkout
-  isolation, a conductor subagent owns the whole exchange by default, waking
+  Where the platform grants write-capable, resumable delegation, a conductor
+  subagent owns the whole exchange by default, in a checkout the owner
+  isolates for it, waking
   the main agent only for judgment calls and the final ledger.
   When feedback arrives it auto-addresses the clear-cut findings and surfaces
   judgment calls for you, converging across the re-reviews that its own fixes
@@ -75,12 +76,17 @@ the gate is the available permitted mechanism, not whether to engage.)
 **Choose the exchange owner before step 1.** Steps 1 through 5 run inside one
 context, and the choice of that context is the largest cost lever in this
 skill, so settle ownership at invocation, not after rounds accumulate. Where
-the platform grants everything a conductor needs (the full gate in step 4:
-write-capable delegation permitted without asking, resumable across the main
-agent's turns, completion that reliably notifies or re-enters the main agent,
-and checkout isolation or exclusivity for the PR branch), **default to a
-conductor owning the whole exchange**: brief it per step 4 and let it run
-the loop while the main agent keeps working. One task stays with the main
+the platform grants the three capabilities a conductor needs (the full gate
+in step 4: write-capable delegation permitted without asking, resumable
+across the main agent's turns, and completion that reliably notifies or
+re-enters the main agent), **default to a conductor owning the whole
+exchange**: brief it per step 4 and let it run
+the loop while the main agent keeps working. The conductor's fourth
+requirement, checkout isolation, is not a fourth capability to check: it is a
+precondition you establish before briefing it (step 4), so it never decides
+this routing call.
+
+One task stays with the main
 agent either way: it made the push, so it captures the step-1 push-time
 facts (the baseline event or the two fallback readings, the expected head,
 the base tip) at the event boundary, before or while spawning, and hands
@@ -747,24 +753,64 @@ terminate or reuse the watcher it abandoned; one active watch per
 PR/reviewer holds here too, and a leftover backgrounded watcher can
 fire a redundant wake later.
 
-Gate the conductor on the full grant it needs: write-capable delegation,
-resumable across the main agent's turns, whose completion reliably
-notifies or re-enters the main agent, plus checkout isolation for the
-branch it rewrites. The conductor edits, folds, and force-pushes across
-the whole exchange while the main agent's thread is free, so the two
-must never share a mutable checkout: an interleaved main-agent edit can
-be swept into a fold, and its half-finished verification invalidated
-mid-run. Give the conductor its own worktree, checkout, or clone where
-the platform supports one; otherwise grant it exclusivity over the
-shared checkout.
+**The gate has two kinds of requirement, and they are not checked the
+same way.** Three are platform capabilities you check: write-capable
+delegation permitted without asking, resumable across the main agent's
+turns, and completion that reliably notifies or re-enters the main
+agent. The fourth, checkout isolation for the branch the conductor
+rewrites, is a precondition you establish. The conductor edits, folds,
+and force-pushes across the whole exchange while the main agent's
+thread is free, so the two must never share a mutable checkout: an
+interleaved main-agent edit can be swept into a fold, and its
+half-finished verification invalidated mid-run.
 
-Map the gate against what the platform actually offers
-rather than inferring vaguely (in Claude Code, for example, every part is
-native: a background subagent with write access satisfies delegation and
-completion notification, re-messaging the same agent satisfies
-resumability, and worktree isolation at spawn satisfies the checkout
-grant). Where any part is missing, name the unmet gate and fall back to
-the persistent fixer with the main agent keeping the loop, then
+**Establish that isolation instead of checking for it.** Use a native
+isolation mechanism where the platform has one; otherwise create the
+checkout yourself with plain git (`git fetch <pr-head-remote>
+<pr-head-branch>`, then `git worktree add --detach <path> <pr-head-sha>`,
+or a separate clone), which needs only a shell and works on any
+platform. Fetch before adding: the head SHA was resolved from the host,
+and `git worktree add` resolves its commit-ish locally, so it exits
+`fatal: invalid reference` on a commit this checkout has never fetched.
+Where neither route is possible, grant the conductor exclusivity over
+the shared checkout and keep the main agent off the branch for the
+exchange.
+
+Resolve `<pr-head-remote>` from the host rather than assuming `origin`,
+and carry the same remote through to the push below. It is the PR head's
+own repository, which is the checkout's usual remote only when the head
+branch lives in the base repository; for a fork head, fetching that
+branch name from the base remote either fails or quietly retrieves a
+same-named base branch, and the host-resolved SHA stays unavailable.
+Configure that repository as a named remote where the checkout has none
+for it, rather than passing its URL inline: fetching and pushing against
+a bare URL writes no remote-tracking ref, and step 5's mandatory
+pushed-ref verification (`git branch -r --contains <sha>`) then has
+nothing to confirm the cited SHA against.
+
+Quote every host-supplied value you substitute into these commands, here
+and at the push below. Branch and remote names arrive from the host, and
+`git check-ref-format` accepts characters the shell reads as syntax
+(`topic;id` and ``a`id`b`` are both valid branch names), so a fork PR's
+head branch interpolated into unquoted shell text executes whatever it
+carries. Pass the remote, branch, path, lease, and refspec as quoted
+arguments.
+
+**A shared default checkout is therefore never itself a reason to fall
+back**: it is the starting state isolation is established from, on
+every platform, including one whose agents all begin in the same
+working directory. Naming isolation as the unmet gate is valid only
+after finding all three routes unavailable, which in a session with a
+shell is close to unreachable.
+
+Map the three capabilities against what the platform actually offers
+rather than inferring vaguely (in Claude Code, for example, each is
+native: a background subagent with write access satisfies delegation
+and completion notification, and re-messaging the same agent satisfies
+resumability; worktree isolation at spawn is one way to establish the
+checkout precondition, `git worktree add` being the platform-agnostic
+one). Where a capability is missing, name the unmet gate and fall back
+to the persistent fixer with the main agent keeping the loop, then
 per-round delegation, then in-main rounds, exactly as above.
 
 Whatever form the isolation takes, align it before the first write: the
@@ -806,6 +852,14 @@ head, incorporating it into local history, before any further
 rewrite, then advance the lease to that incorporated head for the
 retry: the pin always names the newest remote head local history
 contains.
+
+Name the destination branch in the push itself when the conductor's
+checkout is detached, as the `--detach` route above leaves it:
+`git push --force-with-lease=<branch>:<last-pushed-sha> <pr-head-remote>
+HEAD:<pr-head-branch>`. The lease argument sets no refspec, so a bare
+push from a detached HEAD has no branch to infer the destination from
+and exits `fatal: You are not currently on a branch` without publishing
+the round's fixes.
 
 Where delegation with write access is unavailable or not permitted, run the
 rounds in the main agent as usual; for a long review loop from an
@@ -1019,12 +1073,13 @@ steps the agent cannot perform or is not allowed to start without permission.
   delegated-watcher path); step 4's delegated fixer needs delegation
   _with write access_, a larger grant (its gate lives in step 4); and
   step 4's conductor needs that write grant plus resumability across the
-  main agent's turns, completion re-entry, and checkout isolation or
-  exclusivity (step 4), the largest. The ladder reads bottom-up at
-  invocation: where the largest grant holds, the owner decision before
-  step 1 defaults the exchange to the conductor; where a grant is
-  not both supported and permitted, name it and take the next permitted
-  path.
+  main agent's turns and completion re-entry, the largest. The ladder
+  reads bottom-up at invocation: where the largest grant holds, the owner
+  decision before step 1 defaults the exchange to the conductor; where a
+  grant is not both supported and permitted, name it and take the next
+  permitted path. The conductor's checkout isolation is not on this
+  ladder: it is a precondition the owner establishes (step 4), not a
+  grant the platform either extends or withholds.
 - **An agent with background re-invocation or scheduled wake-ups** (e.g.
   Claude Code) runs the **non-blocking** path for that environment.
 - **An agent whose turn is synchronous** and that lacks a reliable
