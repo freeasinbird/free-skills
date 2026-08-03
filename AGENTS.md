@@ -742,6 +742,9 @@ The build succeeds, tests pass, and lint and formatting are clean.
   changed (`./scripts/test-compare-managed-blocks.sh`)
 - Watcher validation matrix green when await-pr-review's `watch-review.sh`
   changed (`./scripts/test-watch-review.sh`)
+- Isolation lifecycle matrix green when await-pr-review's
+  `conductor-isolation.sh` changed
+  (`./scripts/test-conductor-isolation.sh`)
 - Prose-tics matrix green when the prose-tic check changed
   (`./scripts/test-check-prose-tics.sh`)
 - Skill-structure matrix green when the structure check changed

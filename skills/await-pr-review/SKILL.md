@@ -793,6 +793,70 @@ working directory. Naming isolation as the unmet gate is valid only
 after finding all three routes unavailable, which in a session with a
 shell is close to unreachable.
 
+**Don't hand-roll the git for the worktree route; run
+`conductor-isolation.sh`,** which ships next to this file and is the
+executable form of that route's lifecycle:
+
+```sh
+<skill-dir>/conductor-isolation.sh setup --path ../pr-114-conductor \
+  --repo owner/name --pr 114
+# ... the exchange runs, the conductor folds and force-pushes ...
+<skill-dir>/conductor-isolation.sh teardown --path ../pr-114-conductor --realign
+```
+
+Run both from the primary checkout, never from inside `--path`. `setup`
+resolves the PR head from the host, fetches it, creates the detached
+worktree, and verifies its head and cleanliness before any write;
+`teardown` removes it and, with `--realign`, moves the primary
+checkout's local branch to what the conductor pushed. It reports one
+tagged line (`ISOLATION_READY`, `TEARDOWN_DONE`, `TEARDOWN_NOOP`, or
+`BLOCKED` with a reason) and exits 0 ready, 1 blocked, 64 usage, 69
+environment; a `BLOCKED` payload is a state a human must resolve, not a
+retry, and a blocked realignment keeps its state so the same command
+works once that state is cleared (which is also why `setup` refuses a
+path whose previous exchange still has one pending).
+
+Override host resolution with `--head` and `--branch`, name a
+non-`origin` base remote with `--remote`, and get the full argument list
+from `--help`. Those overrides skip the only step that learns where a
+fork's branch lives, so pass `--head-remote` with them on a fork PR:
+without it teardown falls back to the base remote and realigns to
+whatever same-named branch sits there.
+
+Where the isolation was a **separate clone** rather than a worktree,
+`teardown --realign` still realigns the branch but reports
+`removed=manual`: deleting a directory it does not own is not the
+script's call, so that part is yours. A clone you created without
+running `setup` has no recorded state, so name the branch with
+`--branch`, and for the usual folded (rewritten) history add
+`--at-setup <sha>`, the head that branch had before the exchange. That
+is the proof `setup` would have recorded, and it is checked rather than
+trusted: it counts only while the branch still equals it.
+
+Two more flags on that same stateless path, each standing in for
+something `setup` would have recorded. On a fork PR name the fork with
+`--remote`, or teardown fetches the branch from the primary checkout's
+`origin`, which is the base repository, and either finds no such branch
+or realigns to an unrelated same-named one. If you have already deleted
+the clone, add `--expect <sha>`, the head it ended on: teardown reads
+that from the checkout while one is there, and refuses rather than
+trusting the fetched tip when it is not, since a contributor pushing
+between the conductor's last push and teardown would otherwise land an
+unreviewed head in your primary checkout. The remaining two routes need
+neither call, since a platform-native mechanism brings its own lifecycle
+and exclusivity over the shared checkout creates nothing to tear down.
+
+Each of those steps encodes a git behavior that contradicts the obvious
+reading, which is why this is a script and not a paragraph: the branch
+form of `git worktree add` refuses a branch the primary checkout holds,
+a fork PR's head is served by the base repository while its branch
+lives only in the fork (so the two fetches need different remotes),
+`git worktree remove` rejects a separate clone, `--ff-only` advances
+HEAD underneath uncommitted edits instead of refusing, and a folded
+history is never a fast-forward at all.
+`scripts/test-conductor-isolation.sh` pins each one against real
+repositories.
+
 Map the three capabilities against what the platform actually offers
 rather than inferring vaguely (in Claude Code, for example, each is
 native: a background subagent with write access satisfies delegation
@@ -866,6 +930,17 @@ head, incorporating it into local history, before any further
 rewrite, then advance the lease to that incorporated head for the
 retry: the pin always names the newest remote head local history
 contains.
+
+**Tear the isolation down when the ledger lands, and realign what the
+conductor's pushes left behind.** A detached worktree or separate clone
+pushing `HEAD:<branch>` advances the remote PR branch while the primary
+checkout's local branch stays on the pre-review SHA, so a later edit,
+base-freshness update, or merge there starts from history missing every
+review fix. On the worktree route `conductor-isolation.sh teardown
+--realign` does both, and refuses rather than guessing when the primary
+checkout is dirty, holds commits the conductor never saw, or shares the
+branch with another worktree. Surface any such refusal to the human
+instead of forcing either side.
 
 Where delegation with write access is unavailable or not permitted, run the
 rounds in the main agent as usual; for a long review loop from an
