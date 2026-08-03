@@ -86,6 +86,15 @@ requirement, checkout isolation, is not a fourth capability to check: it is a
 precondition you establish before briefing it (step 4), so it never decides
 this routing call.
 
+**Settle "permitted without asking" here by attempting, not by predicting.**
+Resumability and completion re-entry are observable, so check those two
+first and fall back by name if either is missing. Permission is not
+observable, so once they hold, spawn once and route on what actually
+happens instead of predicting the answer. A predicted refusal is
+unfalsifiable, so reading one off ambiguous session guidance defaults the
+entire exchange into the expensive context for a permission that was never
+tested; step 4 carries the argument and the one carve-out.
+
 One task stays with the main
 agent either way: it made the push, so it captures the step-1 push-time
 facts (the baseline event or the two fallback readings, the expected head,
@@ -766,35 +775,18 @@ half-finished verification invalidated mid-run.
 
 **Establish that isolation instead of checking for it.** Use a native
 isolation mechanism where the platform has one; otherwise create the
-checkout yourself with plain git (`git fetch <pr-head-remote>
-<pr-head-branch>`, then `git worktree add --detach <path> <pr-head-sha>`,
-or a separate clone), which needs only a shell and works on any
-platform. Fetch before adding: the head SHA was resolved from the host,
-and `git worktree add` resolves its commit-ish locally, so it exits
-`fatal: invalid reference` on a commit this checkout has never fetched.
-Where neither route is possible, grant the conductor exclusivity over
-the shared checkout and keep the main agent off the branch for the
-exchange.
-
-Resolve `<pr-head-remote>` from the host rather than assuming `origin`,
-and carry the same remote through to the push below. It is the PR head's
-own repository, which is the checkout's usual remote only when the head
-branch lives in the base repository; for a fork head, fetching that
-branch name from the base remote either fails or quietly retrieves a
-same-named base branch, and the host-resolved SHA stays unavailable.
-Configure that repository as a named remote where the checkout has none
-for it, rather than passing its URL inline: fetching and pushing against
-a bare URL writes no remote-tracking ref, and step 5's mandatory
-pushed-ref verification (`git branch -r --contains <sha>`) then has
-nothing to confirm the cited SHA against.
-
-Quote every host-supplied value you substitute into these commands, here
-and at the push below. Branch and remote names arrive from the host, and
-`git check-ref-format` accepts characters the shell reads as syntax
-(`topic;id` and ``a`id`b`` are both valid branch names), so a fork PR's
-head branch interpolated into unquoted shell text executes whatever it
-carries. Pass the remote, branch, path, lease, and refspec as quoted
-arguments.
+checkout yourself with plain git (a detached worktree at the PR head, or
+a separate clone), which needs only a shell and works on any platform;
+where neither is possible, grant the conductor exclusivity over the
+shared checkout and keep the main agent off the branch for the exchange.
+Four of that route's mechanics fail in ways the obvious reading misses,
+so treat each as something to verify rather than recall: the head has to
+be fetched before the checkout can be cut from it, the remote is the PR
+head's own repository rather than the base, a push from a detached
+checkout needs its destination named, and every host-supplied value
+needs quoting. Run each against your own git before relying on it, and
+prefer a tested implementation over a remembered sequence wherever the
+project provides one.
 
 **A shared default checkout is therefore never itself a reason to fall
 back**: it is the starting state isolation is established from, on
@@ -812,6 +804,30 @@ checkout precondition, `git worktree add` being the platform-agnostic
 one). Where a capability is missing, name the unmet gate and fall back
 to the persistent fixer with the main agent keeping the loop, then
 per-round delegation, then in-main rounds, exactly as above.
+
+**"Permitted without asking" is settled by attempting, not by
+predicting.** Whether a spawn is permitted is frequently not readable
+from the session at all: platform guidance, project conventions, and
+the tools on offer can each say something different, and the same
+session often permits delegation through one pathway (a review command,
+a bundled skill) while a directive discourages another. A prediction
+that lands on "not permitted" is unfalsifiable and quietly costs the
+whole exchange the expensive context; a spawn that is genuinely refused
+costs one turn and tells you the truth. So once the two observable
+capabilities hold and delegation exists at all, attempt it once and
+route on the outcome, recording a refusal as **refused when attempted**
+rather than assumed unavailable, since only the former is evidence.
+Ambiguity about the permission resolves toward attempting; a missing
+observable capability is still named and still routes to the fallback.
+
+**Asking is not the substitute.** Where the platform gates tool calls
+with its own prompt, attempting _is_ the check: a genuinely gated spawn
+surfaces that prompt and the user answers it in one turn, while a
+prose round-trip asking whether you may spawn costs a turn and still
+yields no evidence, since the answer describes the policy rather than
+testing it. So do not open an exchange by asking permission to
+delegate. The one exception is a session whose policy plainly forbids
+the spawn, where attempting is the violation rather than the test.
 
 Whatever form the isolation takes, align it before the first write: the
 conductor verifies its checkout's HEAD equals the expected PR head
@@ -852,14 +868,6 @@ head, incorporating it into local history, before any further
 rewrite, then advance the lease to that incorporated head for the
 retry: the pin always names the newest remote head local history
 contains.
-
-Name the destination branch in the push itself when the conductor's
-checkout is detached, as the `--detach` route above leaves it:
-`git push --force-with-lease=<branch>:<last-pushed-sha> <pr-head-remote>
-HEAD:<pr-head-branch>`. The lease argument sets no refspec, so a bare
-push from a detached HEAD has no branch to infer the destination from
-and exits `fatal: You are not currently on a branch` without publishing
-the round's fixes.
 
 Where delegation with write access is unavailable or not permitted, run the
 rounds in the main agent as usual; for a long review loop from an

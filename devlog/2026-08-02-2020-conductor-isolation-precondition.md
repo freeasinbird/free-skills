@@ -51,35 +51,32 @@ the step-4 gate paragraph, and the platform-support ladder bullet (where
 isolation is removed from the ladder entirely, since a ladder rung is by
 definition a grant the platform extends or withholds).
 
-The establish-isolation paragraph names `git worktree add --detach` as
-the platform-agnostic route. The route name is what refutes the misread
-(isolation is one command away wherever there is a shell); the
-lifecycle behind that command is a separate work unit, below.
+The establish-isolation paragraph names the route in prose, a detached
+worktree at the PR head or a separate clone, and prescribes no command
+at all. Naming the route is what refutes the misread (isolation is
+establishable wherever there is a shell); every mechanic behind it is a
+separate work unit, below.
 
-**Where the split boundary actually fell.** The intent was to name the
-route and stop, leaving all lifecycle to the follow-up. The boundary
-moved, because the named route was wrong as written rather than merely
-incomplete. Three failures, verified on git 2.50.1: `git worktree add`
-resolves its commit-ish locally, so it exits `fatal: invalid reference`
-on a host-resolved head the checkout has never fetched; a bare
-`git push --force-with-lease=<branch>:<sha>` from the detached checkout
-that route creates exits `fatal: You are not currently on a branch`,
-since the lease argument supplies no refspec; and a fork head fetched
-from the base remote fails or retrieves a same-named base branch, so the
-remote placeholder has to name the PR head's own repository, resolved
-from the host.
+**A runnable command was tried here and withdrawn.** An intermediate
+revision prescribed the sequence, reasoning that a named route which
+cannot resolve its own head is wrong rather than merely incomplete.
+Three real failures back that reasoning, verified on git 2.50.1:
+`git worktree add` resolves its commit-ish locally, so it fails on a
+host-resolved head the checkout has never fetched; a bare force-push
+with a pinned lease from the detached checkout supplies no refspec and
+fails for want of a branch; and a fork head fetched from the base
+repository fails or retrieves a same-named base branch.
 
-**Decision: the route's own preconditions belong with it; its lifecycle
-does not.** What the named route needs in order to work (the fetch
-before the add, the `HEAD:<pr-head-branch>` refspec on the push, and the
-`<pr-head-remote>` placeholder carried through both) sits in this work
-unit, because a named route that cannot resolve its own head is wrong
-rather than incomplete. Everything past that point (teardown,
-realignment, staleness of the primary checkout, and the fork-aware fetch
-lifecycle behind the placeholder) belongs to the follow-up, where it is
-a tested script rather than prose. Treat those three corrections as
-decided rather than re-deriving them, and take further refinement of the
-sequence to the follow-up rather than growing prose here.
+**The reasoning is sound and the conclusion still went the other way.**
+Prescribing the sequence drew six further review rounds, and the round
+that followed the last of them raised a leading-hyphen branch name
+parsed as a fetch option: the hardening surface of a runnable command
+is unbounded in prose, and each clause added invites the next finding.
+That is this skill's own signal that prose is re-deriving a program, so
+the three failures above are recorded here as evidence for why the
+mechanics are the follow-up's tested script, not as clauses to patch
+into this unit. Owner's call, 2026-08-03, over the intermediate
+revision's boundary.
 
 ## Split into two work units
 
@@ -90,6 +87,83 @@ of them, so the owner's call (2026-08-03) was to split, and let each be
 judged as what it is. The reclassification is this note's decisions
 above and below; the isolation script, the prescribed lifecycle, and
 this note's lifecycle sections are the stacked follow-up.
+
+## The sibling gate: permission, resolved by attempting
+
+The review exchange surfaced that the conductor gate's _first_ clause has
+the same defect this note's main decision fixed in its fourth. "Write-capable
+delegation **permitted without asking**" asks the agent to predict a
+permission, exactly as the old isolation wording asked it to check for a
+checkout, and a prediction of "not permitted" is unfalsifiable: nothing
+later contradicts it, so the exchange silently runs in the expensive
+context forever.
+
+The evidence was this session. Delegation was simultaneously forbidden by
+injected session guidance, permitted by the owner's own global
+conventions ("one subagent for exploration or review is normal"), and
+routinely exercised by other skills in the same session. The agent
+followed the strictest reading and never tested it, paying five review
+rounds of full-context replay for a permission it never checked. The
+owner's observation that authorization "is inconsistent, and some of the
+time it _is_ authorized" is the general case, not this session's quirk:
+authorization is per-pathway, not per-capability.
+
+**Decision: attempt once and route on the outcome.** A refusal is cheap,
+observable, and recorded as "refused when attempted"; a prediction is
+none of those. Ambiguity resolves toward attempting. The carve-out stays
+narrow: a policy that plainly forbids the spawn, where attempting is the
+violation rather than the test.
+
+**A policy that merely conditions the spawn is not that carve-out; it is
+the paradigm case for attempting.** Rejected: widening the carve-out to
+cover approval-conditioned policies, tried and reversed. The falsifiable
+evidence is this
+work unit: session guidance carried "do not call the delegation tool
+unless the user requested it", which reads as forbidding, and on both
+occasions it was actually attempted, in two separate sessions, the spawn
+went straight through with no permission prompt and no refusal. The first
+misread cost six review rounds of main-context replay, the second one
+round. Widening the carve-out would route exactly that class to the
+fallback, reinstating the prediction this decision exists to remove.
+
+**That directive was a shipped default of one platform configuration,
+not one operator's setup.** On the configuration this work ran under,
+the agent platform's own system prompt told the agent not to delegate
+unless the user asked, while the same session's project conventions and
+bundled skills exercised delegation routinely. No local configuration
+reconciled them: the text was absent from the user's settings, the
+user's global instructions, this repo's AGENTS.md, and the installed
+plugins, and whether it appeared was decided by the platform rather than
+by the operator. An agent that predicts the permission therefore
+mispredicts by construction there, for every user of that
+configuration. Not claimed: that this holds for other models, other
+sessions, or other versions; the specific configuration was checked
+once, at one point in time, and a platform can change it at any moment
+without notice.
+
+That is also the direct refutation of the review finding. The policy it
+would have honored as a no-spawn case is the default in that
+configuration, so honoring it disables conductor ownership there
+entirely. The skill prose stays platform-agnostic per the architecture
+invariant; this note carries the platform specifics.
+
+Stated at both altitudes, for the reason the main decision was: the
+ownership call happens at step 0, so a rule reachable only from step 4,
+some 700 lines below, is unread by exactly the agents that route without
+it. Step 0 carries the instruction, step 4 the argument and the
+carve-out.
+
+**Not the ask-once alternative**, which an earlier draft of this note
+carried and the owner rejected: converting the unmet carve-out into a
+prose question spends the turn this decision exists to save and returns
+policy rather than the approval itself. The turn is better spent on the
+next permitted path, which the user can override at any point.
+
+Rejected: leaving this to the operator's configuration. The owner can
+grant a standing permission, and probably should, but a skill whose
+routing collapses when two authorization signals disagree is defective
+independent of any one operator's setup, and disagreement is the normal
+condition.
 
 ## Rejected alternatives
 
