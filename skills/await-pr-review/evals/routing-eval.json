@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "purpose": "Measure whether await-pr-review selects a conductor whenever the four conductor grants hold, and names the exact failed grant otherwise.",
+  "scoring": {
+    "eligible_case_pass": "The first ownership decision is conductor, and no main-owned watcher, CI wait, or feedback handling starts before the spawn.",
+    "fallback_case_pass": "The exchange remains main-owned and emits `Conductor skipped: <specific failed grant or allowed exception>.` before starting a watcher.",
+    "target": "100% of eligible cases choose conductor; at least 90% across repeated fresh-context model runs before accepting prompt wording."
+  },
+  "cases": [
+    {
+      "id": "codex-app-shared-checkout-exclusive",
+      "surface": "codex-app",
+      "request": "The PR is open. Watch for Codex, handle its feedback, and only wake me for judgment calls.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": false,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "claude-code-worktree",
+      "surface": "claude-code",
+      "request": "I pushed the fixes. Wait for the automated re-review and keep addressing clear findings.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": false
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "generic-all-grants",
+      "surface": "generic-agent",
+      "request": "Babysit the bot review for this PR and deal with anything clear-cut.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "unrecorded-reviewer-discovered-by-conductor",
+      "surface": "generic-agent",
+      "request": "This repository has an automated reviewer, but it is not recorded yet. Find it, watch this PR, and handle its feedback.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": false
+      },
+      "reviewer_recorded": false,
+      "review_already_in_hand": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "connector-only-generic-agent",
+      "surface": "generic-agent",
+      "request": "Use the repository connector to watch the bot review; this environment has no shell or host CLI, but it can schedule the same worker to resume between polls.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": false
+      },
+      "host_access": "connector",
+      "shell_available": false,
+      "review_already_in_hand": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "background-shell-does-not-displace-conductor",
+      "surface": "claude-code",
+      "request": "The bot normally responds quickly; keep the main thread free while you wait.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": false,
+        "background_shell_reentry": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "likely-clean-does-not-displace-conductor",
+      "surface": "codex-app",
+      "request": "This should probably be a clean pass, but watch it and handle the review.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": false,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "substantial-feedback-already-in-hand",
+      "surface": "codex-app",
+      "request": "Codex already left six findings. Handle them and stay on the re-reviews.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": false,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": true,
+      "known_trivial_feedback": false,
+      "expected_owner": "conductor"
+    },
+    {
+      "id": "delegation-forbidden",
+      "surface": "generic-agent",
+      "request": "Watch the reviewer and address it.",
+      "grants": {
+        "write_capable_delegation": false,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "main",
+      "expected_fallback_gate": "write-capable delegation is unavailable or forbidden"
+    },
+    {
+      "id": "connector-wait-unavailable",
+      "surface": "generic-agent",
+      "request": "Use this connector to watch the bot review. It only returns instantaneous reads, and scheduled re-entry is available only to the main agent.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": false,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": true
+      },
+      "host_access": "connector",
+      "shell_available": false,
+      "review_already_in_hand": false,
+      "expected_owner": "main",
+      "expected_fallback_gate": "the conductor has neither a local bounded wait nor a scheduled same-conductor wake"
+    },
+    {
+      "id": "completion-notification-unavailable",
+      "surface": "generic-agent",
+      "request": "Wait for the review without making me poll the worker.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": false,
+        "checkout_isolation": true,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "main",
+      "expected_fallback_gate": "subagent completion cannot reliably notify or re-enter the main agent"
+    },
+    {
+      "id": "checkout-not-isolated-or-exclusive",
+      "surface": "codex-app",
+      "request": "Keep editing this same checkout while another worker handles the review loop.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": false,
+        "checkout_exclusivity": false
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "main",
+      "expected_fallback_gate": "the PR branch has neither checkout isolation nor shared-checkout exclusivity"
+    },
+    {
+      "id": "known-trivial-feedback-already-in-hand",
+      "surface": "claude-code",
+      "request": "The review is already here; it only asks for one obvious typo fix.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": false
+      },
+      "review_already_in_hand": true,
+      "known_trivial_feedback": true,
+      "expected_owner": "main",
+      "allowed_exception": "feedback is already in hand and known to need at most a couple of trivial operations"
+    }
+  ]
+}
