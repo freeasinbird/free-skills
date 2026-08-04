@@ -105,6 +105,77 @@ if not any(
 ):
     raise SystemExit("routing eval needs a connector-only main fallback without wait continuity")
 
+skill_authorization = next(
+    (
+        case
+        for case in cases
+        if case["id"]
+        == "skill-authorizes-conductor-under-disabled-proactive-delegation"
+    ),
+    None,
+)
+if skill_authorization is None:
+    raise SystemExit("routing eval needs the skill-authorized delegation case")
+policy = skill_authorization.get("multi_agent_policy", {})
+if policy != {
+    "proactive_delegation_default": "disabled",
+    "delegation_exceptions": [
+        "the user explicitly requests delegation",
+        "an applicable skill explicitly requires delegation",
+    ],
+}:
+    raise SystemExit(
+        "skill-authorized delegation case must state the disabled default "
+        "and its applicable-skill exception"
+    )
+authorization = skill_authorization.get("delegation_authorization", {})
+if authorization != {
+    "user_requested_delegation": False,
+    "triggered_skill": "await-pr-review",
+    "triggered_skill_requires_delegation": True,
+}:
+    raise SystemExit(
+        "skill-authorized delegation case must disable proactive delegation "
+        "while making the triggered skill the authorization"
+    )
+if (
+    skill_authorization["expected_owner"] != "conductor"
+    or skill_authorization.get("expected_first_action")
+    != "spawn_conductor"
+):
+    raise SystemExit(
+        "skill-authorized delegation case must spawn the conductor before waiting"
+    )
+
+restricted_prohibition = next(
+    (
+        case
+        for case in cases
+        if case["id"]
+        == "disclosure-restricted-prohibition-blocks-delegation"
+    ),
+    None,
+)
+if restricted_prohibition is None:
+    raise SystemExit(
+        "routing eval needs the disclosure-restricted prohibition case"
+    )
+if (
+    restricted_prohibition["expected_owner"] != "main"
+    or restricted_prohibition.get("prohibiting_rule_disclosure")
+    != "restricted"
+    or restricted_prohibition.get("expected_skip_explanation")
+    != (
+        "Conductor skipped: delegation is forbidden by a non-disclosable "
+        "developer instruction whose exceptions do not include "
+        "skill-mandated delegation."
+    )
+):
+    raise SystemExit(
+        "disclosure-restricted prohibition case must use a non-sensitive "
+        "paraphrase and analyze the skill exception"
+    )
+
 print(f"routing eval fixture valid: {len(cases)} cases ({eligible} conductor, {fallback} main)")
 PY
 
@@ -112,6 +183,11 @@ for required in \
   'Default to one conductor subagent' \
   'Apply one platform-neutral gate' \
   'wait-and-resume continuity' \
+  'An applicable skill that explicitly requires delegation counts as' \
+  'Do not require a separate user request.' \
+  '“Higher-priority instruction” is not a valid failed grant by itself.' \
+  'identify the prohibiting rule by source when disclosure' \
+  'give a non-sensitive paraphrase of the binding constraint' \
   'Codex app:' \
   'Claude Code:' \
   'Any other agent:' \
