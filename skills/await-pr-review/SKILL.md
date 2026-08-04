@@ -40,9 +40,10 @@ grants hold:
 4. The PR branch has either an isolated checkout or explicit shared-checkout
    exclusivity until the terminal ledger.
 
-Invoking this skill supplies the workflow request to delegate where the host
-allows a skill to do so. Do not ask separately merely because delegation is
-involved. A higher-priority prohibition still wins.
+Under a multi-agent rule that otherwise disables proactive delegation except
+when the user or an applicable skill requests it, this skill supplies that
+request. An applicable skill that explicitly requires delegation counts as
+authorization under this exception. Do not require a separate user request.
 
 Map any agent's actual tools to those grants. The named surfaces below are
 concrete examples that prevent repeated capability guesswork; they do not
@@ -76,6 +77,11 @@ either the failed grant or the narrow trivial-feedback exception:
 ```text
 Conductor skipped: <specific failed grant or allowed exception>.
 ```
+
+“Higher-priority instruction” is not a valid failed grant by itself. To fail
+grant 1 on that basis, identify the prohibiting rule by source when disclosure
+is permitted, or give a non-sensitive paraphrase of the binding constraint
+otherwise, and explain why none of its exceptions apply.
 
 The main agent captures and passes: repository and PR, any already-recorded
 reviewer identity and status signals, the event-anchored baseline (or its

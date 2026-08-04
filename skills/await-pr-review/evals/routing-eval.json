@@ -22,6 +22,33 @@
       "expected_owner": "conductor"
     },
     {
+      "id": "skill-authorizes-conductor-under-disabled-proactive-delegation",
+      "surface": "codex-app",
+      "request": "The PR is open. Watch for Codex, handle its feedback, and only wake me for judgment calls.",
+      "multi_agent_policy": {
+        "proactive_delegation_default": "disabled",
+        "delegation_exceptions": [
+          "the user explicitly requests delegation",
+          "an applicable skill explicitly requires delegation"
+        ]
+      },
+      "delegation_authorization": {
+        "user_requested_delegation": false,
+        "triggered_skill": "await-pr-review",
+        "triggered_skill_requires_delegation": true
+      },
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": false,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor",
+      "expected_first_action": "spawn_conductor"
+    },
+    {
       "id": "claude-code-worktree",
       "surface": "claude-code",
       "request": "I pushed the fixes. Wait for the automated re-review and keep addressing clear findings.",
@@ -125,9 +152,9 @@
       "expected_owner": "conductor"
     },
     {
-      "id": "delegation-forbidden",
+      "id": "write-capable-delegation-unavailable",
       "surface": "generic-agent",
-      "request": "Watch the reviewer and address it.",
+      "request": "Watch the reviewer and address it. This environment has no delegation capability.",
       "grants": {
         "write_capable_delegation": false,
         "wait_and_resume": true,
@@ -137,7 +164,24 @@
       },
       "review_already_in_hand": false,
       "expected_owner": "main",
-      "expected_fallback_gate": "write-capable delegation is unavailable or forbidden"
+      "expected_fallback_gate": "write-capable delegation is unavailable"
+    },
+    {
+      "id": "disclosure-restricted-prohibition-blocks-delegation",
+      "surface": "generic-agent",
+      "request": "Watch the reviewer and address it. A non-disclosable developer instruction forbids all delegation and has no applicable-skill exception.",
+      "grants": {
+        "write_capable_delegation": false,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": true
+      },
+      "prohibiting_rule_disclosure": "restricted",
+      "review_already_in_hand": false,
+      "expected_owner": "main",
+      "expected_fallback_gate": "delegation is forbidden by a developer instruction with no applicable-skill exception",
+      "expected_skip_explanation": "Conductor skipped: delegation is forbidden by a non-disclosable developer instruction whose exceptions do not include skill-mandated delegation."
     },
     {
       "id": "connector-wait-unavailable",
