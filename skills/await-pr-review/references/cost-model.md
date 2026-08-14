@@ -96,8 +96,9 @@ wakes it at least once (the watcher firing) before any fix work starts, and
 each wake replays the full main context. Writing `C_main` for the main
 context and `C_cond` for the conductor's, an N-round exchange with J
 surfaced interruptions, counting everything the conductor surfaces short
-of the terminal report (judgment calls and checkpoint escalations alike),
-`J_user` of them routed on to the user, costs roughly `N × C_main` in
+of the terminal report (judgment calls and no-go or materially uncertain
+convergence escalations alike), `J_user` of them routed on to the user, costs
+roughly `N × C_main` in
 orchestration wakes under main ownership, against
 `(2 + J + J_user) × C_main` under a conductor: the spawn, the terminal
 report, one wake per surfaced interruption, and, for a user-routed one, a

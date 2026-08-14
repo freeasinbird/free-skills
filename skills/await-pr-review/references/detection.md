@@ -103,9 +103,10 @@ An illustrative GraphQL snapshot is:
 
 ```sh
 gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-  reviews(last:20){nodes{author{login} submittedAt state body commit{oid}}}
-  reviewThreads(first:50){nodes{id isResolved comments(last:1){nodes{id author{login} createdAt body path line}}}}
-  reactions(last:20){nodes{content createdAt user{login}}}}}}' \
+  state isDraft closedAt mergedAt headRefName headRefOid baseRefName baseRefOid
+  reviews(last:20){pageInfo{hasPreviousPage startCursor} nodes{author{login} submittedAt state body commit{oid}}}
+  reviewThreads(first:50){pageInfo{hasNextPage endCursor} nodes{id isResolved comments(last:1){nodes{id author{login} createdAt body path line}}}}
+  reactions(last:20){pageInfo{hasPreviousPage startCursor} nodes{content createdAt user{login}}}}}}' \
   -F o=OWNER -F r=REPO -F n=PR
 ```
 
@@ -122,7 +123,25 @@ through REST. When hand-rolling, use the matching paged endpoints:
 - `pulls/PR/comments`
 - `issues/PR/reactions`
 
-Reach for the full thread set only when findings must be resolved.
+For terminal readiness, page the full `reviewThreads` connection to exhaustion
+even when the visible page is resolved; an unresolved thread past the first
+page remains blocking. A terminal composite snapshot is valid only when the PR
+exists, its lifecycle state is open, every required query succeeded, every
+required scalar and collection is present with the expected shape, and every
+required connection was exhausted. Compare both `baseRefName` and `baseRefOid`
+with the recorded base; a same-tip retarget still invalidates integration
+evidence. Treat missing required fields, null where a field contract requires a
+value, malformed values, partial results, or unpaged connections as incomplete
+evidence, not empty state. Preserve documented nullability: `closedAt` and
+`mergedAt` are expected to be null when `state` is `OPEN`.
+
+Require two consecutive complete terminal composite scans with identical
+canonical results. Compare PR lifecycle, head, base, required checks, pending
+push, every review, comment, and reply identity and timestamp, and the complete
+thread map, including every thread ID, `isResolved` state, and latest comment
+identity. Compare page metadata too. If any value differs, discard both
+mixed-time scans and restart until two complete scans match. Individual page
+sequences or a partial boundary fingerprint do not prove coherent state.
 
 ## Reviewer identity and trigger
 

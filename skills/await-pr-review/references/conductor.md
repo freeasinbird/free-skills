@@ -44,10 +44,10 @@ equivalent bounded API or connector polling loop, with scheduled wakes that
 resume this same conductor when it cannot delay in-turn. Never release
 exchange ownership or emit terminal completion merely to wait. Fix, fold,
 push, verify, reply, resolve, advance the baseline, and re-watch under the
-skill's rising bar. Surface only judgment calls, checkpoint escalations, or
-the terminal ledger. Before any write, verify a clean checkout at the expected
-PR head. Keep the force-with-lease pinned to the newest remote head already
-contained in local history.
+skill's rising bar. Surface only judgment calls, no-go or materially uncertain
+convergence escalations, or the terminal ledger. Before any write, verify a
+clean checkout at the expected PR head. Keep the force-with-lease pinned to
+the newest remote head already contained in local history.
 ```
 
 The conductor reads the referenced project conventions itself. Its reports
@@ -62,7 +62,7 @@ only for:
 - a scheduled wake that targets this same conductor and preserves its exchange
   state without reporting terminal completion
 - a judgment call that the main agent or user must decide
-- a convergence checkpoint escalation
+- a no-go or materially uncertain convergence escalation
 - the terminal disposition ledger
 
 The scheduled wake resumes the conductor automatically. Resume the same
@@ -90,11 +90,13 @@ Isolation and exclusivity are equal ways to satisfy the fourth routing gate.
 Do not silently reinterpret isolation as mandatory on a platform whose
 subagents share the filesystem.
 
-Before the first write, the conductor verifies:
+Before the first write, and before any later write after a wait or resume, the
+conductor verifies:
 
 1. The host-reported PR head equals its checkout HEAD.
 2. The worktree and index are clean, including untracked files.
 3. The checked-out branch is the PR branch it is expected to push.
+4. The host PR object exists and its lifecycle state is open.
 
 Handle the checks separately:
 
@@ -102,6 +104,8 @@ Handle the checks separately:
   moving, stashing, or cleaning it, and surface the exact paths.
 - A clean checkout on the wrong branch or head may be re-anchored to the
   fetched PR head before editing.
+- A failed lifecycle query or a missing, null, malformed, closed, or merged PR
+  stops the response round as incomplete evidence.
 
 A pinned lease protects the remote's old value; it does not prove the local
 history being installed is the intended PR history.
@@ -143,9 +147,46 @@ Past the final triage push, a new blocker reopens fix rounds. New non-blockers
 take terminal dispositions only (defer or decline), so a reviewer producing
 one new nit per push cannot hold checkout exclusivity indefinitely.
 
-The terminal ledger includes every finding disposition, checks state, thread
-state, current PR head, recorded base and its freshness result, and any watch
-coverage gap. It is the conductor's completion, not a question to answer.
+Immediately before a terminal ledger declares the PR ready, take a fresh
+live-state snapshot, including after any resume or interruption. Require the
+PR object to exist, its lifecycle state to be open, and the PR to be
+review-ready rather than draft. Refresh the host-reported PR head and require
+it to equal the last handled and verified head; confirm required checks cover
+that exact head. Automated-review evidence must be either a completed pass tied
+to that head with every activity dispositioned, or a fully covered bounded
+timeout whose final observation found no in-progress signal. Also refresh the
+current base tip and freshness, every review thread and blocker, pending push
+state, and any automated-review activity after the last handled boundary. Page
+every collection needed to prove those facts to exhaustion.
+
+The terminal snapshot is valid only when every required query succeeds and
+every required scalar and collection is present with the expected shape.
+Treat a failed or partial query, missing PR, absent required field, null where
+the field contract requires a value, malformed value, or unexhausted page as
+incomplete evidence, never as an empty or clean state. Preserve documented
+nullability: for an open PR, `closedAt` and `mergedAt` are expected to be null.
+
+Require two consecutive complete composite scans with identical canonical
+results. Compare PR lifecycle, head, base, checks, pending push, every review,
+comment, and reply identity and timestamp, and the complete thread map,
+including each thread's `isResolved` state and latest comment identity. If any
+value or page metadata differs, discard both mixed-time scans and restart until
+two complete scans match. Cached, single-scan, or partially compared state
+never proves readiness. A changed PR head makes the previous evidence stale:
+capture the new event boundary and reopen the exchange. Reopen on new same-head
+reviewer activity too; head equality does not disposition a late review,
+comment, or reply.
+
+Do not declare the PR ready while its lifecycle is not open or it remains
+draft; any blocker or thread is unresolved; a push is pending; reviewer
+activity after the handled boundary remains undispositioned; the reviewer is
+known to be in progress; review or snapshot coverage is incomplete or broken;
+a required check is failed or incomplete; or the base is stale.
+
+The terminal ledger includes every finding disposition, the fresh checks and
+thread states, current PR head, current base and its freshness result, pending
+push or review state, and any watch coverage gap. It is the conductor's
+completion, not a question to answer.
 
 ## Stranded-conductor recovery
 

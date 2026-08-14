@@ -137,17 +137,22 @@ Stop and surface thrash when:
 A recurrence caused by patching only the cited line is a half-fix, not a
 reason to stop. Sweep the class properly and continue.
 
-At about five blocker-sustained fix rounds, record a one-line go/no-go.
-Continue only with evidence of convergence, such as shrinking rounds and
-fixes that hold. Repeat the checkpoint at the same cadence while blockers
-continue; one approval does not authorize an unbounded loop.
+At about five blocker-sustained fix rounds, make and record a one-line
+go/no-go. A go is the exchange owner's internal decision: name the convergence
+evidence, such as shrinking rounds and fixes that hold, record it in the
+ledger, and continue without yielding or asking permission. Surface a no-go
+or materially uncertain call with the current ledger for human judgment.
+Repeat the checkpoint at the same cadence while blockers continue; an earlier
+go does not authorize an unbounded loop.
 
 ## Finding-class recurrence
 
 Classify every finding, regardless of source, and sweep its class on first
 appearance. If a second member appears despite that sweep, widen the class
 one level and enumerate the larger input space rather than patching the new
-instance at the old width.
+instance at the old width. First form an explicit root-cause hypothesis for
+why the original sweep missed the second member, then use that hypothesis to
+drive the wider enumeration.
 
 On that second member, use one fresh-context adversarial refute pass where
 read-only delegation is permitted. Give lenses raw artifacts and ask them to
