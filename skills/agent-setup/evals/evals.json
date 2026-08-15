@@ -1,0 +1,67 @@
+{
+  "skill_name": "agent-setup",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "single-stage-init",
+      "prompt": "You are working in the plain project at <fixture-repo>. It has a README but no AGENTS.md. Initialize it with the agent-setup skill using the Standard profile. The owner uses one implementation workflow, does not separate planning, review, or integration into stages, expects no concurrent workers, and requires explicit user assignment. Use the build, test, lint, and format commands documented in the fixture README. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A Standard-profile agent setup whose discovery accounts for optional stage separation but whose AGENTS.md has no work-unit stage record, treating the absent record as the normal single implementation workflow.",
+      "files": [],
+      "expectations": [
+        "The setup applies the Standard profile and produces the normal managed sections and project-specific checks",
+        "The response shows that stage separation was considered during discovery",
+        "AGENTS.md contains no work-unit stage record or placeholder for one",
+        "The absence of a stage record is treated as the default single implementation workflow, not as drift or a missing section",
+        "Planning is not introduced or made mandatory"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "planning-implementation-handoff",
+      "prompt": "You are working in the project at <fixture-repo>. Initialize it with the agent-setup skill using the Standard profile. The owner plans each assigned issue in one agent session and hands the issue to a fresh implementation session. Planning may edit only the issue contract and its plan comment; implementation may edit the repository only after a new explicit user assignment. Record these as project-specific stages with durable handoff state. Use the commands documented in the fixture README. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An AGENTS.md with an unmanaged planning-to-implementation stage record. Both stages define activation, allowed mutations, required input, durable output, finish line, and transition; the issue and plan comment carry the handoff, and plan completion does not authorize implementation.",
+      "files": [],
+      "expectations": [
+        "AGENTS.md records separate planning and implementation stages in unmanaged project-specific content",
+        "Both stages define activation, allowed mutations, required input, durable output, finish line, and transition",
+        "The planning stage may mutate only the issue contract and plan comment",
+        "The planning stage skips implementation-only session checklist steps such as updating the default branch, creating a branch, committing, pushing, and opening a PR",
+        "The issue and its plan comment, rather than chat context, carry the planning output into implementation",
+        "Completing the plan transitions the issue to a handoff state but does not authorize implementation",
+        "Implementation activation still requires a new explicit user assignment"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "later-review-integration-adoption",
+      "prompt": "You are updating the existing agent-ready project at <fixture-repo>. Its AGENTS.md already has managed canonical blocks plus an unmanaged planning and implementation stage record. Use the agent-setup skill in update mode. Preserve the existing two stage definitions and all other unmanaged content, refresh any canonical drift, and add owner-requested review and integration stages. Review may change the branch only to address accepted findings; integration validates the current base and hands off an open green PR for a human merge. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An updated AGENTS.md whose managed blocks match the canonical source and whose unmanaged stage record preserves planning and implementation while adding complete review and integration definitions. The new stages do not weaken explicit activation, human merge, or review gates.",
+      "files": [],
+      "expectations": [
+        "Existing planning and implementation stage definitions are preserved verbatim",
+        "Review and integration are added only because the owner explicitly requested them",
+        "Update mode treats only the requested stage-record additions as an exception to its untouched-unmanaged-content rule",
+        "All four stages define activation, allowed mutations, required input, durable output, finish line, and transition",
+        "The implementation stage stops at its recorded transition without starting separately declared review or integration actions",
+        "The stage record remains outside every managed block and other unmanaged content is preserved verbatim",
+        "Managed sections match the current canonical source after the update",
+        "Review mutations are limited to accepted findings, and integration ends at an open green PR for human merge"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "first-stage-adoption-update",
+      "prompt": "You are updating the existing agent-ready project at <fixture-repo>. Its AGENTS.md has managed canonical blocks and unrelated unmanaged project guidance, but no work-unit stage record. The owner now requests a planning stage only: planning may edit only the issue contract and plan comment, then hands off to the undeclared default implementation workflow, which still requires a new explicit user assignment. Use the agent-setup skill in update mode, preserve all existing unmanaged guidance, and add only the requested stage record. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An updated AGENTS.md that adds the first owner-requested planning-only stage record outside managed blocks while preserving every pre-existing unmanaged instruction and leaving undeclared implementation under the default workflow and explicit activation rule.",
+      "files": [],
+      "expectations": [
+        "Update mode creates a stage record because the owner explicitly requested first-time stage adoption",
+        "The new record contains only the planning stage with all six required fields",
+        "Planning mutations are limited to the issue contract and plan comment",
+        "Undeclared implementation retains the default workflow and still requires a new explicit user assignment",
+        "All pre-existing unmanaged project guidance remains verbatim",
+        "The new stage record stays outside every managed block"
+      ]
+    }
+  ]
+}
