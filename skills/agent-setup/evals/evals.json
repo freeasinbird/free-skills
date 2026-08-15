@@ -139,6 +139,594 @@
         "The recommended concurrency width is capped at two independent component units by actual integration capacity",
         "The result does not copy Freeside lane names, labels, or tracker vocabulary"
       ]
+    },
+    {
+      "id": 10,
+      "eval_name": "new-evidence-after-serial-init",
+      "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. It was initialized early with no coordination record, so its effective model is the safe serial baseline. Architecture documentation and six recent work units now show two recurring, independently reviewable boundaries, while one integrator can reliably handle two active units. The owner has requested reassessment but has not approved any edit. Report the current model, evidence, uncertainty, and smallest supported change; show any proposed project-specific documentation diff for approval. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment report that observes the current serial baseline, cites the new recurring evidence, proposes an upgrade to two stable named streams capped at two active units, shows the exact documentation diff for approval, and leaves the fixture unchanged pending approval.",
+      "files": [],
+      "expectations": [
+        "The explicit reassessment request, not AGENTS.md file state, selects reassessment mode",
+        "The absent coordination record is reported as the effective safe serial baseline rather than missing content",
+        "The report distinguishes observed architecture and work-unit history from inference",
+        "The proposed stable named streams are supported by recurring history and capped at two by integration capacity",
+        "The proposal includes observable triggers for the next reassessment",
+        "The exact project-specific documentation diff is shown for approval",
+        "No file changes before the owner approves the proposal"
+      ]
+    },
+    {
+      "id": 11,
+      "eval_name": "stale-streams-after-architecture-change",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its unmanaged coordination record and detailed mechanics name API and UI streams. Current architecture notes and recent work-unit history show that work now crosses those former boundaries and instead follows short-lived path-and-dependency units. The owner has requested reassessment but has not approved edits. Report drift and propose the smallest supported simplification without silently renaming or reinterpreting anything. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment report that identifies the named streams as stale, cites the architecture and history, proposes simplifying to path-and-dependency units, shows an exact diff for approval, and preserves the existing record and mechanics until approval.",
+      "files": [],
+      "expectations": [
+        "The report cites current architecture and recurring cross-stream work as observations",
+        "The API and UI names retain their recorded meanings and are not silently mapped to new boundaries",
+        "The recommendation simplifies rather than treating coordination as one-way growth",
+        "The proposed diff removes or replaces stale stream documentation only with explicit approval",
+        "Unrelated unmanaged content and issue dependencies remain untouched",
+        "The report states observable triggers for another reassessment"
+      ]
+    },
+    {
+      "id": 12,
+      "eval_name": "repeated-shared-surface-collisions",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its current model uses independent path-and-dependency units. Architecture records and five recent work units show repeated collisions on one shared schema, conflicting generated outputs, and integration delays. Component work remains independent, and one integrator can handle at most two active component units. The owner has requested reassessment but has not approved edits. Report the evidence and propose the smallest supported change. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment report proposing serialized shared-contract work or an integration spine while preserving independent component ownership, capping component concurrency at two, showing an exact documentation diff for approval, and leaving files unchanged pending approval.",
+      "files": [],
+      "expectations": [
+        "Repeated shared-schema collisions, generated-output conflicts, and integration delays are cited as observations",
+        "The recommendation serializes the shared contract without assigning ownership of every component to the integrator",
+        "Independent component concurrency is capped at two by demonstrated integration capacity",
+        "The report distinguishes the supported recommendation from any remaining uncertainty",
+        "The exact project-specific documentation diff is shown before mutation",
+        "The report states when disappearance or relocation of the bottleneck should trigger reassessment"
+      ]
+    },
+    {
+      "id": 13,
+      "eval_name": "obsolete-integration-spine",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its coordination record contains an integration spine created for a shared contract. The contract has been split behind independently versioned interfaces, architecture records show the bottleneck is gone, and eight recent work units integrate without the spine or manual scheduling. The owner has requested reassessment but has not approved edits. Propose the smallest supported model, including removal of obsolete topology when justified. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment report that cites the removed bottleneck and successful recent history, proposes dropping the obsolete spine and simplifying to the remaining evidence-supported shape, shows the exact diff for approval, and preserves the current record until approval.",
+      "files": [],
+      "expectations": [
+        "The report observes that independently versioned interfaces removed the former shared-contract bottleneck",
+        "Recent integration without the spine is cited as corroborating history",
+        "The recommendation drops the obsolete spine rather than retaining complexity as a maturity marker",
+        "Any remaining shape is derived from current evidence, with uncertainty reported rather than filled in",
+        "Record removal or simplification is shown as an exact diff and awaits owner approval",
+        "The report states observable triggers for the next reassessment"
+      ]
+    },
+    {
+      "id": 14,
+      "eval_name": "ordinary-update-does-not-reassess",
+      "prompt": "You are updating the existing agent-ready project at <fixture-repo>. Its AGENTS.md has current managed markers, unrelated unmanaged guidance, a complete rich coordination record with named streams and an integration spine, and evidence that might now support a simpler model. The owner asked only to sync managed workflow sections, not to reassess coordination. Refresh canonical drift, report the coordination record's field completeness, and preserve every byte of unmarked content. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An ordinary update that refreshes only approved managed-section drift, reports whether the coordination record has all four fields, does not analyze or propose topology changes, and preserves the coordination record and all other unmarked content byte-for-byte.",
+      "files": [],
+      "expectations": [
+        "The ordinary update request selects update mode and never enters reassessment mode",
+        "The run reports whether all four coordination-record fields are present",
+        "Potentially stale topology evidence does not trigger analysis, a warning, or a change proposal",
+        "The complete coordination record remains byte-for-byte unchanged",
+        "All other unmarked project-specific content remains byte-for-byte unchanged",
+        "Only approved managed-section drift is refreshed"
+      ]
+    },
+    {
+      "id": 15,
+      "eval_name": "malformed-markers-block-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md contains a managed-block opener with a mismatched closer and an apparent coordination record inside the malformed boundary. The owner explicitly requested reassessment but has not approved any edit. Validate the file before reading it for meaning, report the malformed boundary, and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the malformed managed boundary before interpreting the apparent coordination record, proposes no documentation diff, and leaves AGENTS.md and every project coordination document unchanged.",
+      "files": [],
+      "expectations": [
+        "The explicit reassessment request selects reassessment mode",
+        "The complete update-mode marker validation runs before AGENTS.md is read for meaning",
+        "The mismatched managed boundary is reported as a malformation",
+        "The apparent coordination record inside the malformed boundary is not treated as trusted project-specific policy",
+        "No coordination analysis or documentation diff is produced after the validation failure",
+        "AGENTS.md and all project coordination documents remain unchanged"
+      ]
+    },
+    {
+      "id": 16,
+      "eval_name": "rejected-diff-keeps-triggers-report-only",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and an unmanaged coordination record with a Reassess when field. Current evidence supports changing the model and its next reassessment triggers, but the owner rejects the exact proposed diff. Report the outcome and next triggers without making any edit. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment report that records the rejected proposal and next observable triggers in prose while leaving the coordination record, its Reassess when field, and all project documents unchanged.",
+      "files": [],
+      "expectations": [
+        "The valid marker boundaries are checked before AGENTS.md is interpreted",
+        "The proposed diff includes the Reassess when field change before approval is requested",
+        "The owner's rejection prevents every proposed documentation edit",
+        "The existing Reassess when field remains byte-for-byte unchanged",
+        "The next observable reassessment triggers appear only in the report",
+        "All unrelated unmanaged content and project documents remain unchanged"
+      ]
+    },
+    {
+      "id": 17,
+      "eval_name": "missing-agents-keeps-reassessment-report-only",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. It has no AGENTS.md, but architecture records and recent work units support two stable independently reviewable streams. The owner explicitly requested reassessment and says to record the richer model if the evidence supports it. Analyze the evidence and explain the safe next operation. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A report-only reassessment that treats the current model as the safe serial baseline, explains the evidence-supported richer recommendation and next triggers, requires a separately requested init before applying it, and creates no AGENTS.md or coordination document.",
+      "files": [],
+      "expectations": [
+        "The explicit request selects reassessment mode even though AGENTS.md is absent",
+        "The absent file yields the effective safe serial baseline rather than a partial setup",
+        "The richer recommendation is supported by architecture and recurring work-unit evidence",
+        "The owner's instruction to record the model does not bypass init's profile, canonical-section, and scaffolding workflow",
+        "The report identifies a separately requested init operation as the safe path to apply the recommendation",
+        "No AGENTS.md or project coordination document is created"
+      ]
+    },
+    {
+      "id": 18,
+      "eval_name": "managed-record-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has structurally valid managed markers, but a complete fixed-field coordination record and its Detailed mechanics pointer were accidentally placed inside one managed block. The owner explicitly requested reassessment and approved no edit. Validate the policy location before interpreting the record and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the coordination record and pointer inside a managed range, does not treat them as trusted project-specific policy, proposes no diff, and leaves AGENTS.md and the pointed-to project document unchanged.",
+      "files": [],
+      "expectations": [
+        "The structurally valid managed markers pass syntax validation",
+        "The complete range of every apparent coordination record is checked against every managed range before interpretation",
+        "The Detailed mechanics pointer line is also checked against every managed range",
+        "The record and pointer inside the managed block are reported as an unsafe policy location",
+        "No coordination analysis or documentation diff is produced after the location failure",
+        "AGENTS.md and the pointed-to project document remain unchanged"
+      ]
+    },
+    {
+      "id": 19,
+      "eval_name": "unsafe-mechanics-target-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed markers and a complete coordination record in unmanaged content. The record's Detailed mechanics pointer targets a section inside an AGENTS.md managed block. The owner explicitly requested reassessment and approved no edit. Resolve and validate the pointer target before interpreting it, then stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the managed mechanics target, does not interpret it as project-specific policy, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The unmanaged coordination record and pointer line pass their placement checks",
+        "The Detailed mechanics pointer is resolved before its target is interpreted",
+        "The target section is checked against every AGENTS.md managed range",
+        "The target inside a managed block is reported as unsafe rather than trusted as project-specific policy",
+        "No coordination analysis or documentation diff is produced after the target failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 20,
+      "eval_name": "managed-stage-record-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has structurally valid managed markers and an unmanaged coordination record, but a complete work-unit stage record was accidentally placed inside a managed block. The owner explicitly requested reassessment and approved no edit. Validate every project-specific input before interpreting it and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the stage record inside a managed range, does not use it as project-specific coordination evidence, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The structurally valid managed markers pass syntax validation",
+        "The complete range of every apparent work-unit stage record is checked against every managed range",
+        "The stage record inside a managed block is reported as an unsafe policy location",
+        "The managed stage record is not used to infer or recommend a coordination model",
+        "No coordination analysis or documentation diff is produced after the location failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 21,
+      "eval_name": "combined-init-then-reassessment",
+      "prompt": "You are working in the project at <fixture-repo>. It has no AGENTS.md, but architecture records and six recent work units show two stable independently reviewable streams, and one integrator can handle two active units. In this one request, the owner asks you to initialize agent setup with the Standard profile, record the evidence-supported coordination model during setup, and then reassess whether that model fits. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A complete Standard-profile initialization followed by reassessment of the resulting setup. AGENTS.md contains the canonical sections, scaffolding is created, the initial evidence-supported coordination record is capped at two active units, and reassessment reports whether that resulting model needs any further change instead of discarding initialization or creating a partial file.",
+      "files": [],
+      "expectations": [
+        "The combined request runs initialization before coordination reassessment",
+        "Initialization creates a complete Standard-profile AGENTS.md and normal scaffolding rather than a partial unmanaged file",
+        "The coordination record created during setup cites recurring architecture and work-unit evidence",
+        "The recorded concurrency is capped at two by demonstrated integration capacity",
+        "Reassessment evaluates the resulting initialized model rather than the pre-init missing-file baseline",
+        "The reassessment report distinguishes current observations from any inference and states observable triggers for another reassessment"
+      ]
+    },
+    {
+      "id": 22,
+      "eval_name": "duplicate-coordination-records-block-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries but contains two complete unmanaged coordination records with conflicting shapes and different Detailed mechanics pointers. The owner requested reassessment but has not said which record is authoritative. Validate the project-specific inputs before interpreting either record and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the duplicate coordination records as conflicting project policy, asks the owner to resolve them, does not choose or merge either model, follows neither mechanics pointer, proposes no diff, and leaves every file unchanged.",
+      "files": [],
+      "expectations": [
+        "The valid managed boundaries are checked before project-specific policy is interpreted",
+        "Both apparent coordination records are counted before either is read for meaning",
+        "The duplicate records are reported as conflicting policy that requires owner resolution",
+        "Neither coordination shape nor Detailed mechanics pointer is selected or merged",
+        "No evidence analysis or documentation diff is produced after the cardinality failure",
+        "AGENTS.md and both pointed-to documents remain unchanged"
+      ]
+    },
+    {
+      "id": 23,
+      "eval_name": "duplicate-coordination-field-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged coordination record, but that record contains two different Detailed mechanics fields. The owner requested reassessment but has not identified the authoritative pointer. Validate the record before resolving either target and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the repeated fixed field as ambiguous policy, asks the owner to resolve it, resolves neither mechanics target, proposes no diff, and leaves every file unchanged.",
+      "files": [],
+      "expectations": [
+        "The single apparent coordination record is located outside managed ranges",
+        "Every occurrence of the four fixed coordination fields is counted before its value is interpreted",
+        "The repeated Detailed mechanics field is reported as ambiguous project policy",
+        "Neither mechanics target is resolved or read for meaning",
+        "No coordination analysis or documentation diff is produced after the field-cardinality failure",
+        "AGENTS.md and both candidate documents remain unchanged"
+      ]
+    },
+    {
+      "id": 24,
+      "eval_name": "duplicate-stage-records-block-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries, one unmanaged coordination record, and two separate unmanaged work-unit stage records with conflicting activation and transition rules. The owner requested reassessment but has not identified the authoritative stage policy. Validate the project-specific inputs before interpreting either stage record and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the duplicate stage records as conflicting project policy, asks the owner to resolve them, does not infer coordination from either version, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The valid managed boundaries are checked before project-specific policy is interpreted",
+        "Both apparent work-unit stage records are counted before either is read for meaning",
+        "The duplicate stage records are reported as conflicting policy that requires owner resolution",
+        "Neither stage record is used to infer or recommend a coordination model",
+        "No coordination analysis or documentation diff is produced after the cardinality failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 25,
+      "eval_name": "multi-stage-record-remains-valid",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries, one complete unmanaged coordination record, and one unmanaged work-unit stage section containing complete Planning, Implementation, Review, and Integration stage definitions. Current evidence supports no coordination change. Validate the project-specific inputs and report the reassessment outcome without rewriting valid policy. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that counts the one section as one work-unit stage record, treats its four stage definitions as entries within that record, validates the coordination inputs, and leaves all project policy unchanged.",
+      "files": [],
+      "expectations": [
+        "The valid managed boundaries are checked before project-specific policy is interpreted",
+        "The project-specific stage section is counted as one work-unit stage record",
+        "Planning, Implementation, Review, and Integration are treated as entries within that one record rather than duplicate records",
+        "All four stage entries supply the six required fields",
+        "The valid multi-stage record does not stop reassessment or create an ambiguity warning",
+        "The no-change outcome preserves AGENTS.md and all detailed project documents"
+      ]
+    },
+    {
+      "id": 26,
+      "eval_name": "external-work-contract-remains-read-only",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one complete unmanaged shape-2 coordination record whose Detailed mechanics field points to a tracker issue used as the cross-session work contract. Network access is unavailable, but local architecture and work-unit history are available. Validate the record, report unavailable evidence as uncertainty, and reassess without changing external state. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment that accepts the shape-2 tracker issue as a read-only work-contract reference, reports it as unavailable evidence, continues with local evidence, never proposes an issue edit, and does not reject the record merely because its external source cannot be read.",
+      "files": [],
+      "expectations": [
+        "The complete single coordination record passes cardinality, field, and placement validation",
+        "The Current shape field is read before the Detailed mechanics value is classified",
+        "The shape-2 tracker issue is accepted as a read-only external work contract",
+        "Unavailable tracker evidence is reported as uncertainty rather than an unsafe target",
+        "The reassessment continues using the available local architecture and work-unit evidence",
+        "No proposed diff or mutation targets the tracker issue"
+      ]
+    },
+    {
+      "id": 27,
+      "eval_name": "missing-current-shape-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged coordination record with Evidence basis, Detailed mechanics, and Reassess when fields, but no Current shape field. The mechanics document describes a possible model, but the owner has not repaired the record. Validate the fixed-field record before interpreting its values and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the incomplete fixed-field record, asks the owner to restore Current shape, does not infer the effective model from mechanics or evidence, proposes no diff, and leaves every file unchanged.",
+      "files": [],
+      "expectations": [
+        "The single coordination record and its fixed-field labels are counted before their values are interpreted",
+        "Each of the four fixed coordination fields is required exactly once",
+        "The missing Current shape field is reported as incomplete owner policy",
+        "The mechanics document is not used to infer or reinterpret the effective model",
+        "No evidence analysis or documentation diff is produced after the completeness failure",
+        "AGENTS.md and the mechanics document remain unchanged"
+      ]
+    },
+    {
+      "id": 28,
+      "eval_name": "zero-record-uses-serial-baseline",
+      "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and no coordination record or Detailed mechanics field. One unmanaged multi-stage record is valid, and current evidence supports no richer coordination model. Validate the project-specific inputs and report the effective model without inventing missing fields. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that treats the absent coordination record as the safe serial baseline, skips field and mechanics validation that applies only to a present record, accepts the single stage section, and invents no coordination policy.",
+      "files": [],
+      "expectations": [
+        "Zero coordination records is accepted as the effective safe serial baseline",
+        "The four fixed-field and Detailed mechanics checks are treated as not applicable without a record",
+        "The single valid multi-stage section does not make a coordination record appear present",
+        "Available evidence is assessed without inventing a shape, field, pointer, or mechanics document",
+        "The no-change report states observable triggers for another reassessment",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 29,
+      "eval_name": "composed-rich-shape-requires-local-mechanics",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one complete unmanaged coordination record whose Current shape combines path-and-dependency units with typed relations. Detailed mechanics points only to an external tracker issue, and no repository-local mechanics document exists. Validate the composed shape before using the external work contract and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that recognizes typed relations as requiring safe repository-local mechanics even when shape 2 is also present, treats the external work contract as supplementary read-only evidence rather than a substitute, asks the owner to repair the local mechanics target, and leaves every file and issue unchanged.",
+      "files": [],
+      "expectations": [
+        "The complete single coordination record passes cardinality, field, and placement validation",
+        "The composed Current shape is classified before the Detailed mechanics value is accepted",
+        "The typed-relations component makes a repository-local project mechanics document mandatory",
+        "The external work contract is not accepted as a substitute for required local mechanics",
+        "No coordination analysis or documentation diff is produced after the target failure",
+        "AGENTS.md and the external tracker issue remain unchanged"
+      ]
+    },
+    {
+      "id": 30,
+      "eval_name": "combined-update-preflights-policy-location",
+      "prompt": "You are working in the project at <fixture-repo>. In one request, the owner asks you to update managed workflow sections and then reassess coordination. AGENTS.md has structurally valid managed boundaries, canonical drift in one block, and a complete coordination record accidentally placed inside that same managed block; refreshing the block would delete the record. Run the combined operation safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped combined operation that runs reassessment input validation as a read-only preflight, reports the coordination record inside a managed range, performs no managed refresh or coordination analysis, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The combined request is recognized as setup followed by reassessment",
+        "Marker and project-policy placement validation run before update mode may mutate AGENTS.md",
+        "The coordination record inside the managed range is reported as unsafe project policy placement",
+        "Update mode does not refresh the drifted block after the preflight failure",
+        "Reassessment does not interpret the misplaced record or start evidence analysis",
+        "AGENTS.md remains byte-for-byte unchanged"
+      ]
+    },
+    {
+      "id": 31,
+      "eval_name": "incomplete-stage-entry-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries, one complete unmanaged coordination record, and one unmanaged work-unit stage section. The Planning entry has all six required fields, but the Implementation entry omits Allowed mutations and Transition. Validate every stage entry before using the section as coordination evidence and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the incomplete Implementation stage, does not use either stage definition as coordination evidence, asks the owner to repair the missing fields, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The single stage section passes section cardinality and placement validation",
+        "Each distinctly named stage entry is validated separately",
+        "Every stage entry is required to contain the six fixed fields exactly once",
+        "The missing Allowed mutations and Transition fields are reported before stage values are interpreted",
+        "No coordination analysis or documentation diff is produced after the stage-completeness failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 32,
+      "eval_name": "combined-adoption-preflights-planned-ranges",
+      "prompt": "You are working in the project at <fixture-repo>. In one request, the owner asks you to adopt agent setup management and then reassess coordination. The unmarked AGENTS.md has a canonical-looking Pull requests section that contains a complete coordination record; adoption would wrap that whole section and its update comparison would replace the record with canonical text. Run the combined operation safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped combined operation that derives the planned adoption range without editing, treats it as managed for the reassessment preflight, reports that the coordination record would be enclosed, adds no markers, performs no canonical refresh or evidence analysis, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The combined request is recognized as adoption followed by reassessment",
+        "The canonical-looking section's planned marker range is derived before any marker is written",
+        "The coordination record inside the planned range is reported as unsafe project-policy placement",
+        "Adoption does not add markers or run a refresh after the preflight failure",
+        "Reassessment does not interpret the record or start evidence analysis",
+        "AGENTS.md remains byte-for-byte unchanged"
+      ]
+    },
+    {
+      "id": 33,
+      "eval_name": "duplicate-stage-field-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged work-unit stage section. The Planning entry is under an immediate child heading and contains all six exact fields, but Allowed mutations appears twice with conflicting values. Validate the stage entry before using it as coordination evidence and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the repeated Allowed mutations field as ambiguous Planning policy, does not choose or merge either value, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The Planning child heading defines one stage-entry boundary",
+        "The six exact field labels are counted within that entry rather than across the section",
+        "The repeated Allowed mutations field is reported as ambiguous owner policy",
+        "Neither conflicting value is selected or merged",
+        "No coordination analysis or documentation diff is produced after the field-cardinality failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 34,
+      "eval_name": "duplicate-stage-name-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged work-unit stage section containing two immediate child headings both named Review. Each entry has all six exact fields, but their activation and mutation rules conflict. Validate the entry names before using the section as coordination evidence and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the repeated Review stage name as conflicting owner policy, does not choose or combine either entry, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "Each immediate child heading begins a separate stage entry",
+        "The two Review headings are compared as stage names before their values are interpreted",
+        "The duplicate name is reported as conflicting policy that requires owner resolution",
+        "Neither Review entry is selected or merged",
+        "No coordination analysis or documentation diff is produced after the name-cardinality failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 35,
+      "eval_name": "shared-stage-guidance-is-not-an-entry",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged work-unit stage section. A prose paragraph about shared handoff storage appears before immediate child headings for Planning and Implementation, and both named entries contain each of the six exact fields once. Current evidence supports no coordination change. Validate the section without treating its shared prose as a stage. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that treats the leading prose as shared stage-record guidance, validates Planning and Implementation as the only two complete entries, uses the valid stage policy as evidence, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The stage-record section is counted once",
+        "Prose before the first immediate child heading is treated as shared guidance rather than a stage entry",
+        "Planning and Implementation child headings define two distinct entries",
+        "Each named entry contains the six exact field-label bullets once",
+        "The valid shared prose does not cause a completeness or duplicate-name failure",
+        "The no-change outcome preserves AGENTS.md"
+      ]
+    },
+    {
+      "id": 36,
+      "eval_name": "legacy-single-stage-record-remains-valid",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged project-specific section titled Implementation stage. The section predates child-heading guidance and contains each of Activation, Allowed mutations, Required input, Durable output, Finish line, and Transition exactly once as direct bold field-label bullets with substantive rendered policy values, not comments or placeholders. A nested Verification notes heading and prose follow those fields. Current evidence supports no coordination change. Validate and preserve the legacy stage record. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that accepts the section heading as the sole stage name, validates the six direct fields as one legacy entry, treats Verification notes as content within Implementation rather than a second stage, does not require a migration, uses the valid stage policy as evidence, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The project-specific section is counted as one stage record",
+        "The six direct fields and stage-specific section heading select the legacy single-stage form",
+        "The section heading supplies the sole stage name",
+        "Each of the six direct field-label bullets appears exactly once with a substantive non-placeholder value",
+        "The nested Verification notes heading remains content within Implementation",
+        "The valid legacy form does not cause a boundary or migration failure",
+        "The no-change outcome preserves AGENTS.md"
+      ]
+    },
+    {
+      "id": 37,
+      "eval_name": "mixed-stage-layout-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged work-unit stage section. Activation and Required input appear directly under the section heading, followed by a Planning child heading whose entry contains the other four fields. Validate entry boundaries before using the section as coordination evidence and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the mixed direct-field and child-heading layout as ambiguous, does not combine fields across the section and Planning entry, asks the owner to repair the record, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The direct field bullets and Planning child heading are located before values are interpreted",
+        "The presence of a child heading prevents the direct fields from being treated as a legacy single-stage entry",
+        "Fields are not combined across the record-level area and Planning entry",
+        "The mixed boundary is reported as ambiguous owner policy",
+        "No coordination analysis or documentation diff is produced after the boundary failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 38,
+      "eval_name": "empty-child-stage-field-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged work-unit stage section with a Planning immediate-child entry. All six exact field labels appear once, but Allowed mutations contains only an HTML TODO comment after its colon and no rendered continuation content. Validate field values before using the entry and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports Planning's render-empty Allowed mutations value as incomplete owner policy, does not interpret the other five values, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The Planning immediate child heading defines one stage entry",
+        "Each exact field label is found once before values are interpreted",
+        "An HTML TODO comment does not count as rendered policy content",
+        "The empty field is reported as incomplete owner policy",
+        "No coordination analysis or documentation diff follows the failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 39,
+      "eval_name": "empty-legacy-stage-field-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged Implementation stage section with no descendant headings. All six direct field labels appear once, but Transition contains only the placeholder TBD. Validate the legacy entry before using it and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that recognizes the legacy layout, reports its placeholder-only Transition value as incomplete owner policy, does not use the section as evidence, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The absence of descendant headings selects the legacy layout",
+        "The six direct labels are counted within the section",
+        "Placeholder-only text does not count as substantive policy",
+        "The empty Transition field blocks interpretation of every stage value",
+        "No migration or documentation diff is proposed after the failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 40,
+      "eval_name": "legacy-sibling-addition-requires-migration-approval",
+      "prompt": "You are updating the agent-ready project at <fixture-repo>. Its unmanaged Implementation stage section predates child-entry guidance and contains all six non-empty direct fields with continuation lines plus an unlabelled sentence that constrains Implementation handoff. The owner asks to add a Review sibling but has not approved moving or scoping the existing text. Preserve unrequested policy and handle the required structural migration safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An approval request with an exact proposed migration diff that creates an Implementation child heading, relocates every existing field and continuation line verbatim, asks the owner to confirm whether every other direct line is shared or Implementation-specific, preserves each line verbatim within the confirmed scope, and adds only Review; no file changes occur before approval.",
+      "files": [],
+      "expectations": [
+        "The direct-field section is recognized as a complete legacy stage",
+        "Adding a sibling is recognized as requiring child-heading structure",
+        "An exact structural migration diff is shown for owner approval",
+        "Every existing field and continuation line remains byte-for-byte unchanged in the proposed move",
+        "Every other direct line is classified by scope with owner confirmation rather than silently reassigned",
+        "Only the requested Review sibling is new",
+        "AGENTS.md remains unchanged before approval"
+      ]
+    },
+    {
+      "id": 41,
+      "eval_name": "generic-legacy-container-does-not-invent-stage-name",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged section titled Work-unit stages. It has no descendant headings and contains all six non-empty stage fields directly in the section exactly once. Current evidence supports no policy change. Preserve backward compatibility without inventing owner policy. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that accepts one complete unnamed legacy stage, reports the absent stage name as uncertainty, never calls it Work-unit stages, avoids name-dependent inferences, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The generic section is counted as one stage record",
+        "The absence of descendant headings selects the legacy layout",
+        "All six direct fields and values pass completeness validation",
+        "The generic container heading is not used as the stage name",
+        "The missing name is reported as uncertainty rather than a validation failure",
+        "The no-change outcome preserves AGENTS.md"
+      ]
+    },
+    {
+      "id": 42,
+      "eval_name": "skipped-level-stage-heading-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and an unmanaged Work-unit stages section. It has no immediate child heading, but a skipped-level Implementation heading appears two levels below it followed by all six non-empty fields. Validate entry boundaries before interpreting the section and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the skipped-level heading as an ambiguous entry boundary, does not treat the section as a legacy direct-field record or Implementation as a valid child entry, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "Every descendant heading is located before selecting the legacy form",
+        "The skipped-level heading disqualifies the no-descendant legacy layout",
+        "Implementation is not accepted as an immediate-child entry",
+        "The six fields below it are not assigned across an ambiguous boundary",
+        "No coordination analysis or documentation diff follows the failure",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 43,
+      "eval_name": "legacy-fields-plus-child-stage-blocks-reassessment",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged Implementation stage section. The section contains all six non-empty direct fields for Implementation, then a Review child heading whose subtree contains another complete set of the six stage fields. Validate the layout before interpreting either possible stage and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that reports the direct legacy fields plus descendant stage-field bullets as an ambiguous mixed layout, does not swallow Review as Implementation content or combine the entries, proposes no diff, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The stage-specific section and six direct fields identify a possible legacy Implementation stage",
+        "The Review descendant subtree is searched for exact stage-field bullets",
+        "Review is not silently classified as content within Implementation",
+        "The direct-plus-descendant stage-field layout is reported as ambiguous",
+        "Neither possible stage is interpreted as coordination evidence",
+        "AGENTS.md remains unchanged"
+      ]
+    },
+    {
+      "id": 44,
+      "eval_name": "combined-update-survives-semantic-preflight-failure",
+      "prompt": "You are working in the project at <fixture-repo>. In one request, the owner asks you to update agent setup and then reassess coordination, and approves the exact safe canonical refresh you show. AGENTS.md has valid managed boundaries with canonical drift, plus an incomplete work-unit stage record wholly outside every managed range. Preserve unmanaged policy, complete the safe update, then run reassessment validation. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A combined operation that passes the pre-setup marker and placement gate, completes the approved canonical refresh while preserving the incomplete unmanaged stage record byte-for-byte, then stops only the reassessment half on that semantic completeness failure without interpreting or repairing the record.",
+      "files": [],
+      "expectations": [
+        "Marker validation passes before setup",
+        "The incomplete stage record is located wholly outside managed ranges",
+        "Semantic stage completeness is deferred until after setup",
+        "The approved managed-section refresh completes",
+        "The unmanaged stage record remains byte-for-byte unchanged",
+        "Full post-setup reassessment validation reports the incomplete record and stops before analysis"
+      ]
+    },
+    {
+      "id": 45,
+      "eval_name": "combined-update-preflights-local-target-location",
+      "prompt": "You are working in the project at <fixture-repo>. In one request, the owner asks you to update agent setup and then reassess coordination. AGENTS.md has valid managed boundaries and canonical drift. A complete coordination record is outside managed ranges, but its syntactically local Detailed mechanics pointer targets a section inside the drifted managed block that update would refresh away. Run the combined operation safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped combined operation that resolves the local target only for overwrite-risk location, reports its intersection with the proposed managed refresh, performs no update or reassessment analysis, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "Marker validation and pointer-line placement pass",
+        "The syntactically local mechanics target is resolved before setup mutation",
+        "The target range is compared with the range update proposes to refresh",
+        "The target intersection stops both setup and reassessment",
+        "No mechanics-value or shape suitability analysis is needed for the overwrite verdict",
+        "AGENTS.md remains byte-for-byte unchanged"
+      ]
+    },
+    {
+      "id": 46,
+      "eval_name": "blank-legacy-shape-one-mechanics-remains-valid",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one complete unmanaged legacy coordination record whose Current shape is shape 1 and whose Detailed mechanics label is present exactly once with no rendered value. Current evidence supports no policy change. Validate the lower-shape legacy record without inventing a document. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that accepts the blank legacy Detailed mechanics value for shape 1, validates the record without demanding a no-document token or project document, uses available evidence, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "All four fixed coordination labels appear exactly once",
+        "Current shape is classified before Detailed mechanics",
+        "The final shape contains shape 1 and none of shapes 3 through 5",
+        "The blank legacy mechanics value is accepted",
+        "No placeholder mechanics document or explicit token is invented",
+        "The no-change outcome preserves AGENTS.md"
+      ]
+    },
+    {
+      "id": 47,
+      "eval_name": "blank-legacy-shape-two-mechanics-remains-valid",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one complete unmanaged legacy coordination record whose Current shape is shape 2 and whose Detailed mechanics label is present exactly once with no rendered value. Available local evidence supports no policy change. Validate the record without requiring an external work contract. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that accepts the blank legacy Detailed mechanics value for shape 2, does not require or fabricate a work-contract pointer, uses available local evidence, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "All four fixed coordination labels appear exactly once",
+        "Current shape is classified before Detailed mechanics",
+        "The final shape contains shape 2 and none of shapes 3 through 5",
+        "The blank legacy mechanics value is accepted as the optional lower-shape form",
+        "No external work contract is required or fabricated",
+        "The no-change outcome preserves AGENTS.md"
+      ]
+    },
+    {
+      "id": 48,
+      "eval_name": "blank-rich-shape-mechanics-still-blocks",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged coordination record whose Current shape combines shape 2 with shape 3. All four labels appear exactly once, but Detailed mechanics has no rendered value. Validate the final composed shape before interpreting the record and stop safely. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A stopped reassessment that refuses to apply the lower-shape blank-value exception because shape 3 is present, reports the missing required local mechanics document, does not analyze or edit policy, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "All four fixed coordination labels appear exactly once",
+        "The complete composed Current shape is classified before Detailed mechanics",
+        "Shape 3 takes precedence over the composed shape 2",
+        "The blank lower-shape compatibility exception is not applied",
+        "The missing required local mechanics document stops reassessment",
+        "AGENTS.md remains unchanged"
+      ]
     }
   ]
 }
