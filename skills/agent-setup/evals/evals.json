@@ -34,10 +34,11 @@
     {
       "id": 3,
       "eval_name": "later-review-integration-adoption",
-      "prompt": "You are updating the existing agent-ready project at <fixture-repo>. Its AGENTS.md already has managed canonical blocks plus an unmanaged planning and implementation stage record. Use the agent-setup skill in update mode. Preserve the existing two stage definitions and all other unmanaged content, refresh any canonical drift, and add owner-requested review and integration stages. Review may change the branch only to address accepted findings; integration validates the current base and hands off an open green PR for a human merge. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "An updated AGENTS.md whose managed blocks match the canonical source and whose unmanaged stage record preserves planning and implementation while adding complete review and integration definitions. The new stages do not weaken explicit activation, human merge, or review gates.",
+      "prompt": "You are updating the existing agent-ready project at <fixture-repo>. Its AGENTS.md already has managed canonical blocks, an unmanaged planning and implementation stage record, and a complete four-field coordination model record. Use the agent-setup skill in update mode. Preserve the coordination record, the existing two stage definitions, and all other unmanaged content; refresh any canonical drift and add owner-requested review and integration stages. Review may change the branch only to address accepted findings; integration validates the current base and hands off an open green PR for a human merge. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An updated AGENTS.md whose managed blocks match the canonical source, whose coordination model remains verbatim, and whose unmanaged stage record preserves planning and implementation while adding complete review and integration definitions. The new stages do not weaken explicit activation, human merge, or review gates.",
       "files": [],
       "expectations": [
+        "The existing four-field coordination model record remains verbatim in unmanaged content",
         "Existing planning and implementation stage definitions are preserved verbatim",
         "Review and integration are added only because the owner explicitly requested them",
         "Update mode treats only the requested stage-record additions as an exception to its untouched-unmanaged-content rule",
@@ -61,6 +62,82 @@
         "Undeclared implementation retains the default workflow and still requires a new explicit user assignment",
         "All pre-existing unmanaged project guidance remains verbatim",
         "The new stage record stays outside every managed block"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "empty-repository-serial-baseline",
+      "prompt": "You are working in the empty project at <fixture-repo>. It has a README with basic commands but no AGENTS.md, implementation plan, code, architecture documentation, or work-unit history. Initialize it with the agent-setup skill using the Standard profile. The owner has not requested concurrent work or a coordination record. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A Standard-profile agent setup that uses the safe serial coordination baseline, omits the optional coordination record, and invents no lanes, ownership map, dependency graph, claim mechanism, or concurrency width.",
+      "files": [],
+      "expectations": [
+        "The setup identifies the safe serial baseline from the absence of coordination evidence",
+        "AGENTS.md contains no coordination model record or placeholder for one",
+        "The absent record is treated as serial work, not missing content",
+        "No lane, ownership map, dependency graph, claim mechanism, or parallel-work recommendation is invented",
+        "The result preserves the existing explicit-assignment and claim-is-not-authorization defaults"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "speculative-plan-is-evidence",
+      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the Standard profile. Its only coordination source is a draft PLAN.md that sketches API and UI lanes, a dependency graph, and three parallel workers; no code or work-unit history corroborates those ideas, and review capacity is unknown. The owner explicitly wants a compact coordination record that captures today's justified model and when to revisit it. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An unmanaged fixed-field coordination record that treats the draft plan as uncorroborated evidence, keeps the project on a serial baseline, states unknown review capacity, and names observable reassessment triggers without adopting the proposed lanes or graph.",
+      "files": [],
+      "expectations": [
+        "The plan is described as evidence rather than authoritative project policy",
+        "The selected current shape remains the safe serial baseline because no code or history corroborates the plan",
+        "The record contains current shape, evidence basis, detailed mechanics, and reassessment trigger fields outside managed blocks",
+        "The proposed API and UI lanes, dependency graph, and three-worker width are not adopted",
+        "The reassessment trigger names observable corroboration such as implemented boundaries, repeated work-unit history, or confirmed review capacity"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "mature-simple-adoption",
+      "prompt": "You are adopting agent-setup management in the mature project at <fixture-repo>. Its existing AGENTS.md has useful project guidance but no managed markers or coordination record. Its code, architecture notes, and work-unit history show one maintainer completing small serial changes with no recurring independent streams, shared-contract bottleneck, intentional stacks, or parallel review capacity. Adopt the Standard profile, preserve the existing guidance, and run coordination discovery. The owner has not requested a coordination record. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An adopted Standard-profile setup that preserves existing guidance, considers the mature repository's evidence, keeps its proven simple serial behavior, and does not force a coordination record or richer topology.",
+      "files": [],
+      "expectations": [
+        "Adoption runs project-specific coordination discovery before completing the managed-block comparison",
+        "Existing unmarked project guidance is preserved through adoption",
+        "The setup inspects code, architecture notes, work-unit history, and owner capacity rather than equating repository age with complexity",
+        "The selected coordination shape remains the safe serial baseline",
+        "AGENTS.md contains no coordination model record because the owner did not request one and richer coordination is unsupported",
+        "No named streams, typed relation vocabulary, integration spine, or claim mechanism is introduced",
+        "Existing simple project behavior remains intact"
+      ]
+    },
+    {
+      "id": 8,
+      "eval_name": "recurring-independent-streams",
+      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the Standard profile. Its architecture documentation and six completed work-unit records show two recurring, stable, independently reviewable streams that repeatedly use the same boundaries; the owner confirms those boundaries remain useful. One integrator can reliably review and merge at most two active units. Record the justified coordination model, keep long mechanics in project documentation, and do not infer any stream from directory names alone. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An unmanaged stable-named-streams coordination record with evidence from recurring history, a maximum width of two, a pointer to project-owned mechanics, and reassessment triggers; the detailed document keeps individual work contracts authoritative.",
+      "files": [],
+      "expectations": [
+        "Named streams are justified by recurring work-unit history plus owner confirmation, not by directory names",
+        "The coordination record contains all four fixed fields outside managed blocks",
+        "The current shape names stable work streams and caps concurrent active units at two",
+        "Detailed stream boundaries and interactions live in project documentation referenced from AGENTS.md",
+        "Individual work contracts remain authoritative and claims, if any, remain occupancy signals only",
+        "Reassessment triggers cover boundaries becoming unstable or review and integration capacity changing"
+      ]
+    },
+    {
+      "id": 9,
+      "eval_name": "shared-contract-integration-spine",
+      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the High-assurance profile. The owner requires decision notes for shared-schema changes, coordination-policy changes, and destructive migrations. Existing code, architecture documentation, and work-unit history show independent component work converging through one shared schema: schema changes must serialize, one integration role orders convergence, and prior units separately used start order, merge order, intentional stacking, and mutual exclusion. The owner confirms one integrator can handle two independent component units at once. Record the justified model and its detailed mechanics without treating schema serialization as component ownership. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A High-assurance setup with the supplied mandatory-note classes and an unmanaged integration-spine coordination record capped at two independent component units, with detailed project documentation that separates shared-schema serialization from component ownership and defines start, merge, stacking, and exclusion relations distinctly.",
+      "files": [],
+      "expectations": [
+        "AGENTS.md records the High-assurance profile and the supplied shared-schema, coordination-policy, and destructive-migration mandatory-note classes",
+        "The current shape is an integration spine or serialized shared-contract domain supported by code, architecture, history, and owner evidence",
+        "The coordination record contains all four fixed fields outside managed blocks and points to detailed project mechanics",
+        "Shared-schema serialization is modeled separately from component ownership",
+        "Start order, merge order, intentional stacking, and mutual exclusion have distinct operational meanings",
+        "Unknown or materially ambiguous relations serialize until the designated authority resolves them",
+        "The recommended concurrency width is capped at two independent component units by actual integration capacity",
+        "The result does not copy Freeside lane names, labels, or tracker vocabulary"
       ]
     }
   ]
