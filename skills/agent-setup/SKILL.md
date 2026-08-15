@@ -43,8 +43,12 @@ init and left untouched during updates.
   the adoption bullet below.
 - AGENTS.md exists without markers → ask whether to adopt management or
   leave unmanaged. To adopt: match sections to canonical keys by heading,
-  wrap each match's existing text as-is in markers, then immediately run
-  the update-mode comparison so the user sees any divergence as a diff.
+  wrap each match's existing text as-is in markers, then gather the
+  project-specific information from init step 4 without overwriting existing
+  unmarked guidance. This includes coordination discovery and preserves any
+  existing coordination or stage record under the update-mode rules. Then run
+  the update-mode comparison so the user sees any canonical divergence as a
+  diff.
   One exception to as-is: when wrapping a matched `done` section, also
   wrap its existing project checks in the nested
   `<!-- agents-md:project:done-checks -->` markers (text unchanged);
@@ -99,8 +103,8 @@ metadata file).
    below): each canonical section wrapped in its markers (the `devlog`
    block only under Decision-log or High-assurance), project-specific
    content or placeholders in place, and the `Agent-setup profile:`
-   line (plus the High-assurance mandatory-note list) in an unmanaged
-   section.
+   line (plus the High-assurance mandatory-note list and any justified
+   coordination or work-unit stage record) in an unmanaged section.
 
    Verify that write before moving on: init pastes the managed blocks by
    hand, and every comparison update mode makes depends on their
@@ -194,10 +198,11 @@ metadata file).
      the text around it; never modify the nested block.
    - If different, show the diff and ask whether to update.
 7. Leave all unmarked (project-specific) content untouched, except for
-   owner-requested creation or modification of a work-unit stage record. Within
-   that record, create or change only the requested stages or fields; preserve every
-   unrequested stage and all unrelated unmarked content verbatim. See
-   "Work-unit stages (optional)".
+   owner-requested creation or modification of a coordination model or
+   work-unit stage record. Within either record, create or change only the
+   requested fields or stages; preserve every unrequested field or stage and
+   all unrelated unmarked content verbatim. See "Work contracts and
+   coordination" and "Work-unit stages (optional)".
 8. If a canonical section is missing entirely, offer to insert it at its
    conventional position; under Standard, `devlog` is not such a gap
    (see Profiles).
@@ -228,8 +233,9 @@ metadata file).
    it stands and report it.
 
 10. Audit standard project files (see below) and flag any newly missing;
-    also check the automated-reviewer record and any optional work-unit stage
-    record; see "Automated reviewer record" and "Work-unit stages (optional)".
+    also check the automated-reviewer record, any coordination model, and any
+    optional work-unit stage record; see "Automated reviewer record", "Work
+    contracts and coordination", and "Work-unit stages (optional)".
 11. Check the settings listed under "Repo settings" and offer to align any
     that have drifted.
 
@@ -322,21 +328,49 @@ Use these defaults: direct user-assigned work needs no issue; concurrent,
 backlog, or cross-session work uses a tracker issue; agents do not self-select;
 and neither an issue nor a claim authorizes work.
 
-During init:
+During init or adoption:
 
 - Ask where persistent work contracts live on the project's forge.
 - Ask whether the project separates planning, implementation, review, or
   integration into distinct stages with handoffs. Default to the single
   implementation workflow; record stages only when those handoffs are
   demonstrated or explicitly requested.
-- Ask whether concurrent work is expected. Identify shared contract surfaces,
-  overlapping work, and integration constraints that should become work unit
-  boundaries or explicit dependencies instead of parallel work.
-- If concurrency is expected, ask which forge-visible claim mechanism workers
-  use and how abandoned or stale claims are released or superseded. Never
-  invent a mechanism silently; a claim advertises occupancy only.
+- Gather the available coordination evidence: plans, existing code,
+  architecture documents, work-unit and PR history, and owner expectations.
+  Treat a plan as evidence, never authority. Use
+  `references/coordination-discovery.md` §evidence to grade the sources and
+  `references/coordination-discovery.md` §shapes to choose the smallest model
+  the evidence supports.
+- With neither a credible plan nor a demonstrated coordination need, keep the
+  safe serial baseline. Treat a speculative, uncorroborated plan the same way.
+  Omit the coordination record unless the owner explicitly requests the
+  fixed-field record from `references/coordination-discovery.md` §record; when
+  requested, record the safe serial shape. No record means serial work, not
+  missing content. Do not invent a lane, ownership map, graph, claim mechanism,
+  or placeholder.
+- When evidence supports a richer model, write the fixed-field record from
+  `references/coordination-discovery.md` §record in unmanaged content near the
+  `Agent-setup profile:` line. For typed relations, stable named streams, or an
+  integration spine, keep the long mechanics in project documentation and
+  point to it from the record.
+- Keep shared-contract serialization separate from component ownership. When
+  needed, distinguish start order, merge order, intentional stacking, and
+  mutual exclusion, and cap recommended concurrency at realistic review and
+  integration capacity.
+- If concurrency is expected and the project already defines a forge-visible
+  claim mechanism, record how abandoned or stale claims are released or
+  superseded. Never invent one silently; a claim advertises occupancy only.
+- Use `references/coordination-discovery.md` §freeside only to calibrate the
+  evidence required for named streams and an integration spine. Never copy its
+  lane names or project vocabulary as defaults.
 - Ask whether an explicit project-specific policy permits agent
   self-selection. Without one, self-selection stays disabled.
+
+In update mode, detect and report whether an existing coordination record has
+all four fields. Preserve it as unmanaged content unless the owner explicitly
+requests a field change. Do not reassess an established model while syncing
+canonical sections; topology reassessment is a separate owner-assigned work
+unit.
 
 ### Work-unit stages (optional)
 
