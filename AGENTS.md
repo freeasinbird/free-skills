@@ -58,16 +58,30 @@ Before implementation, establish a lightweight work contract: objective,
 testable acceptance criteria, scope, dependencies and blockers, and explicit
 non-goals. Direct user-assigned work needs no issue; the prompt and
 eventual PR may carry the contract together. Persist that same contract
-in a tracker issue when the work must survive a session boundary,
-coordinate concurrent workers, or join a backlog. Actionable work
-deferred out of the unit's scope gets a tracker issue before handoff.
+in a tracker issue when the work must survive a session boundary, pass
+sequentially between agents or sessions (even within one short session),
+coordinate concurrent workers, or join a backlog. For a sequential handoff,
+put the durable input and output in the issue and its comments, never only in
+transient chat context. Actionable work deferred out of the unit's scope gets
+a tracker issue before handoff.
+
+A project may declare optional work-unit stages in an unmanaged,
+project-specific section. While a declared stage is active, its recorded
+allowed mutations and finish line govern. Completing one stage creates a
+handoff to the next; it does not authorize that next stage to begin.
 
 By default, begin work only through explicit user assignment. An issue, label,
-backlog entry, satisfied dependency, or claim is not authorization to select
-and start work. Agent self-selection requires an explicit project-specific
-opt-in policy.
+backlog entry, satisfied dependency, completed plan, or claim is not
+authorization to select and start work. Agent self-selection requires an
+explicit project-specific opt-in policy.
 
-Use this checklist for each work session:
+For implementation work that is not itself a declared stage, use this
+checklist except actions assigned to any separately declared stage. With no
+stage record, that means the entire checklist. While a declared implementation
+stage is active, use only the steps compatible with its allowed mutations and
+recorded finish line, then stop at its recorded transition. A declared
+non-implementation stage skips this checklist and follows its recorded allowed
+mutations and finish line instead:
 
 1. Read the README and, when resuming an existing work unit, its issue or
    PR and any decision note it links. Resolve the repository's
