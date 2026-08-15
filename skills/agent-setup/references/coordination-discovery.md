@@ -1,10 +1,10 @@
 # Coordination Discovery
 
-Use this reference during agent-setup initialization or adoption to derive the
-smallest coordination model supported by current project evidence. The shapes
-are capabilities, not maturity levels. A project may remain simple, skip a
-capability, combine supported capabilities, or later simplify when its
-evidence changes.
+Use this reference during agent-setup initialization, adoption, or explicit
+coordination reassessment to derive the smallest coordination model supported
+by current project evidence. The shapes are capabilities, not maturity levels.
+A project may remain simple, skip a capability, combine supported capabilities,
+or later simplify when its evidence changes.
 
 ## §evidence
 
@@ -125,15 +125,152 @@ block. Use this fixed field list:
 
 Omit the record for the safe serial baseline unless the owner explicitly wants
 it stated. No record means serial work, not missing content. For shape 2, the
-detailed-mechanics field may point to the work-contract location instead of a
-dedicated coordination document. Never create a placeholder graph, lane list,
-ownership map, or claim rule merely to fill a field.
+detailed-mechanics field may point to repository-local work-contract
+documentation instead of a dedicated coordination document. A tracker issue
+or other external work contract remains evidence, not an editable mechanics
+target. Never create a placeholder graph, lane list, ownership map, or claim
+rule merely to fill a field.
 
 In update mode, detect the record and report whether all four fields are
 present. Preserve it and all other unmanaged content verbatim unless the owner
 explicitly requests a field change. Do not reassess or rewrite an established
 model as a side effect of syncing canonical sections; topology reassessment is
-a separate owner-assigned work unit.
+a separate owner-assigned work unit described in `SKILL.md` under
+"Coordination reassessment" and detailed in §reassess.
+
+## §reassess
+
+Reassessment re-runs coordination discovery against current evidence without
+turning routine synchronization into policy analysis. Begin with the existing
+record and detailed mechanics, when present, and any stage record. If no
+coordination record exists, the observed starting model is the safe serial
+baseline. If AGENTS.md itself is absent, analyze and report only; init must
+establish the profile, canonical sections, and scaffolding before any
+coordination record or project coordination document is created.
+
+When AGENTS.md exists, validate its managed ranges before interpreting policy,
+then locate every apparent fixed-field coordination record, work-unit stage
+record, and **Detailed mechanics** value. Apply this input-state table in order:
+
+| Input                     | Accepted state                                                                                                                                                                                                                                                                                                                                                                                                                 | Stop condition                                                                                                                                                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coordination record       | Zero, meaning the safe serial baseline, or one record                                                                                                                                                                                                                                                                                                                                                                          | More than one record                                                                                                                                                                                                                                    |
+| Fixed coordination fields | With one record, each of **Current shape**, **Evidence basis**, **Detailed mechanics**, and **Reassess when** appears exactly once; with zero records, not applicable                                                                                                                                                                                                                                                          | Any field in the one record is missing or repeated                                                                                                                                                                                                      |
+| Work-unit stage record    | Zero or one project-specific section; one section may contain several stage definitions under immediate child headings                                                                                                                                                                                                                                                                                                         | More than one stage section                                                                                                                                                                                                                             |
+| Stage layout              | In one stage section, either one legacy entry with all six fields directly in a stage-specific section (whose descendant subtrees contain no stage-field bullet), one unnamed legacy entry with all six fields directly in a generic container that has no descendants, or immediate child entries where each unique heading begins one entry and preceding prose is shared guidance; with zero stage sections, not applicable | Direct legacy fields mix with a descendant stage-field bullet, a generic container mixes direct fields with descendants, a skipped-level heading there has no immediate-child entry, other boundaries are ambiguous, or an immediate-child name repeats |
+| Stage fields              | Within every accepted entry, each of the six exact fields appears once with a non-empty value                                                                                                                                                                                                                                                                                                                                  | Any entry field is missing, empty, or repeated                                                                                                                                                                                                          |
+| Placement                 | Every present record range and mechanics line is outside all managed ranges; with zero coordination records, its mechanics line is not applicable                                                                                                                                                                                                                                                                              | Any present record or mechanics line intersects a managed range                                                                                                                                                                                         |
+| Mechanics value           | With one record whose final shape contains only shape 1, shape 2, or both, a legacy blank value or explicit no-document value; shape 2 may instead use a local or external work contract. Whenever shape 3, 4, or 5 appears, a repository-local project document                                                                                                                                                               | The value does not fit the recorded shape, or a required local target is unsafe or unresolved                                                                                                                                                           |
+
+The six exact stage labels are **Activation**, **Allowed mutations**,
+**Required input**, **Durable output**, **Finish line**, and **Transition**.
+Each must appear as a bold field-label bullet once within its immediate-child
+heading entry with a non-empty value. A value is non-empty only when its
+rendered inline or continuation text before the next exact field-label bullet
+or heading contains substantive policy. HTML comments do not count, and
+placeholder-only text such as `TODO` or `TBD` is empty.
+
+For a legacy stage-specific section, require those six bullets directly in the
+section exactly once with non-empty values, use its heading as the sole stage
+name, and treat descendant headings as content only when their subtrees contain
+no exact stage-field bullet. If a descendant subtree does contain one, stop on
+an ambiguous mix of direct legacy fields and a possible child entry. A generic
+container heading, such as `Stages`, `Work unit stages`, or `Work-unit stages`,
+does not supply a name; accept its six complete direct fields as one unnamed
+legacy stage only when it has no descendant headings, and report the missing
+name as uncertainty. Do not invent one. Under a generic container, stop when
+direct field bullets appear alongside child headings or a skipped-level heading
+appears without an immediate-child entry. Deeper headings within an
+immediate-child entry belong to that entry.
+
+When an owner asks to add a sibling to a legacy direct-field record, first
+propose and obtain approval for the necessary structural migration. Name the
+existing stage with the owner's input when the section heading is generic,
+create its immediate child heading, and move its six field bullets and
+continuation lines beneath that heading verbatim. Classify every other direct
+line in the proposal as shared pre-entry guidance or existing-stage content,
+preserve its text and relative order verbatim within that scope, and ask the
+owner to confirm each classification before adding only the requested sibling.
+Without approval, leave the record unchanged.
+
+Every row through **Placement** inspects structure and labels without adopting
+their values as policy. When the first row finds no coordination record, skip
+its field and mechanics rows and use the safe serial baseline. With one record,
+read **Current shape** only after those structural rows pass, then classify
+**Detailed mechanics** against the final row. Any shape containing shape 3, 4,
+or 5 takes precedence over a composed shape 2 and requires a safe local
+document. A blank legacy value is accepted only when the final shape contains
+shape 1, shape 2, or both and none of shapes 3–5. A local target must be
+project-specific, not a canonical source or scaffold template; when it targets
+AGENTS.md, its whole section must also remain outside every managed range.
+
+For any combined setup-and-reassessment request, run marker validation and the
+overwrite-risk portion of **Placement** before setup. For adoption, apply it to
+both current managed ranges and the read-only set of sections adoption proposes
+to wrap. Resolve every syntactically local mechanics target only far enough to
+locate its range or file, and derive the ranges and files the requested setup
+proposes to rewrite. A record, mechanics line, or local target that intersects
+one of those locations stops both operations before setup can overwrite it.
+Defer every other table row, including mechanics-value and semantic target
+suitability, until the full reassessment after setup completes; a semantic
+policy failure outside overwrite-risk locations stops that reassessment, not
+the requested safe setup.
+
+A shape-2 tracker issue or other external work contract is read-only evidence,
+not an editable mechanics target. Resolve and read it only when the source is
+available; otherwise report the unavailable evidence as uncertainty and
+continue. In a composed shape it may supplement, but never replace, the local
+mechanics that shape 3, 4, or 5 requires. Never include an external
+work-contract change in the proposed diff. Stop on every other unsafe,
+ambiguous, or unresolved state before reading or modifying the record or
+target; structurally valid markers do not make content inside them
+project-specific.
+
+Inspect these sources only when they are available, and identify each one in
+the report:
+
+- architecture and recent architecture changes;
+- recent work units and PR history, including recurring boundaries and
+  overlap;
+- issue dependencies and their stated meanings;
+- repeated path overlap or shared-surface collisions;
+- changes to shared contracts or generated surfaces;
+- intentional branch or PR stacking;
+- start-order, merge-order, and mutual-exclusion constraints; and
+- documented manual scheduling friction, plus the people or agents available
+  to review and integrate concurrent work.
+
+Report unavailable sources and ambiguous meanings as uncertainty. Separate
+observations from inferences, and cite the path, work unit, issue relation,
+owner statement, or other available source behind every material finding.
+Never infer coordination maturity from repository size, age, or directory
+layout alone.
+
+Compare the current record and mechanics with the evidence. Look specifically
+for stale stream names, an obsolete integration spine or shared-contract
+bottleneck, missing structure now supported by recurring evidence, and an
+over-modeled topology whose distinctions no longer guide real work. Also check
+whether the record's **Reassess when** condition has become observable. A
+trigger starts analysis only when the owner requests reassessment; it never
+activates update mode or authorizes mutation.
+
+Re-run §shapes and select the smallest safe shape supported now. The result
+may keep the current model, add a capability, simplify it, or return to the
+safe serial baseline. Use the same evidence rule for both upgrades and
+simplifications. When sources conflict, prefer the simpler safe shape and
+report the conflict. Apply §evidence's review and integration capacity cap to
+every concurrency recommendation.
+
+Present the effective model, evidence and uncertainty, detected drift,
+recommended outcome, and next observable reassessment triggers. Show an exact
+diff for every proposed AGENTS.md or project-document change before editing,
+including any **Reassess when** field change. Existing lane names and
+relationship meanings remain authoritative until the owner explicitly
+approves a documented rename or reinterpretation. Issue dependencies are
+read-only evidence and are never mutation proposals. Remove an obsolete
+coordination record or update its reassessment triggers only when the owner
+approves that exact diff; otherwise preserve it and all unrelated unmanaged
+content verbatim and keep the triggers in the report.
 
 ## §freeside
 
