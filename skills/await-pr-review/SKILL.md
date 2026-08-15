@@ -21,13 +21,31 @@ and converge without asking the user to babysit the polling loop. This skill
 owns waiting and orchestration; the project's review-response conventions
 still govern commits, replies, resolution, and handoff.
 
+## Authorization
+
+Treat invocation of this skill as authorization to perform its ordinary,
+task-scoped review-loop actions without per-action or per-round confirmation:
+wait, fix accepted findings, fold fixes, push with the required pinned lease
+and safeguards, verify, reply, resolve, advance the baseline, and trigger or
+await the next automated pass. This includes the history rewrite required by
+the project's fold convention, but only on the expected PR branch under the
+checkout and lease gates.
+
+The ordinary authorization stops at a destructive exception outside that
+sequence, a failed pinned lease or other unmet safety precondition, material
+scope expansion, or a genuine judgment call. Apply the documented safe
+recovery where one exists; surface the stop when it needs judgment or new
+authority. Obey a platform-required approval prompt, but do not invent a
+conversational permission gate when invocation and the workflow safeguards
+already authorize the action.
+
 ## Route ownership before waiting
 
 **Default to one conductor subagent.** First resolve only the event-boundary
 facts needed for its brief, then spawn it before reading feedback, waiting on
 CI, or starting any watcher. The conductor owns steps 1 through 5 and wakes
-the main agent only for a judgment call, a checkpoint escalation, or its
-terminal disposition ledger.
+the main agent only for a judgment call, a no-go or materially uncertain
+convergence escalation, or its terminal disposition ledger.
 
 Apply one platform-neutral gate. A conductor owns the exchange when all four
 grants hold:
@@ -197,6 +215,11 @@ field/login forms, and script exit semantics live in
 Read `references/review-response.md` before changing the branch. Its gates are
 part of this workflow, not optional advice.
 
+Before changing the branch or writing host review state after any wait or
+resume, refresh the PR object. Require it to exist, remain open, and still have
+the expected head. A failed query or a missing, null, malformed, closed, or
+merged PR stops the response round as incomplete evidence.
+
 For every finding:
 
 - Evaluate it on its merits. Fix real findings and decline contrived,
@@ -228,14 +251,19 @@ When unsure whether a finding blocks, treat it as blocking.
 
 Stop for human judgment on thrash: the same class recurring after a correct
 complete fix, or fixes producing new problems without net progress. At about
-five blocker-sustained fix rounds, record a go/no-go checkpoint and repeat it
-at the same cadence while blockers continue.
+five blocker-sustained fix rounds, make and record a go/no-go checkpoint. A go
+is an internal call: record one line naming the convergence evidence, then
+continue without yielding or asking permission. A no-go or materially
+uncertain call surfaces the current ledger for human judgment. Repeat the
+checkpoint at the same cadence while blockers continue; an earlier go does
+not authorize an unbounded loop.
 
 Track finding classes across the whole exchange. A second member after a
-class sweep widens the class one level and earns one fresh-context adversarial
-refute pass where read-only delegation is available. Repeated prose-clause
-findings on one rule surface should trigger an owner escalation to replace the
-prose program with a tested script or check.
+class sweep requires a root-cause hypothesis for why the sweep missed it,
+widens the class one level, and earns one fresh-context adversarial refute pass
+where read-only delegation is available. Repeated prose-clause findings on one
+rule surface should trigger an owner escalation to replace the prose program
+with a tested script or check.
 
 The full taper, final-push, checkpoint, recurrence, refute-pass, and ledger
 rules live in `references/review-response.md`.
@@ -247,10 +275,48 @@ issue), or explicitly outstanding for the human. State any no-blocker call
 that ended the exchange, whether threads are resolved, checks status, and any
 bounded timeout or coverage gap.
 
-Before calling the PR ready, resolve the current base branch and tip again. If
-either differs from the recorded base, report the review exchange complete but
-integration evidence stale and return to the project's freshness workflow.
-Do not update the branch as part of the watcher role.
+Before calling the PR ready, take a fresh live-state snapshot, including after
+any resume or interruption. Require the PR object to exist, its lifecycle state
+to be open, and the PR to be review-ready rather than draft. Refresh the
+host-reported PR head and require it to equal the last handled and verified
+head; confirm required checks cover that exact head.
+Automated-review evidence must be either a completed pass tied to that head
+with every activity dispositioned, or a fully covered bounded timeout whose
+final observation found no in-progress signal. The documented main-owned
+final-triage handoff is the sole exception to that terminal-review evidence:
+its locally verified head may be handed off with the re-review explicitly
+pending. Also refresh the base branch and tip, every review thread and blocker,
+pending push state, and any automated-review activity after the last handled
+boundary. Page every collection needed to prove those facts to exhaustion.
+
+The terminal snapshot is valid only when every required query succeeds and
+every required scalar and collection is present with the expected shape.
+Treat a failed or partial query, missing PR, absent required field, null where
+the field contract requires a value, malformed value, or unexhausted page as
+incomplete evidence, never as an empty or clean state. Preserve documented
+nullability: for an open PR, `closedAt` and `mergedAt` are expected to be null.
+
+Require two consecutive complete composite scans with identical canonical
+results. Compare PR lifecycle, head, base, checks, pending push, every review,
+comment, and reply identity and timestamp, and the complete thread map,
+including each thread's `isResolved` state and latest comment identity. If any
+value or page metadata differs, discard both mixed-time scans and restart until
+two complete scans match. Never report readiness from cached, single-scan, or
+partially compared state.
+
+Do not call the PR ready while its lifecycle is not open or it remains draft;
+any blocker or thread is unresolved; a push is pending; reviewer activity after
+the handled boundary remains undispositioned; the reviewer is known to be in
+progress outside that final-triage exception; review or snapshot coverage is
+incomplete or broken; a required check is failed or incomplete; or the base is
+stale. If the refreshed PR head differs from the last handled and verified
+head, treat the earlier review and check evidence as stale, capture the new
+event boundary, and reopen the exchange. Reopen on new same-head reviewer
+activity too; head equality does not disposition a late review, comment, or
+reply. If the current base branch or tip differs from the recorded base,
+report the review exchange complete but integration evidence stale and return
+to the project's freshness workflow. Do not update the branch as part of the
+watcher role.
 
 Wait for every required check and fix any known-red result before claiming the
 PR ready. The ledger records the final checks state rather than treating review
