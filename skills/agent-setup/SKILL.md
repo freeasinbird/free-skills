@@ -193,7 +193,11 @@ metadata file).
      (matching its exact marker lines only, per step 3) and compare only
      the text around it; never modify the nested block.
    - If different, show the diff and ask whether to update.
-7. Leave all unmarked (project-specific) content untouched.
+7. Leave all unmarked (project-specific) content untouched, except for
+   owner-requested creation or modification of a work-unit stage record. Within
+   that record, create or change only the requested stages or fields; preserve every
+   unrequested stage and all unrelated unmarked content verbatim. See
+   "Work-unit stages (optional)".
 8. If a canonical section is missing entirely, offer to insert it at its
    conventional position; under Standard, `devlog` is not such a gap
    (see Profiles).
@@ -224,8 +228,8 @@ metadata file).
    it stands and report it.
 
 10. Audit standard project files (see below) and flag any newly missing;
-    also check that an automated-reviewer record is present; see
-    "Automated reviewer record".
+    also check the automated-reviewer record and any optional work-unit stage
+    record; see "Automated reviewer record" and "Work-unit stages (optional)".
 11. Check the settings listed under "Repo settings" and offer to align any
     that have drifted.
 
@@ -321,6 +325,10 @@ and neither an issue nor a claim authorizes work.
 During init:
 
 - Ask where persistent work contracts live on the project's forge.
+- Ask whether the project separates planning, implementation, review, or
+  integration into distinct stages with handoffs. Default to the single
+  implementation workflow; record stages only when those handoffs are
+  demonstrated or explicitly requested.
 - Ask whether concurrent work is expected. Identify shared contract surfaces,
   overlapping work, and integration constraints that should become work unit
   boundaries or explicit dependencies instead of parallel work.
@@ -329,6 +337,40 @@ During init:
   invent a mechanism silently; a claim advertises occupancy only.
 - Ask whether an explicit project-specific policy permits agent
   self-selection. Without one, self-selection stays disabled.
+
+### Work-unit stages (optional)
+
+When a project adopts distinct stages, record them in an unmanaged,
+project-specific AGENTS.md section near the `Agent-setup profile:` line. No
+stage record means the default single implementation workflow, not missing
+content. Planning is optional; never create a planning stage merely because
+the project uses tracker issues.
+
+For each adopted stage, record:
+
+- **Activation:** the explicit assignment or event that begins the stage.
+- **Allowed mutations:** the state the stage may change.
+- **Required input:** the durable state that must exist before work begins.
+- **Durable output:** the artifact that carries the result beyond the current
+  chat or session.
+- **Finish line:** the condition that completes the stage.
+- **Transition:** how the finished output is handed to the next stage.
+
+Use a tracker issue for a sequential handoff between agents or sessions, even
+when it occurs within one short session. Keep its input and output in the issue
+and its comments, never only in transient chat context. A completed plan,
+issue, claim, or satisfied dependency does not authorize the next stage;
+explicit assignment still does unless the project records a narrower
+activation rule.
+
+Adopt stages incrementally. A later update may add review or integration to an
+existing planning and implementation record without changing the stages the
+owner did not ask to revise. In update mode, detect and report whether an
+existing record supplies all six fields and preserve it as unmanaged project
+content except for owner-requested edits. Leave an absent record alone unless
+the owner explicitly requests stage adoption; then create only the requested
+stage definitions. Never fabricate a stage record or move it inside a managed
+block.
 
 ### Header/intro
 
