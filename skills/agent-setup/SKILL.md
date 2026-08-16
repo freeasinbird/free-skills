@@ -10,7 +10,9 @@ description: >-
   "update AGENTS.md", "sync workflow sections", "check agent setup",
   "bootstrap devlog", "make this project agent-ready", asks to add a devlog,
   decision records, PR template, or CONTRIBUTING.md to a repo, or discusses
-  managing shared development conventions across projects.
+  managing shared development conventions across projects. Also use when the
+  user asks to reassess coordination, check the parallel-work setup, or
+  simplify obsolete lanes.
 ---
 
 # Agent Setup
@@ -25,6 +27,30 @@ init and left untouched during updates.
 
 ## Detecting mode
 
+- When one request explicitly asks for both setup (init, adoption, or update)
+  and coordination reassessment, protect any existing AGENTS.md before setup
+  mutates it: run reassessment step 1 and only step 2's read-only location
+  preflight. Locate every apparent coordination record, stage record, and
+  mechanics line, then apply **Placement** against current managed ranges. If
+  adoption is requested, also derive its planned ranges without editing and
+  treat them as managed for this check. Resolve every syntactically local
+  mechanics target only far enough to check its location; also derive the
+  ranges and files setup proposes to rewrite. A marker or location failure
+  that exposes a record, pointer line, or local target to overwrite stops both
+  operations. Do not apply record cardinality, field, stage-layout,
+  stage-field, mechanics-value, or semantic target-suitability validation yet;
+  those semantic failures do not make managed setup unsafe. Complete the
+  requested setup operation using the file-state routing below, then run the
+  full reassessment (including all of steps 1–2) against the resulting setup.
+  If setup stops on an unsafe state or an unresolved owner choice, do not
+  continue to reassessment. Never discard the setup half of a combined request
+  merely because later reassessment validation must stop.
+- An explicit owner request to reassess whether the project's coordination
+  model still fits, check its parallel-work setup, or simplify obsolete lanes
+  without also requesting setup → **Reassessment mode**, regardless of
+  AGENTS.md file state. Enter this mode only from the request, never because a
+  recorded reassessment trigger appears satisfied or an ordinary init,
+  adoption, or update discovers new evidence.
 - No AGENTS.md in the project root → **Init mode**
 - AGENTS.md exists with `<!-- agents-md:managed:` markers → **Update mode**
 - AGENTS.md exists with no exact managed markers but with marker
@@ -201,8 +227,11 @@ metadata file).
    owner-requested creation or modification of a coordination model or
    work-unit stage record. Within either record, create or change only the
    requested fields or stages; preserve every unrequested field or stage and
-   all unrelated unmarked content verbatim. See "Work contracts and
-   coordination" and "Work-unit stages (optional)".
+   all unrelated unmarked content verbatim. The only structural exception is
+   an owner-approved legacy-stage migration described under "Work-unit stages
+   (optional)"; it may relocate an unrequested stage's existing lines without
+   altering them. See "Work contracts and coordination" and "Work-unit stages
+   (optional)".
 8. If a canonical section is missing entirely, offer to insert it at its
    conventional position; under Standard, `devlog` is not such a gap
    (see Profiles).
@@ -260,6 +289,84 @@ it into a failure; that flag fits a note-keeping profile (and init's
 post-write check), not a Standard project, whose absent `devlog` block
 would fail it (see Profiles). Review its diffs with the user as step 6
 describes. Without shell access, follow the steps manually as written.
+
+## Coordination reassessment
+
+Run this mode only for the explicit owner request described under "Detecting
+mode". It analyzes the effective project-specific coordination model and may
+propose a change, but it never edits the model as part of ordinary init,
+adoption, or managed-section update.
+
+1. Establish the AGENTS.md boundary before reading it for meaning. When the
+   file exists, run update-mode step 3's complete marker validation. On any
+   malformation, stop and report it; do not analyze coordination content,
+   propose a documentation diff, or edit AGENTS.md or a project coordination
+   document. When the file is absent, continue with the safe serial baseline
+   below, but keep reassessment report-only: do not create AGENTS.md or a
+   project coordination document. Applying a recommendation first requires a
+   separately requested init operation with its normal profile, canonical
+   sections, and scaffolding workflow.
+2. Before reading project-specific policy for meaning, locate every apparent
+   fixed-field coordination record, work-unit stage record, and **Detailed
+   mechanics** value in AGENTS.md. Apply the complete input-state table in
+   `references/coordination-discovery.md` §reassess before interpreting any
+   value. A present coordination record must contain each of its four fixed
+   fields exactly once; a missing or repeated field is ambiguous owner policy,
+   not evidence to infer. With no record, the field and mechanics validations
+   do not apply and the effective model is the safe serial baseline. Count the
+   project-specific section grouping stage definitions as one stage record,
+   not each definition inside it. A stage entry begins at an immediate child
+   heading of that section and ends at the next child heading or the section's
+   end; the unique child-heading text is its name. Within every entry, require
+   each of the six exact field-label bullets once with a non-empty value before
+   the record can inform coordination. Prose before the first child heading is
+   shared record guidance, not another stage. Also accept one legacy
+   single-stage record when all six fields appear directly in a stage-specific
+   section exactly once with non-empty values; use that section heading as its
+   name and treat descendant headings whose subtrees contain no exact stage
+   field bullet as content of the stage. A stage-field bullet below any
+   descendant heading makes the direct-plus-descendant layout ambiguous. A
+   generic container with all six direct fields is legacy only when it has no
+   descendant heading; its sole stage's name was not recorded and must be
+   reported as uncertainty, not invented. Direct fields mixed with child stage
+   entries under a generic container, or a skipped-level heading there without
+   an immediate child entry, are also ambiguous and stop validation.
+
+   Stop on any cardinality, completeness, placement, or target failure and ask
+   the owner to repair the policy; never choose, merge, or edit one version
+   while leaving another. After validation, read the single record, any valid
+   mechanics source, and the single stage record. A shape-2 external work
+   contract is read-only evidence, not an editable mechanics target; when it is
+   unavailable, report uncertainty rather than rejecting an otherwise valid
+   record. A legacy blank **Detailed mechanics** value is also valid when the
+   final shape contains only shape 1, shape 2, or both. Any shape containing
+   shape 3, 4, or 5 requires a safe
+   repository-local, project-specific mechanics document even when shape 2 or
+   an external work contract is also present. Every mechanics target that a
+   reassessment may edit must be such a local document outside managed ranges.
+
+3. Follow `references/coordination-discovery.md` §reassess. Examine each
+   available evidence source, name unavailable sources as uncertainty, and
+   distinguish observed facts from inferences. Cite the repository path, work
+   unit, issue relation, owner statement, or other source that supports each
+   material finding.
+4. Report the effective model, any drift between its record and current
+   evidence, and the smallest shape current evidence supports. The outcome may
+   be no change, an upgrade, a simplification, or removal of obsolete
+   topology. Cap any proposed concurrency at demonstrated review and
+   integration capacity.
+5. Before changing AGENTS.md or a project coordination document, show the
+   exact proposed diff, including any **Reassess when** field change, and ask
+   for approval. Never silently rename a lane, reinterpret a relationship, or
+   alter an issue dependency; a rename is an explicit documentation proposal,
+   and issue-dependency inspection is read-only evidence.
+6. On approval, apply only the shown project-specific changes and preserve all
+   unrelated unmanaged content verbatim. Without approval, leave the project
+   unchanged.
+7. State observable triggers for the next reassessment in the report. Put them
+   in the record's **Reassess when** field only when the owner approved that
+   field change in step 5's exact diff and step 6 applied it; otherwise leave
+   the record unchanged and keep the triggers in the report.
 
 ## Conventional section order
 
@@ -370,15 +477,44 @@ In update mode, detect and report whether an existing coordination record has
 all four fields. Preserve it as unmanaged content unless the owner explicitly
 requests a field change. Do not reassess an established model while syncing
 canonical sections; topology reassessment is a separate owner-assigned work
-unit.
+unit under "Coordination reassessment".
 
 ### Work-unit stages (optional)
 
 When a project adopts distinct stages, record them in an unmanaged,
-project-specific AGENTS.md section near the `Agent-setup profile:` line. No
-stage record means the default single implementation workflow, not missing
-content. Planning is optional; never create a planning stage merely because
-the project uses tracker issues.
+project-specific AGENTS.md section near the `Agent-setup profile:` line. That
+section is one work-unit stage record and may contain several stage definitions
+with the fields below; the individual stage entries are not separate records.
+No stage record means the default single implementation workflow, not missing
+content. Planning is optional; never create a planning stage merely because the
+project uses tracker issues.
+
+For new or revised policy, give every stage definition one immediate child
+heading under the stage-record section. The unique child-heading text is the
+stage name, and its entry ends at the next immediate child heading or the
+stage-record section's end. Put shared record guidance before the first child
+heading so it cannot be mistaken for a stage. Under each stage heading, use each
+exact bold field-label bullet below once with a non-empty value. A value is
+non-empty only when its rendered inline or continuation text before the next
+exact field-label bullet or heading contains substantive policy. HTML comments
+do not count, and placeholder-only text such as `TODO` or `TBD` is empty.
+
+Preserve a legacy single-stage record when each of the six fields appears
+directly in a stage-specific section exactly once with a non-empty value. That
+section heading is the sole stage's name, and all descendant headings are
+content within that stage only when their subtrees contain no exact stage-field
+bullet. If a descendant subtree does contain one, stop on an ambiguous mix of
+direct legacy fields and a possible child entry. A generic container heading,
+such as `Stages`, `Work unit stages`, or `Work-unit stages`, does not supply a
+name; accept its six complete direct fields as one unnamed legacy stage only
+when it has no descendant headings, and report the missing name as uncertainty.
+Do not require an unrelated migration before update or reassessment.
+
+Under a generic container, direct field bullets mixed with child headings have
+ambiguous boundaries and need owner repair, as does a skipped-level heading
+without an immediate child entry. A missing, empty, repeated, or duplicate-name
+entry also needs repair. Deeper headings inside an immediate-child entry belong
+to that entry. Never combine fields across entries to make one look complete.
 
 For each adopted stage, record:
 
@@ -400,11 +536,22 @@ activation rule.
 Adopt stages incrementally. A later update may add review or integration to an
 existing planning and implementation record without changing the stages the
 owner did not ask to revise. In update mode, detect and report whether an
-existing record supplies all six fields and preserve it as unmanaged project
-content except for owner-requested edits. Leave an absent record alone unless
-the owner explicitly requests stage adoption; then create only the requested
-stage definitions. Never fabricate a stage record or move it inside a managed
-block.
+existing record is either one complete legacy direct-field entry or gives every
+uniquely named child-heading entry each of the six fields exactly once with a
+non-empty value, and preserve it as unmanaged project content except for
+owner-requested edits.
+
+Adding a sibling stage to a legacy direct-field record requires a structural
+migration: propose an exact diff, ask the owner to name the existing stage when
+its container heading is generic, and obtain approval before creating that
+child heading and moving the existing six field bullets and their continuation
+lines beneath it verbatim. Classify every other direct line in the proposal as
+either shared pre-entry guidance or existing-stage content, preserve its text
+and relative order verbatim in that scope, and ask the owner to confirm each
+classification. Then add only the requested sibling. Without that approval,
+leave the record unchanged. Leave an absent record alone unless the owner
+explicitly requests stage adoption; then create only the requested stage
+definitions. Never fabricate a stage record or move it inside a managed block.
 
 ### Header/intro
 
