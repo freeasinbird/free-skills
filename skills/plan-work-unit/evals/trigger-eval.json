@@ -1,0 +1,50 @@
+[
+  {
+    "query": "Plan #125",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan issue 42, complete its contract and put the implementation plan in a comment",
+    "should_trigger": true
+  },
+  {
+    "query": "Replan acme/widgets#88 against the current code and update the existing plan comment",
+    "should_trigger": true
+  },
+  {
+    "query": "Turn https://github.com/acme/api/issues/19 into a startable work contract, then file the code-grounded plan",
+    "should_trigger": true
+  },
+  {
+    "query": "Handle #125, implementation plan in comments",
+    "should_trigger": false
+  },
+  {
+    "query": "Implement issue 42 using the plan comment that is already there",
+    "should_trigger": false
+  },
+  {
+    "query": "Assess #125 and tell me whether its scope is coherent",
+    "should_trigger": false
+  },
+  {
+    "query": "Check overlap between #31 and #32, do not change either issue",
+    "should_trigger": false
+  },
+  {
+    "query": "Read issue #17 and propose a better implementation plan here in chat",
+    "should_trigger": false
+  },
+  {
+    "query": "Review the implementation plan in #73 for missing risks",
+    "should_trigger": false
+  },
+  {
+    "query": "Use the specification linked from #61 while fixing the parser",
+    "should_trigger": false
+  },
+  {
+    "query": "Summarize the comments on #54 and identify its blockers",
+    "should_trigger": false
+  }
+]
