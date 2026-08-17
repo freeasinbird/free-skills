@@ -224,9 +224,9 @@ npx prettier --write '**/*.md'   # to fix
 
 ### CI
 
-<!-- TODO: Add CI configuration (.github/workflows/) once the repo has
-     content worth gating. The workflow conventions in this file assume CI
-     exists; set it up before the first real PR. -->
+Pull requests run `.github/workflows/commit-messages.yml`, which checks the
+exact feature-branch commit range against the Mechanical Commit-Message
+Checks below. Broader Markdown and script CI remains future work.
 
 CLAUDE.md is a pointer that imports AGENTS.md; edit AGENTS.md, never the
 pointer.
@@ -727,6 +727,35 @@ log tells the project's evolution). Rules:
 
 <!-- /agents-md:managed:commits -->
 
+## Mechanical Commit-Message Checks
+
+Pull-request CI runs
+`bash scripts/check-commit-messages.sh <base-ref> <head-ref>` (locally, usually
+`bash scripts/check-commit-messages.sh origin/main HEAD`). It resolves the
+merge base and checks every non-merge commit in `merge-base..head`; merge
+commits and mainline commits brought in by a base-freshness merge are exempt.
+The check reports every offending commit and rule in one run.
+
+Every checked commit must satisfy all of these mechanical rules:
+
+- A subject and a body are required, with line 2 blank between them. The
+  body must contain at least one non-blank line after that separator.
+- The subject is at most 72 characters, does not end in a period, and does
+  not begin with a lowercase ASCII letter. Acronym-, identifier-, and
+  digit-led subjects remain valid.
+- Case-insensitive Conventional Commit prefixes are forbidden for `build`,
+  `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`,
+  and `test`, including scoped and breaking forms such as `feat(api):` and
+  `refactor!:`.
+- Case-insensitive `fixup!` and `squash!` prefixes and standalone `WIP`
+  markers are forbidden.
+- Case-insensitive review-cleanup prefixes are forbidden: `Address review`,
+  `Address PR review`, `Address pull request review`, `Apply review feedback`
+  (with optional `PR` or `pull request` before `review`), `PR feedback`, and
+  `Pull request feedback`. Fold that work into its owning commit instead.
+- Body lines are at most 72 characters. A line with no whitespace is exempt
+  so an unbreakable URL, object ID, or ref can remain intact.
+
 <!-- agents-md:managed:done -->
 
 ## Definition of done for an increment
@@ -758,6 +787,8 @@ The build succeeds, tests pass, and lint and formatting are clean.
   changed (`./scripts/test-watch-review.sh`)
 - Prose-tics matrix green when the prose-tic check changed
   (`./scripts/test-check-prose-tics.sh`)
+- Commit-message validation matrix green when the commit-message check changed
+  (`./scripts/test-check-commit-messages.sh`)
 - Skill-structure matrix green when the structure check changed
   (`./scripts/test-check-skill-structure.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
