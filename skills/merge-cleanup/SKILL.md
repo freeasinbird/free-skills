@@ -1,30 +1,14 @@
 ---
 name: merge-cleanup
 description: >-
-  Run the post-merge cleanup after a pull request has merged. Use when the
-  user reports a merge and wants the workspace tidied: "merged", "PR merged,
-  please clean up", "PR #N is merged", "just merged it, tidy up", "the PR
-  landed". Deletes the remote branch if the forge's auto-delete didn't,
-  resyncs the branch the PR merged into, deletes the local branch, prunes
-  stale tracking refs, verifies that issues the PR claimed to close actually
-  closed (surfacing any that need manual closing), and shuts down any
-  still-running review watch for that PR where the platform has one. Not
-  for performing the merge itself (that is the self-merge skill's job), and
-  not for cleaning up branches of PRs that are still open.
+  Run post-merge cleanup when a user reports "merged", "PR merged, please
+  clean up", "PR #N is merged", "just merged it, tidy up", or "the PR landed".
+  Safely tidies branches and refs, verifies issue closure, performs documented
+  project reconciliation, and stops review watches. Not for merging a PR or
+  cleaning up one that remains open.
 ---
 
 # Merge Cleanup
-
-Post-merge housekeeping for a pull request that has already merged: restore
-the workspace to a clean state on the branch the PR merged into (its base,
-usually the default branch), check that the PR's
-issue-closing keywords actually closed their issues, and stop any review
-watch still running for the PR.
-
-This skill assumes git and a shell. A PR host CLI (such as `gh`) enables
-the verification steps; every step that needs one states the fallback. It
-never performs the merge itself: when the user asks the agent to merge its
-own PR, that is the self-merge skill's territory.
 
 ## Identify the merged PR and branch
 
@@ -472,6 +456,50 @@ references, merges to a non-default branch, and keyword typos.
 - **Without a PR host CLI**, say the check could not run instead of skipping
   it silently.
 
+## Project post-merge obligations
+
+After issue-close verification, and only when merge verification passed,
+inspect the authoritative project instructions that govern the repository for
+exactly one fixed-field `Post-merge obligations` record whose fields each
+appear exactly once. An earlier git-cleanup stop does not prevent safe
+reconciliation, but continuing requires a freshly resolved current base tip;
+report the git and project results separately.
+
+Before acting, read `references/project-obligations.md` §record,
+`references/project-obligations.md` §discovery,
+`references/project-obligations.md` §state-machine,
+`references/project-obligations.md` §authorization,
+`references/project-obligations.md` §trackers, and
+`references/project-obligations.md` §failures. Use
+`references/project-obligations.md` §freeside-example only as calibration.
+
+Readable absence adds no behavior or summary text only after its final base-tip
+check stays unchanged; an unreadable required source makes cleanup incomplete.
+Reconcile only known trackers and authorized fields, observing every limit in
+the reference. In particular, read the record
+and mechanics from the same freshly resolved immutable base commit, never from
+the checked-out feature tree or a stale local ref, and recheck that base tip
+before every tracker write attempt and after its tracker verification attempt,
+even when the write or verification failed. The record can authorize only
+guarded transitions and listed refreshes for known containing trackers, never
+another external or project mutation. The mutation guard or exclusive-writer
+window must cover every external object whose state selected the tracker or
+determined the computed edit, not only the tracker being written.
+
+Use `reconciliation-ledger.sh` for every discovery result, including readable
+absence. Enumerate work per tracker and per transition or refreshed field,
+record each ordered freshness, guard, attempt, verification, and disposition
+event. Name every external input used by a write, no-op, or report; after all
+writes are dispositioned, reread and recompute no-op and report items before
+recording them fresh. Then close the trace with a final base-tip observation
+even when no write ran. A stable absence suppresses the complete ledger and
+stays silent;
+otherwise report the checker's ledger and owner action. Only `RESULT complete`
+supports a full project-reconciliation claim. Run it as
+`<skill-dir>/reconciliation-ledger.sh '<trace-file>'`; `--help`, or `-h`, prints
+the trace contract. If the executable check cannot run, apply the referenced
+state machine manually and report that verification gap.
+
 ## Review-watch shutdown
 
 If a review watch for this PR is still running (a backgrounded poller, a
@@ -487,4 +515,7 @@ so a later wake-up reporting nothing is expected noise, not a failure.
 Close with a short report: what was deleted and resynced, what the merge
 verification showed, any issues that still need manual closing, any watch
 stopped or left to expire, and anything that blocked a step (dirty tree,
-unverifiable merge, undeletable branch) that now needs the user.
+unverifiable merge, undeletable branch) that now needs the user. When a
+post-merge record exists or its required source was unreadable, also say which
+project obligations ran, what changed, what remains ambiguous or failed, and
+which owner must act.
