@@ -100,7 +100,48 @@ shared contract must change serially even while component work remains
 independent. Model shared-contract serialization separately from component
 ownership: owning or working in a component does not grant concurrent access to
 the shared contract, and an integrator can coordinate convergence without
-owning every component. Reassess when the bottleneck disappears, changes
+owning every component. Serialization here means repo-wide mutual exclusion
+among changes to the shared surface, not per-unit ordering that only sequences
+each unit's contract change before its own dependents. Per-unit ordering is the
+reading that fails: it permits several units to each open "its own serialized"
+contract change concurrently, colliding semantically on the surface where merge
+tooling does not reliably surface the conflict.
+
+When the selected model includes shared-contract serialization (not an
+integration-spine-only path with no serialized contract), the
+detailed-mechanics project document must define five things:
+
+- **The surface** as concrete paths and generated artifacts, including
+  downstream sites a change must move in the same change (exhaustive-match
+  sites, generated consumers).
+- **The exclusivity rule:** at most one active contract change at a time,
+  checked against every other in-flight contract change before starting;
+  collision means wait or surface, never proceed in parallel. Make
+  acquisition race-safe, since ordinary issue, PR, or label creation is not an
+  atomic check-and-register: define a protocol that breaks a concurrent tie
+  deterministically, such as registering first and then rechecking with a
+  fixed winner (earliest entry, lowest ID), or a designated authority that
+  grants the lock, so two simultaneous starts can neither both proceed nor
+  both wait forever.
+- **Forge-visible enumeration** of in-flight contract changes (a marker on
+  contract-bearing units, or their declared surface paths on a forge-visible
+  work contract), registered before implementation begins so a starting unit
+  can check against every in-flight change. A directly assigned unit whose
+  contract would otherwise live only in the prompt registers a forge-visible
+  entry (issue, draft PR, or the project's claim mechanism) first. Gate this
+  registration on available forge capability: where an assigned agent lacks
+  the tooling or permission to register, the mechanics name a human or
+  external registrar, or a stop-and-escalate, so no agent faces an impossible
+  startup step.
+- **Registration lifecycle:** when an entry joins the active set, when it
+  leaves it (normally on merge or close), and how a stale or abandoned entry
+  is released or superseded. A registration with no defined release blocks the
+  surface indefinitely or invites agents to bypass the lock by guessing it is
+  dead.
+- **Ordering relief** when several planned units need the surface: an explicit
+  dependency chain, or one combined leading contract change.
+
+Reassess when the bottleneck disappears, changes
 location, or a simpler per-unit dependency captures it completely.
 
 For shapes 3 through 5, keep long mechanics outside AGENTS.md. The project

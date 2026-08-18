@@ -463,7 +463,9 @@ During init or adoption:
 - Keep shared-contract serialization separate from component ownership. When
   needed, distinguish start order, merge order, intentional stacking, and
   mutual exclusion, and cap recommended concurrency at realistic review and
-  integration capacity.
+  integration capacity. Shared-contract serialization means repo-wide mutual
+  exclusion on the surface, not per-unit ordering; define the mechanics per
+  shape 5 in `references/coordination-discovery.md` §shapes.
 - If concurrency is expected and the project already defines a forge-visible
   claim mechanism, record how abandoned or stale claims are released or
   superseded. Never invent one silently; a claim advertises occupancy only.
