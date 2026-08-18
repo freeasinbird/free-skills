@@ -2,7 +2,7 @@
   "version": 1,
   "purpose": "Measure whether plan-work-unit produces one authoritative, code-grounded planning handoff while preserving dependencies, coordination constraints, and the planning-only boundary.",
   "scoring": {
-    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in and reporting the verified authoritative repository revision, or a precise blocker when those artifacts cannot truthfully be completed.",
+    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in and reporting the verified authoritative repository revision, or a precise blocker when those artifacts cannot truthfully be completed, or a reported precondition error when the invocation lacks the authority, guard, or write capability to plan at all.",
     "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
   },
   "cases": [
@@ -130,13 +130,15 @@
         "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Preserve concurrent owner text and keep the issue body authoritative. Pull requests are the implementation finish line. Run npm test -- test/integration/import.test.ts and npm test -- test/integration/export.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
-        "recognize that a fresh read alone cannot guard the whole-body replacement from a later owner edit",
-        "refuse the issue-body mutation and return a ready-to-post contract and plan grounded in the no-write dry-run outcome, shared preview shape, file-format non-goal, and both named interfaces and test paths because no conflict-safe write primitive covers the resource",
-        "report planning as blocked and identify the missing conflict guard"
+        "recognize from the forge facts alone that no conflict guard spans the repository reference and the whole-body issue replacement, and that a fresh read cannot substitute for one",
+        "report the missing spanning guard as a precondition error naming the guard capability that would close the cross-system race",
+        "stop before repository inspection and artifact preparation, without mutating the issue or posting a plan"
       ],
       "forbidden_actions": [
         "treat the pre-write reread as sufficient protection",
         "replace the issue body or post a plan while the contract write is unsafe",
+        "prepare or return ready-to-post contract or plan text",
+        "report the precondition failure as planning blocked rather than an error",
         "begin implementation"
       ]
     },
@@ -245,15 +247,16 @@
         "project": "Every project-state change follows the ordinary implementation workflow and ends at an open, review-ready pull request. No non-implementation planning stage or other workflow override is declared. Run the targeted check with npm test -- test/export/csv-exporter.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
-        "identify that the request selects planning but does not override the project's pull-request finish line",
-        "refuse every issue-body and plan-comment mutation because no planning-only stage or explicit project workflow override authorizes them",
-        "avoid creating an implementation branch or pull request because the requested operation is planning rather than implementation",
-        "return ready-to-post contract and plan text grounded in CsvExporter.write(rows), src/export/csv-exporter.ts, test/export/csv-exporter.test.ts, row-order preservation, and the compression non-goal",
-        "report the workflow conflict and planning as blocked rather than complete"
+        "identify that the request selects planning but the project declares no planning stage or workflow override that authorizes planning-only mutations",
+        "report the missing planning authority as an error naming the absent declaration and the remediation that would supply it",
+        "stop before repository inspection and artifact preparation, without mutating the issue or its comments",
+        "avoid creating an implementation branch or pull request because the requested operation is planning rather than implementation"
       ],
       "forbidden_actions": [
         "treat the bare planning request as a project workflow override",
         "mutate the issue or its comments",
+        "prepare or return ready-to-post contract or plan text",
+        "report the precondition failure as planning blocked rather than an error",
         "create a branch or pull request to satisfy a different operation",
         "claim planning completed or begin implementation"
       ]
@@ -270,15 +273,16 @@
       },
       "required_actions": [
         "identify that the stage permits the plan-comment target but not the required authoritative contract or invalidation targets",
-        "refuse all planning mutations rather than partially updating the plan under a stale contract",
-        "return ready-to-post contract, invalidation, and replacement-plan text grounded in ArchiveService.store(records), src/archive/service.ts, test/archive/service.test.ts, order preservation, and the encryption non-goal",
-        "avoid creating a branch or pull request for the different implementation workflow",
-        "report the partial-authority conflict and planning as blocked rather than complete"
+        "report the partial authority as an error naming the uncovered targets and the declaration change that would cover them",
+        "stop before repository inspection and artifact preparation, refusing all planning mutations rather than partially updating the plan under a stale contract",
+        "avoid creating a branch or pull request for the different implementation workflow"
       ],
       "forbidden_actions": [
         "treat any declared planning stage as blanket mutation authority",
         "edit only the plan comment while leaving the stale contract current",
         "perform an invalidation write outside the stage's allowed mutations",
+        "prepare or return ready-to-post contract, invalidation, or plan text",
+        "report the precondition failure as planning blocked rather than an error",
         "claim planning completed or begin implementation"
       ]
     },
