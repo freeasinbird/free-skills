@@ -137,6 +137,7 @@
         "Start order, merge order, intentional stacking, and mutual exclusion have distinct operational meanings",
         "Unknown or materially ambiguous relations serialize until the designated authority resolves them",
         "The recommended concurrency width is capped at two independent component units by actual integration capacity",
+        "The detailed mechanics define at most one active shared-contract change at a time, checked against a forge-visible enumeration of every in-flight contract change, not merely prose that schema changes serialize",
         "The result does not copy Freeside lane names, labels, or tracker vocabulary"
       ]
     },
@@ -182,6 +183,7 @@
         "The recommendation serializes the shared contract without assigning ownership of every component to the integrator",
         "Independent component concurrency is capped at two by demonstrated integration capacity",
         "The report distinguishes the supported recommendation from any remaining uncertainty",
+        "The proposed mechanics define at most one active shared-contract change at a time with forge-visible enumeration of every in-flight contract change, not merely prose that schema changes serialize",
         "The exact project-specific documentation diff is shown before mutation",
         "The report states when disappearance or relocation of the bottleneck should trigger reassessment"
       ]
