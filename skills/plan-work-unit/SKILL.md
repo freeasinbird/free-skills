@@ -6,7 +6,7 @@ description: >-
   the issue contract and file an implementation plan." Within a
   project-authorized planning-only workflow, produce the authoritative work
   contract and one code-grounded implementation-plan comment, then stop;
-  otherwise return ready-to-post artifacts and report the workflow blocker. Do
+  otherwise report the failed planning precondition as an error. Do
   not use for "Handle #N, implementation plan in comments," where the plan is
   implementation input, or for read-only assessment, overlap, and in-chat
   proposal requests that do not explicitly authorize planning mutations.
@@ -44,11 +44,32 @@ override, whose recorded allowed mutations cover every contemplated contract
 record, plan comment, and invalidation target and whose exact finish line is
 their verified handoff without a branch or pull request. A bare request to plan
 an issue selects this operation but does not override the project's allowed
-mutations or default finish line.
+mutations or default finish line. Missing or partial authority is a failed
+precondition of the invocation, not a planning outcome: report it as an error
+that names the absent stage or override and the declaration that would supply
+it, then stop before repository inspection or artifact preparation.
 
 ## Establish the planning surface
 
-Before writing, read the project instructions and the entire issue, including
+Verify the planning preconditions first, from the project instructions and the
+forge alone, before inspecting the repository or preparing any artifact: the
+planning-stage declaration or explicit override above covers the operation's
+whole potential mutation surface, the contemplated contract record, plan
+comments, and invalidation targets named above, and ends at the planning
+finish line; a conflict guard satisfying "Write against fresh forge state" is
+available; and the forge offers the write capabilities that surface needs.
+
+That mutation surface is fixed by the operation, not discovered by
+inspection: any run can find, only after inspecting code, that the contract
+or a prior plan must change, so a stage authorizing only part of the surface
+is partial authority even when a particular run would touch just the
+authorized part. If any precondition fails, or project policy still routes
+the handoff through a pull request, report the error above and stop: do not
+perform even a permitted subset of the writes, do not begin that different
+branch-and-PR operation, and do not prepare ready-to-post contract or plan
+text.
+
+With the preconditions verified, read the entire issue, including
 existing plan comments and linked decisions. Inspect the relevant code,
 interfaces, tests, documentation, declared dependencies, and verification
 commands. Do not infer the implementation from the issue title or produce a
@@ -78,15 +99,6 @@ capabilities, and any dependency or authorization blocker. Do not claim the
 issue, create an implementation branch, edit implementation files, or open a
 pull request.
 
-Before any mutation, verify the planning-stage declaration or explicit project
-override above against every required target and the exact planning finish
-line. If any target is outside its recorded allowed mutations, or project
-policy still routes the handoff through a pull request, do not perform even the
-permitted subset and do not begin that different branch-and-PR operation.
-Return any ready-to-post contract, plan, or invalidation text the available
-evidence supports, identify the workflow conflict, and report planning as
-blocked.
-
 ## Write against fresh forge state
 
 Before any planning write, require one conflict guard that covers both the
@@ -100,9 +112,9 @@ exclusive mutation ownership for the repository reference and that whole
 planning surface, or an operation that atomically rejects the publication if
 either the repository reference or any guarded planning resource changes. A
 fresh read, a planning-only lock, or separate repository and forge checks do
-not close the cross-system read/write race. If no guard spans both systems, do
-not mutate; return the required ready-to-post artifacts and report planning as
-blocked.
+not close the cross-system read/write race. If no guard spans both systems,
+the guard precondition has failed: report the error and stop without mutating,
+never a blocked planning outcome.
 
 Immediately after entering the guarded boundary, query the authoritative
 moving project reference again and require it to equal the inspected immutable
@@ -117,8 +129,9 @@ collection membership and each record's identity, status, and content or
 version, including every write target and current plan, with the state used to
 prepare the write. Reconcile any change and repeat the guarded read. If the
 guard cannot cover every planning input, write target, and collection invariant
-the operation affects, do not mutate; return the required ready-to-post text
-and report planning as blocked.
+the operation affects, do not mutate: a guard that cannot span the discovered
+surface is the same failed precondition, reported as an error even when it is
+found this late, never as a blocked planning outcome.
 
 Treat a write's returned object as untrusted until an authoritative post-write
 reread confirms the exact target identity and persisted content, preserves
@@ -216,9 +229,14 @@ forge API, CLI, or interface is available, without assuming a platform-specific
 tool.
 
 If the available environment cannot perform the authorized planning writes,
-return the ready-to-post contract, plan, or invalidation text that the outcome
-requires, identify the missing capability, and report planning as blocked
-rather than complete.
+and no planning write has yet mutated state, that missing capability is a
+failed precondition: report it as an error naming the capability, never as a
+blocked or complete planning outcome, and do not present prepared text as a
+handoff artifact. A publication path that fails only after earlier guarded
+writes have persisted is not that precondition error: follow the
+retirement-first rule above, stop with the old plan visibly non-current, and
+report the partial unsafe state, including the prepared replacement text the
+failed write was meant to publish.
 
 ## Report the handoff
 
@@ -236,3 +254,11 @@ plan remains actionable, identify that unsafe state and its location instead
 of presenting a clean blocked handoff. Do not present an incomplete selected
 contract record as the planning handoff. In either outcome, do not continue
 into implementation in the same operation.
+
+A failed planning precondition (missing or partial authority, no spanning
+conflict guard, or absent write capability), detected before any planning
+write has persisted, never reaches this handoff: report it as an error the
+moment it is detected, not as a blocked or finished planning result, and never
+with prepared artifacts standing in for the writes the environment refused.
+Once a guarded write has persisted, a later write failure is the partial
+unsafe state the rules above already report, not a precondition error.

@@ -11,14 +11,17 @@ repository.
 - `planning-eval.json` covers a stale issue contract, a dependency-blocked
   unit, a shared-contract unit, a plan invalidated by current code, and an
   owner decision that blocks contract completion. It also covers a concurrent
-  issue edit without a safe guard, a contract-bearing non-plan comment added
-  during a guarded write, and replacement-plan publication failing after the
-  prior plan is retired, both when the contract changes and when only the plan
-  is stale. A designated-contract-record case verifies that the handoff does
+  issue edit whose missing spanning guard is reported as a precondition error
+  with no artifacts, a contract-bearing non-plan comment added during a
+  guarded write, and replacement-plan publication failing after the prior plan
+  is retired, reported as a partial unsafe state because guarded writes have
+  already persisted, both when the contract changes and when only the plan is
+  stale. A designated-contract-record case verifies that the handoff does
   not require duplicating the authoritative contract into the issue body. A
-  missing-planning-stage case blocks mutation when project policy still routes
-  every state change through a pull request, and a partial-permission case
-  blocks the whole write set rather than mutating only its authorized subset.
+  missing-planning-stage case reports a precondition error, with no mutation
+  or prepared artifacts, when project policy still routes every state change
+  through a pull request, and a partial-permission case reports the same error
+  class rather than mutating only its authorized subset.
   Repository-revision cases require re-inspection when the default branch moves
   before publication, verification of the inspected revision before handoff,
   and retirement of both stale contract content and plan when a claimed
