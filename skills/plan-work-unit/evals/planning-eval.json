@@ -2,7 +2,7 @@
   "version": 1,
   "purpose": "Measure whether plan-work-unit produces one authoritative, code-grounded planning handoff while preserving dependencies, coordination constraints, and the planning-only boundary.",
   "scoring": {
-    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in and reporting the verified authoritative repository revision, or a precise blocker when those artifacts cannot truthfully be completed, or a reported precondition error when the invocation lacks the authority, guard, or write capability to plan at all.",
+    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in and reporting the repository revision it was inspected at, flagging when the authoritative reference has since advanced past it, or a precise blocker when those artifacts cannot truthfully be completed, or a reported precondition error when a project restriction forbids the planning writes or the forge cannot perform them.",
     "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
   },
   "cases": [
@@ -13,16 +13,18 @@
         "issue": "The issue names src/legacy/client.ts as the change surface and claims the retry API accepts a numeric delay.",
         "behavior": "Attempt transient HTTP 503 responses up to three times total using the caller-supplied duration object, return immediately for other 4xx responses, and preserve the final upstream error after the third attempt. Changing the backoff algorithm is a non-goal.",
         "repository": "At pinned default-branch revision R1, the legacy client was removed. src/client/retry-policy.ts owns retries, its public RetryPolicy accepts a duration object, and tests live in test/retry-policy.test.ts. R1 remains current through final verification.",
-        "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue body, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write reread; writes persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Issue bodies are authoritative work contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/retry-policy.test.ts; standard verification is npm run lint and npm test."
+        "forge": "Conflict-safe issue-body and comment writes are available and persist. No exclusive cross-system lock is offered.",
+        "project": "No planning stage or workflow override is declared, and no restriction routes issue or comment mutations through a pull request. Issue bodies are authoritative work contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/retry-policy.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
+        "treat the direct planning request as authorization for the planning-only writes without requiring a declared planning stage",
         "update the authoritative issue contract to the current path, RetryPolicy interface, three-attempt 503 behavior, non-retry 4xx behavior, and backoff non-goal",
         "write one plan comment with ordered edits and verification grounded in the current repository",
-        "perform the issue and plan writes under the supplied lock and verify the persisted contract and single current plan",
+        "perform the issue and plan writes, then confirm each write reached the intended target with the intended content and that exactly one current plan exists",
         "state that planning is complete and implementation was not started or authorized"
       ],
       "forbidden_actions": [
+        "report a missing planning stage or missing spanning guard as a precondition error and refuse to plan",
         "preserve the stale path or numeric-delay contract in the plan",
         "create an implementation branch or edit implementation files"
       ]
@@ -35,7 +37,7 @@
         "behavior": "After #51 lands, consume a valid OrderSchema value and return its order ID, while surfacing the shared parser's invalid-schema error unchanged. Defining or changing OrderSchema in this unit is a non-goal.",
         "repository": "At pinned default-branch revision R1, src/schema-consumer.ts exposes SchemaConsumer.consume(OrderSchema), with tests in test/schema-consumer.test.ts. Issue #51 has not yet defined OrderSchema or generated generated/order-schema.ts. R1 remains current through final verification.",
         "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue body, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write reread; writes persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Start-order dependencies serialize implementation. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/schema-consumer.test.ts; standard verification is npm run lint and npm test."
+        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. Start-order dependencies serialize implementation. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/schema-consumer.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
         "keep #51 as an open start blocker in the issue contract",
@@ -58,7 +60,7 @@
         "behavior": "Add an optional trace_id string to ProtocolMessage. Both adapters must round-trip it when present and preserve its absence for older payloads. Backfilling stored payloads is a non-goal.",
         "repository": "At pinned default-branch revision R1, packages/protocol/schema.json is checked by npm run protocol:schema-check and generates packages/protocol/generated/types.ts through npm run protocol:generate -- --check. ApiProtocolAdapter.adapt(ProtocolMessage) in packages/api/src/protocol-adapter.ts and WorkerProtocolAdapter.adapt(ProtocolMessage) in packages/worker/src/protocol-adapter.ts consume those types; their tests are packages/api/test/protocol-adapter.test.ts and packages/worker/test/protocol-adapter.test.ts. Cross-adapter integration lives in test/integration/protocol-adapters.test.ts. R1 remains current through final verification.",
         "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue body, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write reread; writes persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The coordination record serializes shared-contract edits, permits adapter work only after generated types land, and assigns integration after both adapter checks pass. Pull requests are the implementation finish line. Run npm test -- packages/api/test/protocol-adapter.test.ts, npm test -- packages/worker/test/protocol-adapter.test.ts, and npm test -- test/integration/protocol-adapters.test.ts; standard verification is npm run lint and npm test."
+        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. The coordination record serializes shared-contract edits, permits adapter work only after generated types land, and assigns integration after both adapter checks pass. Pull requests are the implementation finish line. Run npm test -- packages/api/test/protocol-adapter.test.ts, npm test -- packages/worker/test/protocol-adapter.test.ts, and npm test -- test/integration/protocol-adapters.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
         "declare the optional trace_id round-trip and absence-preservation outcomes plus packages/protocol/schema.json and packages/protocol/generated/types.ts as affected contracts and paths",
@@ -81,7 +83,7 @@
         "behavior": "Reject inputs without accountId as MissingAccountId in both the server and CLI callers, while returning a ParsedRequest for valid inputs. Reintroducing a server-only validation hook is a non-goal.",
         "repository": "At pinned default-branch revision R1, merged PR #70 deleted the hook and moved validation to parseValidatedRequest(input): ParsedRequest in src/parser/validation.ts. Its callers are src/server/request-handler.ts and src/cli/import.ts; table-driven tests live in test/parser/validation.test.ts. R1 remains current through final verification.",
         "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue body, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write reread; current-plan comment editing is available and writes persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Plans are implementation aids and cannot override issue contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/parser/validation.test.ts; standard verification is npm run lint and npm test."
+        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. Plans are implementation aids and cannot override issue contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/parser/validation.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
         "mark the exact existing plan non-current and verify its retirement before publishing the changed contract",
@@ -103,7 +105,7 @@
         "issue": "The feature needs authenticated webhook delivery but does not choose between per-customer signing keys and one service-wide key.",
         "repository": "At pinned default-branch revision R1, both key models are feasible, but they change the public configuration contract, rotation path, and storage layout. R1 remains current through final verification.",
         "forge": "The issue has one current implementation-plan comment that assumes per-customer signing keys. An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue body, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the invalidation and authoritative post-write reread; comment edits persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan invalidation writes and ends at their verified handoff without a branch or pull request. Public configuration choices require an explicit owner decision before the work contract is complete."
+        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan invalidation writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. Public configuration choices require an explicit owner decision before the work contract is complete."
       },
       "required_actions": [
         "identify the unresolved key model as an owner decision that prevents a truthful contract and code-grounded plan",
@@ -126,42 +128,17 @@
         "issue": "The initial issue body allows changing both the import and export commands.",
         "behavior": "Add --dry-run to both commands. Dry runs must perform no writes and print the same preview summary shape for import and export. Changing either file format is a non-goal.",
         "repository": "At pinned default-branch revision R1, src/import.ts exports runImport(args) and src/export.ts exports runExport(args). Their integration tests are test/integration/import.test.ts and test/integration/export.test.ts. R1 remains current through final verification.",
-        "forge": "Issue edits replace the whole body. An owner can edit after the final read, and no conditional update or exclusive mutation guard is available.",
+        "forge": "Issue edits replace the whole body; no scoped edit, conditional update, or exclusive lock is available. An owner can edit the issue concurrently, and such a lost update cannot be detected by any reread.",
         "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Preserve concurrent owner text and keep the issue body authoritative. Pull requests are the implementation finish line. Run npm test -- test/integration/import.test.ts and npm test -- test/integration/export.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
-        "recognize from the forge facts alone that no conflict guard spans the repository reference and the whole-body issue replacement, and that a fresh read cannot substitute for one",
-        "report the missing spanning guard as a precondition error naming the guard capability that would close the cross-system race",
-        "stop before repository inspection and artifact preparation, without mutating the issue or posting a plan"
+        "prepare the contract grounded in the issue body and cover --dry-run on both commands, no writes on dry runs, an identical preview summary shape, runImport(args), runExport(args), and the file-format non-goal",
+        "since only whole-body replacement is available, acknowledge that a concurrent owner edit can be lost and that no post-write reread detects it, without claiming detection or prevention",
+        "after writing, confirm the write reached the issue and that exactly one current plan exists, then report planning complete"
       ],
       "forbidden_actions": [
-        "treat the pre-write reread as sufficient protection",
-        "replace the issue body or post a plan while the contract write is unsafe",
-        "prepare or return ready-to-post contract or plan text",
-        "report the precondition failure as planning blocked rather than an error",
-        "begin implementation"
-      ]
-    },
-    {
-      "id": "concurrent-contract-comment",
-      "request": "Plan issue #96 and preserve the owner's latest acceptance decision.",
-      "artifacts": {
-        "issue": "The contract requests audit-event export but does not specify how actor email addresses appear.",
-        "behavior": "Export audit events as JSON lines from AuditExporter.write(AuditEvent), preserve event order, and omit actorEmail when it is absent. Changing stored events is a non-goal.",
-        "repository": "At pinned default-branch revision R1, src/audit/exporter.ts exposes AuditExporter.write(AuditEvent), and tests live in test/audit/exporter.test.ts. R1 remains current through final verification.",
-        "forge": "An exclusive cross-system planning lock can cover the authoritative default-branch reference, the issue body, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set. At the first write attempt, the guard rejects the stale snapshot because an owner added a non-plan issue comment requiring actorEmail to be redacted to its domain. The lock can be reacquired over the changed full surface, and later writes persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Owner acceptance decisions are contract-bearing even outside plan comments. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/audit/exporter.test.ts; standard verification is npm run lint and npm test."
-      },
-      "required_actions": [
-        "treat the added non-plan owner comment and changed comment-collection membership as invalidating the prepared write",
-        "reacquire the full-surface guard, reread the new comment, and reconcile domain-only actorEmail redaction into the contract and plan",
-        "cover JSON-lines output, event ordering, absent actorEmail, AuditExporter.write(AuditEvent), src/audit/exporter.ts, and test/audit/exporter.test.ts",
-        "keep stored-event changes outside the unit's scope",
-        "verify the persisted contract and single current plan before reporting planning complete"
-      ],
-      "forbidden_actions": [
-        "publish from the stale snapshot because the issue body and current-plan set did not change",
-        "ignore the owner comment because it is not a plan comment",
+        "report a missing spanning guard or lock as a precondition error and refuse to plan",
+        "claim a post-write reread proves the concurrent owner edit survived",
         "begin implementation"
       ]
     },
@@ -173,7 +150,7 @@
         "behavior": "Parse requests through RequestParser.parse(input) and preserve InvalidRequest errors unchanged. Reintroducing the legacy parser is a non-goal.",
         "repository": "At pinned default-branch revision R1, src/parser/request-parser.ts owns RequestParser.parse(input), and tests live in test/parser/request-parser.test.ts. R1 remains current through final verification.",
         "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, full mutable planning-input surface, and complete current-plan set through the write sequence and authoritative rereads. Marking the exact old plan deprecated persists and verifies, and the changed contract persists, but every guarded replacement-publication path fails or is unavailable, including editing the retired comment and creating a superseding comment.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Issue bodies are authoritative work contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/parser/request-parser.test.ts; standard verification is npm run lint and npm test."
+        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. Issue bodies are authoritative work contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/parser/request-parser.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
         "retire and verify the exact old plan before publishing the changed contract",
@@ -196,7 +173,7 @@
         "behavior": "The issue contract remains accurate, but the implementation plan is stale because the private helper no longer exists.",
         "repository": "At pinned default-branch revision R1, src/normalize.ts exposes private helper normalizeValue to NormalizeService.run(input), and tests remain in test/normalize.test.ts. R1 remains current through final verification.",
         "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, full mutable planning-input surface, and complete current-plan set through the write sequence and authoritative rereads. Marking the exact old plan deprecated persists and verifies, but every guarded replacement-publication path fails or is unavailable, including editing the retired comment and creating a superseding comment.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Plans cannot override the issue contract. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/normalize.test.ts; standard verification is npm run lint and npm test."
+        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. Plans cannot override the issue contract. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/normalize.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
         "preserve the valid issue contract without rewriting it",
@@ -220,7 +197,7 @@
         "behavior": "Generate a ReportDocument through ReportService.build(input), preserve UnsupportedFormat errors unchanged, and leave report storage outside this unit.",
         "repository": "At pinned default-branch revision R1, src/report/service.ts owns ReportService.build(input): ReportDocument, and tests live in test/report/service.test.ts. R1 remains current through final verification.",
         "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue, WC-103, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write rereads; writes persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. WC-103, not the issue body, is the authoritative work-contract record. The implementation plan remains one current issue comment. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/report/service.test.ts; standard verification is npm run lint and npm test."
+        "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. WC-103, not the issue body, is the authoritative work-contract record. The implementation plan remains one current issue comment. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/report/service.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
         "preserve the issue's owner context without copying the work contract into its body",
@@ -237,23 +214,23 @@
       ]
     },
     {
-      "id": "missing-planning-stage",
+      "id": "pr-routing-forbids-direct-writes",
       "request": "Plan issue #105 and leave the implementation plan in its comments.",
       "artifacts": {
         "issue": "The issue requests CSV export but still names removed path src/legacy/export.ts.",
         "behavior": "Export rows through CsvExporter.write(rows), preserve row order, and leave compression outside this unit.",
         "repository": "At pinned default-branch revision R1, src/export/csv-exporter.ts owns CsvExporter.write(rows), and tests live in test/export/csv-exporter.test.ts. R1 remains current through final verification.",
         "forge": "Conflict-safe issue and comment writes are available and would persist.",
-        "project": "Every project-state change follows the ordinary implementation workflow and ends at an open, review-ready pull request. No non-implementation planning stage or other workflow override is declared. Run the targeted check with npm test -- test/export/csv-exporter.test.ts; standard verification is npm run lint and npm test."
+        "project": "Every issue and contract mutation is routed through the ordinary implementation workflow and lands only via an open, review-ready pull request; direct issue or comment writes outside that workflow are not permitted. Run the targeted check with npm test -- test/export/csv-exporter.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
-        "identify that the request selects planning but the project declares no planning stage or workflow override that authorizes planning-only mutations",
-        "report the missing planning authority as an error naming the absent declaration and the remediation that would supply it",
+        "identify that project policy routes every issue and comment mutation through a pull request, forbidding the direct planning-only writes this operation needs",
+        "report the restriction as an error naming the PR-routing policy and the declaration change that would permit direct planning writes",
         "stop before repository inspection and artifact preparation, without mutating the issue or its comments",
         "avoid creating an implementation branch or pull request because the requested operation is planning rather than implementation"
       ],
       "forbidden_actions": [
-        "treat the bare planning request as a project workflow override",
+        "treat the bare planning request as license to bypass the project's PR-routing restriction",
         "mutate the issue or its comments",
         "prepare or return ready-to-post contract or plan text",
         "report the precondition failure as planning blocked rather than an error",
@@ -273,7 +250,7 @@
       },
       "required_actions": [
         "identify that the stage permits the plan-comment target but not the required authoritative contract or invalidation targets",
-        "report the partial authority as an error naming the uncovered targets and the declaration change that would cover them",
+        "report the active stage's restriction as an error naming the uncovered contract and invalidation targets and the declaration change that would cover them",
         "stop before repository inspection and artifact preparation, refusing all planning mutations rather than partially updating the plan under a stale contract",
         "avoid creating a branch or pull request for the different implementation workflow"
       ],
@@ -292,46 +269,21 @@
       "artifacts": {
         "issue": "The issue contract and draft plan target LegacyRenderer in src/export/render.ts.",
         "behavior": "Render a Document through RenderService.render(document): RenderedDocument, preserve InvalidDocument errors unchanged, and leave output caching outside this unit.",
-        "repository": "The initial inspection pins default-branch revision R1, where LegacyRenderer still exists. Immediately before the guarded planning write, the moving default-branch reference advances to immutable R2. At R2, LegacyRenderer and src/export/render.ts are removed; src/render/service.ts owns RenderService.render(document): RenderedDocument, and tests live in test/render/service.test.ts. R2 remains current through post-write verification.",
-        "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue body, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write rereads; writes persist.",
+        "repository": "The inspection pins default-branch revision R1, where LegacyRenderer still exists in src/export/render.ts. By handoff the authoritative default-branch reference has advanced to R2, where LegacyRenderer and src/export/render.ts are removed and src/render/service.ts owns RenderService.render(document): RenderedDocument. The plan was inspected and prepared at R1.",
+        "forge": "Conflict-safe issue and comment writes are available and persist.",
         "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. Issue bodies are authoritative work contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/render/service.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
-        "record R1 as the inspected immutable revision and detect that the moving default-branch reference advanced to R2 before any write",
-        "repeat the affected repository inspection at R2, reprepare the contract and plan, and take a fresh guarded read of the issue-side planning records",
-        "replace LegacyRenderer and src/export/render.ts with RenderService.render(document), src/render/service.ts, and test/render/service.test.ts in the persisted contract and single current plan",
-        "preserve the RenderedDocument outcome, unchanged InvalidDocument error, and output-caching non-goal",
-        "verify R2 remains current after the writes, report R2 in the handoff, and stop without implementation"
+        "record R1 as the revision inspected and prepare the contract and plan grounded in R1",
+        "at handoff, observe that the authoritative default-branch reference has advanced past R1 and report the plan as grounded in the superseded revision R1, recommending the implementer verify against current code or request a replan",
+        "not reinspect at the moved revision and republish a rewritten plan, and not attempt an automated repair of the contract or plan",
+        "report R1 as the grounding revision and stop without implementation"
       ],
       "forbidden_actions": [
-        "publish artifacts prepared from R1 after the default branch advances",
-        "treat fresh issue and comment guards as proof that repository evidence is current",
-        "claim completion without the post-write R2 check",
+        "reinspect at the moved revision and republish a rewritten plan as part of this operation",
+        "silently report the plan as current without flagging that the base advanced past its grounding revision",
+        "attempt an automated compensation or lock the repository and forge together",
         "begin implementation"
-      ]
-    },
-    {
-      "id": "repository-revision-guard-fails",
-      "request": "Plan issue #109 from the current default branch and leave one implementation plan.",
-      "artifacts": {
-        "issue": "Owner context says report delivery is audited separately. The issue contract and draft plan target LegacyReporter in src/report/legacy.ts.",
-        "behavior": "Build a ReportDocument through ReportService.build(input), preserve InvalidReport errors unchanged, and leave report delivery outside this unit.",
-        "repository": "The inspection pins forge-authoritative default-branch revision R1, where LegacyReporter still exists. After the planning writes but before authoritative post-write verification, the default branch advances to R2. At R2, LegacyReporter and src/report/legacy.ts are removed; src/report/service.ts owns ReportService.build(input): ReportDocument, and tests live in test/report/service.test.ts.",
-        "forge": "A cross-system guard claims to cover the authoritative default-branch reference and full mutable planning surface, and the R1-grounded contract and plan writes persist. The authoritative post-write reference query exposes that the guard failed because the default branch is now R2. A newly verified full-surface guard is available for compensation, and authoritative rereads persist.",
-        "project": "A declared non-implementation planning stage permits the task-scoped contract, issue-plan, and invalidation writes and ends at their verified handoff without a branch or pull request. Issue bodies are authoritative work contracts. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/report/service.test.ts; standard verification is npm run lint and npm test."
-      },
-      "required_actions": [
-        "treat the R1-to-R2 movement as a failed publication guard and refuse a code-grounded handoff",
-        "under the newly verified full-surface guard, preserve the freshly reread owner context while marking the R1-grounded issue contract content blocked and the exact R1-grounded plan non-current, naming the repository drift in both locations",
-        "authoritatively reread both compensating results and report either confirmed retirement or each still-actionable artifact as unsafe",
-        "require a fresh R2 inspection before attempting a replacement contract or plan, and stop without implementation"
-      ],
-      "forbidden_actions": [
-        "claim that the successful planning-record writes prove the R1 artifacts are current",
-        "restore the already-stale pre-write issue contract as authoritative",
-        "retire only the plan while leaving the stale contract actionable",
-        "publish an R2 replacement without inspecting R2",
-        "claim planning completed or begin implementation"
       ]
     }
   ]
