@@ -872,6 +872,202 @@ if [ "$(git -C "$WORK" symbolic-ref -q HEAD)" = "refs/heads/$BB" ] \
   ok
 else bad "work checkout did not land on the resynced base"; fi
 
+# Discriminating against the old delete-first sequence: the remote exists while
+# the feature branch is checked out and disappears from effective config on the
+# base. The old sequence deleted the head, switched, then failed its base fetch.
+scenario "a branch-conditioned base remote that disappears stops before delete"
+std_setup; std_fixtures
+G "$WORK" checkout "$HB"
+INC="$SCEN/feature-remote.cfg"
+G "$WORK" config --unset-all remote.origin.url
+G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
+git config --file "$INC" remote.origin.url "$BARE"
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED base-remote'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the remote head was deleted before the post-landing remote stop"; fi
+
+# Discriminating against carrying a remote name across checkout. The include is
+# split across two mutually exclusive includes, so feature resolves origin to
+# the real repository while main resolves it to a different, valid local
+# repository whose main is a descendant. Without the identity pin, fetch and
+# fast-forward both succeed against the wrong repository.
+scenario "a branch-conditioned base remote cannot redirect the resync"
+std_setup; std_fixtures
+WRONG_BARE="$SCEN/wrong.git"
+WRONG_WORK="$SCEN/wrong-work"
+git clone -q --bare "$BARE" "$WRONG_BARE"
+git clone -q "$WRONG_BARE" "$WRONG_WORK"
+G "$WRONG_WORK" config user.email t@t; G "$WRONG_WORK" config user.name t
+G "$WRONG_WORK" checkout "$BB"
+echo wrong > "$WRONG_WORK/wrong.txt"; G "$WRONG_WORK" add .; G "$WRONG_WORK" commit -m wrong
+G "$WRONG_WORK" push origin "$BB"
+WRONG_OID=$(git -C "$WRONG_WORK" rev-parse HEAD)
+G "$WORK" checkout "$HB"
+INC="$SCEN/feature-remote.cfg"; MAIN_INC="$SCEN/base-remote.cfg"
+G "$WORK" config --unset-all remote.origin.url
+G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
+G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
+git config --file "$INC" remote.origin.url "$BARE"
+git config --file "$MAIN_INC" remote.origin.url "$WRONG_BARE"
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP remote-config-changed'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the remote head was deleted after the base remote redirected"; fi
+if [ "$(git -C "$WORK" rev-parse HEAD)" != "$WRONG_OID" ]; then
+  ok
+else bad "the base fast-forwarded from the wrong repository"; fi
+
+# A missing local base is created from the remote selected while the feature
+# branch is checked out. The checkout must not retain that pre-landing remote
+# as its upstream when base-conditioned configuration resolves the same
+# repository through another remote after landing.
+scenario "a created base tracks the post-landing remote"
+std_setup; std_fixtures
+G "$WORK" checkout "$HB"
+G "$WORK" branch -D "$BB"
+MAIN_INC="$SCEN/base-remote.cfg"
+G "$WORK" remote add base "$BARE"
+G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
+git config --file "$MAIN_INC" remote.origin.pushurl \
+  https://github.invalid/other/name.git
+GIT_REAL=$(command -v git)
+GIT_SHIM="$SCEN/git-shim"
+mkdir "$GIT_SHIM"
+printf '#!/bin/sh\nif [ "$1" = remote ] && [ "$2" = get-url ]; then\n  out=$("%s" "$@") || exit\n  if [ "$out" = "%s" ]; then\n    out=https://github.invalid/owner/name.git\n  fi\n  printf "%%s\\n" "$out"\n  exit 0\nfi\nexec "%s" "$@"\n' \
+  "$GIT_REAL" "$BARE" "$GIT_REAL" > "$GIT_SHIM/git"
+chmod +x "$GIT_SHIM/git"
+run_sm_with_git_shim "$GIT_SHIM" cleanup --pr 83 --repo owner/name \
+  --head "$FEAT_OID"
+want_rc 0
+if [ "$(git -C "$WORK" config --get "branch.$BB.remote")" = base ] \
+   && [ "$(git -C "$WORK" config --get "branch.$BB.merge")" = "refs/heads/$BB" ]; then
+  ok
+else bad "the created base did not track the post-landing remote"; fi
+
+# Refute the asymmetric identity check: validating only a new hosted URL would
+# still accept a checkout that replaces a forge-verified hosted remote with an
+# arbitrary hostless path. The path is valid and fast-forwardable, so equality
+# with the pre-checkout identity is the only available guard.
+scenario "a hosted base remote cannot become an untrusted hostless path"
+std_setup; std_fixtures
+WRONG_BARE="$SCEN/wrong.git"
+WRONG_WORK="$SCEN/wrong-work"
+git clone -q --bare "$BARE" "$WRONG_BARE"
+git clone -q "$WRONG_BARE" "$WRONG_WORK"
+G "$WRONG_WORK" config user.email t@t; G "$WRONG_WORK" config user.name t
+G "$WRONG_WORK" checkout "$BB"
+echo wrong > "$WRONG_WORK/wrong.txt"; G "$WRONG_WORK" add .; G "$WRONG_WORK" commit -m wrong
+G "$WRONG_WORK" push origin "$BB"
+WRONG_OID=$(git -C "$WRONG_WORK" rev-parse HEAD)
+G "$WORK" checkout "$HB"
+INC="$SCEN/feature-remote.cfg"; MAIN_INC="$SCEN/base-remote.cfg"
+G "$WORK" config --unset-all remote.origin.url
+G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
+G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
+git config --file "$INC" remote.origin.url https://github.invalid/owner/name.git
+git config --file "$MAIN_INC" remote.origin.url "$WRONG_BARE"
+run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP remote-config-changed'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the remote head was deleted after the hosted remote became local"; fi
+if [ "$(git -C "$WORK" rev-parse HEAD)" != "$WRONG_OID" ]; then
+  ok
+else bad "the base trusted a hostless replacement after checkout"; fi
+
+scenario "a checkout-switched symlink cannot redirect head deletion"
+std_setup; std_fixtures
+WRONG_BARE="$SCEN/wrong.git"
+G "$WORK" checkout "$HB"
+ln -s "$BARE" "$WORK/remote.git"
+G "$WORK" add remote.git; G "$WORK" commit -m feature-link
+G "$WORK" push origin "$HB"
+FEAT_OID=$(git -C "$WORK" rev-parse HEAD)
+G "$MRG" fetch origin
+G "$MRG" checkout "$BB"
+G "$MRG" merge --no-ff -m redirected-head "origin/$HB"
+rm "$MRG/remote.git"
+ln -s "$WRONG_BARE" "$MRG/remote.git"
+G "$MRG" add remote.git; G "$MRG" commit -m base-link
+G "$MRG" push origin "$BB"
+git clone -q --bare "$BARE" "$WRONG_BARE"
+pr_full OPEN "$HB" "$BB" "$FEAT_OID" false owner name
+G "$WORK" remote add base "$BARE"
+G "$WORK" config remote.origin.url ./remote.git
+mkdir "$WORK/subdir"
+OUT=$(cd "$WORK/subdir" && PATH="$SHIMD:$PATH" bash "$SCRIPT" cleanup \
+  --pr 83 --repo owner/name --base-remote base --head-remote origin \
+  --head "$FEAT_OID" 2>"$FIX/stderr")
+RC=$?
+want_rc 2
+want_out 'STOP remote-config-changed'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the trusted repository lost its head branch"; fi
+if git -C "$WRONG_BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the symlink replacement lost its head branch"; fi
+
+scenario "a Git-expanded tilde symlink cannot redirect head deletion"
+std_setup; std_fixtures
+WRONG_BARE="$SCEN/wrong.git"
+G "$WORK" checkout "$HB"
+ln -s "$BARE" "$WORK/remote.git"
+G "$WORK" add remote.git; G "$WORK" commit -m feature-link
+G "$WORK" push origin "$HB"
+FEAT_OID=$(git -C "$WORK" rev-parse HEAD)
+G "$MRG" fetch origin
+G "$MRG" checkout "$BB"
+G "$MRG" merge --no-ff -m redirected-head "origin/$HB"
+rm "$MRG/remote.git"
+ln -s "$WRONG_BARE" "$MRG/remote.git"
+G "$MRG" add remote.git; G "$MRG" commit -m base-link
+G "$MRG" push origin "$BB"
+git clone -q --bare "$BARE" "$WRONG_BARE"
+pr_full OPEN "$HB" "$BB" "$FEAT_OID" false owner name
+G "$WORK" remote add base "$BARE"
+G "$WORK" config remote.origin.url '~/remote.git'
+mkdir "$WORK/subdir"
+OUT=$(cd "$WORK/subdir" && HOME="$WORK" PATH="$SHIMD:$PATH" \
+  bash "$SCRIPT" cleanup --pr 83 --repo owner/name \
+  --base-remote base --head-remote origin --head "$FEAT_OID" 2>"$FIX/stderr")
+RC=$?
+want_rc 2
+want_out 'STOP remote-config-changed'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the tilde path's trusted repository lost its head branch"; fi
+if git -C "$WRONG_BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the tilde path's symlink replacement lost its head branch"; fi
+
+scenario "a branch-conditioned head remote is revalidated after resync"
+std_setup; std_fixtures
+WRONG_BARE="$SCEN/wrong.git"
+git clone -q --bare "$BARE" "$WRONG_BARE"
+G "$WORK" remote add base "$BARE"
+G "$WORK" checkout "$HB"
+INC="$SCEN/feature-head.cfg"; MAIN_INC="$SCEN/base-head.cfg"
+G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
+G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
+git config --file "$INC" remote.head.url "$BARE"
+git config --file "$MAIN_INC" remote.head.url "$WRONG_BARE"
+run_sm cleanup --pr 83 --repo owner/name --base-remote base --head-remote head --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP remote-config-changed'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the changed head remote deleted the original branch"; fi
+if [ "$(git -C "$WORK" rev-parse HEAD)" = "$(git -C "$BARE" rev-parse "refs/heads/$BB")" ]; then
+  ok
+else bad "the head-remote stop happened before the base resync"; fi
+
 scenario "a local branch created during cleanup reports kept_manual"
 std_setup; std_fixtures
 G "$WORK" update-ref -d "refs/heads/$HB"
@@ -997,7 +1193,6 @@ if [ "$(cat "$WORK/.env")" = local-secret ]; then ok; else bad ".env was clobber
 
 scenario "an ignored file the resync starts tracking aborts the fast-forward intact"
 std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
 G "$MRG" checkout "$BB"
 echo remote-secret > "$MRG/.env"; G "$MRG" add -f .env
 G "$MRG" commit -m env; G "$MRG" push origin "$BB"
@@ -1007,14 +1202,19 @@ run_sm "${CLEAN[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP resync-failed'
 if [ "$(cat "$WORK/.env")" = local-secret ]; then ok; else bad ".env was clobbered"; fi
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the remote head was deleted before the refused resync"; fi
 
 scenario "a diverged base refuses the fast-forward"
 std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
 echo local > "$WORK/local.txt"; G "$WORK" add .; G "$WORK" commit -m local
 run_sm "${CLEAN[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP resync-failed'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the remote head was deleted before the diverged-base stop"; fi
 
 scenario "worktree preservation targets the right record despite hostile names"
 std_setup 'x$(touch${IFS}probe-file)' main
@@ -1397,7 +1597,10 @@ G "$WORK" remote set-url origin deploy@github.invalid:owner/name.git
 G "$WORK" remote add forge git@github.invalid:owner/name.git
 run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
 want_rc 4
-want_out 'LOOKUP_FAILED ls-remote'
+want_out 'LOOKUP_FAILED base-fetch'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the remote head was deleted before the selected base remote failed"; fi
 
 scenario "a second configured push URL still stops the split"
 std_setup; std_fixtures
@@ -1634,7 +1837,10 @@ std_setup; std_fixtures
 G "$WORK" remote add forge https://github.invalid/owner/name.git
 run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
 want_rc 4
-want_out 'LOOKUP_FAILED ls-remote'   # resolution succeeded; the dead host is next
+want_out 'LOOKUP_FAILED base-fetch'   # resolution succeeded; resync reaches the dead host first
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the remote head was deleted before the selected base remote failed"; fi
 
 scenario "fork consumer lookups use the owner-qualified encoded form"
 std_setup 'feat#2' main

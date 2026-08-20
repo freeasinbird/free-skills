@@ -543,7 +543,7 @@ else ok; fi
 # Branches and remote-tracking refs live in the common git directory, while a
 # linked worktree's own git dir holds only its per-worktree refs, so a stat
 # rooted at the private one sees none of them. This is not a corner: the skill's
-# relocate rule runs step 2 inside a linked worktree when the base branch is
+# relocate rule runs step 1 inside a linked worktree when the base branch is
 # checked out there.
 #
 # discriminating: against a copy using --absolute-git-dir.
@@ -559,10 +559,10 @@ if G "$SCEN/linked" checkout --no-overwrite-ignore -b release/next main; then
 else ok; fi
 git -C "$REPO" worktree remove --force "$SCEN/linked" 2>/dev/null
 
-# Step 3 fetches into refs/remotes/<remote>/<base> on every cleanup, not only
+# Step 2 fetches into refs/remotes/<remote>/<base> on every cleanup, not only
 # when the local branch had to be created, so the remote-tracking conflict check
 # is not gated on create. With a local base already present nothing is created,
-# and the plan would otherwise pass a fetch that fails after step 1.
+# and the plan would otherwise pass a fetch that fails during resync.
 #
 # discriminating: against a copy with that check inside the create branch.
 scenario "the tracking destination is checked even when nothing is created"
@@ -1073,8 +1073,7 @@ want_rc 4
 want_out 'LOOKUP_FAILED remote'
 
 # discriminating: a remote check scoped to what the landing itself touches
-# passes this, and step 3 then fetches from the same unresolvable name after
-# step 1 has already deleted the remote branch.
+# passes this, and step 2 then fetches from the same unresolvable name.
 scenario "an unresolvable remote fails even where the landing would not use it"
 track "$REPO" main origin
 run origin2 main
@@ -1083,11 +1082,30 @@ want_out 'LOOKUP_FAILED remote'
 
 # discriminating: `git remote get-url` succeeds here and echoes the remote's
 # own name, because git falls back to treating that name as a URL, so a check
-# reading its output (empty or not) passes a remote that step 3's fetch then
+# reading its output (empty or not) passes a remote that step 2's fetch then
 # dies on. The configured value is what has to be read.
 scenario "a remote configured with an empty URL is not a usable remote"
 track "$REPO" main origin
 G "$REPO" config remote.origin.url ""
+run origin main
+want_rc 4
+want_out 'LOOKUP_FAILED remote'
+
+# Does not discriminate within the planner: it pins the reason the caller must
+# resolve the base role and run the plan again after checkout. The same remote
+# name is usable under feature and has no URL under main because Git evaluates
+# onbranch includes against the branch currently checked out.
+scenario "an onbranch remote result is scoped to the checked-out branch"
+G "$REPO" branch feature
+G "$REPO" checkout feature
+INC="$SCEN/feature-remote.cfg"
+G "$REPO" config --unset-all remote.origin.url
+G "$REPO" config --add includeIf.onbranch:feature.path "$INC"
+git config --file "$INC" remote.origin.url "$ORIGIN"
+run origin main
+want_rc 0
+want_out 'OK landing'
+G "$REPO" checkout main
 run origin main
 want_rc 4
 want_out 'LOOKUP_FAILED remote'
@@ -1180,7 +1198,7 @@ want_out '"create":false'
 
 # discriminating: byte-wise \u escaping emits one escape per UTF-8 byte, and
 # those decode to mojibake, so the caller fetches a refspec naming a branch
-# that does not exist, after step 1 has already deleted the remote one. JSON
+# that does not exist. JSON
 # is UTF-8, so the bytes belong in the line verbatim.
 scenario "a non-ASCII branch name survives the JSON tail"
 OID=$(git -C "$REPO" rev-parse HEAD)
@@ -1203,7 +1221,7 @@ fi
 # A ref name may hold raw bytes above 0x7f that are not UTF-8, and no JSON
 # string can carry one: escaping it to \u00XX would round-trip to a different
 # name, so the plan would name a branch that does not exist. Refused up front
-# instead, before step 1 deletes anything.
+# instead, before step 1 mutates anything.
 scenario "a base name that is not valid UTF-8 is refused"
 run origin "$(printf 'bad\xffname')"
 want_rc 64
@@ -1258,7 +1276,7 @@ want_out 'LOOKUP_FAILED status'
 # discriminating: each of these is a valid branch name that no landing command
 # attaches HEAD to, because git resolves the shorthand before refs/heads. Two
 # are silent (exit 0 on the wrong branch), so without the refusal the caller's
-# own HEAD check catches them only after step 1 deleted the remote branch.
+# own HEAD check is the last line of defence against resyncing the wrong branch.
 # The update-ref below is scene-setting, not a precondition: the refusal is on
 # the name and fires before any ref is read, so the case would pass in a
 # repository holding none of these branches. It is here because the refusal is

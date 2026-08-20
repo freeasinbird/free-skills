@@ -30,8 +30,9 @@
 # merge    Merges pinned to --head with an explicit title-only message,
 #          then polls until the forge reports the PR MERGED (a zero exit
 #          from the merge command proves enqueueing, not merging).
-# cleanup  Post-merge: lease-protected remote branch delete behind
-#          re-checked consumer guards, land on the base branch, resync it,
+# cleanup  Post-merge: land on and resync the base branch, then a
+#          lease-protected remote branch delete behind re-checked remote and
+#          consumer guards,
 #          stop before mutating branches when a separate linked head worktree
 #          remains, keep the local branch for a separate deliberate delete,
 #          prune.
@@ -169,6 +170,11 @@ out_exact() { # out_exact <var> <cmd...>: fails when the command fails
   __o=$("$@" 2>/dev/null && printf x) || return 1
   __o="${__o%x}"
   printf -v "$__v" '%s' "${__o%$'\n'}"
+}
+
+physical_dir() { # physical_dir <path>
+  cd -P -- "$1" 2>/dev/null || return 1
+  pwd -P
 }
 
 # Reject a remote whose configured URLs carry a newline: every listing of
@@ -541,6 +547,8 @@ layout_check() {
   CWD_CDUP=$(git rev-parse --show-cdup 2>/dev/null) \
     || stop not-a-repo "not inside a git working tree"
   CWD_CDUP="${CWD_CDUP:-.}"
+  out_exact WORKTREE_ROOT physical_dir "$CWD_CDUP" \
+    || stop not-a-repo "could not resolve the current worktree root"
   worktree_scan "refs/heads/$BASE"; base_wt="$WT_MATCH"
   if [ -n "$base_wt" ] && ! [ "$base_wt" -ef "$CWD_CDUP" ]; then
     stop wrong-checkout "the base branch is checked out in another worktree: run this phase from $base_wt"
@@ -729,13 +737,69 @@ url_id() {
     *) host="" ;;
   esac
   if [ -z "$host" ]; then
-    printf 'path %s' "${raw%/}"
+    case "$raw" in /) ;; */) raw="${raw%/}" ;; esac
+    printf 'path %s' "$raw"
     return
   fi
   host=$(printf '%s' "$host" | tr 'A-Z' 'a-z')
   [ -z "$ssh_user" ] || host="$ssh_user@$host"
   path="${path%/}"
   printf 'host %s %s %s' "$transport" "$host" "$path"
+}
+
+# Resolve a hostless URL to the filesystem destination Git will use now.
+# Ask Git to expand its leading ~/ and ~user/ path syntax, root other relative
+# paths at the worktree root, and follow every symlink before the identity
+# crosses a checkout boundary. Keep the remaining resolution in shell so
+# cleanup does not gain another executable dependency.
+canonical_local_path() { # canonical_local_path <path>
+  local path="$1" link dir base physical suffix="" hops=0
+  case "$path" in
+    ~*) out_exact path git -c "selfmerge.path=$path" config --path --get selfmerge.path \
+      || return 1 ;;
+  esac
+  case "$path" in
+    /*) ;;
+    *)
+      case "$WORKTREE_ROOT" in
+        /) path="/$path" ;;
+        *) path="$WORKTREE_ROOT/$path" ;;
+      esac
+      ;;
+  esac
+  while [ -L "$path" ]; do
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || return 1
+    out_exact link readlink "$path" || return 1
+    [ -n "$link" ] || return 1
+    dir="${path%/*}"; [ -n "$dir" ] || dir=/
+    case "$link" in /*) path="$link" ;; *) path="$dir/$link" ;; esac
+  done
+  while ! [ -d "$path" ]; do
+    base="${path##*/}"
+    [ -n "$base" ] || return 1
+    suffix="/$base$suffix"
+    dir="${path%/*}"; [ -n "$dir" ] || dir=/
+    [ "$dir" != "$path" ] || return 1
+    path="$dir"
+  done
+  cd -P -- "$path" 2>/dev/null || return 1
+  out_exact physical pwd -P || return 1
+  printf '%s%s' "${physical%/}" "$suffix"
+}
+
+remote_url_id() { # remote_url_id <effective-url>
+  local id path resolved
+  id=$(url_id "$1")
+  case "$id" in
+    path\ *)
+      path="${id#path }"
+      [ -n "$path" ] || return 1
+      out_exact resolved canonical_local_path "$path" || return 1
+      printf 'path %s' "$resolved"
+      ;;
+    *) printf '%s' "$id" ;;
+  esac
 }
 
 # The forge identifies a repository by host plus owner/name even when the
@@ -810,16 +874,28 @@ resolve_remote() { # resolve_remote <owner/name>: sets RESOLVED_REMOTE
 
 # A hosted override must still identify the PR's repository. A hostless
 # mapping cannot be matched to forge identity, so naming that remote
-# explicitly is the separate trust decision; its fetch/push identity is
+# explicitly is the separate trust decision. A hostless mapping that remains
+# after checkout is pinned to that identity; a replacement hosted mapping can
+# instead be validated against the forge. CHECKED_REMOTE_ID exposes the
+# validated identity to that checkout boundary, and fetch/push identity is
 # still checked before a destructive head push.
+CHECKED_REMOTE_ID=""
 remote_repo_check() { # remote_repo_check <remote> <role>
-  local remote="$1" role="$2" furl endpoint_id
+  local remote="$1" role="$2" configured u have_url=false furl endpoint_id
+  remote_urls_newline_free "$remote" \
+    || stop remote-repo-mismatch "$role remote $remote has a newline-bearing URL whose forge identity cannot be compared faithfully"
+  out_exact configured git config --get-all "remote.$remote.url" \
+    || lookup_failed "$role-remote" "could not read $remote's configured URLs"
+  while IFS= read -r u; do
+    [ -n "$u" ] && have_url=true
+  done <<< "$configured"
+  [ "$have_url" = true ] \
+    || lookup_failed "$role-remote" "$remote has no URL configured"
   out_exact furl git remote get-url -- "$remote" \
     || lookup_failed "$role-remote" "could not read $remote's URL"
-  case "$furl" in *$'\n'*)
-    stop remote-repo-mismatch "$role remote $remote has a newline-bearing URL whose forge identity cannot be compared faithfully" ;;
-  esac
-  endpoint_id=$(url_id "$furl")
+  out_exact endpoint_id remote_url_id "$furl" \
+    || stop remote-repo-mismatch "$role remote $remote's effective local destination could not be resolved safely"
+  CHECKED_REMOTE_ID="$endpoint_id"
   case "$endpoint_id" in
     path\ *) return 0 ;;
     "$REPO_CLONE_ID"|"$REPO_SSH_ID") return 0 ;;
@@ -914,7 +990,8 @@ phase_merge() {
 
 phase_cleanup() {
   local merged_at local_tip local_deleted=absent base_symbolic_rc=0
-  local removed_worktree=none
+  local removed_worktree=none initial_base_id="" initial_head_id=""
+  local remote_deleted=kept_fork repo_fork_network=false
   merged_at=$(gh pr view "$PR" --repo="$REPO" --json state,mergedAt \
     --jq 'if .state == "MERGED" and .mergedAt != null then .mergedAt else "no" end' 2>/dev/null) \
     || lookup_failed pr-view "could not read PR $PR's merge state"
@@ -963,13 +1040,85 @@ phase_cleanup() {
     BASE_REMOTE="$RESOLVED_REMOTE"
   fi
   remote_repo_check "$BASE_REMOTE" base
+  initial_base_id="$CHECKED_REMOTE_ID"
 
-  # Remote head branch. A fork's branch may head PRs anywhere in its fork
-  # network, which per-repository queries cannot enumerate, so a fork head
-  # is never deleted here: it is kept and reported. The same reasoning
-  # keeps a same-repository branch anywhere in a fork network, whether
-  # the base is a fork or a root with forks.
-  local remote_deleted=kept_fork repo_fork_network=false
+  # An explicit hostless head remote is a trust decision made against the
+  # configuration active at invocation. Pin that identity now so the checkout
+  # cannot silently redirect the later delete. Hosted remotes are checked
+  # against the forge's authoritative endpoints at use time instead.
+  if [ "$IS_FORK" != true ] && [ "$REPO_IS_FORK" != true ] \
+      && [ "$FORKS_COUNT" -eq 0 ]; then
+    if [ -n "$HEAD_REMOTE_OPT" ]; then
+      remote_repo_check "$HEAD_REMOTE_OPT" head
+      initial_head_id="$CHECKED_REMOTE_ID"
+    else
+      initial_head_id="$initial_base_id"
+    fi
+  fi
+
+  # Land on the base branch. The bare-name switch is only taken when the
+  # local branch verifiably exists (a rev-parse existence probe is
+  # satisfied by a same-named tag, and a bare checkout then detaches HEAD
+  # at the tag); otherwise the branch is created from a freshly fetched
+  # tracking ref, since the start-point can be absent in a fresh,
+  # single-branch, or sparse clone. Both switches refuse to overwrite an
+  # ignored file the base tracks; that refusal surfaces as a stop.
+  base_created=false
+  if git show-ref --verify --quiet "refs/heads/$BASE"; then
+    git checkout --no-overwrite-ignore "$BASE" >/dev/null 2>&1 \
+      || stop checkout-refused "switching to $BASE was refused (an ignored file the base tracks, or a conflicting state); nothing was overwritten"
+  else
+    git fetch -- "$BASE_REMOTE" "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+      || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
+    git checkout --no-overwrite-ignore --no-track -b "$BASE" "refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+      || stop checkout-refused "creating local $BASE from $BASE_REMOTE was refused; nothing was overwritten"
+    base_created=true
+  fi
+  [ "$(git symbolic-ref -q HEAD 2>/dev/null)" = "refs/heads/$BASE" ] \
+    || stop detached "HEAD is not on $BASE after the switch (a same-named tag or OID shadowed the branch)"
+
+  # Branch-conditioned includes can change every remote URL at checkout. Do
+  # not carry the pre-landing remote selection into the resync: resolve and
+  # validate it again under the base branch's effective configuration. Hosted
+  # URLs must still identify the PR repository. A post-checkout hostless path
+  # cannot be matched to the forge, so it must be the exact path explicitly
+  # trusted before the checkout.
+  if [ -n "$BASE_REMOTE_OPT" ]; then
+    BASE_REMOTE="$BASE_REMOTE_OPT"
+  else
+    resolve_remote "$REPO"
+    [ -n "$RESOLVED_REMOTE" ] \
+      || stop remote-unresolved "no configured remote's URL matches $REPO after landing on $BASE; pass --base-remote"
+    BASE_REMOTE="$RESOLVED_REMOTE"
+  fi
+  remote_repo_check "$BASE_REMOTE" base
+  case "$CHECKED_REMOTE_ID" in path\ *)
+    [ "$CHECKED_REMOTE_ID" = "$initial_base_id" ] \
+      || stop remote-config-changed "base remote $BASE_REMOTE became a hostless path not trusted before checkout; preserve the remote branch and validate the new path manually" ;;
+  esac
+  if [ "$base_created" = true ]; then
+    git config "branch.$BASE.remote" "$BASE_REMOTE" \
+      && git config "branch.$BASE.merge" "refs/heads/$BASE" \
+      || stop tracking-config-failed "could not configure local $BASE to track $BASE_REMOTE/$BASE; preserve the remote branch and repair the upstream manually"
+  fi
+
+  # Resync before deleting the remote feature branch: fetch, then an explicit
+  # fast-forward merge. Not git pull: its
+  # merge step updates ignored files by default and rejects
+  # --no-overwrite-ignore, and a bare pull follows the configured
+  # upstream, which in a fork clone can be the fork's stale copy.
+  git fetch -- "$BASE_REMOTE" "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+    || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
+  git merge --ff-only --no-overwrite-ignore "refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+    || stop resync-failed "fast-forwarding $BASE refused (divergence, or an ignored file the fetch started tracking); resolve it rather than forcing"
+
+  # Delete the remote head only after the base resync succeeds. A fork's
+  # branch may head PRs anywhere in its fork network, which per-repository
+  # queries cannot enumerate, so fork-network branches are kept and reported.
+  # Refresh that fact after the resync because a first fork can appear while
+  # cleanup is running.
+  REPO_FACTS_LOADED=""
+  load_repo_facts
   if [ "$REPO_IS_FORK" = true ] || [ "$FORKS_COUNT" -gt 0 ]; then
     repo_fork_network=true
   fi
@@ -983,14 +1132,16 @@ phase_cleanup() {
       HEAD_REMOTE="$BASE_REMOTE"
     fi
     remote_repo_check "$HEAD_REMOTE" head
+    case "$CHECKED_REMOTE_ID" in path\ *)
+      [ "$CHECKED_REMOTE_ID" = "$initial_head_id" ] \
+        || stop remote-config-changed "head remote $HEAD_REMOTE became a hostless path not trusted before checkout; preserve the branch and validate the new path manually" ;;
+    esac
     # Whatever chose the remote, override included: the repository the
     # existence and OID checks read (the fetch URL) must be the only
     # repository the delete writes. git push sends to every configured
     # push URL, so all of them are held to the fetch URL's identity; a
     # split would validate one repository and delete from another.
     local hr_furl
-    remote_urls_newline_free "$HEAD_REMOTE" \
-      || stop pushurl-mismatch "a URL of $HEAD_REMOTE contains a newline, which no line-based listing can compare faithfully; validate and delete manually"
     out_exact hr_furl git remote get-url -- "$HEAD_REMOTE" \
       || lookup_failed head-remote "could not read $HEAD_REMOTE's URL"
     push_ids_match "$HEAD_REMOTE" "$(url_id "$hr_furl")" \
@@ -1032,8 +1183,8 @@ phase_cleanup() {
         [ "$FORGE_HEAD_OID" = "$HEAD_OID" ] \
           || stop oid-mismatch "the forge reports head $FORGE_HEAD_OID but the merged head was $HEAD_OID"
         # Fork-network membership and consumers are re-checked at the last
-        # moment the branch exists: either answer can go stale in the
-        # minutes since the initial cleanup preflight.
+        # moment the branch exists: either answer can go stale after the
+        # resync and remote-identity checks.
         REPO_FACTS_LOADED=""
         load_repo_facts
         if [ "$REPO_IS_FORK" = true ] || [ "$FORKS_COUNT" -gt 0 ]; then
@@ -1052,34 +1203,6 @@ phase_cleanup() {
       fi
     fi
   fi
-
-  # Land on the base branch. The bare-name switch is only taken when the
-  # local branch verifiably exists (a rev-parse existence probe is
-  # satisfied by a same-named tag, and a bare checkout then detaches HEAD
-  # at the tag); otherwise the branch is created from a freshly fetched
-  # tracking ref, since the start-point can be absent in a fresh,
-  # single-branch, or sparse clone. Both switches refuse to overwrite an
-  # ignored file the base tracks; that refusal surfaces as a stop.
-  if git show-ref --verify --quiet "refs/heads/$BASE"; then
-    git checkout --no-overwrite-ignore "$BASE" >/dev/null 2>&1 \
-      || stop checkout-refused "switching to $BASE was refused (an ignored file the base tracks, or a conflicting state); nothing was overwritten"
-  else
-    git fetch -- "$BASE_REMOTE" "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-      || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
-    git checkout --no-overwrite-ignore -b "$BASE" "refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-      || stop checkout-refused "creating local $BASE from $BASE_REMOTE was refused; nothing was overwritten"
-  fi
-  [ "$(git symbolic-ref -q HEAD 2>/dev/null)" = "refs/heads/$BASE" ] \
-    || stop detached "HEAD is not on $BASE after the switch (a same-named tag or OID shadowed the branch)"
-
-  # Resync: fetch then an explicit fast-forward merge. Not git pull: its
-  # merge step updates ignored files by default and rejects
-  # --no-overwrite-ignore, and a bare pull follows the configured
-  # upstream, which in a fork clone can be the fork's stale copy.
-  git fetch -- "$BASE_REMOTE" "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-    || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
-  git merge --ff-only --no-overwrite-ignore "refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-    || stop resync-failed "fast-forwarding $BASE refused (divergence, or an ignored file the fetch started tracking); resolve it rather than forcing"
 
   # Keep the local branch. Git exposes no portable deletion that combines an
   # expected-old OID with the checked-out-worktree guard: update-ref supplies

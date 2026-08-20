@@ -616,17 +616,28 @@ GitHub: `gh pr merge <n> --merge`; where the repo's title-only
 merge-message settings aren't confirmed set, pass the message
 explicitly instead of inheriting the forge default:
 `gh pr merge <n> --merge --subject '<PR title> (#<n>)' --body ''`),
-delete the remote branch if the
-auto-delete setting didn't, then resync the base branch, delete the
-local branch (`git branch -d <branch>`), and `git fetch --prune`.
+resync the base branch as described below, re-resolve and validate the head
+remote under the base branch's effective configuration, delete the remote
+branch if the auto-delete setting didn't, delete the local branch
+(`git branch -d <branch>`), and `git fetch --prune`.
 
 In a single checkout, fetch the base first
 (`git fetch <remote> refs/heads/main`), then land on the branch: with a
 local `main` present (`git show-ref --verify --quiet refs/heads/main`)
 that is `git checkout --no-overwrite-ignore main`, and without one
-`git checkout --no-overwrite-ignore -b main FETCH_HEAD`, because a bare
-checkout detaches `HEAD` at a same-named tag. Fast-forward with
-`git merge --ff-only --no-overwrite-ignore FETCH_HEAD`. Not
+`git checkout --no-overwrite-ignore --no-track -b main FETCH_HEAD`, because a
+bare checkout detaches `HEAD` at a same-named tag. After landing, re-resolve
+the base remote under the configuration now in force and confirm its effective
+URL still identifies the merged PR's base repository. For a branch created by
+cleanup, then set `branch.main.remote` to that post-landing remote and
+`branch.main.merge` to `refs/heads/main`; do not retain a pre-landing upstream
+or leave the new branch untracked.
+
+Fetch that base again into
+its remote-tracking ref
+(`git fetch <remote> refs/heads/main:refs/remotes/<remote>/main`), then
+fast-forward with
+`git merge --ff-only --no-overwrite-ignore refs/remotes/<remote>/main`. Not
 `git checkout main && git pull --ff-only`: a plain checkout and pull's
 merge step both overwrite an ignored file the base has started tracking
 rather than aborting (`git pull` rejects `--no-overwrite-ignore`), and a

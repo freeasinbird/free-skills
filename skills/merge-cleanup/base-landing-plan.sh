@@ -19,9 +19,9 @@
 # §checkout-detach, and §status-config. Comments below cite the section rather
 # than restating it.
 #
-# Run it before the sequence deletes anything: it is free to run early, and a
-# stop found here costs nothing where the same stop found after step 1 leaves
-# the remote branch deleted and the workspace still on the merged branch.
+# Run it immediately before landing. A stop leaves both branches intact, and a
+# second run after checkout reads the tracking and remote configuration active
+# under the base branch.
 #
 # Usage:
 #   base-landing-plan.sh <base-remote> <base-branch>
@@ -235,13 +235,12 @@ cfg_nonempty() { # cfg_nonempty <--get|--get-all> <key>
   [ "$rc" -eq 0 ] && [ -n "$v" ]
 }
 
-# Checked even where the landing itself never touches the remote: step 3
-# fetches from it in every shape, so a name resolving to nothing strands the
-# cleanup after step 1. `--` because a remote is a bare positional.
+# Checked even where the landing itself never touches the remote: step 2
+# fetches from it in every shape. `--` because a remote is a bare positional.
 git remote get-url -- "$REMOTE" >/dev/null 2>&1 \
   || lookup_failed remote "$REMOTE names no remote in this repository"
 # Existing is not usable: with the URL empty git falls back to the remote's own
-# name, so get-url succeeds while step 3's fetch dies. Read the configured value
+# name, so get-url succeeds while step 2's fetch dies. Read the configured value
 # instead. --get-all because remote.<name>.url is genuinely multi-valued and git
 # fetches through the first usable entry, skipping an empty one.
 cfg_nonempty --get-all "remote.$REMOTE.url" \
@@ -271,7 +270,7 @@ ref_exists() { # ref_exists <namespace> <full-ref>
 # over the packed entry, so `git rev-parse release` starts reporting Release's
 # tip while `for-each-ref` still shows the real one, and the user's branch is
 # hijacked under a sequence that then fast-forwards and deletes against it.
-# Both land after step 1, which is why the stop happens here.
+# Stop before either create reaches the ref store.
 #
 # Two conditions, because either alone gets a case wrong. Whether the filesystem
 # folds is probed by asking for $GIT_DIR/head, which resolves only where it
@@ -287,7 +286,7 @@ ref_exists() { # ref_exists <namespace> <full-ref>
 # per-worktree refs (HEAD, refs/bisect) while branches and remote-tracking
 # refs live in the common directory, so stats rooted at the private one see
 # none of the refs this guard is about. That matters here rather than in
-# theory: the skill's own relocate rule runs step 2 inside a linked worktree.
+# theory: the skill's own relocate rule runs step 1 inside a linked worktree.
 # --git-common-dir predates --path-format=absolute and returns a path relative
 # to the current directory, so resolve that answer ourselves instead of probing
 # an option that older git echoes as data while exiting 0.
@@ -500,10 +499,10 @@ path_occupied() { # path_occupied <full-ref>
 }
 
 # The remote-tracking destination is checked whatever the landing does, because
-# step 3 fetches into refs/remotes/<remote>/<base> on every cleanup, not only
+# step 2 fetches into refs/remotes/<remote>/<base> on every cleanup, not only
 # when the local branch had to be created. Verified: with a local main present
 # (so nothing is created) and refs/remotes/origin occupied as a ref, the plan
-# passed and step 3's fetch failed on the lock, after step 1 had run.
+# passed and step 2's fetch failed on the lock.
 remote_ref="refs/remotes/$REMOTE/$BASE"
 if ancestor_occupied "$remote_ref" || path_occupied "$remote_ref" \
   || df_conflict "$remote_ref"; then
@@ -554,7 +553,7 @@ fi
 # Only when creating, and then enough to make the start-point exist: a clone
 # that verified the merge through the forge need never have fetched the base.
 # The switch path takes two refspecs because it cannot create the branch, so the
-# name arrives in refs/heads directly and the tracking copy feeds step 3.
+# name arrives in refs/heads directly and the tracking copy feeds step 2.
 FETCH=""
 if [ "$CREATE" = true ]; then
   if [ "$VERB" = switch ]; then
