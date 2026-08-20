@@ -89,7 +89,11 @@ mutations and finish line instead:
    work from that exact tip, not from whichever branch is currently checked
    out. Only an intentionally declared stacked PR may start from another open
    PR's branch (see Stacked PRs under Pull requests).
-2. Create one correctly named branch explicitly from that starting tip.
+2. Create one correctly named branch from that starting tip in a dedicated
+   worktree or equivalent isolated checkout. Use the primary checkout only
+   when an explicit user or project instruction requires it, or when the
+   platform cannot create another checkout; serialize the work there and
+   report the exception.
 3. Make the scoped change, including the docs/tests/assets that keep it
    complete and, where the project keeps decision notes, a note when
    the work meets its triggers.
@@ -372,19 +376,20 @@ parallel. Before substantive work, an assigned concurrent unit uses the
 project's forge-visible claim mechanism, when one is defined. The claim
 advertises active occupancy, not authorization; its form is project-specific.
 
-**Isolate concurrent work units.** Concurrent work units must use separate
-worktrees or checkouts. Where your platform and session support a second
-checkout (a native worktree tool or session flag, or plain
-`git worktree add <path> -b <type>/<slug> <default-branch>`), create each
-worktree explicitly from the freshly updated default-branch tip, not from
-whatever branch is checked out; prefer the same isolation for a single work
-unit. Remove the worktree once its branch merges, standing outside the one
-being removed (`git worktree remove <path>`): git does not stop a session
-from unlinking its own working directory. Where isolated checkouts are
-unavailable (no multi-checkout support, or a sandbox pinned to one
-directory), serialize the work units and use one correctly based branch at
-a time in the primary checkout. Never run concurrent work units in one
-checkout.
+**Isolate every implementation work unit.** Each implementation work unit uses
+a dedicated worktree or equivalent isolated checkout by default. Where your
+platform and session support a second checkout (a native worktree tool or
+session flag, or plain
+`git worktree add <path> -b <type>/<slug> <default-branch>`), create the branch
+and checkout from the freshly updated default-branch tip, not from whatever
+branch is checked out. Use the primary checkout only when an explicit user or
+project instruction requires it, or when the platform cannot create another
+checkout (no multi-checkout support, or a sandbox pinned to one directory). In
+either case, serialize all work on one correctly based branch in the primary
+checkout and report the exception; never run concurrent work units in one
+checkout. Remove a worktree once its branch merges, standing outside the one
+being removed (`git worktree remove <path>`): git does not stop a session from
+unlinking its own working directory.
 
 Follow-up work that depends on an open PR can stack on its branch instead
 of waiting; see the Stacked PRs pattern under Pull requests.

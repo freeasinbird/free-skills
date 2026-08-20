@@ -12,6 +12,7 @@
         "The response shows that stage separation was considered during discovery",
         "AGENTS.md contains no work-unit stage record or placeholder for one",
         "The absence of a stage record is treated as the default single implementation workflow, not as drift or a missing section",
+        "The managed workflow defaults every implementation work unit to a dedicated worktree or equivalent isolated checkout, permits the primary checkout only when an explicit user or project instruction requires it or another checkout cannot be created, and requires serialized work plus exception reporting there",
         "Planning is not introduced or made mandatory"
       ]
     },
@@ -46,6 +47,7 @@
         "The implementation stage stops at its recorded transition without starting separately declared review or integration actions",
         "The stage record remains outside every managed block and other unmanaged content is preserved verbatim",
         "Managed sections match the current canonical source after the update",
+        "The refreshed managed workflow defaults every implementation work unit to a dedicated worktree or equivalent isolated checkout, permits the primary checkout only when an explicit user or project instruction requires it or another checkout cannot be created, and requires serialized work plus exception reporting there",
         "Review mutations are limited to accepted findings, and integration ends at an open green PR for human merge"
       ]
     },
