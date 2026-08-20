@@ -11,12 +11,24 @@ point.
 - [Checkout gate](#checkout-gate)
 - [Pinned force-with-lease](#pinned-force-with-lease)
 - [Quiescence and reporting](#quiescence-and-reporting)
+- [Context rotation](#context-rotation)
 - [Stranded-conductor recovery](#stranded-conductor-recovery)
 
 ## Spawn brief
 
-Give the conductor one compact task with these facts:
+Start the conductor with the least inherited parent context the host exposes.
+For Codex collaboration use `fork_turns: "none"`; for Claude Code use an
+ordinary named background subagent, not an experimental context-inheriting
+fork. On another host, request fresh or empty context when supported. If the
+host cannot control inheritance, state that limitation in the brief and
+continue when the four conductor grants still hold; context control is an
+optimization, not a fifth grant.
 
+Give the conductor one compact, self-contained task with these facts:
+
+- current task contract at spawn: objective, acceptance criteria, scope,
+  dependencies and blockers, explicit non-goals, and task-specific user
+  constraints
 - repository and PR number
 - automated reviewer login in each required API form, when already recorded
 - trigger and progress/clean status signals, when already recorded
@@ -24,15 +36,21 @@ Give the conductor one compact task with these facts:
   reading when the baseline used the pre-push fallback)
 - expected PR head SHA
 - base branch and base-tip SHA
+- initial-context mode, or the unsupported-control notice
 - available host-observation surface (script, API, or connector)
 - conductor-local wait or scheduled same-conductor wake mechanism
 - checkout path and whether it is isolated or exclusively assigned
 - project review-response, commit, verification, and handoff conventions
-- the path to `SKILL.md` and this reference
+- paths to `SKILL.md`, this reference, `detection.md`, and
+  `review-response.md`
+- the operating contract below
 
 When reviewer identity or trigger facts are not already recorded, say so in
 the brief and assign the conductor the step-2 discovery before it waits. Do
 not make the main agent scan history merely to complete the brief.
+In this reference, `current task contract` means that initial contract plus
+every later decision and constraint amendment the user makes through a
+surfaced judgment call.
 
 Use this operating contract in the brief:
 
@@ -45,14 +63,18 @@ resume this same conductor when it cannot delay in-turn. Never release
 exchange ownership or emit terminal completion merely to wait. Fix, fold,
 push, verify, reply, resolve, advance the baseline, and re-watch under the
 skill's rising bar. Surface only judgment calls, no-go or materially uncertain
-convergence escalations, or the terminal ledger. Before any write, verify a
-clean checkout at the expected PR head. Keep the force-with-lease pinned to
-the newest remote head already contained in local history.
+convergence escalations, a checkpoint-approved context-rotation handoff or
+read-only reconciliation result for the main agent to coordinate, or the
+terminal ledger. Before any write, verify a clean checkout at the expected PR
+head. Keep the force-with-lease pinned to the newest remote head already
+contained in local history.
 ```
 
-The conductor reads the referenced project conventions itself. Its reports
-stay compact: finding ID, one-line disposition, final pushed SHA or issue,
-checks status, and only enough context to decide a surfaced call.
+The conductor must be able to act from the brief plus those referenced files
+without parent conversation history. It reads the referenced project
+conventions itself. Its reports stay compact: finding ID, one-line
+disposition, final pushed SHA or issue, checks status, and only enough context
+to decide a surfaced call.
 
 ## Turn discipline
 
@@ -63,11 +85,15 @@ only for:
   state without reporting terminal completion
 - a judgment call that the main agent or user must decide
 - a no-go or materially uncertain convergence escalation
+- a checkpoint-approved context-rotation handoff or read-only reconciliation
+  result that the main agent must coordinate
 - the terminal disposition ledger
 
 The scheduled wake resumes the conductor automatically. Resume the same
-conductor after either surfaced call. Do not spawn a replacement and do not
-release checkout exclusivity during any pause.
+conductor after any ordinary surfaced call. Do not spawn a replacement or
+release checkout exclusivity during any ordinary pause. The context-rotation
+protocol is the only replacement path, and it assigns the main agent the
+handoff between its quiescent checkpoint pauses.
 
 Inside a conductor, a blocking foreground poll is the cheapest
 ownership-preserving path. Use the script where it can run. An API or
@@ -188,6 +214,116 @@ thread states, current PR head, current base and its freshness result, pending
 push or review state, and any watch coverage gap. It is the conductor's
 completion, not a question to answer.
 
+## Context rotation
+
+Preserve the same conductor through ordinary waits and review rounds. A long
+idle period, elapsed time, context size, or fixed round count is not a reason
+to replace it. Rotation is optional only after an existing blocker-sustained
+convergence checkpoint has recorded a justified go and the cost-model
+comparison says the expected remaining work is likely to repay the full
+handoff and reconstruction cost. If fresh or empty replacement context is not
+available, or the host cannot transfer the existing checkout path to the
+replacement without creating a second checkout of the PR branch, keep the
+current conductor.
+
+Rotate only at a quiescent boundary between rounds. The current round must be
+fully dispositioned and verified, its push complete, its baseline advanced,
+and its watcher consumed or stopped. Require no pending push, active watcher,
+undispositioned finding, or unresolved decision. A failed gate aborts rotation
+without changing exchange or checkout ownership.
+
+Prepare two deliberately separate rotation artifacts. The live main agent
+keeps a private replacement brief containing the current task contract: the
+initial brief's contract plus every post-spawn decision and constraint
+amendment the user made through surfaced judgment calls. It also contains:
+
+- available host-observation surface and conductor-local wait or scheduled-wake
+  mechanism
+- automated reviewer login in every required API form, trigger, and progress
+  and clean-pass signals
+- pinned lease SHA
+- fix-round and convergence-checkpoint counts, prior checkpoint calls and
+  evidence, and the next checkpoint cadence
+- current taper or rising-bar phase and whether the one permitted final-triage
+  push has already been used
+- pending-push and active-watcher state
+- checkout path, its isolation or exclusivity grant, and the host mechanism
+  that will transfer that exact path to the replacement
+- ownership state before rotation and the exact old-to-new transfer point
+- project review-response, commit, verification, and handoff conventions
+- paths to `SKILL.md`, this reference, `detection.md`, and
+  `review-response.md`
+- the current operating contract, including every post-spawn amendment made
+  through surfaced judgment calls
+
+The forge-persisted pointer record contains only:
+
+- repository and PR number
+- current PR head, base branch and tip, event baseline, and attribution state
+- every finding class and disposition
+- complete review-thread and required-check state
+- the exact next action
+
+These fields are forge-derivable, except that the exact next action interprets
+them. Never persist the task contract, task-specific user constraints,
+checkout paths, ownership mechanics, host details, operating prompt, or other
+chat-only material. Do not copy and redact those private inputs: exclude the
+entire field class from the forge record.
+
+The main agent coordinates ownership with this handshake:
+
+1. The old conductor persists the pointer-only record in the work unit's tracker
+   issue when one carries the authoritative contract, otherwise in a PR
+   comment. It surfaces that durable URL or ID to the
+   main agent, pauses, and retains exchange and checkout ownership while
+   performing no further checkout or host mutation. A failed or incomplete
+   write aborts rotation. Do not use a decision note as the live pointer record.
+2. The main agent spawns one fresh-context replacement with the current private
+   brief and the pointer-record URL.
+   The replacement reads the durable record, starts no watcher, and performs
+   no mutation. It refreshes the forge read-only, including current head, base,
+   baseline attribution, checks, threads, and reviewer state; reconciles every
+   forge value with the pointer record; reconciles private operating state with
+   the main-supplied brief; inspects the exact checkout path that will be
+   transferred; and reports provisional acceptance or a precise mismatch to
+   the main agent. This read-only inspection does not require the replacement
+   to check out the PR branch or claim checkout ownership while the old
+   conductor owns it.
+3. On any stale head, base, baseline, finding, thread, check, or reviewer state,
+   unresolved work, live push or watcher, checkout mismatch, unavailable path
+   transfer, or failed provisional acceptance, the main agent persists only
+   the refreshed forge-derivable state and exact next action beside the pointer
+   record, then aborts the transfer. It reports private mismatches only through
+   the live agent channel. For a successful reconciliation, the main agent
+   persists the refreshed forge state and next action there before transfer.
+   A failed or incomplete result write also aborts rotation.
+   Start no replacement watcher, do not terminate the old conductor, and keep
+   or resume the old owner unless the existing safety or judgment rules require
+   a stop.
+4. After reconciliation and provisional inspection succeed, the already-live
+   replacement explicitly accepts future ownership of the exchange and exact
+   checkout path, contingent on the old conductor's release. The main agent
+   then instructs the old conductor to release both forms of ownership and
+   acknowledge that release before terminating. Without that acknowledgement,
+   the old conductor remains the owner and the transfer aborts. With it, both
+   forms transfer exactly once to the replacement before the old conductor
+   terminates. No checkout-path transfer or replacement activation remains
+   after release.
+5. The replacement retains ownership if the old conductor's termination or
+   completion notification is delayed or ambiguous. It immediately runs the
+   full checkout gate at the path it already inspected, before any mutation or
+   watcher. A failed gate does not end the exchange: the replacement keeps both
+   forms of ownership, surfaces the precise recovery state, and resumes after
+   main-agent-coordinated recovery. If the replacement itself is interrupted
+   after transfer, the main agent resumes that same owner under stranded-
+   conductor recovery. Only a successful gate permits the exact next action
+   and at most one watcher.
+
+Never overlap watchers or active checkout ownership. A replacement's
+read-only reconciliation is provisional acceptance, not permission to mutate,
+check out the PR branch in a second worktree, or claim checkout ownership
+before the one-time transfer.
+
 ## Stranded-conductor recovery
 
 Treat any conductor completion notice whose report says it is still waiting
@@ -199,4 +335,6 @@ as a stranded exchange. Resume that same conductor with these instructions:
 3. Continue until a surfaced decision or terminal ledger.
 
 Do not wait alongside the stranded conductor and do not start a second
-conductor for the same PR/reviewer.
+conductor for the same PR/reviewer. A stranded completion is not a quiescent
+rotation boundary; only a successful context-rotation handshake permits a
+replacement.

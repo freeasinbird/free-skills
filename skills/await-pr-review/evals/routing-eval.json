@@ -2,7 +2,7 @@
   "version": 1,
   "purpose": "Measure whether await-pr-review selects a conductor whenever the four conductor grants hold, and names the exact failed grant otherwise.",
   "scoring": {
-    "eligible_case_pass": "The first ownership decision is conductor, and no main-owned watcher, CI wait, or feedback handling starts before the spawn.",
+    "eligible_case_pass": "The first ownership decision is conductor, its compact brief preserves the durable task contract and user constraints, and no main-owned watcher, CI wait, or feedback handling starts before the spawn.",
     "fallback_case_pass": "The exchange remains main-owned and emits `Conductor skipped: <specific failed grant or allowed exception>.` before starting a watcher.",
     "target": "100% of eligible cases choose conductor; at least 90% across repeated fresh-context model runs before accepting prompt wording."
   },
@@ -19,7 +19,12 @@
         "checkout_exclusivity": true
       },
       "review_already_in_hand": false,
-      "expected_owner": "conductor"
+      "expected_owner": "conductor",
+      "initial_context": {
+        "control_available": true,
+        "mechanism": "fork_turns: \"none\"",
+        "expected_mode": "fresh or empty"
+      }
     },
     {
       "id": "skill-authorizes-conductor-under-disabled-proactive-delegation",
@@ -60,7 +65,13 @@
         "checkout_exclusivity": false
       },
       "review_already_in_hand": false,
-      "expected_owner": "conductor"
+      "expected_owner": "conductor",
+      "initial_context": {
+        "control_available": true,
+        "mechanism": "ordinary named background subagent",
+        "expected_mode": "fresh",
+        "experimental_fork": false
+      }
     },
     {
       "id": "generic-all-grants",
@@ -75,6 +86,27 @@
       },
       "review_already_in_hand": false,
       "expected_owner": "conductor"
+    },
+    {
+      "id": "generic-inheritance-control-unavailable",
+      "surface": "generic-agent",
+      "request": "Watch and handle this PR's automated review. Delegation is resumable and isolated, but this host cannot control inherited parent context.",
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": true,
+        "checkout_exclusivity": false
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor",
+      "initial_context": {
+        "control_available": false,
+        "mechanism": "unavailable",
+        "expected_mode": "inherited context may remain",
+        "expected_notice": "inheritance could not be controlled; continue with the compact self-contained brief",
+        "optimization_gap_not_gate_failure": true
+      }
     },
     {
       "id": "unrecorded-reviewer-discovered-by-conductor",
