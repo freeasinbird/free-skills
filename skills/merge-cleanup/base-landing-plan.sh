@@ -25,6 +25,7 @@
 #
 # Usage:
 #   base-landing-plan.sh <base-remote> <base-branch>
+#   base-landing-plan.sh --format nul <base-remote> <base-branch>
 #   base-landing-plan.sh --help
 #
 # The arguments are in git's own order, and neither is treated as an option: an
@@ -32,7 +33,9 @@
 # `-h`, is help only as the sole argument, so with both positionals present
 # `-h` is a branch name.
 #
-# Output is one line. Exit codes:
+# Default output is one line. `--format nul` emits the successful plan as
+# NUL-delimited fields for an executable caller; stop and failure output stays
+# human-readable. Exit codes:
 #   0   OK landing {...}       the plan: fetch, verb, create, tracking
 #   2   STOP <guard> {...}     do not proceed; the line is what to surface
 #   4   LOOKUP_FAILED <what>   a read failed, so no plan was established
@@ -61,6 +64,11 @@ if [ $# -le 1 ]; then
   case "${1---help}" in
     --help | -h) sed -n '2,/^set -u$/p' "$0" | sed '$d'; exit 0 ;;
   esac
+fi
+FORMAT=json
+if [ $# -eq 4 ] && [ "$1" = --format ]; then
+  FORMAT="$2"; shift 2
+  case "$FORMAT" in json|nul) ;; *) usage "--format must be json or nul" ;; esac
 fi
 [ $# -eq 2 ] || usage
 REMOTE="$1"
@@ -552,15 +560,24 @@ fi
 
 # Only when creating, and then enough to make the start-point exist: a clone
 # that verified the merge through the forge need never have fetched the base.
-# The switch path takes two refspecs because it cannot create the branch, so the
-# name arrives in refs/heads directly and the tracking copy feeds step 2.
+# Do not write a branch or remote-tracking ref before checkout activates
+# onbranch config. The caller creates either branch from FETCH_HEAD with an
+# absence check, then guards the effective remote namespace and writes its
+# tracking ref during resync.
 FETCH=""
 if [ "$CREATE" = true ]; then
-  if [ "$VERB" = switch ]; then
-    FETCH="\"$(json_escape "refs/heads/$BASE:refs/heads/$BASE")\","
-  fi
-  FETCH="$FETCH\"$(json_escape "refs/heads/$BASE:refs/remotes/$REMOTE/$BASE")\""
+  FETCH="\"$(json_escape "refs/heads/$BASE")\""
 fi
 
-printf 'OK landing {"remote":"%s","base":"%s","verb":"%s","create":%s,"fetch":[%s],"tracking":"%s","tag_shadow":%s}\n' \
-  "$(json_escape "$REMOTE")" "$(json_escape "$BASE")" "$VERB" "$CREATE" "$FETCH" "$TRACKING" "$TAG_SHADOW"
+if [ "$FORMAT" = nul ]; then
+  fetch_count=0
+  [ "$CREATE" != true ] || fetch_count=1
+  printf 'OK landing\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0' \
+    "$REMOTE" "$BASE" "$VERB" "$CREATE" "$TRACKING" "$TAG_SHADOW" "$fetch_count"
+  if [ "$CREATE" = true ]; then
+    printf '%s\0' "refs/heads/$BASE"
+  fi
+else
+  printf 'OK landing {"remote":"%s","base":"%s","verb":"%s","create":%s,"fetch":[%s],"tracking":"%s","tag_shadow":%s}\n' \
+    "$(json_escape "$REMOTE")" "$(json_escape "$BASE")" "$VERB" "$CREATE" "$FETCH" "$TRACKING" "$TAG_SHADOW"
+fi
