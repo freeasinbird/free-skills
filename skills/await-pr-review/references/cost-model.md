@@ -98,9 +98,9 @@ context and `C_cond` for the conductor's, an N-round exchange with J
 surfaced interruptions, counting everything the conductor surfaces short
 of the terminal report (judgment calls and no-go or materially uncertain
 convergence escalations alike), `J_user` of them routed on to the user, costs
-roughly `N × C_main` in
-orchestration wakes under main ownership, against
-`(2 + J + J_user) × C_main` under a conductor: the spawn, the terminal
+roughly `(N + J_user) × C_main` under main ownership: one wake per round plus
+a second main-agent turn when each user's answer resumes the loop. Conductor
+ownership costs `(2 + J + J_user) × C_main`: the spawn, the terminal
 report, one wake per surfaced interruption, and, for a user-routed one, a
 second main-agent turn when the user's answer arrives before the
 conductor can resume. Beyond those wakes, every watch and fix tool call
@@ -110,8 +110,9 @@ Measured sessions (a 2026-08 local usage audit; the 2026-08-02 devlog note
 records it) put `C_main` at 300–500k tokens in real PR sessions against a
 20–60k conductor brief, a 5x to 25x per-call ratio paid at cached-read
 prices on every call. On orchestration wakes alone the conductor wins
-when `2 + J + J_user < N`; the per-call savings close the gap well before
-that,
+when `2 + J + J_user < N + J_user`, which cancels to `2 + J < N` because
+the user-answer turns occur under either owner. The per-call savings close
+the gap well before that,
 since a single fix round of a few dozen tool calls replays roughly
 `20 × C_main` when run in-main against `20 × C_cond` under a conductor,
 and at the measured 5x to 25x ratio that one round's difference already
@@ -120,8 +121,11 @@ exceeds the conductor's two fixed wakes (`2 × C_main`).
 The comparison
 stays governed by the formula, not a blanket rule: rounds carrying real
 fix work favor the conductor, while an exchange whose interruptions
-rival its rounds (`J + J_user` large against N, e.g. two one-call
-rounds each pausing for the user) favors the already-awake main agent.
+rival its rounds (`J` large against N, e.g. two one-call rounds each
+requiring a separate main-agent judgment) favors the already-awake main
+agent. A user-routed pause contributes to both `J` and `J_user`: surfacing
+the interruption remains conductor-specific, but the answer turn is shared
+and does not move the wake-only break-even.
 A one-round exchange favors the main agent only when that round is
 itself trivial (a couple of calls); by the ratio above, a single
 substantive fix round already repays the conductor's fixed wakes.
