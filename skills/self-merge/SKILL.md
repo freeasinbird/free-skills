@@ -120,14 +120,16 @@ none is needed on an ordinary same-repository PR:
    message, and waits until the forge reports the PR merged. A zero exit
    from a merge command proves enqueueing, not merging, so the wait is
    part of the phase.
-4. **cleanup**: checks whether auto-delete ran rather than assuming it,
-   and stops before either branch is mutated when a separate linked head
-   worktree remains: make that checkout idle, remove it as a deliberate
-   step, then rerun cleanup. Otherwise it deletes the surviving remote
-   branch behind OID, consumer, and lease guards (a fork's branch is never
-   deleted, only reported), lands on and fast-forwards the base, prunes,
-   and reports the local branch as `kept_manual`. Delete that local branch
-   as a separate deliberate step after verifying no worktree uses it.
+4. **cleanup**: stops before either branch is mutated when a separate linked
+   head worktree remains: make that checkout idle, remove it as a deliberate
+   step, then rerun cleanup. Otherwise it lands on the base, re-resolves and
+   validates the base remote under that checkout's effective configuration,
+   and fast-forwards before touching the remote feature branch. It then checks
+   whether auto-delete ran rather than assuming it, revalidates the head
+   remote, and deletes the surviving branch behind OID, consumer, and lease
+   guards (a fork's branch is never deleted, only reported), prunes, and
+   reports the local branch as `kept_manual`. Delete that local branch as a
+   separate deliberate step after verifying no worktree uses it.
 
 The last stdout line is the machine-readable result; branch on it and on
 the exit code rather than parsing prose:

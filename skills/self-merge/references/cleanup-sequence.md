@@ -172,7 +172,53 @@ sequence stops:
   switch makes that same worktree cease to hold the head. No head match also
   proceeds normally.
 
-## 4. Delete the remote head branch
+## 4. Land on the base branch
+
+- After the pre-mutation symbolic-ref rejection, test for a direct local base
+  branch with `git show-ref --verify --quiet refs/heads/<base>`;
+  `rev-parse --verify` is satisfied by a same-named tag, and a bare checkout
+  then detaches `HEAD` at the tag while the real base stays stale.
+- Existing local branch: `git checkout --no-overwrite-ignore <base>`.
+  Missing: fetch `refs/heads/<base>` into the remote-tracking ref first
+  (the start-point can be absent in a fresh, single-branch, or sparse
+  clone), then `git checkout --no-overwrite-ignore --no-track -b` from it.
+  Suppressing automatic tracking prevents the pre-landing remote from
+  surviving a branch-conditioned remote change. Both switches refuse to
+  overwrite an ignored file the base tracks; that refusal is a stop, and a
+  plain checkout clobbers the file silently.
+- Confirm `git symbolic-ref -q HEAD` reports `refs/heads/<base>` after the
+  switch, whichever path ran.
+- Resolve the base remote again after checkout. An `includeIf "onbranch:…"`
+  can remove the old mapping or reveal a different URL. An auto-selected or
+  explicit hosted remote must still match the repository API's authoritative
+  clone endpoints. A hostless path is an explicit trust decision: expand Git's
+  leading `~/` and `~user/` path syntax, resolve any other relative path from
+  the worktree root, and follow every symlink before and after checkout. Then
+  require the post-checkout destination to remain the canonical destination
+  trusted before checkout. A hosted replacement can instead be validated
+  against the forge; a different hostless destination is not a new implicit
+  trust decision.
+- When cleanup created the local base, configure both tracking keys after
+  that validation: `branch.<base>.remote` names the post-landing remote and
+  `branch.<base>.merge` names `refs/heads/<base>`. A later pull must not use
+  the pre-landing remote or leave the cleanup-created branch untracked.
+
+## 5. Resync
+
+Fetch the base explicitly, then
+`git merge --ff-only --no-overwrite-ignore refs/remotes/<remote>/<base>`.
+Not `git pull`: its merge step updates ignored files by default, it
+rejects `--no-overwrite-ignore`, and a bare pull follows the configured
+upstream, which in a fork clone can be the fork's stale copy. A refused
+fast-forward (divergence, or an ignored file the base started tracking) is
+a stop; never resolve it with reset or force.
+
+## 6. Delete the remote head branch
+
+Only reach this step after the base resync succeeds. Re-resolve the head remote
+under the base branch's effective configuration before any existence read or
+delete; no remote name or URL read before checkout is evidence about the
+mapping now in force.
 
 - The remote consulted and the remote written must be the same
   repository: git prefers configured `pushurl` entries for pushes while
@@ -221,7 +267,11 @@ sequence stops:
   including the complete hosted path; matching only host plus
   `owner/name` can accept a deployment prefix or SSH user that names
   another repository. Only a true hostless path is an explicit
-  local-remote trust decision. A hosted mismatch, non-local file
+  local-remote trust decision, and any hostless mapping still in force must
+  resolve to the same canonical destination trusted before checkout. Resolve
+  relative paths from the worktree root and follow symlinks on both
+  sides of the boundary. A hosted mismatch, changed local destination,
+  non-local file
   authority, or malformed hosted form is a stop.
 - Check whether auto-delete already ran:
   `git ls-remote --exit-code --heads -- <remote> refs/heads/<branch>`.
@@ -251,31 +301,6 @@ sequence stops:
   `git push --delete --force-with-lease='refs/heads/<branch>:<verified-oid>' -- <remote> refs/heads/<branch>`,
   so a push landing between check and delete fails the delete instead of
   losing the new work.
-
-## 5. Land on the base branch
-
-- After the pre-mutation symbolic-ref rejection, test for a direct local base
-  branch with `git show-ref --verify --quiet refs/heads/<base>`;
-  `rev-parse --verify` is satisfied by a same-named tag, and a bare checkout
-  then detaches `HEAD` at the tag while the real base stays stale.
-- Existing local branch: `git checkout --no-overwrite-ignore <base>`.
-  Missing: fetch `refs/heads/<base>` into the remote-tracking ref first
-  (the start-point can be absent in a fresh, single-branch, or sparse
-  clone), then `git checkout --no-overwrite-ignore -b` from it. Both
-  switches refuse to overwrite an ignored file the base tracks; that
-  refusal is a stop, and a plain checkout clobbers the file silently.
-- Confirm `git symbolic-ref -q HEAD` reports `refs/heads/<base>` after the
-  switch, whichever path ran.
-
-## 6. Resync
-
-Fetch the base explicitly, then
-`git merge --ff-only --no-overwrite-ignore refs/remotes/<remote>/<base>`.
-Not `git pull`: its merge step updates ignored files by default, it
-rejects `--no-overwrite-ignore`, and a bare pull follows the configured
-upstream, which in a fork clone can be the fork's stale copy. A refused
-fast-forward (divergence, or an ignored file the base started tracking) is
-a stop; never resolve it with reset or force.
 
 ## 7. Preserve the local branch and prune
 

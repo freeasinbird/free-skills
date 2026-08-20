@@ -36,7 +36,7 @@ deletion:
 A bare fetch or pull refspec is exposed the same way.
 
 Relied on by the identify section (fully qualify every ref a guard resolves
-or compares), step 1 (why the `ls-remote` pattern is qualified at all), step 3
+or compares), step 3 (why the `ls-remote` pattern is qualified at all), step 2
 (the qualified fetch refspec), and `base-landing-plan.sh` (which reports a
 same-named tag, and qualifies both ref reads for this reason).
 
@@ -62,7 +62,7 @@ No push refspec expresses the delete while the decoy exists, and a forge-API
 ref delete would run neither the OID comparison nor the lease, so this is a
 stop rather than a workaround.
 
-Relied on by step 1 (the whole-string ref-column comparison and the
+Relied on by step 3 (the whole-string ref-column comparison and the
 suffix-match stop).
 
 ---
@@ -77,7 +77,7 @@ no local branch and a same-named tag, `git checkout <base-branch>` detaches
 
 Relied on by the identify section (the qualification exception),
 `base-landing-plan.sh` (which reports whether a local branch exists and
-whether a tag shares the name), and step 2 (the detached-`HEAD` confirmation
+whether a tag shares the name), and step 1 (the detached-`HEAD` confirmation
 that reads it).
 
 ---
@@ -148,9 +148,9 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
   with "a branch named 'Main' already exists" (exit 128), the switch path's
   fetch into `refs/heads/Main` failing likewise. Packed refs do not fold, so the
   first answer also depends on whether the repository has been packed. Both
-  failures land after step 1, which is why `base-landing-plan.sh` reads refs
-  exactly and then stops on a case collision before the deletion rather than
-  planning a create git will refuse.
+  failures abort the landing, which is why `base-landing-plan.sh` reads refs
+  exactly and stops on a case collision before planning a create git will
+  refuse.
 - A ref name cannot also be a directory of refs, and the create fails in both
   directions and both storages. Verified on git 2.50.1, all four exit 128: an
   existing `release` blocks `release/next` ("'refs/heads/release' exists; cannot
@@ -228,7 +228,7 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
   `git rev-parse --absolute-git-dir` sees none of them from a linked worktree,
   where that path is `.git/worktrees/<id>`. Verified: a dangling
   `refs/heads/release` was invisible from the linked worktree and the create
-  failed anyway. The relocate rule puts step 2 in exactly that layout, so the
+  failed anyway. The relocate rule puts step 1 in exactly that layout, so the
   plan resolves `--git-common-dir` instead.
 - `git rev-parse` can echo an option it does not understand while exiting 0.
   Therefore probing `--path-format=absolute` and falling back only on failure
@@ -245,8 +245,8 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
 - The plan is necessarily a snapshot. A ref writer that runs after the check
   can introduce the same namespace conflict before the later fetch or branch
   create; no read-only script can retain Git's ref lock across those separate
-  commands. Step 2 therefore requires one continuous window of exclusive
-  control over ref-mutating operations from its first plan through step 3's
+  commands. Step 1 therefore requires one continuous window of exclusive
+  control over ref-mutating operations from its first plan through step 2's
   final fetch and fast-forward, including the switch and second plan. This is
   an operating precondition, not a guarantee the script can manufacture.
 - The aliasing is the filesystem's, not just case: APFS resolves
@@ -267,15 +267,17 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
 - Configuration is not fixed across a checkout, and this reaches further than
   the tracking keys: an `includeIf "onbranch:<name>"` section can supply any
   key, `remote.<name>.url` included. Verified on git 2.50.1 with the URL moved
-  into such a section: the pre-step-1 plan validated it while `feature` was
-  checked out and the post-landing plan reported `LOOKUP_FAILED remote`, by
-  which point step 1 had already deleted the branch. Nothing the preflight can
-  read predicts this, because git evaluates `onbranch` against whichever branch
-  is checked out at the time, so **every config-derived field in the plan is an
-  answer about the branch that was checked out when it ran**. The tracking write
-  is taken after the landing for exactly this reason; the remote check cannot be
-  moved the same way, since step 1 needs it and step 1 precedes the landing.
-  What remains is a property of the sequence, not of the check.
+  into such a section: the pre-landing plan validated it while `feature` was
+  checked out and the post-landing plan reported `LOOKUP_FAILED remote`.
+  A different valid fallback URL instead made the resync fetch from another
+  repository. Nothing a preflight reads predicts either value, because git
+  evaluates `onbranch` against whichever branch is checked out at the time, so
+  **every config-derived field in the plan is an answer about the branch that
+  was checked out when it ran**. The sequence therefore lands first,
+  re-resolves and validates the base remote before resyncing, completes the
+  resync before deleting the remote head, and re-resolves the head role again
+  at deletion time. A missing or changed mapping now leaves the remote head
+  intact.
 - Tracking configuration is not fixed across a checkout, which is why the
   decision to write it is taken after the landing rather than from the plan
   that preceded it. An `includeIf "onbranch:<name>"` section applies only while
@@ -292,8 +294,8 @@ Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
   success on both of those states, including the one an interruption between
   the two writes leaves behind.
 - `git switch` is the one command the sequence needs that a still-supported git
-  may lack (it arrived in 2.23), and step 1 deletes the remote branch before
-  step 2 would reach it. `git switch -h` distinguishes the two (usage and exit
+  may lack (it arrived in 2.23), so step 1's plan probes for it before naming a
+  switch landing. `git switch -h` distinguishes the two (usage and exit
   129 where the command exists; "is not a git command" and exit 1 where it does
   not, checked against a deliberately bogus `git switchx -h`), but invoking the
   command is the wrong way to ask, and `base-landing-plan.sh` does not: where
@@ -354,9 +356,8 @@ its place only where the first cannot express the name.
 Relied on by the identify section (the pass-`--` rule and the checkout
 exception), `base-landing-plan.sh` (every decision above: the verb the name
 shape picks, the two-refspec fetch that creates it, the `git switch` probe, and
-the two-key upstream check), step 2 (running the plan the script prints), the
-worktree preflight (the terminated removal), and the terminators in steps 1, 3,
-4, and 5.
+the two-key upstream check), step 1 (running the plan the script prints), the
+worktree preflight (the terminated removal), and the terminators in steps 1–5.
 
 ---
 
@@ -479,7 +480,7 @@ repo, against an ignored `.env` that the base branch still tracks:
   `git merge --ff-only --no-overwrite-ignore` aborts and preserves it;
   `git pull` itself rejects `--no-overwrite-ignore`.
 
-Relied on by step 2 (every landing command it may run) and step 3 (the
+Relied on by step 1 (every landing command it may run) and step 2 (the
 resync). `base-landing-plan.sh` deliberately does not read ignored files: the
 flag makes git itself abort, so predicting the overwrite would add a stop where
 git already has one.
@@ -499,7 +500,7 @@ with `status.showUntrackedFiles=no` set in the repository config:
   untracked-file refusal described above having stopped firing too; under the
   default configuration the same removal refused with exit 128.
 
-Relied on by `base-landing-plan.sh` (the dirty-tree guard step 2 reads) and by
+Relied on by `base-landing-plan.sh` (the dirty-tree guard step 1 reads) and by
 `worktree-inventory.sh`, which pass `-uall` explicitly for this reason.
 
 ---
