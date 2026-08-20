@@ -817,6 +817,8 @@ The build succeeds, tests pass, and lint and formatting are clean.
 - Landing validation matrix green when merge-cleanup's
   `base-landing-plan.sh` changed
   (`./scripts/test-merge-cleanup-landing.sh`)
+- Orchestration validation matrix green when merge-cleanup's
+  `merge-cleanup.sh` changed (`./scripts/test-merge-cleanup.sh`)
 
 <!-- /agents-md:project:done-checks -->
 

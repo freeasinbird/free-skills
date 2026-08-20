@@ -505,6 +505,27 @@ Relied on by `base-landing-plan.sh` (the dirty-tree guard step 1 reads) and by
 
 ---
 
+## §prune-refspec-scope
+
+`git fetch --prune <remote>` inherits that remote's configured fetch refspecs.
+Those destinations are not confined to remote-tracking refs. Verified in a
+scratch repository with a configured refspec mapping `refs/cleanup/*` into
+`refs/heads/*`: pruning a remote with no matching source refs deleted every
+local branch, including the checked-out branch, and returned exit 0.
+
+An explicit heads-to-remote-tracking wildcard confines the destination, but
+the remote name still defines a namespace. Remotes named `foo` and `foo/bar`
+overlap because a wildcard matches slashes. On a case-folding ref filesystem,
+`origin` and `Origin` alias too. Pruning one can update or delete tracking refs
+owned by the other at exit 0.
+
+Relied on by `merge-cleanup.sh`, which prunes a canonical validated URL with an
+explicit heads-to-remote-tracking refspec, disables prune-tags for that fetch,
+and stops when configured remote names have component-prefix or filesystem
+alias overlap.
+
+---
+
 ## §branch-d-upstream
 
 `git branch -d` checks the branch against its _upstream_ when one is set, and
