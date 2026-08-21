@@ -10,8 +10,8 @@ compose under `set -e`, `&&` chains, and agents that key off status.
 
 Extract the shared block from every family member and diff pairwise; expect
 identical output (excluding any intentionally per-tool marker line). An
-empty extraction is itself a failure: it means the file has no shared core,
-not that it matches.
+empty extraction is itself a failure: the file has no shared core, so it
+cannot match.
 
 ```sh
 ok=1
@@ -66,9 +66,9 @@ rewraps a payload has edited the prompt.
 ## Read-as-the-agent pass
 
 One full read of each payload in its final form, checking that no rule
-conflicts with another and no rule addresses the wrong reader. This is
-judgment, not grep; it is still required, and it is the pass that catches
-what the mechanical checks structurally cannot.
+conflicts with another and no rule addresses the wrong reader. Judgment,
+not grep, and still required: this pass catches what the mechanical checks
+structurally cannot.
 
 ## Report discipline
 
