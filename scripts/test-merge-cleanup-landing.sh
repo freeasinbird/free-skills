@@ -137,6 +137,17 @@ run_in() { # run_in <dir> <args...>: captures OUT and RC
   RC=$?
 }
 run() { run_in "$REPO" "$@"; }
+run_nul() { # run_nul <args...>: captures NUL_FIELDS and RC
+  local file field
+  file="$SCEN/nul-plan"
+  NUL_FIELDS=()
+  (cd "$REPO" && "$SUT" --format nul "$@" >"$file" 2>&1)
+  RC=$?
+  while IFS= read -r -d '' field; do
+    NUL_FIELDS[${#NUL_FIELDS[@]}]="$field"
+  done <"$file"
+  OUT=$(LC_ALL=C tr '\0' '|' <"$file")
+}
 run_with_fifo_breaker() { # run_with_fifo_breaker <fifo> <marker> <args...>
   local fifo="$1" marker="$2" breaker
   shift 2
@@ -208,6 +219,41 @@ want_out '"create":false'
 want_out '"fetch":[]'
 want_out '"tracking":"ok"'
 want_out '"tag_shadow":false'
+
+# The executable orchestrator consumes this contract. Assert every field and
+# its order directly so a JSON-only planner cannot pass while breaking cleanup.
+scenario "the NUL plan exposes the complete existing-branch contract"
+track "$REPO" main origin
+run_nul origin main
+want_rc 0
+[ "${#NUL_FIELDS[@]}" -eq 8 ] && ok || bad "field count is ${#NUL_FIELDS[@]}, wanted 8"
+expected=("OK landing" origin main checkout false ok false 0)
+for i in 0 1 2 3 4 5 6 7; do
+  [ "${NUL_FIELDS[$i]:-}" = "${expected[$i]}" ] && ok \
+    || bad "field $i is '${NUL_FIELDS[$i]:-}', wanted '${expected[$i]}'"
+done
+
+scenario "the NUL plan includes the ordinary create refspec"
+run_nul origin feat
+want_rc 0
+[ "${#NUL_FIELDS[@]}" -eq 9 ] && ok || bad "field count is ${#NUL_FIELDS[@]}, wanted 9"
+[ "${NUL_FIELDS[7]:-}" = 1 ] && ok || bad "fetch count is '${NUL_FIELDS[7]:-}'"
+[ "${NUL_FIELDS[8]:-}" = 'refs/heads/feat' ] && ok \
+  || bad "unexpected create refspec: ${NUL_FIELDS[8]:-}"
+
+scenario "a remote literally named --format keeps the two-position contract"
+G "$REPO" config remote.--format.url "$ORIGIN"
+run --format main
+want_rc 0
+want_out 'OK landing'
+want_out '"remote":"--format"'
+
+scenario "a NUL-format stop stays human-readable"
+printf 'changed\n' >"$REPO/a.txt"
+run_nul origin main
+want_rc 2
+[ "${#NUL_FIELDS[@]}" -eq 0 ] && ok || bad "stop output contained NUL fields"
+want_out 'STOP dirty'
 
 # discriminating: read-only is what lets this run before the destructive step.
 # All three landing shapes are exercised, because the create paths are the ones
@@ -307,24 +353,26 @@ if [ -e "$SCEN/alias-ran" ]; then bad "the probe executed the alias"; else ok; f
 
 # --- r2: the create path fetches enough to make the start-point exist --------
 
-# discriminating: a one-refspec copy omits the local ref, and `switch -c` will
-# not create the name, so the landing would have nothing to attach to.
-scenario "a hyphen-leading base with no local branch fetches into both refs"
+# discriminating: an option-shaped branch also stays in FETCH_HEAD so the
+# executable caller can create its local ref with an absence lease.
+scenario "a hyphen-leading base also fetches only to FETCH_HEAD"
 G "$REPO" update-ref -d refs/heads/-x
 run origin -x
 want_rc 0
 want_out '"create":true'
-want_out '"refs/heads/-x:refs/heads/-x"'
-want_out '"refs/heads/-x:refs/remotes/origin/-x"'
+want_out '"refs/heads/-x"'
+want_no_out '"refs/heads/-x:refs/heads/-x"'
+want_no_out '"refs/heads/-x:refs/remotes/origin/-x"'
 
-# discriminating: a copy that always emits both refspecs writes a local branch
-# on the ordinary path, where `checkout -b` is what should create it.
-scenario "an ordinary base with no local branch fetches only the tracking ref"
+# discriminating: the ordinary path leaves the source in FETCH_HEAD so checkout
+# creates the local branch without touching a tracking namespace pre-landing.
+scenario "an ordinary base with no local branch fetches only to FETCH_HEAD"
 run origin feat
 want_rc 0
 want_out '"create":true'
-want_out '"refs/heads/feat:refs/remotes/origin/feat"'
+want_out '"refs/heads/feat"'
 want_no_out '"refs/heads/feat:refs/heads/feat"'
+want_no_out '"refs/heads/feat:refs/remotes/origin/feat"'
 
 # The oracle is what the create LEAVES BEHIND, not its exit status, because on a
 # folding filesystem the packed-ref case exits 0 and is the more dangerous of
