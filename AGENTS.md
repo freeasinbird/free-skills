@@ -308,8 +308,11 @@ description) that an agent loads to execute the skill. Additional files
   never overwrite it with the canonical template. The two-place rule also
   covers this repo's **scaffolded files**: `devlog/README.md` (which the
   managed devlog block points to as the authoritative protocol),
-  `CONTRIBUTING.md`, the PR template, and `CLAUDE.md` are live copies of the
-  templates in `skills/agent-setup/references/scaffolding.md`, so an edit to a
+  `docs/agent-workflow.md` (the step-local reference the managed blocks
+  point at by `§slug`; `./scripts/check-managed-sync.sh` diffs it against
+  the template), `CONTRIBUTING.md`, the PR template, and `CLAUDE.md` are
+  live copies of the templates in
+  `skills/agent-setup/references/scaffolding.md`, so an edit to a
   scaffold template must update the matching live file here too (`diff` them),
   or the live copy silently contradicts the freshly-synced convention.
   Sections outside the managed
@@ -618,7 +621,8 @@ The build succeeds, tests pass, and lint and formatting are clean.
   `references/<file>.md` §slug pointer resolving both ways
 - Skill prompts reviewed for platform-agnostic language (no
   Claude-Code-only or Codex-only assumptions without explicit gates)
-- Managed blocks in sync with the canonical source
+- Managed blocks in sync with the canonical source and
+  `docs/agent-workflow.md` in sync with its scaffold template
   (`./scripts/check-managed-sync.sh`)
 - Comparator regression suite green when the comparator or sync check
   changed (`./scripts/test-compare-managed-blocks.sh`)

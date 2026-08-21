@@ -4,8 +4,9 @@ description: >-
   Make a project agent-ready: create or update AGENTS.md with managed canonical
   workflow sections under one of three profiles (Standard, Decision-log,
   High-assurance), scaffold the CLAUDE.md pointer, CONTRIBUTING.md, PR
-  template, and (under the note-keeping profiles) the decision-note devlog,
-  and audit standard files and repo settings. Use when the user asks to "set
+  template, the docs/agent-workflow.md reference the managed sections point
+  at, and (under the note-keeping profiles) the decision-note devlog, and
+  audit standard files and repo settings. Use when the user asks to "set
   up this project for agents", "initialize AGENTS.md", "create AGENTS.md",
   "update AGENTS.md", "sync workflow sections", "check agent setup",
   "bootstrap devlog", "make this project agent-ready", asks to add a devlog,
@@ -18,7 +19,8 @@ description: >-
 # Agent Setup
 
 Ensure a project is agent-ready: AGENTS.md with canonical workflow
-sections, CLAUDE.md pointer, PR template, and repo scaffolding, plus a
+sections, CLAUDE.md pointer, PR template, the `docs/agent-workflow.md`
+reference the sections point at, and repo scaffolding, plus a
 decision-note devlog under the note-keeping profiles (see Profiles).
 Eight canonical sections encode the owner's workflow conventions and
 are managed across projects; project-specific sections (build/test/run,
@@ -125,7 +127,12 @@ metadata file).
    "Project-specific section guidance" below. The conventional order
    interleaves them with the managed sections, so collect this content
    (or decide on placeholders) before writing.
-5. Write AGENTS.md once, following the conventional section order (see
+5. Settle `docs/agent-workflow.md` before this write: the blocks carry
+   `§slug` pointers into it, so if a copy already exists and cannot be
+   created or refreshed to the template (step 6), say so and leave the
+   dependent blocks out rather than writing pointers the project cannot
+   follow. Then write AGENTS.md once, following the conventional
+   section order (see
    below): each canonical section wrapped in its markers (the `devlog`
    block only under Decision-log or High-assurance), project-specific
    content or placeholders in place, and the `Agent-setup profile:`
@@ -153,10 +160,15 @@ metadata file).
    - `.github/pull_request_template.md`: content in `references/scaffolding.md` §pr-template
    - `CONTRIBUTING.md`: content in `references/scaffolding.md` §contributing
    - `CLAUDE.md`: content in `references/scaffolding.md` §claude-md
+   - `docs/agent-workflow.md`: content in `references/scaffolding.md`
+     §agent-workflow (the step-local procedure the managed blocks point
+     at by `§slug`; without it those pointers dangle)
 
    For any that already exist, don't recreate them: compare against the
    template and, on drift, show the diff and offer to refresh (the same
-   rule as update-mode step 9); never overwrite silently.
+   rule as update-mode step 9, including its `docs/agent-workflow.md`
+   exception, where the pointers in the blocks make a stale copy drift
+   to fix rather than an offer); never overwrite silently.
 
 7. Audit standard project files; see "Standard project files" below.
    Report which are present, which are missing, and suggest creating any
@@ -222,7 +234,10 @@ metadata file).
      exclude the nested `project:done-checks` block from both sides
      (matching its exact marker lines only, per step 3) and compare only
      the text around it; never modify the nested block.
-   - If different, show the diff and ask whether to update.
+   - If different, show the diff and ask whether to update. Blocks that
+     carry `docs/agent-workflow.md` `§slug` pointers depend on that file
+     existing and matching, so settle it in the same decision; see
+     step 9.
 7. Leave all unmarked (project-specific) content untouched, except for
    owner-requested creation or modification of a coordination model or
    work-unit stage record. Within either record, create or change only the
@@ -233,22 +248,45 @@ metadata file).
    altering them. See "Work contracts and coordination" and "Work-unit stages
    (optional)".
 8. If a canonical section is missing entirely, offer to insert it at its
-   conventional position; under Standard, `devlog` is not such a gap
-   (see Profiles).
+   conventional position; a section carrying `docs/agent-workflow.md`
+   `§slug` pointers settles that file in the same decision (see
+   step 9). Under Standard, `devlog` is not such a gap (see Profiles).
 9. Check scaffolding files (CLAUDE.md, CONTRIBUTING.md, PR template,
-   and, under a note-keeping profile, devlog/README.md): offer to
-   create any that are missing; for any that exist, compare against the
-   templates in `references/scaffolding.md` and, on drift, show the
-   diff and offer to refresh. These files carry no markers and may hold
-   local customizations, so never overwrite silently; let the user
-   decide per file. (Watch `devlog/README.md` especially: the managed
-   `devlog` block points to it as the protocol, and a stale copy
-   contradicts a freshly-synced block.)
+   docs/agent-workflow.md, and, under a note-keeping profile,
+   devlog/README.md): offer to create any that are missing; for any
+   that exist, compare against the templates in
+   `references/scaffolding.md` and, on drift, show the diff and offer
+   to refresh. These files carry no markers and may hold local
+   customizations, so never overwrite silently; let the user decide
+   per file. (Watch `devlog/README.md` especially: the managed `devlog`
+   block points to it as the protocol, and a stale copy contradicts a
+   freshly-synced block.)
+
+   `docs/agent-workflow.md` is the exception to "offer": the managed
+   blocks read it by path and `§slug` at the steps that need it, so a
+   missing or stale copy beside synced blocks is a dangling-pointer
+   state in which the conventions the blocks point at are unreachable.
+   Report it as drift and create or refresh the file as part of the
+   same sync, not as an optional offer. Local additions do not exempt
+   it, because the blocks depend on its canonical text: restore or
+   refresh that text and keep the project's own sections alongside it,
+   rather than leaving the file as it stands.
+
+   Settle that file with the blocks, never after them. Any write or
+   refresh of a block carrying `§slug` pointers, wherever in this skill
+   it happens (init step 5, update steps 6 and 8, and the reviewer-record
+   refresh), shows this file's state next to that change,
+   so the project accepts or refuses both together; when the reference
+   cannot be created or refreshed, those blocks hold at their existing
+   text, or stay out of a new AGENTS.md. A project that takes the
+   blocks anyway is left pointing at procedure it does not have, so
+   record that decline in the report.
 
    An existing file that holds substantive content the template doesn't
-   is not drift to refresh: refreshing it would delete material the
-   project relies on. Report the difference and leave such a file as it
-   stands unless the user asks otherwise. `CONTRIBUTING.md` and the PR
+   is not drift to refresh (except `docs/agent-workflow.md` above):
+   refreshing it would delete material the project relies on. Report
+   the difference and leave such a file as it stands unless the user
+   asks otherwise. `CONTRIBUTING.md` and the PR
    template are meant to be customized, so a fuller local copy is the
    project's own documentation, not drift to reduce. `CLAUDE.md` is the
    one file that gets a further offer, because its template is a
@@ -637,8 +675,9 @@ detected." Don't create a CI config (too project-specific), just warn.
 | `CONTRIBUTING.md`                  | Human contribution guide                                  |
 | `devlog/README.md`                 | Decision-note protocol (Decision-log/High-assurance only) |
 | `.github/pull_request_template.md` | PR body scaffold                                          |
+| `docs/agent-workflow.md`           | Step-local procedure the managed blocks point at          |
 
-### docs/ (project-specific, no canonical content)
+### docs/ (project-specific; only `docs/agent-workflow.md` above is canonical)
 
 | File                   | Purpose                                       | When needed      |
 | ---------------------- | --------------------------------------------- | ---------------- |
@@ -788,3 +827,7 @@ flag it before any managed-block refresh and offer, in order:
 2. If relocation is declined: refresh the block and re-insert the record
    verbatim at its prior position, flagged for later relocation.
 3. If both are declined: skip refreshing that block and report the conflict.
+
+A refresh here writes the block outside update step 6's loop, so it settles
+`docs/agent-workflow.md` in the same decision when the block carries `§slug`
+pointers; see step 9's exception for that file.
