@@ -161,7 +161,8 @@ conductor context replayed by each call, and `C_new` the replacement's smaller
 context replay. Let `H_old` be the old conductor's pointer-record write cost,
 `S_main` be all main-agent coordination turns (reconstructing the private brief,
 spawning the replacement, receiving its reconciliation, persisting only the
-forge-derived result, and coordinating the ownership transfer), and `R_new`
+forge-derived result, coordinating the ownership transfer, and sending the
+replacement the activation message that tells it release landed), and `R_new`
 the replacement's pointer-record read, private-brief load, read-only forge
 refresh, reconciliation, and state reconstruction cost. Continuing costs
 roughly:
@@ -190,6 +191,22 @@ replays the main context; and the pointer-record read, forge refresh, and
 reconstruction grow the new context before remaining calls begin. Omitting any
 of those terms creates a false saving. When little work is likely to remain, or
 the estimate is materially uncertain, keep the existing conductor.
+
+On current hosts `K`, `C_old`, and `C_new` are not observable: no host exposes
+its own context size, the replacement's, or its remaining-call count. The
+comparison is therefore applied through a qualitative proxy at the checkpoint.
+Rotate only when both of these hold; either one failing keeps the existing
+conductor:
+
+- The checkpoint's evidence expects several more blocker-sustained fix rounds,
+  not a final triage push.
+- The conductor shows replay strain: re-reading or re-deriving its own earlier
+  output, host compaction or context-limit warnings, or repeated within-turn
+  state reconstruction.
+
+The proxy stays advisory. It never turns either condition into a fixed
+threshold, and both conjoined keep a single strained signal from forcing a
+handoff that little remaining work would not repay.
 
 This comparison is advisory at a checkpoint. It does not turn ten rounds,
 elapsed time, idle time, context size, or any other fixed threshold into an

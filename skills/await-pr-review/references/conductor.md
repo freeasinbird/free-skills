@@ -18,8 +18,8 @@ point.
 
 Start the conductor with the least inherited parent context the host exposes.
 For Codex collaboration use `fork_turns: "none"`; for Claude Code use an
-ordinary named background subagent, not an experimental context-inheriting
-fork. On another host, request fresh or empty context when supported. If the
+ordinary named background subagent, not a context-inheriting fork. On another
+host, request fresh or empty context when supported. If the
 host cannot control inheritance, state that limitation in the brief and
 continue when the four conductor grants still hold; context control is an
 optimization, not a fifth grant.
@@ -280,8 +280,9 @@ The main agent coordinates ownership with this handshake:
    write aborts rotation. Do not use a decision note as the live pointer record.
 2. The main agent spawns one fresh-context replacement with the current private
    brief and the pointer-record URL.
-   The replacement reads the durable record, starts no watcher, and performs
-   no mutation. It refreshes the forge read-only, including current head, base,
+   The replacement reads the durable record, starts no watcher, and makes no
+   checkout, host, or forge mutation before transfer. It refreshes the
+   forge read-only, including current head, base,
    baseline attribution, checks, threads, and reviewer state; reconciles every
    forge value with the pointer record; reconciles private operating state with
    the main-supplied brief; inspects the exact checkout path that will be
@@ -307,17 +308,36 @@ The main agent coordinates ownership with this handshake:
    acknowledge that release before terminating. Without that acknowledgement,
    the old conductor remains the owner and the transfer aborts. With it, both
    forms transfer exactly once to the replacement before the old conductor
-   terminates. No checkout-path transfer or replacement activation remains
-   after release.
-5. The replacement retains ownership if the old conductor's termination or
-   completion notification is delayed or ambiguous. It immediately runs the
-   full checkout gate at the path it already inspected, before any mutation or
-   watcher. A failed gate does not end the exchange: the replacement keeps both
+   terminates. Ownership and the checkout-path transfer are then complete and
+   not repeatable; only the activation notification to the replacement remains.
+   After that release acknowledgement the main agent sends the
+   replacement one activation message stating that release landed and that it
+   now owns the exchange and the exact checkout path. The replacement takes no
+   owning action before that message. Ownership has already transferred
+   exactly once at that release acknowledgement, so the activation message
+   is idempotent: a lost or delayed one never re-transfers ownership. The
+   replacement confirms receipt, and while that confirmation is absent,
+   whether the main agent was interrupted or the message was simply
+   dropped, the main agent re-sends the same activation message; the
+   replacement keeps waiting, taking no owning action, until one arrives,
+   and re-sending never re-transfers ownership.
+5. This step begins only after that activation message. The
+   replacement retains ownership if the old conductor's termination or
+   completion notification is delayed or ambiguous; here "delayed" refers to
+   the old conductor's termination notice, not to the activation message. It
+   immediately runs the full checkout gate at the path it already inspected,
+   before any mutation or watcher. A failed gate does not end the exchange: the replacement keeps both
    forms of ownership, surfaces the precise recovery state, and resumes after
-   main-agent-coordinated recovery. If the replacement itself is interrupted
-   after transfer, the main agent resumes that same owner under stranded-
-   conductor recovery. Only a successful gate permits the exact next action
-   and at most one watcher.
+   main-agent-coordinated recovery. If the replacement is interrupted after
+   this activation message, whether or not its checkout gate has completed, the
+   main agent resumes that same owner under stranded-conductor recovery. An
+   interruption during the
+   activation gap, after ownership transferred at the release acknowledgement
+   but before the activation message arrives, is not stranded-conductor
+   recovery: the replacement only keeps waiting and the main agent re-sends the
+   idempotent activation message per step 4, starting no watcher, running no
+   checkout gate, and doing no review work until activation arrives. Only a
+   successful gate permits the exact next action and at most one watcher.
 
 Never overlap watchers or active checkout ownership. A replacement's
 read-only reconciliation is provisional acceptance, not permission to mutate,
@@ -327,7 +347,17 @@ before the one-time transfer.
 ## Stranded-conductor recovery
 
 Treat any conductor completion notice whose report says it is still waiting
-as a stranded exchange. Resume that same conductor with these instructions:
+as a stranded exchange, whether it is an ordinary conductor or an activated
+rotation replacement, and whether or not that replacement has completed its
+checkout gate. The one exception is a rotation replacement still in the
+activation gap, interrupted after ownership transferred at the release
+acknowledgement but before the activation message arrives: it is not
+stranded, and rotation handshake step 4 governs it instead (re-wait and
+idempotent activation re-send, with no watcher and no checkout gate until
+activation arrives). A stranded replacement that has not yet completed its
+checkout gate runs that gate first, per step 5, before step 2 below resumes
+any watcher, so no watcher ever precedes the gate. Resume the stranded
+conductor with these instructions:
 
 1. Terminate or reuse the abandoned watcher so only one watch remains.
 2. Resume the foreground script or the scheduled same-conductor connector/API
