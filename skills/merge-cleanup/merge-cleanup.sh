@@ -770,7 +770,7 @@ url_forge_id() {
 # outputs.
 SSH_ALIAS_HOST="" SSH_ALIAS_USER="" SSH_ALIAS_PORT=""
 ssh_resolved_endpoint() { # ssh_resolved_endpoint <host> [user]
-  local host="$1" user="${2:-}" target key val
+  local host="$1" user="${2:-}" target key val resolved
   SSH_ALIAS_HOST="" SSH_ALIAS_USER="" SSH_ALIAS_PORT=""
   command -v ssh >/dev/null 2>&1 || return 1
   # Git honors an ssh-command override (GIT_SSH_COMMAND, then core.sshCommand,
@@ -792,13 +792,14 @@ ssh_resolved_endpoint() { # ssh_resolved_endpoint <host> [user]
     -*|*@*) return 1 ;;
     ?*) target="$user@$host" ;;
   esac
+  resolved=$(ssh -G -- "$target" 2>/dev/null) || return 1
   while read -r key val; do
     case "$key" in
       hostname) [ -n "$SSH_ALIAS_HOST" ] || SSH_ALIAS_HOST="$val" ;;
       user) [ -n "$SSH_ALIAS_USER" ] || SSH_ALIAS_USER="$val" ;;
       port) [ -n "$SSH_ALIAS_PORT" ] || SSH_ALIAS_PORT="$val" ;;
     esac
-  done < <(ssh -G -- "$target" 2>/dev/null)
+  done <<< "$resolved"
   [ -n "$SSH_ALIAS_HOST" ] || return 1
   SSH_ALIAS_HOST=$(printf '%s' "$SSH_ALIAS_HOST" | tr 'A-Z' 'a-z')
 }
@@ -814,10 +815,12 @@ ssh_resolved_endpoint() { # ssh_resolved_endpoint <host> [user]
 # resolved port is not the default (a non-default port is a genuinely different
 # endpoint than the forge's default-port ssh_url and must not be blessed), or
 # when the host is unchanged (no alias in play). The rewritten URL feeds only
-# the identity check; fetch and push keep the original alias URL so the user's
-# ssh routing and key selection still apply.
+# the identity check; fetch and push keep the original alias URL so its ssh
+# config still applies, while SSH_ALIAS_PIN_COMMAND pins the checked endpoint.
+SSH_ALIAS_URL="" SSH_ALIAS_PIN_COMMAND=""
 ssh_alias_resolve() { # ssh_alias_resolve <url>
   local raw="$1" scheme rest authority before after path="" host user="" newuser newauth
+  SSH_ALIAS_URL="" SSH_ALIAS_PIN_COMMAND=""
   case "$raw" in
     *://*)
       scheme="${raw%%://*}"
@@ -839,14 +842,22 @@ ssh_alias_resolve() { # ssh_alias_resolve <url>
   # A port or IPv6 literal in the host is not the simple alias this resolves.
   case "$host" in ''|*:*|\[*) return 1 ;; esac
   ssh_resolved_endpoint "$host" "$user" || return 1
+  # GIT_SSH_COMMAND is parsed as a shell command by Git. Only literal endpoint
+  # fields may enter it; quoting untrusted ssh -G output would be a weaker
+  # boundary because another shell parses the value later.
+  case "$SSH_ALIAS_HOST" in ''|*[!A-Za-z0-9.-]*) return 1 ;; esac
+  case "$SSH_ALIAS_USER" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  case "$SSH_ALIAS_PORT" in ''|*[!0-9]*) return 1 ;; esac
   [ "$SSH_ALIAS_PORT" = 22 ] || return 1
   [ "$SSH_ALIAS_HOST" != "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" ] || return 1
   newuser="$user"; [ -n "$newuser" ] || newuser="$SSH_ALIAS_USER"
+  case "$newuser" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   newauth="$SSH_ALIAS_HOST"; [ -z "$newuser" ] || newauth="$newuser@$SSH_ALIAS_HOST"
+  SSH_ALIAS_PIN_COMMAND="ssh -o HostName=$SSH_ALIAS_HOST -o User=$newuser -o Port=$SSH_ALIAS_PORT -o CanonicalizeHostname=no"
   case "$raw" in
-    *://*) [ -n "$path" ] && printf '%s://%s/%s' "$scheme" "$newauth" "$path" \
-             || printf '%s://%s' "$scheme" "$newauth" ;;
-    *) printf '%s:%s' "$newauth" "$after" ;;
+    *://*) [ -n "$path" ] && SSH_ALIAS_URL="$scheme://$newauth/$path" \
+             || SSH_ALIAS_URL="$scheme://$newauth" ;;
+    *) SSH_ALIAS_URL="$newauth:$after" ;;
   esac
 }
 
@@ -879,10 +890,12 @@ push_ids_match() { # push_ids_match <remote> <expected-id>
 # full-length command-scoped rewrite wins over any broader live insteadOf or
 # pushInsteadOf rule. Git applies URL rewrites once, so the pinned literal is
 # not fed back through repository config after the synthetic name resolves.
-git_pinned_url() { # git_pinned_url <literal-url> <git args with @PINNED_URL@>
-  local target="$1" count="${GIT_CONFIG_COUNT:-0}" next pin arg seen=0
-  local -a args=()
-  shift
+# A non-empty first argument also pins the SSH endpoint for this command only.
+git_pinned_url() { # git_pinned_url <ssh-command> <literal-url> <git args with @PINNED_URL@>
+  local ssh_command="$1" target="$2" count="${GIT_CONFIG_COUNT:-0}"
+  local next pin arg seen=0
+  local -a args=() env_args=()
+  shift 2
   case "$count" in ''|*[!0-9]*) lookup_failed url-pin "GIT_CONFIG_COUNT is invalid" ;; esac
   PIN_SERIAL=$((PIN_SERIAL + 1))
   pin="${target}#merge-cleanup-pin-${BASHPID:-$$}-${PIN_SERIAL}-${RANDOM}-${RANDOM}"
@@ -895,7 +908,8 @@ git_pinned_url() { # git_pinned_url <literal-url> <git args with @PINNED_URL@>
   done
   [ "$seen" -eq 1 ] || lookup_failed url-pin "pinned Git command did not contain exactly one URL placeholder"
   next=$((count + 1))
-  env "GIT_CONFIG_COUNT=$((count + 2))" \
+  [ -z "$ssh_command" ] || env_args+=("GIT_SSH_COMMAND=$ssh_command")
+  env "${env_args[@]}" "GIT_CONFIG_COUNT=$((count + 2))" \
     "GIT_CONFIG_KEY_${count}=url.$target.insteadOf" \
     "GIT_CONFIG_VALUE_${count}=$pin" \
     "GIT_CONFIG_KEY_${next}=url.$target.pushInsteadOf" \
@@ -925,7 +939,8 @@ resolve_remote() { # resolve_remote <owner/name> <clone-id> <ssh-id>
     # retry the candidate match on the concrete endpoint when the raw URL fails.
     if { [ "$fid" != "$2" ] && [ "$fid" != "$3" ]; } \
         || [ "$forge_id" != "$PR_HOST $want" ]; then
-      resolved=$(ssh_alias_resolve "$furl") && [ -n "$resolved" ] || continue
+      ssh_alias_resolve "$furl" || continue
+      resolved="$SSH_ALIAS_URL"
       fid=$(url_id "$resolved")
       forge_id=$(url_forge_id "$resolved") || continue
     fi
@@ -946,10 +961,11 @@ resolve_remote() { # resolve_remote <owner/name> <clone-id> <ssh-id>
 # instead be validated against the forge. CHECKED_REMOTE_ID exposes the
 # validated identity to that checkout boundary, and fetch/push identity is
 # still checked before a destructive head push.
-CHECKED_REMOTE_ID="" CHECKED_REMOTE_URL=""
+CHECKED_REMOTE_ID="" CHECKED_REMOTE_URL="" PINNED_SSH_COMMAND=""
 remote_repo_check() { # remote_repo_check <remote> <role> <repo> <clone-id> <ssh-id>
   local remote="$1" role="$2" expected_repo="$3" configured u have_url=false furl endpoint_id
-  local resolved_url resolved_id
+  local resolved_id
+  PINNED_SSH_COMMAND=""
   remote_urls_newline_free "$remote" \
     || stop remote-repo-mismatch "$role remote $remote has a newline-bearing URL whose forge identity cannot be compared faithfully"
   out_exact configured git config --get-all "remote.$remote.url" \
@@ -975,10 +991,15 @@ remote_repo_check() { # remote_repo_check <remote> <role> <repo> <clone-id> <ssh
   esac
   # A local SSH host alias resolves to the forge's real endpoint; compare that
   # resolved identity before refusing. CHECKED_REMOTE_URL stays the alias URL
-  # so fetch and push still route through the user's ssh config.
-  if resolved_url=$(ssh_alias_resolve "$furl") && [ -n "$resolved_url" ] \
-      && resolved_id=$(remote_url_id "$resolved_url"); then
-    case "$resolved_id" in "$4"|"$5") return 0 ;; esac
+  # so its remaining ssh config applies. Only a head alias earns the endpoint
+  # pin used by the later destructive transports; base fetches stay unpinned.
+  if ssh_alias_resolve "$furl" \
+      && resolved_id=$(remote_url_id "$SSH_ALIAS_URL"); then
+    case "$resolved_id" in "$4"|"$5")
+      [ "$role" != head ] || PINNED_SSH_COMMAND="$SSH_ALIAS_PIN_COMMAND"
+      return 0
+      ;;
+    esac
   fi
   stop remote-repo-mismatch "$role remote $remote does not match $expected_repo's authoritative clone endpoints"
 }
@@ -1075,7 +1096,7 @@ remote_namespace_check() { # remote_namespace_check <remote-name>
 safe_prune() { # safe_prune <validated-url> <remote-name>
   local url="$1" remote="$2"
   remote_namespace_check "$remote"
-  git_pinned_url "$url" -c fetch.pruneTags=false fetch --prune -- @PINNED_URL@ \
+  git_pinned_url "" "$url" -c fetch.pruneTags=false fetch --prune -- @PINNED_URL@ \
     "+refs/heads/*:refs/remotes/$remote/*" >/dev/null 2>&1
 }
 
@@ -1234,7 +1255,7 @@ phase_cleanup() {
 
   INCOMPLETE_STEP=base_resync
   remote_namespace_check "$BASE_REMOTE"
-  git_pinned_url "$base_fetch_url" fetch -- @PINNED_URL@ \
+  git_pinned_url "" "$base_fetch_url" fetch -- @PINNED_URL@ \
     "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
     || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
   git merge --ff-only --no-overwrite-ignore \
@@ -1284,7 +1305,8 @@ phase_cleanup() {
     head_target="$VALIDATED_PUSH_URL"
   fi
 
-  ls_out=$(git_pinned_url "$head_target" ls-remote --exit-code --heads -- @PINNED_URL@ \
+  ls_out=$(git_pinned_url "$PINNED_SSH_COMMAND" "$head_target" \
+    ls-remote --exit-code --heads -- @PINNED_URL@ \
     "refs/heads/$BRANCH" 2>/dev/null); ls_rc=$?
   if [ "$ls_rc" -eq 2 ]; then
     check_consumers
@@ -1309,7 +1331,7 @@ phase_cleanup() {
       [ "$remote_oid" = "$HEAD_OID" ] \
         || stop oid-mismatch "remote $BRANCH is $remote_oid, not merged head $HEAD_OID"
       check_consumers
-      git_pinned_url "$head_target" push --delete \
+      git_pinned_url "$PINNED_SSH_COMMAND" "$head_target" push --delete \
         --force-with-lease="refs/heads/$BRANCH:$HEAD_OID" \
         -- @PINNED_URL@ "refs/heads/$BRANCH" >/dev/null 2>&1 \
         || stop lease-failed "lease-protected deletion of $BRANCH from $head_label was refused"

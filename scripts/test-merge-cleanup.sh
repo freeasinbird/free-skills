@@ -408,13 +408,13 @@ want_ref "$FORK" refs/heads/feature
 # github.invalid) names the forge's real endpoint. An ssh shim serves the alias
 # both for `ssh -G` identity resolution and for the git transport that deletes
 # over it, so the whole destructive path runs end to end. ALIAS_GHOST/GUSER/
-# GPORT let a case perturb the resolved endpoint; ALIAS_SERVE is the bare repo
-# the shim serves regardless of the path in the alias URL. The `-G` target is
-# the last argument (after `--`); when it names a user (`user@host`) the shim
-# can resolve differently via ALIAS_GHOST_U/GUSER_U/GPORT_U, which default to
-# the userless values. That mirrors a user-dependent ssh config (`Match user`,
-# `%r`) so a case can prove the guard resolves the same user@host Git connects
-# through, not a bare host.
+# GPORT let a case perturb the resolved endpoint; ALIAS_SERVE is the verified
+# bare repo. When ALIAS_SERVE_ROGUE is set, an unpinned transport is sent to
+# that repo instead. The `-G` target is the last argument (after `--`); when it
+# names a user (`user@host`) the shim can resolve differently via
+# ALIAS_GHOST_U/GUSER_U/GPORT_U, which default to the userless values. That
+# mirrors a user-dependent ssh config (`Match user`, `%r`) so a case can prove
+# the guard resolves the same user@host Git connects through, not a bare host.
 install_ssh_shim() {
   cat >"$SHIMD/ssh" <<'SSH'
 #!/usr/bin/env bash
@@ -429,11 +429,22 @@ for a in "$@"; do
            "${ALIAS_GHOST:-github.invalid}" \
            "${ALIAS_GUSER:-git}" "${ALIAS_GPORT:-22}" ;;
     esac
+    [ "${ALIAS_GFAIL_AFTER:-}" != 1 ] || exit 1
     exit 0
   }
 done
+host=""
+for a in "$@"; do
+  case "$a" in HostName=*) host="${a#HostName=}" ;; esac
+done
+serve="$ALIAS_SERVE"
+if [ -n "${ALIAS_SERVE_ROGUE:-}" ] \
+    && [ "$host" != "${ALIAS_EXPECT_HOST:-github.invalid}" ]; then
+  serve="$ALIAS_SERVE_ROGUE"
+fi
+[ -z "${ALIAS_TRANSPORT_LOG:-}" ] || printf '%s\n' "$*" >>"$ALIAS_TRANSPORT_LOG"
 cmd="${!#}"; verb="${cmd%% *}"
-exec "$verb" "$ALIAS_SERVE"
+exec "$verb" "$serve"
 SSH
   chmod +x "$SHIMD/ssh"
 }
@@ -459,6 +470,50 @@ want_rc 0
 want_out '"remote_branch":"deleted"'
 want_no_ref "$ORIGIN" refs/heads/feature
 
+SCENARIO="ssh alias destructive transport pins the verified endpoint"
+setup_same merge
+ROGUE="$SCEN/rogue.git"
+git init -q --bare "$ROGUE"
+git -C "$SEED" push -q "$ROGUE" "$HEAD_OID:refs/heads/feature"
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+ALIAS_TRANSPORT_LOG="$FIX/alias-transport.log"
+: >"$ALIAS_TRANSPORT_LOG"
+export ALIAS_SERVE="$ORIGIN" ALIAS_SERVE_ROGUE="$ROGUE" ALIAS_TRANSPORT_LOG
+# Prove the scenario distinguishes the pin: the same lease-protected delete
+# without HostName pinning routes to the rogue mirror and deletes its copy.
+if UNPINNED_OID=$(PATH="$SHIMD:$PATH" git -C "$WORK" ls-remote \
+    --exit-code --heads -- 'git@bnw.github.invalid:acme/repo.git' \
+    refs/heads/feature | awk '{print $1}') \
+    && [ "$UNPINNED_OID" = "$HEAD_OID" ] \
+    && PATH="$SHIMD:$PATH" git -C "$WORK" push --delete \
+      --force-with-lease="refs/heads/feature:$HEAD_OID" -- \
+      'git@bnw.github.invalid:acme/repo.git' refs/heads/feature >/dev/null 2>&1; then
+  ok
+else
+  bad "the unpinned counter-run did not delete from the rogue repository"
+fi
+want_no_ref "$ROGUE" refs/heads/feature
+git -C "$SEED" push -q "$ROGUE" "$HEAD_OID:refs/heads/feature"
+: >"$ALIAS_TRANSPORT_LOG"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+unset ALIAS_SERVE_ROGUE ALIAS_TRANSPORT_LOG
+want_rc 0
+want_out '"remote_branch":"deleted"'
+want_no_ref "$ORIGIN" refs/heads/feature
+want_ref "$ROGUE" refs/heads/feature
+if awk '
+    index($0, "HostName=github.invalid") && index($0, "User=git") &&
+    index($0, "Port=22") && index($0, "CanonicalizeHostname=no") &&
+    index($0, "bnw.github.invalid") { pinned++ }
+    END { exit !(pinned == 2) }
+  ' "$FIX/alias-transport.log"; then
+  ok
+else
+  TRANSPORT_DETAIL=$(paste -sd ';' "$FIX/alias-transport.log")
+  bad "ls-remote and push did not both pin the endpoint through the alias URL: $TRANSPORT_DETAIL"
+fi
+
 SCENARIO="ssh alias to a different repository still stops"
 setup_same merge
 git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/other.git'
@@ -476,6 +531,28 @@ export ALIAS_SERVE="$ORIGIN" ALIAS_GPORT=2222
 RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
 run_cleanup
 unset ALIAS_GPORT
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="ssh alias resolver failure after plausible output still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN" ALIAS_GFAIL_AFTER=1
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+unset ALIAS_GFAIL_AFTER
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="ssh alias with an unsafe resolved user still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN" ALIAS_GUSER_U='git;rogue'
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+unset ALIAS_GUSER_U
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
 want_ref "$ORIGIN" refs/heads/feature
