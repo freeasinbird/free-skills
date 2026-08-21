@@ -203,6 +203,18 @@ npx prettier --check '**/*.md'
 npx prettier --write '**/*.md'   # to fix
 ```
 
+### Readability report
+
+```sh
+./scripts/check-readability.sh [file ...]
+```
+
+The report prints one row per markdown file with its word count, median and
+maximum sentence length, sentences over 40 words, and maximum paragraph
+length. All lengths use whitespace-separated word counts. It is report-only
+and exits 0 after any successful report; no readability thresholds are
+enforced.
+
 ### CI
 
 Pull requests run `.github/workflows/commit-messages.yml`, which checks the
@@ -581,6 +593,8 @@ The build succeeds, tests pass, and lint and formatting are clean.
   changed (`./scripts/test-watch-review.sh`)
 - Prose-tics matrix green when the prose-tic check changed
   (`./scripts/test-check-prose-tics.sh`)
+- Readability matrix green when `check-readability.sh` changed
+  (`./scripts/test-check-readability.sh`)
 - Commit-message validation matrix green when the commit-message check changed
   (`./scripts/test-check-commit-messages.sh`)
 - Skill-structure matrix green when the structure check changed
