@@ -399,6 +399,7 @@
       "state": {
         "old_owner_release_acknowledged": true,
         "replacement_owns_exchange_and_checkout": true,
+        "activation_received": true,
         "old_owner_completion": "ambiguous"
       },
       "required_actions": [
@@ -418,6 +419,7 @@
           "request": "After the old conductor releases ownership, the replacement's final checkout gate finds a changed PR head. Continue the exchange safely.",
           "state": {
             "replacement_owns_exchange_and_checkout": true,
+            "activation_received": true,
             "replacement_final_checkout_gate": "failed",
             "failure_reason": "changed PR head"
           },
@@ -438,6 +440,7 @@
           "request": "The old conductor released ownership to the replacement, then that replacement was interrupted before its final checkout gate completed. Recover the exchange safely.",
           "state": {
             "replacement_owns_exchange_and_checkout": true,
+            "activation_received": true,
             "replacement_status": "interrupted"
           },
           "required_actions": [
