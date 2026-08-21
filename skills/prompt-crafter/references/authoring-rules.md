@@ -23,9 +23,9 @@
   self-check (a grep) for that payload; `verification.md` runs them.
 - **Compression needs donors.** In a hard-capped prompt (ChatGPT Custom
   Instructions), plan every addition as a swap: find the trim that funds
-  it, and prefer trims of implied content ("recommendation/next steps" to
+  it. Prefer trims of implied content ("recommendation/next steps" to
   "recommendation") over trims of qualifiers ("hidden assumptions" to
-  "assumptions"), which change behavior.
+  "assumptions"); a lost qualifier changes behavior.
 
 ## Per-tool tilts
 
@@ -48,20 +48,20 @@ verbatim, in a shared core.
 ### Sources (last verified 2026-07-01)
 
 - Anthropic, "Prompting best practices"
-  (<https://platform.claude.com/docs/en/docs/build-with-claude/prompt-engineering/claude-4-best-practices>):
-  confirms the rationale tilt ("Providing context or motivation behind your
-  instructions ... can help Claude better understand your goals") and the
-  emphasis tilt ("The fix is to dial back any aggressive language. Where
+  (<https://platform.claude.com/docs/en/docs/build-with-claude/prompt-engineering/claude-4-best-practices>).
+  Confirms the rationale tilt: "Providing context or motivation behind your
+  instructions ... can help Claude better understand your goals". Confirms
+  the emphasis tilt: "The fix is to dial back any aggressive language. Where
   you might have said 'CRITICAL: You MUST use this tool when...', you can
-  use more normal prompting like 'Use this tool when...'").
+  use more normal prompting like 'Use this tool when...'".
 - OpenAI, "GPT-5 prompting guide"
-  (<https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide>):
-  confirms the contradiction cost ("contradictory or vague instructions can
+  (<https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide>).
+  Confirms the contradiction cost: "contradictory or vague instructions can
   be more damaging to GPT-5 than to other models, as it expends reasoning
-  tokens searching for a way to reconcile the contradictions"), the
-  literalism ("follows prompt instructions with surgical precision"), and
-  the structure tilt (Markdown only where semantically correct,
-  hierarchical organization).
+  tokens searching for a way to reconcile the contradictions". Confirms the
+  literalism ("follows prompt instructions with surgical precision") and the
+  structure tilt (Markdown only where semantically correct, hierarchical
+  organization).
 
 ## Structural pattern: shared core + per-tool tail
 
