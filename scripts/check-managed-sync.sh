@@ -45,6 +45,48 @@ else
   status=1
 fi
 
+# A fenced example is not a section a pointer can name. Exclude backtick and
+# tilde fenced blocks before the heading checks, or a template-identical
+# example containing `## heading` would be rejected by the pointer scan.
+reference_headings() {
+  awk '
+    function fence_run(line, marker, count) {
+      marker = substr(line, 1, 1)
+      if (marker != "`" && marker != "~") return 0
+      count = 0
+      while (substr(line, count + 1, 1) == marker) count++
+      return count
+    }
+    {
+      line = $0
+      indent = 0
+      while (indent < 3 && substr(line, 1, 1) == " ") {
+        line = substr(line, 2)
+        indent++
+      }
+      run = fence_run(line)
+      marker = substr(line, 1, 1)
+      if (in_fence) {
+        if (marker == fence_marker && run >= fence_length &&
+            substr(line, run + 1) ~ /^[[:space:]]*$/) {
+          in_fence = 0
+        }
+        next
+      }
+      if (run >= 3) {
+        info = substr(line, run + 1)
+        if (marker == "~" || index(info, "`") == 0) {
+          in_fence = 1
+          fence_marker = marker
+          fence_length = run
+          next
+        }
+      }
+      if ($0 ~ /^## /) print
+    }
+  ' "$REFERENCE"
+}
+
 # Pointers wrap across lines between the path and the slug, so join the
 # canonical text before matching.
 # A target runs to the next space, and only sentence punctuation may
@@ -62,8 +104,8 @@ pointed=$(printf '%s\n' "$targets" | sort -u)
 # them all rather than only slug-shaped ones: a narrower pattern would
 # hide a prose-titled section from the "every heading is pointed at"
 # half of the check, leaving a section core never sends anyone to.
-headed=$(grep -E '^## ' "$REFERENCE" | sed 's/^## *//' | sort -u)
-malformed=$(grep -E '^## ' "$REFERENCE" | sed 's/^## *//' | grep -vE '^[a-z0-9-]+$' || true)
+headed=$(reference_headings | sed 's/^## *//' | sort -u)
+malformed=$(reference_headings | sed 's/^## *//' | grep -vE '^[a-z0-9-]+$' || true)
 if [ -n "$malformed" ]; then
   echo "$REFERENCE heading(s) are not §slugs a pointer can name:" >&2
   printf '%s\n' "$malformed" >&2
@@ -71,7 +113,7 @@ if [ -n "$malformed" ]; then
 fi
 # The set comparison below dedupes, so repeated slugs would hide behind
 # their first occurrence and leave a pointer with two possible targets.
-duplicated=$(grep -E '^## ' "$REFERENCE" | sed 's/^## *//' | sort | uniq -d)
+duplicated=$(reference_headings | sed 's/^## *//' | sort | uniq -d)
 if [ -n "$duplicated" ]; then
   echo "$REFERENCE has repeated §slug heading(s):" >&2
   printf '%s\n' "$duplicated" >&2

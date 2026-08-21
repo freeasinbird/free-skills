@@ -575,6 +575,8 @@ The build succeeds, tests pass, and lint and formatting are clean.
   (`./scripts/check-managed-sync.sh`)
 - Comparator regression suite green when the comparator or sync check
   changed (`./scripts/test-compare-managed-blocks.sh`)
+- Sync-check validation matrix green when `check-managed-sync.sh` changed
+  (`./scripts/test-check-managed-sync.sh`)
 - Watcher validation matrix green when await-pr-review's `watch-review.sh`
   changed (`./scripts/test-watch-review.sh`)
 - Prose-tics matrix green when the prose-tic check changed
