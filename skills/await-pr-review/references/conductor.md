@@ -18,8 +18,8 @@ point.
 
 Start the conductor with the least inherited parent context the host exposes.
 For Codex collaboration use `fork_turns: "none"`; for Claude Code use an
-ordinary named background subagent, not an experimental context-inheriting
-fork. On another host, request fresh or empty context when supported. If the
+ordinary named background subagent, not a context-inheriting fork. On another
+host, request fresh or empty context when supported. If the
 host cannot control inheritance, state that limitation in the brief and
 continue when the four conductor grants still hold; context control is an
 optimization, not a fifth grant.

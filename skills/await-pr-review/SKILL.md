@@ -79,7 +79,7 @@ replace the generic route:
   ledger. If the main agent must keep changing that checkout, grant 4 does not
   hold.
 - **Claude Code:** use one ordinary named background subagent, which starts
-  with fresh context, rather than an experimental fork that inherits the
+  with fresh context, rather than a fork that inherits the
   parent conversation. Give it explicit worktree isolation. Its blocking
   foreground wait plus re-messaging the same agent satisfy grant 2; completion
   notification satisfies grant 3.
