@@ -404,6 +404,141 @@ want_rc 4
 want_out 'LOOKUP_FAILED head-repo-facts'
 want_ref "$FORK" refs/heads/feature
 
+# A local ~/.ssh/config Host alias (label bnw.github.invalid, HostName
+# github.invalid) names the forge's real endpoint. An ssh shim serves the alias
+# both for `ssh -G` identity resolution and for the git transport that deletes
+# over it, so the whole destructive path runs end to end. ALIAS_GHOST/GUSER/
+# GPORT let a case perturb the resolved endpoint; ALIAS_SERVE is the bare repo
+# the shim serves regardless of the path in the alias URL. The `-G` target is
+# the last argument (after `--`); when it names a user (`user@host`) the shim
+# can resolve differently via ALIAS_GHOST_U/GUSER_U/GPORT_U, which default to
+# the userless values. That mirrors a user-dependent ssh config (`Match user`,
+# `%r`) so a case can prove the guard resolves the same user@host Git connects
+# through, not a bare host.
+install_ssh_shim() {
+  cat >"$SHIMD/ssh" <<'SSH'
+#!/usr/bin/env bash
+for a in "$@"; do
+  [ "$a" = -G ] && {
+    case "${!#}" in
+      *@*) printf 'hostname %s\nuser %s\nport %s\n' \
+             "${ALIAS_GHOST_U:-${ALIAS_GHOST:-github.invalid}}" \
+             "${ALIAS_GUSER_U:-${ALIAS_GUSER:-git}}" \
+             "${ALIAS_GPORT_U:-${ALIAS_GPORT:-22}}" ;;
+      *) printf 'hostname %s\nuser %s\nport %s\n' \
+           "${ALIAS_GHOST:-github.invalid}" \
+           "${ALIAS_GUSER:-git}" "${ALIAS_GPORT:-22}" ;;
+    esac
+    exit 0
+  }
+done
+cmd="${!#}"; verb="${cmd%% *}"
+exec "$verb" "$ALIAS_SERVE"
+SSH
+  chmod +x "$SHIMD/ssh"
+}
+install_ssh_shim
+
+SCENARIO="explicit ssh host alias resolves to the forge and deletes"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+want_rc 0
+want_out '"remote_branch":"deleted"'
+want_no_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="ssh host alias auto-resolves as the head remote"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG=""
+run_cleanup
+want_rc 0
+want_out '"remote_branch":"deleted"'
+want_no_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="ssh alias to a different repository still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/other.git'
+export ALIAS_SERVE="$ORIGIN"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="ssh alias on a non-default port still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN" ALIAS_GPORT=2222
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+unset ALIAS_GPORT
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+# A user-dependent ssh config: the bare host resolves to the forge, but the
+# user-qualified `git@host` Git actually connects through resolves elsewhere.
+# The guard must resolve the same user@host Git uses; resolving the bare host
+# would bless the forge yet delete via the other endpoint. Discriminating:
+# neutering the user pass (querying only the bare host) resolves the forge and
+# deletes, so this must stop.
+SCENARIO="ssh alias diverging by remote user still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN" ALIAS_GHOST_U=rogue.github.invalid
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+unset ALIAS_GHOST_U
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+# Git honors an ssh-command override (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH)
+# for the transport, but the guard queries the plain ssh on PATH, so the offline
+# resolution need not reflect the endpoint Git reaches. The guard fails closed
+# whenever an override is active. Discriminating: without the fail-closed the
+# alias resolves to the forge (via the shim) and the branch is deleted through
+# the unverified endpoint, so each override must stop.
+SCENARIO="ssh alias under GIT_SSH_COMMAND override still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN" GIT_SSH_COMMAND='ssh -F /dev/null'
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+unset GIT_SSH_COMMAND
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="ssh alias under core.sshCommand override still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+git -C "$WORK" config core.sshCommand 'ssh -F /dev/null'
+export ALIAS_SERVE="$ORIGIN"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="ssh alias under GIT_SSH override still stops"
+setup_same merge
+git -C "$WORK" remote add alias 'git@bnw.github.invalid:acme/repo.git'
+export ALIAS_SERVE="$ORIGIN" GIT_SSH="$SHIMD/ssh"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote alias"
+run_cleanup
+unset GIT_SSH
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_ref "$ORIGIN" refs/heads/feature
+
+rm -f "$SHIMD/ssh"
+unset ALIAS_SERVE
+
 SCENARIO="credential-bearing forge endpoints mutate nothing"
 setup_same merge
 jq '.clone_url = "https://user:returned-secret@github.invalid/acme/repo.git"' \

@@ -754,6 +754,102 @@ url_forge_id() {
   printf '%s %s/%s' "$host" "$owner" "$name"
 }
 
+# Resolve an SSH host, possibly a local ~/.ssh/config Host alias, to the
+# concrete hostname, user, and port Git will actually connect to. The forge
+# identity guards below compare a remote against the forge's authoritative
+# clone endpoints; a local alias (HostName github.com behind the label
+# bnw.github.com) names that same endpoint, so it must resolve before the
+# comparison rather than read as a foreign host. `ssh -G` computes the
+# effective config offline without connecting, and the user's own ssh config
+# is the same trust domain as the git insteadOf rules the script already
+# honors. Resolve the exact user@host target Git will reach: ~/.ssh/config can
+# expand a different HostName/port per remote user (`Match user`, `%r` in
+# HostName), so resolving a bare host could bless a userless endpoint while the
+# delete routes through the user-qualified one. Fails closed (nonzero, empties
+# left) when ssh is absent or cannot resolve. SSH_ALIAS_HOST/USER/PORT are the
+# outputs.
+SSH_ALIAS_HOST="" SSH_ALIAS_USER="" SSH_ALIAS_PORT=""
+ssh_resolved_endpoint() { # ssh_resolved_endpoint <host> [user]
+  local host="$1" user="${2:-}" target key val
+  SSH_ALIAS_HOST="" SSH_ALIAS_USER="" SSH_ALIAS_PORT=""
+  command -v ssh >/dev/null 2>&1 || return 1
+  # Git honors an ssh-command override (GIT_SSH_COMMAND, then core.sshCommand,
+  # else GIT_SSH) for the fetch/ls-remote/push that deletes the branch, but this
+  # guard queries the plain `ssh` on PATH. Under an override the offline `ssh -G`
+  # no longer reflects the endpoint Git reaches, so fail closed rather than bless
+  # a possibly-divergent host. The intersection that this stops (an alias that
+  # needs resolving while an override is active) is narrow and errs safe.
+  [ -n "${GIT_SSH_COMMAND:-}" ] && return 1
+  [ -n "${GIT_SSH:-}" ] && return 1
+  [ -n "$(git config --get core.sshCommand 2>/dev/null)" ] && return 1
+  # An option-shaped host or user could be read as an ssh flag even after --, so
+  # refuse it outright rather than trust a single guard.
+  case "$host" in ''|-*) return 1 ;; esac
+  # Query user@host when the URL names a user, matching Git's own connection; a
+  # bare host otherwise, matching Git applying the config's User.
+  target="$host"
+  case "$user" in
+    -*|*@*) return 1 ;;
+    ?*) target="$user@$host" ;;
+  esac
+  while read -r key val; do
+    case "$key" in
+      hostname) [ -n "$SSH_ALIAS_HOST" ] || SSH_ALIAS_HOST="$val" ;;
+      user) [ -n "$SSH_ALIAS_USER" ] || SSH_ALIAS_USER="$val" ;;
+      port) [ -n "$SSH_ALIAS_PORT" ] || SSH_ALIAS_PORT="$val" ;;
+    esac
+  done < <(ssh -G -- "$target" 2>/dev/null)
+  [ -n "$SSH_ALIAS_HOST" ] || return 1
+  SSH_ALIAS_HOST=$(printf '%s' "$SSH_ALIAS_HOST" | tr 'A-Z' 'a-z')
+}
+
+# Rewrite an SSH remote URL whose host is a local alias into the concrete URL
+# form that names the real endpoint, so the forge identity comparison sees the
+# true host and user. Only ssh-family transports (scp-like host:path and the
+# ssh:// schemes) carry aliases; every other URL is left to its existing
+# mismatch. The rewrite substitutes the resolved hostname, fills in the
+# resolved user when the URL states none (an alias commonly carries `User
+# git`), and keeps the original transport form and path byte-for-byte. It
+# fails, leaving the caller on its mismatch, when ssh cannot resolve, when the
+# resolved port is not the default (a non-default port is a genuinely different
+# endpoint than the forge's default-port ssh_url and must not be blessed), or
+# when the host is unchanged (no alias in play). The rewritten URL feeds only
+# the identity check; fetch and push keep the original alias URL so the user's
+# ssh routing and key selection still apply.
+ssh_alias_resolve() { # ssh_alias_resolve <url>
+  local raw="$1" scheme rest authority before after path="" host user="" newuser newauth
+  case "$raw" in
+    *://*)
+      scheme="${raw%%://*}"
+      case "$scheme" in ssh|git+ssh|ssh+git) ;; *) return 1 ;; esac
+      rest="${raw#*://}"
+      authority="${rest%%/*}"
+      case "$authority" in *@*) user="${authority%@*}"; host="${authority##*@}" ;;
+        *) host="$authority" ;; esac
+      [ "$rest" = "$authority" ] || path="${rest#*/}"
+      ;;
+    *:*)
+      case "${raw%%:*}" in */*) return 1 ;; esac
+      before="${raw%%:*}"; after="${raw#*:}"
+      case "$before" in *@*) user="${before%@*}"; host="${before##*@}" ;;
+        *) host="$before" ;; esac
+      ;;
+    *) return 1 ;;
+  esac
+  # A port or IPv6 literal in the host is not the simple alias this resolves.
+  case "$host" in ''|*:*|\[*) return 1 ;; esac
+  ssh_resolved_endpoint "$host" "$user" || return 1
+  [ "$SSH_ALIAS_PORT" = 22 ] || return 1
+  [ "$SSH_ALIAS_HOST" != "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" ] || return 1
+  newuser="$user"; [ -n "$newuser" ] || newuser="$SSH_ALIAS_USER"
+  newauth="$SSH_ALIAS_HOST"; [ -z "$newuser" ] || newauth="$newuser@$SSH_ALIAS_HOST"
+  case "$raw" in
+    *://*) [ -n "$path" ] && printf '%s://%s/%s' "$scheme" "$newauth" "$path" \
+             || printf '%s://%s' "$scheme" "$newauth" ;;
+    *) printf '%s:%s' "$newauth" "$after" ;;
+  esac
+}
+
 # Does a remote have exactly one push destination with the expected identity?
 # --push --all is load-bearing: a remote can configure several push URLs,
 # git push sends to every one of them, and the plain --push query returns
@@ -817,15 +913,23 @@ git_pinned_url() { # git_pinned_url <literal-url> <git args with @PINNED_URL@>
 # auto-resolves; pass the override flag for such a layout. Overridable
 # because URL forms vary; unresolvable is a stop, not a guess.
 resolve_remote() { # resolve_remote <owner/name> <clone-id> <ssh-id>
-  local want r furl fid forge_id match="" count=0
+  local want r furl fid forge_id resolved match="" count=0
   want=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
   RESOLVED_REMOTE=""
   while IFS= read -r r; do
     remote_urls_newline_free "$r" || continue
     out_exact furl git remote get-url -- "$r" || continue
     fid=$(url_id "$furl")
+    forge_id=$(url_forge_id "$furl") || forge_id=""
+    # A local SSH host alias hides the true forge identity; resolve it and
+    # retry the candidate match on the concrete endpoint when the raw URL fails.
+    if { [ "$fid" != "$2" ] && [ "$fid" != "$3" ]; } \
+        || [ "$forge_id" != "$PR_HOST $want" ]; then
+      resolved=$(ssh_alias_resolve "$furl") && [ -n "$resolved" ] || continue
+      fid=$(url_id "$resolved")
+      forge_id=$(url_forge_id "$resolved") || continue
+    fi
     case "$fid" in "$2"|"$3") ;; *) continue ;; esac
-    forge_id=$(url_forge_id "$furl") || continue
     [ "$forge_id" = "$PR_HOST $want" ] || continue
     count=$((count + 1))
     match="$r"
@@ -845,6 +949,7 @@ resolve_remote() { # resolve_remote <owner/name> <clone-id> <ssh-id>
 CHECKED_REMOTE_ID="" CHECKED_REMOTE_URL=""
 remote_repo_check() { # remote_repo_check <remote> <role> <repo> <clone-id> <ssh-id>
   local remote="$1" role="$2" expected_repo="$3" configured u have_url=false furl endpoint_id
+  local resolved_url resolved_id
   remote_urls_newline_free "$remote" \
     || stop remote-repo-mismatch "$role remote $remote has a newline-bearing URL whose forge identity cannot be compared faithfully"
   out_exact configured git config --get-all "remote.$remote.url" \
@@ -867,8 +972,15 @@ remote_repo_check() { # remote_repo_check <remote> <role> <repo> <clone-id> <ssh
   case "$endpoint_id" in
     path\ *) return 0 ;;
     "$4"|"$5") return 0 ;;
-    *) stop remote-repo-mismatch "$role remote $remote does not match $expected_repo's authoritative clone endpoints" ;;
   esac
+  # A local SSH host alias resolves to the forge's real endpoint; compare that
+  # resolved identity before refusing. CHECKED_REMOTE_URL stays the alias URL
+  # so fetch and push still route through the user's ssh config.
+  if resolved_url=$(ssh_alias_resolve "$furl") && [ -n "$resolved_url" ] \
+      && resolved_id=$(remote_url_id "$resolved_url"); then
+    case "$resolved_id" in "$4"|"$5") return 0 ;; esac
+  fi
+  stop remote-repo-mismatch "$role remote $remote does not match $expected_repo's authoritative clone endpoints"
 }
 
 # --- cleanup orchestration --------------------------------------------------
