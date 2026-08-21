@@ -5,16 +5,20 @@
 # stay byte-identical to the §agent-workflow scaffold template; every
 # `docs/agent-workflow.md §slug` pointer in the canonical text must
 # resolve to a `## slug` heading in that file and every level-two
-# heading there must be such a slug and be pointed at. Thin
-# strict-mode wrapper over the comparator shipped with the
-# agent-setup skill, plus the checks the split added. Every check
-# runs; the exit status is the worst of them.
+# heading there must be such a slug and be pointed at; and the
+# managed blocks (excluding the project sub-block) must stay
+# within the byte budget the core/reference split set (see
+# devlog/2026-08-21-1049-core-reference-split.md). Thin strict-mode
+# wrapper over the comparator shipped with the agent-setup skill, plus
+# the checks the split added. Every check runs; the exit status is the
+# worst of them.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 CANONICAL=skills/agent-setup/references/canonical-sections.md
 TEMPLATE=skills/agent-setup/references/scaffolding.md
 REFERENCE=docs/agent-workflow.md
+BUDGET=20000
 status=0
 
 skills/agent-setup/scripts/compare-managed-blocks.sh --require-all AGENTS.md || status=1
@@ -81,5 +85,21 @@ else
   status=1
 fi
 
+# The budget is encoded bytes, and awk's length() counts characters in
+# a UTF-8 locale (the blocks hold en dashes, arrows and `≤`), so print
+# the extracted lines and let wc -c count the stream.
+bytes=$(awk '
+  /^<!-- agents-md:managed:/ { m = 1 }
+  /^<!-- agents-md:project:/ { p = 1 }
+  { if (m && !p) print }
+  /^<!-- \/agents-md:project:/ { p = 0 }
+  /^<!-- \/agents-md:managed:/ { m = 0 }
+' AGENTS.md | wc -c | tr -d ' ')
+if [ "$bytes" -le "$BUDGET" ]; then
+  echo "ok: managed blocks $bytes bytes (budget $BUDGET)"
+else
+  echo "managed blocks $bytes bytes exceed the $BUDGET budget" >&2
+  status=1
+fi
 
 exit "$status"
