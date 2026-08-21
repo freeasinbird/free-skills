@@ -270,8 +270,11 @@ for fragment in (
     "main agent",
     "persist only the replacement's refreshed forge-derivable state and exact next action",
     "already-live replacement",
-    "no checkout-path transfer or replacement activation",
+    "only the activation notification to the replacement remaining",
     "transfer exactly once from old to new",
+    "send the replacement one activation message after the release acknowledgement",
+    "re-send that idempotent message while the replacement's receipt "
+    "confirmation is absent",
     "retain ownership through ambiguous old-owner completion",
 ):
     if fragment not in success_required:
@@ -401,8 +404,9 @@ for required in \
   'persists the pointer-only record in the work unit' \
   'persists the refreshed forge state and next action there' \
   'already-live' \
-  'No checkout-path transfer or replacement activation remains' \
+  'only the activation notification to the replacement' \
   'forms transfer exactly once to the replacement' \
+  'activation message stating that release landed' \
   'replacement retains ownership' \
   'Never overlap watchers or active checkout ownership'; do
   if ! grep -Fq "$required" "$conductor"; then

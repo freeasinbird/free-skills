@@ -31,13 +31,23 @@
       "state": {
         "checkpoint_call": "go",
         "rotation_cost_comparison": "favorable",
+        "expected_more_blocker_rounds": true,
+        "conductor_replay_strain": true,
         "fresh_replacement_context_available": true,
         "existing_checkout_path_transferable": true,
         "durable_pointer_record_writable": true,
-        "current_round_dispositioned": true,
+        "undispositioned_findings": 0,
         "pending_push": false,
         "active_watcher": false,
-        "unresolved_decisions": 0
+        "unresolved_decisions": 0,
+        "durable_pointer_record": "written",
+        "durable_reconciliation_record": "written",
+        "forge_record_contains_chat_only_material": false,
+        "private_replacement_prompt_current_task_contract_present": true,
+        "live_reviewer_state_matches_pointer_record": true,
+        "provisional_checkout_inspection": "passed",
+        "pointer_record_head": "deadbeef",
+        "live_head": "deadbeef"
       },
       "required_actions": [
         "have the old conductor persist a pointer-only forge record containing only repository and PR, head, base, baseline and attribution, finding dispositions, threads, checks, and exact next action in the authoritative tracker issue or PR comment",
@@ -45,7 +55,8 @@
         "have the main agent keep the old conductor as the paused non-mutating owner while it spawns one fresh-context replacement to read the pointer record, refresh forge state, and inspect the exact transferable checkout path read-only without checking out the PR branch or claiming ownership",
         "have the main agent persist only the replacement's refreshed forge-derivable state and exact next action beside the pointer record before any ownership transfer",
         "have the main agent require the already-live replacement to accept future ownership contingent on release, then obtain the old conductor's ownership-release acknowledgement before the old owner terminates",
-        "have both forms of ownership transfer exactly once from old to new at the release acknowledgement, with no checkout-path transfer or replacement activation remaining afterward",
+        "have both forms of ownership transfer exactly once from old to new at the release acknowledgement; ownership and the checkout-path transfer are then complete and not repeatable, with only the activation notification to the replacement remaining",
+        "have the main agent send the replacement one activation message after the release acknowledgement, telling it release landed and that it now owns the exchange and the exact checkout path before it takes any owning action, and re-send that idempotent message while the replacement's receipt confirmation is absent so a lost or delayed message never strands the exchange or re-transfers ownership",
         "have the replacement retain ownership through ambiguous old-owner completion and any failed final checkout gate, recovering before it starts one watcher or performs the exact next action"
       ],
       "forbidden_actions": [
@@ -61,7 +72,6 @@
       "request": "The conductor context is large and substantial work may remain, but no blocker-sustained convergence checkpoint has recorded a justified go. Rotate if useful.",
       "state": {
         "checkpoint_call": "not reached",
-        "rotation_cost_comparison": "favorable",
         "fresh_replacement_context_available": true
       },
       "required_actions": [
@@ -82,6 +92,8 @@
       "state": {
         "checkpoint_call": "go",
         "rotation_cost_comparison": "unfavorable",
+        "expected_more_blocker_rounds": false,
+        "conductor_replay_strain": true,
         "fresh_replacement_context_available": true
       },
       "required_actions": [
@@ -123,7 +135,6 @@
       "request": "A convergence checkpoint recorded a justified go, the exchange is quiescent, and the cost comparison is favorable, but the host cannot start a replacement with fresh or empty context. Rotate if useful.",
       "state": {
         "checkpoint_call": "go",
-        "rotation_cost_comparison": "favorable",
         "fresh_replacement_context_available": false
       },
       "required_actions": [
@@ -143,7 +154,6 @@
       "request": "A convergence checkpoint recorded a justified go, the exchange is quiescent, and the cost comparison is favorable, but this host would require the replacement to check out the PR branch in a second worktree while the old conductor still owns its checkout. Rotate if useful.",
       "state": {
         "checkpoint_call": "go",
-        "rotation_cost_comparison": "favorable",
         "fresh_replacement_context_available": true,
         "existing_checkout_path_transferable": false
       },
@@ -265,7 +275,6 @@
       "request": "A favorable checkpoint rotation is proposed, but one finding from the current round is still undispositioned. Rotate if safe.",
       "state": {
         "checkpoint_call": "go",
-        "rotation_cost_comparison": "favorable",
         "undispositioned_findings": 1,
         "unresolved_decisions": 0
       },
@@ -286,7 +295,6 @@
           "request": "A favorable checkpoint rotation is proposed at a round boundary, but a surfaced judgment call has not been resolved. Rotate if safe.",
           "state": {
             "checkpoint_call": "go",
-            "rotation_cost_comparison": "favorable",
             "undispositioned_findings": 0,
             "unresolved_decisions": 1
           },
@@ -309,7 +317,6 @@
       "request": "A checkpoint-approved rotation is cost-favorable, but the old conductor has a verified local fix that has not been pushed. Rotate if safe.",
       "state": {
         "checkpoint_call": "go",
-        "rotation_cost_comparison": "favorable",
         "pending_push": true,
         "active_watcher": false
       },
@@ -330,7 +337,6 @@
       "request": "A checkpoint-approved rotation is cost-favorable, but the old conductor's current watcher is still active. Rotate if safe.",
       "state": {
         "checkpoint_call": "go",
-        "rotation_cost_comparison": "favorable",
         "pending_push": false,
         "active_watcher": true
       },
@@ -362,6 +368,28 @@
         "overlap active checkout ownership",
         "terminate the old conductor before replacement acceptance",
         "report the PR ready"
+      ],
+      "safety_case": true
+    },
+    {
+      "id": "rotation-activation-gap-interruption-rewaits",
+      "request": "The old conductor released ownership at the release acknowledgement, but the replacement was interrupted during the activation gap, before the activation message arrived. Recover the exchange safely.",
+      "state": {
+        "old_owner_release_acknowledged": true,
+        "replacement_owns_exchange_and_checkout": true,
+        "activation_received": false,
+        "interrupted_during_activation_gap": true
+      },
+      "required_actions": [
+        "keep the replacement as the sole owner and only re-wait for the idempotent activation message re-sent per handshake step 4",
+        "wait for activation to arrive before running the checkout gate or any owning action"
+      ],
+      "forbidden_actions": [
+        "resume the polling loop before activation",
+        "start a replacement watcher before activation",
+        "run the checkout gate before activation",
+        "run review work before activation",
+        "route the activation-gap interruption to stranded-conductor recovery"
       ],
       "safety_case": true
     },
