@@ -14,6 +14,7 @@ pricing change.
 - [Delegated fix round](#delegated-fix-round-what-delegation-actually-saves-step-4)
 - [Persistent fixer amortization](#persistent-fixer-amortization-step-4)
 - [Conductor accounting](#conductor-whole-exchange-accounting)
+- [Conductor rotation](#conductor-context-rotation)
 
 ## Single wake vs cache-keepalive wakes (step 3)
 
@@ -148,3 +149,49 @@ conductor-local detector directly, using the script where available and an
 equivalent connector or API loop otherwise. A connector with instantaneous
 reads but no conductor-local wait or scheduled same-conductor wake fails the
 gate and uses the main-owned mechanism ladder.
+
+## Conductor: context rotation
+
+Rotation is a mid-exchange optimization, not a routing or safety rule. Evaluate
+it only after an existing convergence checkpoint records a justified go and
+the exchange reaches the quiescent transfer boundary in `conductor.md`.
+
+Let `K` be the expected remaining conductor calls, `C_old` the accumulated old
+conductor context replayed by each call, and `C_new` the replacement's smaller
+context replay. Let `H_old` be the old conductor's pointer-record write cost,
+`S_main` be all main-agent coordination turns (reconstructing the private brief,
+spawning the replacement, receiving its reconciliation, persisting only the
+forge-derived result, and coordinating the ownership transfer), and `R_new`
+the replacement's pointer-record read, private-brief load, read-only forge
+refresh, reconciliation, and state reconstruction cost. Continuing costs
+roughly:
+
+```text
+K × C_old
+```
+
+Rotating costs roughly:
+
+```text
+H_old + S_main + R_new + K × C_new
+```
+
+The reset is likely to repay only when:
+
+```text
+K × (C_old - C_new) > H_old + S_main + R_new
+```
+
+Estimate the terms for the work actually expected, including watcher wakes,
+fixes, verification, replies, and terminal scans. The pointer-record write runs
+at the old context size; every coordination turn, private-brief reconstruction,
+and persisted forge-derived reconciliation result in the ownership handshake
+replays the main context; and the pointer-record read, forge refresh, and
+reconstruction grow the new context before remaining calls begin. Omitting any
+of those terms creates a false saving. When little work is likely to remain, or
+the estimate is materially uncertain, keep the existing conductor.
+
+This comparison is advisory at a checkpoint. It does not turn ten rounds,
+elapsed time, idle time, context size, or any other fixed threshold into an
+automatic kill switch, and it never relaxes the quiescence or exactly-once
+ownership-transfer gates.

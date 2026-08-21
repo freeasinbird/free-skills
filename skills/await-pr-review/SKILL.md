@@ -42,10 +42,13 @@ already authorize the action.
 ## Route ownership before waiting
 
 **Default to one conductor subagent.** First resolve only the event-boundary
-facts needed for its brief, then spawn it before reading feedback, waiting on
-CI, or starting any watcher. The conductor owns steps 1 through 5 and wakes
-the main agent only for a judgment call, a no-go or materially uncertain
-convergence escalation, or its terminal disposition ledger.
+facts needed for its brief. Request the least inherited parent context the
+host exposes, give the conductor a self-contained compact brief, then spawn it
+before reading feedback, waiting on CI, or starting any watcher. The conductor
+owns steps 1 through 5 and wakes the main agent only for a judgment call, a
+no-go or materially uncertain convergence escalation, a checkpoint-approved
+context-rotation handshake that the main agent must coordinate, or its terminal
+disposition ledger.
 
 Apply one platform-neutral gate. A conductor owns the exchange when all four
 grants hold:
@@ -67,22 +70,28 @@ Map any agent's actual tools to those grants. The named surfaces below are
 concrete examples that prevent repeated capability guesswork; they do not
 replace the generic route:
 
-- **Codex app:** collaboration tools that expose spawn and completion
+- **Codex app:** spawn the conductor with `fork_turns: "none"` so it inherits
+  no parent turns. Collaboration tools that expose spawn and completion
   notification satisfy grants 1 and 3. Follow-up/resume plus a conductor-local
   foreground wait or scheduled same-conductor wake satisfy grant 2. If agents
   share the checkout, grant branch exclusivity by having the main agent make no
   edit, commit, fetch of the PR branch, rebase, or push until the terminal
   ledger. If the main agent must keep changing that checkout, grant 4 does not
   hold.
-- **Claude Code:** use one write-capable background subagent with explicit
-  worktree isolation. Its blocking foreground wait plus re-messaging the same
-  agent satisfy grant 2; completion notification satisfies grant 3.
+- **Claude Code:** use one ordinary named background subagent, which starts
+  with fresh context, rather than an experimental fork that inherits the
+  parent conversation. Give it explicit worktree isolation. Its blocking
+  foreground wait plus re-messaging the same agent satisfy grant 2; completion
+  notification satisfies grant 3.
 - **Any other agent:** inspect its delegation, conductor-local wait and resume,
   completion, and checkout controls and apply the same four-grant gate. An API
   or connector that can only return instantaneous reads does not satisfy grant
   2 unless it can schedule the same conductor to resume without ending the
-  exchange. Do not infer a failed gate from unfamiliar tool names; name the
-  concrete missing grant if one is absent.
+  exchange. Request fresh or empty context when the host supports it. When it
+  cannot control inherited context, state that limitation and continue with
+  the compact self-contained brief; this optimization gap is not a failed
+  conductor grant. Do not infer a failed gate from unfamiliar tool names; name
+  the concrete missing grant if one is absent.
 
 Keep the exchange in the main agent only when a grant is concretely absent or
 forbidden, or when feedback is already in hand and known to require at most a
@@ -101,18 +110,21 @@ grant 1 on that basis, identify the prohibiting rule by source when disclosure
 is permitted, or give a non-sensitive paraphrase of the binding constraint
 otherwise, and explain why none of its exceptions apply.
 
-The main agent captures and passes: repository and PR, any already-recorded
-reviewer identity and status signals, the event-anchored baseline (or its
-explicit attribution gap), expected PR head, base branch and base tip, the
-available host-observation surface (script, API, or connector), the
-conductor-local wait or scheduled-wake mechanism, the project review-response
-conventions, and the conductor contract in
-`references/conductor.md`. An unrecorded reviewer is not a reason to delay the
-spawn; assign step-2 discovery to the conductor. Grant checkout isolation or
-exclusivity explicitly. Use a model capable of editing and review judgment,
-not the cheapest watcher tier. Read that reference before spawning; it
-contains the ready-to-use brief, turn discipline, checkout alignment, and
-lease rules.
+The main agent captures and passes the current task contract at spawn
+(objective, acceptance criteria, scope, dependencies and blockers, explicit
+non-goals, and task-specific user constraints); repository and PR; any recorded
+reviewer identity and status signals; the event-anchored baseline (or its
+explicit attribution gap); expected PR head; base branch and base tip; the
+initial-context mode or unsupported-control notice; the available
+host-observation surface (script, API, or connector); the conductor-local wait
+or scheduled-wake mechanism; checkout ownership; the project review-response
+conventions; the relevant skill and reference paths; and the operating
+contract in `references/conductor.md`. An unrecorded reviewer is not a reason
+to delay the spawn; assign step-2 discovery to the conductor. Grant checkout
+isolation or exclusivity explicitly. Use a model capable of editing and review
+judgment, not the cheapest watcher tier. Read that reference before spawning;
+it contains the ready-to-use brief, turn discipline, checkout alignment,
+rotation protocol, and lease rules.
 
 ## The exchange
 
@@ -257,6 +269,26 @@ continue without yielding or asking permission. A no-go or materially
 uncertain call surfaces the current ledger for human judgment. Repeat the
 checkpoint at the same cadence while blockers continue; an earlier go does
 not authorize an unbounded loop.
+
+Keep the same conductor through ordinary waits, surfaced pauses, and review
+rounds; idle lifetime alone is not a reason to replace it. Only after an
+existing checkpoint records a justified go may the owner consider the context
+rotation protocol in `references/conductor.md`, and only when expected
+remaining work is likely to repay the full handoff and reconstruction cost in
+`references/cost-model.md`. Finish and disposition the current round first,
+complete any push, advance its baseline, consume or stop its watcher, and
+verify that the existing checkout path can transfer safely to the already-live
+replacement before rotation.
+
+Persist the pointer-only forge record and its
+forge-derived reconciliation result in the work unit before ownership moves.
+That record may contain forge-derivable state and the exact next action, never
+the task contract, user constraints, or other chat-only operating input. The
+live main agent supplies the current private inputs to the replacement: the
+initial brief plus every post-spawn decision and constraint amendment the user
+made through surfaced judgment calls.
+A fixed round count, elapsed time, idle time, or context size alone never forces
+replacement.
 
 Track finding classes across the whole exchange. A second member after a
 class sweep requires a root-cause hypothesis for why the sweep missed it,
