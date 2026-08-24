@@ -1,69 +1,66 @@
-# Authoring rules (write lens)
+# Authoring Rules (Write Lens)
 
-## Writing rules
+## Writing Rules
 
-- **Prompts are weighed context, not enforced config.** Concision and
-  clarity raise adherence more than volume or shouting. A hard guarantee
-  needs a real gate (a hook, a CI check), never louder wording.
-- **Reserve absolutes for invariants.** `ALWAYS`, `NEVER`, and `MUST` only
-  for safety rules and true never-actions; decision rules ("prefer X unless
+- **Prompts influence agent behavior, but do not guarantee it.** The model
+  weighs every sentence against everything else in context. Concise, clear,
+  and unambiguous instructions work better than repetition or shouting.
+- **Guarantees require enforcement.** Use a real gate, such as a hook or CI
+  check, when compliance is mandatory.
+- **Reserve absolutes for invariants.** Use `ALWAYS`, `NEVER`, and `MUST` only
+  for safety rules and true never-actions. Use decision rules ("prefer X unless
   Y") for judgment calls. Newer Claude models over-trigger on aggressive
-  emphasis (see sources below); prefer normal phrasing in every variant.
-- **Give gates instances.** Abstract categories under-fire; a ten-word
-  example list makes the gate recognizable at the moment of action.
-- **Structure is load-bearing.** Headers group, bullets isolate rules, and
-  each rule's position matters: models drop the middle of dense blocks
+  emphasis (see sources below), so prefer normal phrasing in every variant.
+- **Give gates examples.** Abstract categories under-fire, but a ten-word
+  example list helps the gate trigger at the critical moment.
+- **Structure matters.** Headers group, bullets isolate rules, and
+  each rule's position matters. Models drop the middle of dense blocks
   first.
-- **Every instruction must be addressable by its reader.** Before writing a
-  rule, name who executes it (agent or human) and route it to that
-  audience's document.
-- **Self-referential style rules apply to the payload itself.** A prompt
+- **Only include instructions the intended reader can act on.** Before writing a
+  rule, name who executes it (agent or human) and don't give an instruction
+  to a party who can't perform it.
+- **Prompts should follow the same rules they give the agent.** A prompt
   that bans a punctuation habit must contain none of it; models mimic their
   config's prose. Any style ban in a payload creates a mechanical
   self-check (a grep) for that payload; `verification.md` runs them.
-- **Compression needs donors.** In a hard-capped prompt (ChatGPT Custom
-  Instructions), plan every addition as a swap: find the trim that funds
-  it, and prefer trims of implied content ("recommendation/next steps" to
-  "recommendation") over trims of qualifiers ("hidden assumptions" to
-  "assumptions"), which change behavior.
+- **If you need to add something to a capped document, shorten something
+  else.** In a hard-capped prompt (ChatGPT Custom Instructions), plan every
+  addition as a swap: find the trim that funds it, and prefer trims of implied
+  content ("recommendation/next steps" to "recommendation") over trims of
+  qualifiers ("hidden assumptions" to "assumptions"), which change behavior.
 
-## Per-tool tilts
+## Per-Tool Tilts
 
-Parameterize on this table; don't hardcode one tool's register into shared
-text. Treat the table as data to re-verify against the primary sources
-below, not gospel: it is the part of this skill that rots. Re-check it when
-a major model generation ships, and update the last-verified date.
+Use this table to tailor the wording for each tool. Keep tool-specific tone out
+of shared text. Because the table can become outdated, check it against the
+primary sources below whenever a major model generation is released, then update
+the last-verified date.
 
-| Axis      | Claude variant                                   | GPT/Codex variant                                 |
-| --------- | ------------------------------------------------ | ------------------------------------------------- |
-| Emphasis  | Normal phrasing; caps over-trigger               | Same restraint; absolutes for invariants only     |
-| Structure | Headers + bullets; scans structure like a reader | Plain hierarchical Markdown; no conflicting rules |
-| Rationale | Give the why; generalizes from the explanation   | State rule and check; trim narration              |
-| Verbosity | Concise but explanatory                          | Terser; biased to action                          |
+| Axis      | Claude Variant                                                             | GPT/Codex Variant                                                                              |
+| --------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Emphasis  | Use normal, explicit phrasing; reserve strong emphasis for true invariants | State each instruction once; reserve absolutes for true invariants                             |
+| Structure | Use clear sections and numbered or bulleted steps when order matters       | Lead with the outcome, constraints, and success criteria; specify the output shape when useful |
+| Rationale | Briefly explain why when it helps the model generalize                     | Keep rationale brief; emphasize the required outcome and checks                                |
+| Verbosity | Be concise, but include enough explanation to make the reasoning clear     | Be brief and action-oriented; omit explanation that does not affect the decision or result     |
 
-When a rule diverges per tool, variants differ in wording and emphasis, not
-intent. Most principles are genuinely tool-neutral and belong once,
+When a rule diverges per tool, variants should differ in wording and emphasis,
+not intent. Most principles are genuinely tool-neutral and belong once,
 verbatim, in a shared core.
 
-### Sources (last verified 2026-07-01)
+### Sources (last verified 2026-08-24)
 
 - Anthropic, "Prompting best practices"
-  (<https://platform.claude.com/docs/en/docs/build-with-claude/prompt-engineering/claude-4-best-practices>):
-  confirms the rationale tilt ("Providing context or motivation behind your
-  instructions ... can help Claude better understand your goals") and the
-  emphasis tilt ("The fix is to dial back any aggressive language. Where
-  you might have said 'CRITICAL: You MUST use this tool when...', you can
-  use more normal prompting like 'Use this tool when...'").
-- OpenAI, "GPT-5 prompting guide"
-  (<https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide>):
-  confirms the contradiction cost ("contradictory or vague instructions can
-  be more damaging to GPT-5 than to other models, as it expends reasoning
-  tokens searching for a way to reconcile the contradictions"), the
-  literalism ("follows prompt instructions with surgical precision"), and
-  the structure tilt (Markdown only where semantically correct,
-  hierarchical organization).
+  (<https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices>):
+  recommends clear, explicit instructions and structured steps when order
+  matters. It says context or motivation helps Claude generalize, and warns
+  that aggressive language can over-trigger tools in some Claude models.
+- OpenAI, "Model guidance"
+  (<https://developers.openai.com/api/docs/guides/latest-model>): recommends
+  lean prompts that state each instruction once. It also recommends
+  outcome-focused prompts with constraints, success criteria, and an output
+  shape, plus explicit guidance about what concise answers must preserve.
 
-## Structural pattern: shared core + per-tool tail
+## Structural Pattern: Shared Core + Per-Tool Tail
 
 For system payloads serving several tools: a byte-identical tool-agnostic
 core between explicit markers, plus a per-tool tail. Consequences to
