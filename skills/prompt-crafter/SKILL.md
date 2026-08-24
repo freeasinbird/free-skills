@@ -32,15 +32,15 @@ host project's own conventions; and API-level prompt engineering (tool
 schemas, system-prompt design inside applications), which is a different
 craft with different constraints.
 
-## Core model
+## Core Model
 
-Two ideas drive everything below; the references expand them.
+Three ideas drive everything below; the references expand them.
 
-- **Prompts are weighed context, not enforced config.** The model weighs
-  every sentence against everything else in context. Concision, clear
-  structure, and unambiguous wording raise adherence more than volume or
-  shouting. A hard guarantee needs a real gate (a hook, a CI check), never
-  louder wording.
+- **Prompts influence agent behavior, but do not guarantee it.** The model
+  weighs every sentence against everything else in context. Concise, clear,
+  and unambiguous instructions work better than repetition or shouting.
+- **Guarantees require enforcement.** Use a real gate, such as a hook or CI
+  check, when compliance is mandatory.
 - **Shared core plus per-tool tail.** When one principle set serves several
   tools, keep a byte-identical tool-agnostic core between explicit markers
   plus a per-tool tail. A core edit is one edit applied identically to every
@@ -50,18 +50,18 @@ Two ideas drive everything below; the references expand them.
 
 The working knowledge lives in three references, loaded on demand:
 
-- `references/defect-taxonomy.md`: the seven defect classes a review hunts,
+- `references/defect-taxonomy.md`: The seven defect classes a review hunts,
   each with a live example and its fix pattern.
-- `references/authoring-rules.md`: the writing rules, the per-tool tilt
+- `references/authoring-rules.md`: The writing rules, the per-tool tilt
   table with sources, and the shared-core pattern's consequences.
-- `references/verification.md`: the mechanical check battery as
+- `references/verification.md`: The mechanical check battery as
   copy-pasteable commands.
 
-## Workflow: review or audit an existing prompt set
+## Workflow: Review or Audit An Existing Prompt Set
 
-1. **Load the prior decisions relevant to the payloads under review.**
+1. **Load the prior decisions relevant to the payloads being reviewed.**
    Read the host project's authoring conventions, then any decision
-   notes the current issue or PR links or that name the payloads under
+   notes the current issue or PR links to or that name the payloads under
    review (search the project's decision log, where it keeps one, by
    affected path, topic, or decision name, not by chronology). Build an
    explicit prior-decision list, what was decided and why, and carry it
@@ -96,7 +96,7 @@ The working knowledge lives in three references, loaded on demand:
 7. **Apply, run the verification battery** (`references/verification.md`),
    and ship per the host project's process.
 
-## Workflow: cross-cutting edit
+## Workflow: Cross-Cutting Edit
 
 1. State the principle once, tool-neutral: what, and why.
 2. Decide its home. If it reads identically for every tool, it goes in the
@@ -109,7 +109,7 @@ The working knowledge lives in three references, loaded on demand:
 4. Read each edited payload end-to-end as its own agent would, then run the
    verification battery.
 
-## Workflow: author a new payload
+## Workflow: Author A New Payload
 
 1. Establish the target: which tool, which surface (synced config file
    versus pasted chat box), what character budget, and what sync mechanism.
