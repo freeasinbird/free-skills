@@ -182,21 +182,28 @@ the reference. In particular, read the record and mechanics from the same
 freshly resolved immutable base commit, never from the checked-out feature tree
 or a stale local ref, and recheck that base tip before every tracker write
 attempt and after its tracker verification attempt, even when the write or
-verification failed. The record can authorize only guarded transitions and
-listed refreshes for known containing trackers, never another external or
-project mutation. The mutation guard or exclusive-writer window must cover
-every external object whose state selected the tracker or determined the
-computed edit, not only the tracker being written.
+verification failed.
+
+The record can authorize only documented transitions and listed refreshes for
+known containing trackers, never another external or project mutation.
+Immediately before a tracker write, freshly reread every external object whose
+state selected the tracker or determined the computed edit, not only the
+tracker being written, then recompute and apply only the documented idempotent
+transition. After the target verification, reread that full input set again. A
+changed or unverifiable input makes every otherwise verified field from the
+attempt unknown and stops later work. Successful later verification proves
+current observed state, not that no concurrent edit was overwritten.
 
 Use `reconciliation-ledger.sh` for every discovery result, including readable
 absence. Enumerate work per tracker and per transition or refreshed field,
-record each ordered freshness, guard, attempt, verification, and disposition
-event. Name every external input used by a write, no-op, or report; after all
-writes are dispositioned, reread and recompute no-op and report items before
-recording them fresh. Then close the trace with a final base-tip observation
-even when no write ran. A stable absence suppresses the complete ledger and
-stays silent; otherwise report the checker's ledger and owner action. Only
-`RESULT complete` supports a full project-reconciliation claim. Run it as
+record each ordered freshness, guard, attempt, target verification, full-input
+recheck, and disposition event. Name every external input used by a write,
+no-op, or report; after all writes are dispositioned, reread and recompute
+no-op and report items before recording them fresh. Then close the trace with a
+final base-tip observation even when no write ran. A stable absence suppresses
+the complete ledger and stays silent; otherwise report the checker's ledger and
+owner action. Only `RESULT complete` supports a full project-reconciliation
+claim. Run it as
 `<skill-dir>/reconciliation-ledger.sh '<trace-file>'`; `--help`, or `-h`, prints
 the trace contract. If the executable check cannot run, apply the referenced
 state machine manually and report that verification gap.

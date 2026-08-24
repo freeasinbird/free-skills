@@ -102,20 +102,32 @@ a trace that omits one; its canonical output is the ledger to report. A skipped
 row names the
 immediate reason and one of the fixed owner-action classes printed by `--help`,
 so the generated action can name source repair, ambiguity resolution, supported
-tooling, guard acquisition, policy recovery, closing-issue verification,
+tooling, input-reread recovery, policy recovery, closing-issue verification,
 separate authorization, or safe remaining work without accepting arbitrary
 edit text. Every class requires fresh rediscovery and recomputation where inputs
 can change, never an edit or command derived from stale inputs.
 
-Every write attempt has exactly this order: resolve `pre`; establish the
-complete external-input `guard`; record the interface result and all attempted
-fields in `attempt`; reread the tracker and record one `verify` result per
-field; then resolve `post`. Run the post lookup even when the interface failed
-or rejected its condition, or the tracker reread could not verify the outcome.
-Only a reread that proves the intended field and unrelated state records
-`changed`; a proved no-change failure records `failed`, and any indeterminate
-field records `unknown`. One external call may therefore leave completed and
-unknown fields in the same partial ledger.
+Every write attempt has exactly this order: resolve `pre`; freshly reread and
+record every external input in `guard complete`; record the interface result
+and all attempted fields in `attempt`; reread the tracker and record one
+`verify` result per field; reread every guarded selector and computation input
+and record the full set in `recheck`; then resolve `post`. `guard unavailable`
+means at least one input could not be freshly reread. Run the target reread,
+input recheck, and post lookup even when the interface failed, or the target
+reread could not verify the outcome. Only a target reread that proves the
+intended field and unrelated state records `changed`; a proved no-change
+failure records `failed`, and any indeterminate field records `unknown`. A
+changed or unverifiable post-write input makes every otherwise verified change
+unknown and stops later work. One external call may therefore leave completed
+and unknown fields in the same partial ledger. When the fresh pre-write rereads
+show that a planned target or transition no longer applies, record its `skip`
+after `guard complete` and before any `attempt`.
+
+`recheck fresh` means every named input was readable and its current state still
+supports the post-write recomputation, including the intended target changes.
+Use `changed` when any input changed outside the intended transition so the
+selector or computation no longer holds, and `unverifiable` when any input
+cannot be established. The event always lists the full `guard complete` set.
 
 After every planned write is dispositioned, reread each no-op, then recompute
 each report from all of its named current inputs. Record that `observe` event
@@ -131,18 +143,18 @@ as `restart`; after an earlier attempt changed or may have changed state, stop
 as `partial`. A moved or unverifiable post-tip always stops remaining work.
 Preserve verified fields, mark unverifiable attempted fields unknown, skip
 everything not attempted, and never roll back or repeat the call. An interface
-failure, conditional rejection, failed verification, or incomplete guard also
+failure, rejected attempt, failed verification, or incomplete input reread also
 stops later writes even when policy stayed fresh.
 
 Close every applicable trace with a newly resolved `final` base tip after all
 items are dispositioned. This closing observation is mandatory for a zero-item
 plan, all-no-op work, report-only work, ambiguity, missing tooling, an
-unavailable guard, a pre-write stop, and every post-write exit. It prevents a
-stale completion or report when no later write would otherwise trigger another
-freshness lookup. A moved or unverifiable final tip makes a zero-change run
-`restart` and a changed or unknown run `partial`. Mark the one permitted new
-trace `replacement`; if freshness moves again during it, the checker returns
-`unstable` rather than another restart.
+unavailable input reread, a pre-write stop, and every post-write exit. It
+prevents a stale completion or report when no later write would otherwise
+trigger another freshness lookup. A moved or unverifiable final tip makes a
+zero-change run `restart` and a changed or unknown run `partial`. Mark the one
+permitted new trace `replacement`; if freshness moves again during it, the
+checker returns `unstable` rather than another restart.
 
 Only `RESULT complete` supports full project-reconciliation completion. A
 `restart`, `unstable`, `incomplete`, or `partial` result reports every completed,
@@ -200,31 +212,38 @@ mechanics document already identifies it.
 
 Use the PR host CLI or the project's documented tracker interface for external
 mutations. Without one, do not improvise a platform-specific mechanism; report
-the obligations as not run and provide the exact owner action to reacquire
-current inputs and apply the transition under a complete guard. Do not hand off
-a precomputed edit when an input can change.
+the obligations as not run and provide the exact owner action to freshly reread
+current inputs and recompute the transition. Do not hand off a precomputed edit
+when an input can change.
 
 Before any tracker write, enumerate every external object whose state selects
 the target or determines the transition or refreshed value. This input set can
 include closing issues, containing or dependency trackers, and the target
 tracker itself. Require the pre-write base-tip freshness check in §discovery
-and either an interface that conditions the mutation on immutable revisions of
-every object in that set, or a documented exclusive-writer mechanism acquired
-and verified across the full set for the whole read-compute-write window. A
-condition on only the target tracker is insufficient when another object's
-state influenced the write. A read followed by an unconditional whole-object
-replacement is also unsafe. Without all guards, do not write; give the owner
-the exact steps to rediscover and recompute under a complete guard instead,
-never an edit derived from unguarded or stale inputs.
+and freshly reread every object in that set immediately before the write. Record
+every input in `guard complete`; if any input cannot be reread, record
+`guard unavailable` and do not write. Recompute from those current states and
+apply only the documented idempotent transition and refresh when the target,
+unit entry, and authority still apply. Otherwise skip the planned transition
+before an attempt and report the changed input. If a project documents a
+genuinely stronger mechanism, such as a real lock or a tracker interface with
+compare-and-set across every input, use that mechanism too.
 
-With the guard held, read every input object's current state, confirm every
-captured revision and the documented unit entry remain unchanged, apply only
-the authorized transition and refresh, then re-read the target to verify the
-intended changes and that unrelated state remains intact. Run the post-write
-base-tip check after that reread and verification attempt, regardless of its
-outcome. Only then classify the tracker result and stop on any input revision
-mismatch, failed verification, or failed freshness check. Report an unverified
-write as unknown, never as changed or unchanged.
+After the fresh rereads, apply the transition through the documented interface,
+then reread the target and verify every intended field plus unrelated state.
+Reread every selector and computation input again before the post-write
+base-tip check. If any changed or became unverifiable, report every otherwise
+verified field from that attempt as unknown and stop. Run the post-write
+base-tip check after those verification attempts, regardless of their outcome.
+A successful reread verifies only the current states observed; it cannot prove
+that an unconditional whole-object replacement did not overwrite a concurrent
+edit made after the pre-write reread. Report that residual race honestly, and
+use the forge's edit history to recover if it occurs. Stop on a failed reread,
+failed verification, failed input recheck, or failed freshness check. Report an
+unverified write as unknown, never as changed or unchanged, and never describe
+a verified current state as race-free. In the summary, describe a verified
+`changed` result as verified current state, or an inconclusive result as
+unknown.
 
 Record outcomes per tracker and per refreshed field. If a mutation fails
 midway, do not roll back or repeat completed git cleanup and do not claim full
