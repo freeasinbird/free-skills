@@ -11,6 +11,7 @@
 #   guard   <complete|unavailable>
 #   attempt <accepted|failed|rejected> <write item> [<write item> ...]
 #   verify  <attempted item> <changed|failed|unknown>
+#   recheck <fresh|changed|unverifiable> <input> [<input> ...]
 #   post    <base-tip|unverifiable>
 #   observe <noop|report item> <fresh|stale|unverifiable> <input> [<input> ...]
 #   skip    <item>  <reason>  <owner-action-class>
@@ -18,10 +19,16 @@
 #
 # `policy` comes first and identifies the immutable tip used for both governing
 # instructions and detailed mechanics. All `plan` rows follow it and precede
-# execution. A write is exactly pre, guard, attempt, one verify per attempted
-# field, post. The attempt status records the interface result separately from
-# what the reread proves. `observe` revalidates a no-op or report item after all
-# writes, while `skip` dispositions work that could not safely run.
+# execution. `guard complete` records every named input freshly reread
+# immediately before the attempt; `guard unavailable` means an input could not
+# be freshly reread. A write is exactly pre, guard, attempt, one verify per
+# attempted field, recheck, post. `recheck fresh` records that the same external
+# inputs were readable and still support the post-write computation, including
+# intended target changes; `changed` or `unverifiable` cannot yield completion.
+# The attempt status records the interface result separately from what the
+# target reread proves. `observe` revalidates a no-op or report
+# item after all writes, while `skip` dispositions work that could not safely
+# run.
 # Owner-action classes are
 # source, ambiguity, tooling, guard, policy, closing, unauthorized, or
 # remaining. `final` is mandatory even when the plan is empty, report-only, or
@@ -155,7 +162,7 @@ BEGIN {
     if (phase != "pre") invalid("guard must immediately follow a fresh pre")
     guard_count = 0
     if ($2 == "complete") {
-      if (NF < 3) invalid("a complete guard must enumerate guarded inputs")
+      if (NF < 3) invalid("guard complete must enumerate freshly reread inputs")
       for (field = 3; field <= NF; field++) {
         for (guard_no = 1; guard_no <= guard_count; guard_no++)
           if (guard_input[guard_no] == $field)
@@ -174,7 +181,7 @@ BEGIN {
   }
   if (event == "attempt") {
     require_at_least(3)
-    if (phase != "guarded") invalid("attempt must immediately follow a complete guard")
+    if (phase != "guarded") invalid("attempt must immediately follow guard complete")
     if ($2 != "accepted" && $2 != "failed" && $2 != "rejected")
       invalid("attempt status must be accepted, failed, or rejected")
     attempt_status = $2
@@ -190,7 +197,7 @@ BEGIN {
         covered = 0
         for (guard_no = 1; guard_no <= guard_count; guard_no++)
           if (guard_input[guard_no] == dep) covered = 1
-        if (!covered) invalid("guard omits required input " dep " for " $field)
+        if (!covered) invalid("guard complete omits freshly reread input " dep " for " $field)
       }
       attempt_count++
       attempt_index[attempt_count] = idx
@@ -213,16 +220,55 @@ BEGIN {
     phase = "verified"
     next
   }
-  if (event == "post") {
-    require_fields(2)
-    if (phase != "verified") invalid("post must follow the verification attempt")
+  if (event == "recheck") {
+    require_at_least(3)
+    if (phase != "verified") invalid("recheck must follow every field verification")
     for (attempt_no = 1; attempt_no <= attempt_count; attempt_no++) {
       idx = attempt_index[attempt_no]
       if (!verified[idx]) invalid("attempted item has no verification: " plan_item[idx])
-      if (verification[idx] == "changed") {
+    }
+    if ($2 != "fresh" && $2 != "changed" && $2 != "unverifiable")
+      invalid("recheck status must be fresh, changed, or unverifiable")
+    if (NF - 2 != guard_count) invalid("recheck input set differs from guard complete")
+    for (field = 3; field <= NF; field++) {
+      if (rechecked_input[$field]) invalid("recheck repeats an input: " $field)
+      rechecked_input[$field] = 1
+      covered = 0
+      for (guard_no = 1; guard_no <= guard_count; guard_no++)
+        if (guard_input[guard_no] == $field) covered++
+      if (covered != 1) invalid("recheck names an input absent from guard complete: " $field)
+    }
+    for (guard_no = 1; guard_no <= guard_count; guard_no++) {
+      dep = guard_input[guard_no]
+      if (!rechecked_input[dep]) invalid("recheck omits guarded input: " dep)
+      delete rechecked_input[dep]
+    }
+    input_recheck = $2
+    phase = "rechecked"
+    next
+  }
+  if (event == "post") {
+    require_fields(2)
+    if (phase != "rechecked") {
+      if (phase == "verified")
+        for (attempt_no = 1; attempt_no <= attempt_count; attempt_no++) {
+          idx = attempt_index[attempt_no]
+          if (!verified[idx]) invalid("attempted item has no verification: " plan_item[idx])
+        }
+      invalid("post must follow the post-write input recheck")
+    }
+    for (attempt_no = 1; attempt_no <= attempt_count; attempt_no++) {
+      idx = attempt_index[attempt_no]
+      if (!verified[idx]) invalid("attempted item has no verification: " plan_item[idx])
+      if (verification[idx] == "changed" && input_recheck == "fresh") {
         disposition[idx] = "completed"
         detail[idx] = "changed"
         changed_count++
+      } else if (verification[idx] == "changed") {
+        disposition[idx] = "unknown"
+        detail[idx] = "post-write inputs were " input_recheck
+        unknown_count++
+        writes_stopped = 1
       } else if (verification[idx] == "failed") {
         disposition[idx] = "skipped"
         detail[idx] = "write failed or its condition was rejected"
@@ -244,12 +290,14 @@ BEGIN {
       attempt_problem = 1
       writes_stopped = 1
     }
+    if (input_recheck != "fresh") writes_stopped = 1
     stop_writes_for_freshness($2)
     attempt_count = 0
     attempt_status = ""
     for (guard_no = 1; guard_no <= guard_count; guard_no++)
       delete guard_input[guard_no]
     guard_count = 0
+    input_recheck = ""
     phase = "idle"
     next
   }
@@ -299,11 +347,22 @@ BEGIN {
   }
   if (event == "skip") {
     require_fields(4)
-    if (phase != "idle" && phase != "blocked")
-      invalid("skip requires an idle or blocked state")
+    if (phase != "idle" && phase != "blocked" && phase != "guarded")
+      invalid("skip requires an idle, blocked, or freshly reread state")
     idx = item_index($2)
     if (!idx) invalid("skip names an unplanned item: " $2)
     if (disposition[idx] != "") invalid("item already dispositioned: " $2)
+    if (phase == "guarded" && plan_kind[idx] != "write")
+      invalid("a post-reread skip requires a write item")
+    if (phase == "guarded") {
+      for (dep_no = 1; dep_no <= dep_count[idx]; dep_no++) {
+        dep = plan_dep[idx, dep_no]
+        covered = 0
+        for (guard_no = 1; guard_no <= guard_count; guard_no++)
+          if (guard_input[guard_no] == dep) covered = 1
+        if (!covered) invalid("guard complete omits freshly reread input " dep " for " $2)
+      }
+    }
     if ($4 != "source" && $4 != "ambiguity" && $4 != "tooling" &&
         $4 != "guard" && $4 != "policy" && $4 != "closing" &&
         $4 != "unauthorized" && $4 != "remaining")
@@ -314,7 +373,12 @@ BEGIN {
     detail[idx] = $3
     action_class[idx] = $4
     skipped_count++
-    if (phase == "blocked") phase = "idle"
+    if (phase == "guarded") {
+      for (guard_no = 1; guard_no <= guard_count; guard_no++)
+        delete guard_input[guard_no]
+      guard_count = 0
+    }
+    if (phase == "blocked" || phase == "guarded") phase = "idle"
     next
   }
   if (event == "final") {
@@ -373,7 +437,7 @@ END {
   if (result == "complete") {
     print "OWNER ACTION none"
   } else if (result == "restart") {
-    print "OWNER ACTION rediscover policy and reacquire every input at the current base tip before recomputing work under a complete guard; do not use a precomputed edit"
+    print "OWNER ACTION rediscover policy, freshly reread every input at the current base tip, and recompute; do not use a precomputed edit"
   } else if (result == "unstable") {
     print "OWNER ACTION wait for the base tip to stabilize, then rediscover policy and reacquire every input before recomputing; do not reuse either prior trace"
   }
@@ -395,17 +459,17 @@ END {
       else if (action_class[idx] == "ambiguity")
         action = "resolve the named ambiguity, then rediscover policy and reacquire every affected input before recomputing; do not guess"
       else if (action_class[idx] == "tooling")
-        action = "use the documented tracker interface, then reacquire every input and recompute under a complete guard; do not improvise a mutation mechanism"
+        action = "use the documented tracker interface, then freshly reread every input and recompute; do not improvise a mutation mechanism"
       else if (action_class[idx] == "guard")
-        action = "acquire a guard spanning every selector and computation input, reread them, and recompute before applying; do not use a precomputed edit"
+        action = "restore access, then freshly reread every selector and computation input and recompute before applying; do not use a precomputed edit"
       else if (action_class[idx] == "policy")
         action = "re-establish current base identity, then rediscover policy and reacquire every input before recomputing; do not use a precomputed edit"
       else if (action_class[idx] == "closing")
-        action = "reverify the closing issues, then rediscover trackers and recompute from current guarded inputs"
+        action = "reverify the closing issues, then rediscover trackers and recompute from freshly reread inputs"
       else if (action_class[idx] == "unauthorized")
         action = "authorize and perform this as a separate work unit; merge-cleanup cannot inherit it"
       else
-        action = "rediscover current policy, reacquire every affected input, and recompute remaining work under a complete guard; do not use a precomputed edit"
+        action = "rediscover current policy, freshly reread every affected input, and recompute remaining work; do not use a precomputed edit"
       print "OWNER ACTION " plan_item[idx] ": " action
     }
   }

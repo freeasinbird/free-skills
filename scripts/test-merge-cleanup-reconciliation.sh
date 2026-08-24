@@ -3,8 +3,8 @@
 #
 # The cases enumerate every deterministic project-reconciliation exit class:
 # successful single and multiple writes, zero work, no-op and report-only work,
-# every freshness failure position, source/tool/guard stops, mutation and
-# verification failures, conditional rejection, partial fields, and malformed
+# every freshness failure position, source/tool/input-reread stops, mutation
+# and verification failures, rejected attempts, partial fields, and malformed
 # traces that try to bypass the ordering or complete-disposition invariants.
 #
 # Usage: test-merge-cleanup-reconciliation.sh
@@ -50,12 +50,99 @@ pre	A
 guard	complete	full-input-set
 attempt	accepted	T1:transition
 verify	T1:transition	changed
+recheck	fresh	full-input-set
 post	A
 final	A
 EOF
 want 'RESULT complete'
 want 'COMPLETED T1:transition (changed)'
 want 'OWNER ACTION none'
+
+run_case "a GitHub-shaped optimistic write follows fresh input rereads" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	closing-issue	dependency-tracker	T1
+pre	A
+guard	complete	closing-issue	dependency-tracker	T1
+attempt	accepted	T1:transition
+verify	T1:transition	changed
+recheck	fresh	closing-issue	dependency-tracker	T1
+post	A
+final	A
+EOF
+want 'RESULT complete'
+reject 'acquire a complete guard'
+
+run_case "a post-write selector change makes verified state unknown" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	closing-issue	T1
+pre	A
+guard	complete	closing-issue	T1
+attempt	accepted	T1:transition
+verify	T1:transition	changed
+recheck	changed	closing-issue	T1
+post	A
+final	A
+EOF
+want 'RESULT partial'
+want 'UNKNOWN T1:transition: post-write inputs were changed'
+want 'inspect every unknown write'
+
+run_case "an unverifiable post-write input makes verified state unknown" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	dependency-tracker	T1
+pre	A
+guard	complete	dependency-tracker	T1
+attempt	accepted	T1:transition
+verify	T1:transition	changed
+recheck	unverifiable	dependency-tracker	T1
+post	A
+final	A
+EOF
+want 'RESULT partial'
+want 'UNKNOWN T1:transition: post-write inputs were unverifiable'
+
+run_case "a fresh selector reread can stop before the write" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	closing-issue	T1
+pre	A
+guard	complete	closing-issue	T1
+skip	T1:transition	closing issue no longer selects T1	remaining
+final	A
+EOF
+want 'RESULT incomplete'
+want 'SKIPPED T1:transition: closing issue no longer selects T1'
+reject 'COMPLETED T1:transition'
+
+run_case "a post-reread skip cannot omit a selecting input" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	closing-issue	T1
+pre	A
+guard	complete	T1
+skip	T1:transition	closing issue no longer selects T1	remaining
+EOF
+want 'guard complete omits freshly reread input closing-issue for T1:transition'
+
+run_case "a post-write input recheck cannot omit a guarded input" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	closing-issue	T1
+pre	A
+guard	complete	closing-issue	T1
+attempt	accepted	T1:transition
+verify	T1:transition	changed
+recheck	fresh	T1
+EOF
+want 'recheck input set differs from guard complete'
+
+run_case "a post-write input recheck cannot repeat an input" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	closing-issue	T1
+pre	A
+guard	complete	closing-issue	T1
+attempt	accepted	T1:transition
+verify	T1:transition	changed
+recheck	fresh	T1	T1
+EOF
+want 'recheck repeats an input: T1'
 
 run_case "multiple writes and an atomic multi-field write complete" 0 <<'EOF'
 policy	A	complete	initial
@@ -66,12 +153,14 @@ pre	A
 guard	complete	full-input-set
 attempt	accepted	T1:transition
 verify	T1:transition	changed
+recheck	fresh	full-input-set
 post	A
 pre	A
 guard	complete	full-input-set
 attempt	accepted	T2:transition	T2:readiness
 verify	T2:transition	changed
 verify	T2:readiness	changed
+recheck	fresh	full-input-set
 post	A
 final	A
 EOF
@@ -125,7 +214,7 @@ final	A
 EOF
 want 'RESULT incomplete'
 want 'SKIPPED T1:transition: inputs were stale at re-observation'
-want 'recompute remaining work under a complete guard'
+want 'freshly reread every affected input'
 
 run_case "a no-op recheck cannot omit a selecting input" 2 <<'EOF'
 policy	A	complete	initial
@@ -165,6 +254,7 @@ pre	A
 guard	complete	T1-revision
 attempt	accepted	T1:transition
 verify	T1:transition	changed
+recheck	fresh	T1-revision
 post	A
 observe	startable-now	fresh	T1-revision	dependency
 final	A
@@ -211,7 +301,7 @@ skip	project-reconciliation	detailed mechanics at A is unreadable	source
 final	B
 EOF
 want 'RESULT restart'
-want 'rediscover policy and reacquire every input at the current base tip'
+want 'rediscover policy, freshly reread every input at the current base tip'
 reject 'restore or correct the named authoritative current-base source'
 
 run_case "ambiguity is incomplete with no guessed work" 0 <<'EOF'
@@ -223,28 +313,28 @@ EOF
 want 'RESULT incomplete'
 want 'SKIPPED T1:readiness: dependency relation is ambiguous'
 
-run_case "a missing complete guard permits no attempt" 0 <<'EOF'
+run_case "a failed input reread permits no attempt" 0 <<'EOF'
 policy	A	complete	initial
 plan	T1:transition	write	full-input-set
 pre	A
 guard	unavailable
-skip	T1:transition	full input-set guard is unavailable	guard
+skip	T1:transition	an input could not be freshly reread	guard
 final	A
 EOF
 want 'RESULT incomplete'
-want 'guard spanning every selector and computation input'
+want 'freshly reread every selector and computation input'
 
-run_case "a final policy move supersedes an unavailable old guard" 0 <<'EOF'
+run_case "a final policy move supersedes a failed input reread" 0 <<'EOF'
 policy	A	complete	initial
 plan	T1:transition	write	full-input-set
 pre	A
 guard	unavailable
-skip	T1:transition	full input-set guard is unavailable	guard
+skip	T1:transition	an input could not be freshly reread	guard
 final	B
 EOF
 want 'RESULT restart'
-want 'rediscover policy and reacquire every input at the current base tip'
-reject 'acquire a guard spanning every selector'
+want 'rediscover policy, freshly reread every input at the current base tip'
+reject 'acquire a complete guard'
 
 run_case "a pre-write move before any change restarts" 0 <<'EOF'
 policy	A	complete	initial
@@ -263,6 +353,7 @@ pre	A
 guard	complete	full-input-set
 attempt	accepted	T1:transition
 verify	T1:transition	changed
+recheck	fresh	full-input-set
 post	A
 pre	B
 skip	T2:transition	policy moved before the next write	policy
@@ -280,6 +371,7 @@ pre	A
 guard	complete	full-input-set
 attempt	failed	T1:transition
 verify	T1:transition	failed
+recheck	fresh	full-input-set
 post	A
 final	A
 EOF
@@ -293,6 +385,7 @@ pre	A
 guard	complete	full-input-set
 attempt	failed	T1:transition
 verify	T1:transition	changed
+recheck	fresh	full-input-set
 post	A
 final	A
 EOF
@@ -307,6 +400,7 @@ pre	A
 guard	complete	full-input-set
 attempt	accepted	T1:transition
 verify	T1:transition	unknown
+recheck	fresh	full-input-set
 post	A
 final	A
 EOF
@@ -322,6 +416,7 @@ pre	A
 guard	complete	full-input-set
 attempt	accepted	T1:transition
 verify	T1:transition	changed
+recheck	fresh	full-input-set
 post	B
 skip	T2:transition	policy moved after T1	policy
 final	B
@@ -337,6 +432,7 @@ pre	A
 guard	complete	full-input-set
 attempt	accepted	T1:transition
 verify	T1:transition	changed
+recheck	fresh	full-input-set
 post	unverifiable
 final	unverifiable
 EOF
@@ -351,19 +447,21 @@ guard	complete	full-input-set
 attempt	accepted	T1:transition	T1:readiness
 verify	T1:transition	changed
 verify	T1:readiness	unknown
+recheck	fresh	full-input-set
 post	A
 final	A
 EOF
 want 'COMPLETED T1:transition (changed)'
 want 'UNKNOWN T1:readiness'
 
-run_case "a rejected conditional mutation still requires verify then post" 0 <<'EOF'
+run_case "a failed tracker call still requires verify then post" 0 <<'EOF'
 policy	A	complete	initial
 plan	T1:transition	write	full-input-set
 pre	A
 guard	complete	full-input-set
-attempt	rejected	T1:transition
+attempt	failed	T1:transition
 verify	T1:transition	failed
+recheck	fresh	full-input-set
 post	A
 final	A
 EOF
@@ -374,22 +472,22 @@ policy	A	complete	initial
 EOF
 want 'trace has no final freshness observation'
 
-run_case "an attempt without a complete guard is invalid" 2 <<'EOF'
+run_case "an attempt without fresh input rereads is invalid" 2 <<'EOF'
 policy	A	complete	initial
 plan	T1:transition	write	full-input-set
 pre	A
 attempt	accepted	T1:transition
 EOF
-want 'attempt must immediately follow a complete guard'
+want 'attempt must immediately follow guard complete'
 
-run_case "a target-only guard cannot omit a selecting input" 2 <<'EOF'
+run_case "fresh input rereads cannot omit a selecting input" 2 <<'EOF'
 policy	A	complete	initial
 plan	T1:transition	write	closing-issue	T1
 pre	A
 guard	complete	T1
 attempt	accepted	T1:transition
 EOF
-want 'guard omits required input closing-issue for T1:transition'
+want 'guard complete omits freshly reread input closing-issue for T1:transition'
 
 run_case "post cannot precede complete per-field verification" 2 <<'EOF'
 policy	A	complete	initial
@@ -402,6 +500,17 @@ verify	T1:transition	changed
 post	A
 EOF
 want 'attempted item has no verification: T1:readiness'
+
+run_case "post cannot omit the full-input recheck" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	full-input-set
+pre	A
+guard	complete	full-input-set
+attempt	accepted	T1:transition
+verify	T1:transition	changed
+post	A
+EOF
+want 'post must follow the post-write input recheck'
 
 run_case "every planned field needs exactly one disposition" 2 <<'EOF'
 policy	A	complete	initial
@@ -465,6 +574,7 @@ pre	A
 guard	complete	full-input-set
 attempt	accepted	T1:transition
 verify	T1:transition	unknown
+recheck	fresh	full-input-set
 post	A
 pre	A
 EOF

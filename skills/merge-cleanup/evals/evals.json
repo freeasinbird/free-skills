@@ -18,13 +18,13 @@
     {
       "id": 2,
       "eval_name": "freeside-style-tracker-refresh",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Governing instructions contain a complete Post-merge obligations record whose readable repository-contained mechanics identify one containing tracker from the merged unit's closing issue, define its exact completion transition and a conditional-write guard spanning the closing issue, every readiness input, and the target tracker, distinguish Startable now from Mergeable next, and require newly unblocked units plus invalidated integration evidence in the report. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Governing instructions contain a complete Post-merge obligations record whose readable repository-contained mechanics identify one containing tracker from the merged unit's closing issue, define its exact idempotent completion transition, require fresh pre-write rereads of the closing issue, every readiness input, and the target tracker, distinguish Startable now from Mergeable next, and require newly unblocked units plus invalidated integration evidence in the report. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
       "expected_output": "Completed generic cleanup plus unit-scoped reconciliation of the one known tracker, with typed lists refreshed independently and the required project results reported without starting work.",
       "files": [],
       "expectations": [
         "Obligations run only after the merge is verified and issue-close state is checked",
         "The merged unit is checked off in the one known containing tracker",
-        "The tracker write condition covers the closing issue, every readiness input, and the target tracker",
+        "Fresh pre-write rereads cover the closing issue, every readiness input, and the target tracker",
         "Startable now and Mergeable next are refreshed as distinct lists",
         "Newly unblocked units are reported but neither claimed nor started",
         "Integration evidence invalidated by the merge is identified",
@@ -34,12 +34,12 @@
     {
       "id": 3,
       "eval_name": "multiple-containing-trackers",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Its complete Post-merge obligations record and repository-contained mechanics identify exactly two containing trackers, their unit entries and completion transitions, and an exclusive-writer guard for the merged unit; an unrelated tracker also exists but is not selected by that rule. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Its complete Post-merge obligations record and repository-contained mechanics identify exactly two containing trackers, their unit entries and idempotent completion transitions, and every input to reread immediately before each write; an unrelated tracker also exists but is not selected by that rule. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
       "expected_output": "Completed generic cleanup plus reconciliation of both and only the two known containing trackers, with per-tracker outcomes in the summary.",
       "files": [],
       "expectations": [
         "Both known containing trackers are updated",
-        "The exclusive-writer guard covers each tracker read-compute-write window",
+        "Every selector and computation input is freshly reread before each tracker write",
         "No tracker, board, lane, or dependency is invented",
         "The unrelated tracker is neither read as authority nor mutated",
         "The summary distinguishes the outcome for each containing tracker"
@@ -61,7 +61,7 @@
     {
       "id": 5,
       "eval_name": "ambiguous-dependencies",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Its complete Post-merge obligations record and repository-contained mechanics identify one containing tracker, its exact unit completion transition, and a conditional-write guard, but the tracker state conflicts with the mechanics document about a dependency edge and therefore changes whether another unit is startable. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Its complete Post-merge obligations record and repository-contained mechanics identify one containing tracker and its exact idempotent unit completion transition, but the tracker state conflicts with the mechanics document about a dependency edge and therefore changes whether another unit is startable. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
       "expected_output": "Generic cleanup plus only independently supported tracker edits, with the ambiguous dependency and affected readiness result surfaced for the project owner rather than guessed.",
       "files": [],
       "expectations": [
@@ -75,7 +75,7 @@
     {
       "id": 6,
       "eval_name": "tracker-mutation-failure-after-git-cleanup",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Its complete Post-merge obligations record and repository-contained mechanics identify two containing trackers, their exact completion transitions, and conditional-write guards. The local PR-host CLI stub allows the ordinary git cleanup and the first tracker update, then fails the second guarded mutation deterministically. Use only the fixture and do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Its complete Post-merge obligations record and repository-contained mechanics identify two containing trackers and their exact idempotent completion transitions. The local PR-host CLI stub allows the ordinary git cleanup and the first tracker update, then fails the second documented mutation deterministically. Use only the fixture and do not call the network or change anything outside it.",
       "expected_output": "The successful git cleanup remains complete, the successful tracker mutation is retained, and the second tracker failure is reported with exact owner action instead of retry, rollback, or a false full-success claim.",
       "files": [],
       "expectations": [
@@ -129,7 +129,7 @@
     {
       "id": 10,
       "eval_name": "policy-advance-between-tracker-writes",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies two containing trackers with guarded transitions. The local PR-host CLI stub keeps the base unchanged through the first verified tracker write, then advances it to a commit with different mechanics before the second write. Use only the fixture and do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies two containing trackers with documented transitions. The local PR-host CLI stub keeps the base unchanged through the first verified tracker write, then advances it to a commit with different mechanics before the second write. Use only the fixture and do not call the network or change anything outside it.",
       "expected_output": "The first verified tracker write is retained, the second is not attempted under stale policy, and project reconciliation is reported partial with the base advance and remaining owner action.",
       "files": [],
       "expectations": [
@@ -143,8 +143,8 @@
     {
       "id": 11,
       "eval_name": "non-tracker-mutation-request",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base instructions and mechanics define one guarded containing-tracker transition, then request deletion of a release artifact as another unit-scoped post-merge obligation. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
-      "expected_output": "Generic cleanup plus only the guarded containing-tracker transition, with the release-artifact deletion left to the project owner as outside delegated authority.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base instructions and mechanics define one documented containing-tracker transition, then request deletion of a release artifact as another unit-scoped post-merge obligation. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "Generic cleanup plus only the documented containing-tracker transition, with the release-artifact deletion left to the project owner as outside delegated authority.",
       "files": [],
       "expectations": [
         "The known containing tracker receives only its documented transition and listed refreshes",
@@ -157,7 +157,7 @@
     {
       "id": 12,
       "eval_name": "policy-advance-during-final-write",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker with a guarded transition. The local PR-host CLI stub keeps the base unchanged through the pre-write lookup, performs and verifies the tracker mutation, then reports a base advance to different mechanics on the next lookup. Use only the fixture and do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker with a documented transition. The local PR-host CLI stub keeps the base unchanged through the pre-write lookup, performs and verifies the tracker mutation, then reports a base advance to different mechanics on the next lookup. Use only the fixture and do not call the network or change anything outside it.",
       "expected_output": "The verified tracker write is retained, the post-write base check detects the policy move, and project reconciliation is reported partial rather than fully complete even though no later tracker write exists.",
       "files": [],
       "expectations": [
@@ -171,7 +171,7 @@
     {
       "id": 13,
       "eval_name": "unverifiable-policy-after-final-write",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker with a guarded transition. The local PR-host CLI stub keeps the base unchanged through the pre-write lookup and verifies the tracker mutation, then returns a malformed result for the required post-write base-tip lookup. Use only the fixture and do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker with a documented transition. The local PR-host CLI stub keeps the base unchanged through the pre-write lookup and verifies the tracker mutation, then returns a malformed result for the required post-write base-tip lookup. Use only the fixture and do not call the network or change anything outside it.",
       "expected_output": "The verified tracker write is retained, the unverifiable final policy observation makes reconciliation partial, and the report lists the completed write plus exact owner action rather than claiming full success.",
       "files": [],
       "expectations": [
@@ -185,7 +185,7 @@
     {
       "id": 14,
       "eval_name": "tracker-verification-failure-still-checks-policy",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker with a guarded transition. The local PR-host CLI stub accepts the mutation, makes the tracker reread fail verification, and advances the base before the required post-write tip lookup. Use only the fixture and do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker with a documented transition. The local PR-host CLI stub accepts the mutation, makes the tracker reread fail verification, and advances the base before the required post-write tip lookup. Use only the fixture and do not call the network or change anything outside it.",
       "expected_output": "The tracker reread and verification attempt precede the mandatory post-write policy lookup; the write outcome is reported unknown, the base advance is reported, and reconciliation stops partial without retry or rollback.",
       "files": [],
       "expectations": [
@@ -199,31 +199,31 @@
     {
       "id": 15,
       "eval_name": "container-selection-input-changes",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy selects a containing tracker through a link on the merged unit's closing issue. After discovery, the local PR-host CLI stub removes that link while leaving the target tracker and its revision unchanged; its conditional mutation can guard only the target revision. Use only the fixture and do not call the network or change anything outside it.",
-      "expected_output": "No tracker write occurs because the closing issue that selected the target is outside the mutation's guard set; the stale selection and exact owner action to rediscover and recompute under a complete guard are reported.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy selects a containing tracker through a link on the merged unit's closing issue. After discovery but before the fresh pre-write reread, the local PR-host CLI stub removes that link while leaving the target tracker unchanged. Use only the fixture and do not call the network or change anything outside it.",
+      "expected_output": "No tracker write occurs because the fresh closing-issue reread shows that the target is no longer selected; the changed selection and exact owner action to rediscover and recompute are reported.",
       "files": [],
       "expectations": [
         "The closing issue is recognized as an external input that selected the tracker",
-        "A condition on only the unchanged target tracker is rejected as insufficient",
+        "The closing issue is freshly reread immediately before any target write",
         "The no-longer-selected tracker is not mutated",
         "No replacement container is inferred or searched for",
         "A final base-tip observation closes the zero-write run",
-        "The summary requires rediscovery and recomputation under a complete guard rather than handing off a stale edit"
+        "The summary requires rediscovery and recomputation rather than handing off a stale edit"
       ]
     },
     {
       "id": 16,
       "eval_name": "readiness-input-changes",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy requires a guarded target-tracker transition and a readiness refresh computed from a dependency tracker. After both are read, the local PR-host CLI stub changes only the dependency tracker while keeping the target revision unchanged. Use only the fixture and do not call the network or change anything outside it.",
-      "expected_output": "No target write occurs: the full-set conditional mutation rejects the changed dependency revision, while an exclusive-writer claim is invalid because the concurrent change occurred. The stale readiness input and exact owner action to rediscover and recompute are reported.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy requires a documented target-tracker transition and a readiness refresh computed from a dependency tracker. After discovery but before the fresh pre-write reread, the local PR-host CLI stub changes the dependency so the documented refresh no longer applies while keeping the target unchanged. Use only the fixture and do not call the network or change anything outside it.",
+      "expected_output": "No target write occurs: the fresh dependency reread detects the change and recomputation shows that the documented readiness refresh no longer applies. The changed readiness input and exact owner action to rediscover and recompute are reported.",
       "files": [],
       "expectations": [
-        "The dependency tracker is included in the external input guard set",
-        "The full-set conditional mutation rejects the changed dependency revision",
-        "Any claimed exclusive-writer window is treated as invalid because the concurrent change occurred",
+        "The dependency tracker is included in the fresh pre-write input set",
+        "The dependency tracker is freshly reread and the readiness value is recomputed",
+        "The changed dependency stops the write because the documented refresh no longer applies",
         "No readiness value computed from the stale dependency state is written",
         "The dependency edge is not invented, removed, or reinterpreted",
-        "The rejected conditional attempt is followed by tracker verification, a post-attempt base-tip lookup, and the final freshness observation",
+        "The detected input change is closed with the final base-tip observation",
         "The summary requires rediscovery and recomputation rather than handing off a stale edit"
       ]
     },
@@ -258,21 +258,21 @@
     {
       "id": 19,
       "eval_name": "missing-tracker-interface",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker and exact transition, but neither the PR-host CLI stub nor project instructions provide a supported conditional tracker interface. The base remains unchanged. Use only the fixture and do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies one containing tracker and exact transition, but neither the PR-host CLI stub nor project instructions provide a supported tracker interface. The base remains unchanged. Use only the fixture and do not call the network or change anything outside it.",
       "expected_output": "No tracker mutation is improvised; the transition is skipped, the zero-write trace closes against the unchanged policy tip, and reconciliation is incomplete with a safe owner procedure.",
       "files": [],
       "expectations": [
         "No platform-specific mutation mechanism is improvised",
-        "The transition is recorded as skipped because the guarded interface is unavailable",
+        "The transition is recorded as skipped because the documented interface is unavailable",
         "A final base-tip observation closes the zero-write run",
         "The result is incomplete rather than complete",
-        "The owner action reacquires current inputs and recomputes under a complete guard without a stale edit payload"
+        "The owner action freshly rereads current inputs and recomputes without a stale edit payload"
       ]
     },
     {
       "id": 20,
       "eval_name": "policy-advance-before-later-write",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies two guarded trackers. The first write verifies and its post-write tip is unchanged; immediately before the second write the base advances to different mechanics. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy identifies two documented trackers. The first write verifies and its post-write tip is unchanged; immediately before the second write the base advances to different mechanics. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside it.",
       "expected_output": "The verified first write is preserved, the second is skipped before an attempt, and the later pre-write policy move yields a partial ledger instead of restarting into mixed policy.",
       "files": [],
       "expectations": [
@@ -285,22 +285,22 @@
     },
     {
       "id": 21,
-      "eval_name": "conditional-rejection-still-closes-write",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. A complete full-input conditional guard is available, but one guarded input changes and the tracker interface rejects the mutation without changing the target. The base remains unchanged. Use only the fixture and do not call the network or change anything outside it.",
-      "expected_output": "The rejected call is treated as an attempted write, followed by target verification, a post-attempt policy lookup, and final freshness; the transition is skipped and reconciliation is incomplete.",
+      "eval_name": "tracker-interface-failure-still-closes-write",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Every input is freshly reread, but the documented tracker interface fails the mutation without changing the target. The base remains unchanged. Use only the fixture and do not call the network or change anything outside it.",
+      "expected_output": "The failed call is treated as an attempted write, followed by target verification, a post-attempt policy lookup, and final freshness; the transition is skipped and reconciliation is incomplete.",
       "files": [],
       "expectations": [
-        "The conditional rejection is recorded separately from the tracker reread result",
+        "The interface failure is recorded separately from the tracker reread result",
         "The target is reread and verified unchanged",
         "The post-attempt base-tip lookup runs after verification",
         "No later tracker write is attempted",
-        "The owner action requires rereading every guard input and recomputing rather than retrying a stale call"
+        "The owner action requires freshly rereading every input and recomputing rather than retrying a stale call"
       ]
     },
     {
       "id": 22,
       "eval_name": "partial-field-verification",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. One guarded tracker call attempts the documented completion transition and readiness refresh. The reread verifies the transition but cannot establish the refreshed field or unrelated-state integrity; the base stays unchanged. Use only the fixture and do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. One documented tracker call attempts the completion transition and readiness refresh. The reread verifies the transition but cannot establish the refreshed field or unrelated-state integrity; the base stays unchanged. Use only the fixture and do not call the network or change anything outside it.",
       "expected_output": "The transition is completed, the refresh is unknown, no further work runs, and reconciliation is partial with per-field dispositions and a safe owner procedure.",
       "files": [],
       "expectations": [
@@ -356,13 +356,13 @@
     {
       "id": 26,
       "eval_name": "report-recomputed-after-planned-write",
-      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current policy requires one guarded tracker transition and a Startable now report derived from that tracker and a dependency. The pre-transition reads would produce a different report than the verified post-transition state. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside it.",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current policy requires one documented tracker transition and a Startable now report derived from that tracker and a dependency. The pre-transition reads would produce a different report than the verified post-transition state. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside it.",
       "expected_output": "The report remains pending until the planned write is dispositioned, then every named report input is reread and the post-transition report is computed before final freshness and completion.",
       "files": [],
       "expectations": [
         "The transition and report are planned separately with all external inputs named",
         "The report cannot be marked complete while the transition is pending",
-        "The guarded write is attempted and verified before report observation",
+        "The documented write is attempted and verified before report observation",
         "Every report input is reread at its current revision after the write",
         "Only the post-transition Startable now result is reported complete"
       ]
@@ -379,6 +379,20 @@
         "Every named input revision is revalidated",
         "A changed or unverifiable input skips the no-op rather than completing it",
         "An unchanged policy tip alone cannot support full reconciliation completion"
+      ]
+    },
+    {
+      "id": 28,
+      "eval_name": "input-changes-during-write",
+      "prompt": "The feature PR in <fixture-repo> has merged. Use the merge-cleanup skill to tidy the repository. Current-base policy selects one containing tracker through a closing issue and computes a readiness refresh from a dependency tracker. Every input is fresh immediately before the documented idempotent write, but the dependency tracker changes while the target update is in flight. The target reread verifies both intended fields and the base remains unchanged. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside it.",
+      "expected_output": "The post-write input recheck detects that the computation input changed, both otherwise verified target fields are reported unknown, later work stops, and reconciliation is partial rather than complete.",
+      "files": [],
+      "expectations": [
+        "The pre-write guard records the closing issue, dependency tracker, and target",
+        "The write uses only the freshly recomputed documented transition and refresh",
+        "Every guarded input is reread after target verification",
+        "The changed dependency downgrades every field in that write attempt to unknown",
+        "Stable target and policy observations cannot produce RESULT complete"
       ]
     }
   ]
