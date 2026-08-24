@@ -1,41 +1,37 @@
-# Decision notes
+# Decision Notes
 
-`devlog/` holds selective decision records, not session logs. Most
-work leaves no note; AGENTS.md's Decision notes section defines when
-one is warranted, this README defines the mechanics. The README and
-AGENTS.md always hold current truth: if a note contradicts them, they
-win; notes are the trail of how it got that way.
+`devlog/` holds selected decision records, not session logs. Most work needs
+no note. AGENTS.md explains when to write one; this file explains how.
+
+AGENTS.md and this README always state the current rules. When an old note
+conflicts with them, use the current rules. The note remains a record of how
+the project reached its earlier decision.
 
 ## Protocol
 
-- **One file per note**, named `YYYY-MM-DD-HHMM-slug.md` using local
-  24-hour time. Directory-of-notes (not a single file) so parallel
-  branches and agent sessions add notes without merge conflicts, while
-  same-day notes still sort in order.
-- **At most one permanent note per work unit or PR** in the ordinary
-  case. A note may evolve while its work unit or PR is active (in
-  lockstep with branch rewrites; see fold-fix in AGENTS.md) and
-  freezes when the PR merges; later corrections go in a new note,
-  never edits to a frozen one.
-- **Write for the future re-litigator**, not for someone following
-  along. The decision sentence shape is "Chose X over Y because Z";
-  name the decider when it isn't obvious (user choice, review finding,
-  agent judgment). Record final rationale, rejected alternatives,
-  changed assumptions, and verification findings that changed a
-  decision or closed a risk; no chronology ("first tried..."), no
-  commit diffs, no test transcripts, no PR status.
-- **Add a "Revisit when ..." line** where a concrete condition would
-  reopen the decision. It marks the decision's boundary, not open
-  work: it needs no clock and no follow-up bookkeeping.
-- **Actionable follow-ups live in the issue tracker.** When an issue
-  originates from a note, link the note from the issue; the note may
-  carry a plain `Follow-up: #N` historical link, but the issue, not
-  the note, carries the status.
+- **Use one file per note.** Name it `YYYY-MM-DD-HHMM-slug.md` with local
+  24-hour time. Separate files let parallel branches add notes without a merge
+  conflict, while the timestamp keeps same-day notes ordered.
+- **In the ordinary case, keep at most one permanent note per work unit or
+  PR.** Update an active note while its work is open, including when review
+  fixes are folded into earlier commits. Freeze the note when the PR merges.
+  Put a later correction in a new note.
+- **Write for a future reader revisiting the decision.** Use the shape "Chose
+  X over Y because Z." Name who decided when it matters, such as the user, a
+  reviewer, or the agent.
+- **Record lasting reasons and evidence.** Include the final reasoning,
+  rejected options, changed assumptions, and findings that changed a decision
+  or closed a risk. Do not include chronology, diffs, test logs, or PR status.
+- **Add a "Revisit when ..." condition when useful.** It states when the
+  decision should be reconsidered. It isn't open work and needs no deadline
+  or status tracking.
+- **Put actionable follow-ups in issues.** Link the note from an issue that
+  starts there. The note may keep a historical `Follow-up: #N` link, but the
+  issue owns the current status.
 
-## Historical entries
+## Historical Entries
 
-Entries written under an earlier protocol (session bookends,
-`## To promote` queues, `->` state markers) are frozen history: read
-them as evidence when relevant, never mutate or reformat them, and
-take no queue action from them; anything in one that is still
-actionable belongs in the issue tracker.
+Older entries may use session bookends, `## To promote` queues, or `->`
+status markers. Leave them unchanged. Read them as evidence when relevant, but
+do not act on their queues. Move any work that is still actionable into the
+issue tracker.

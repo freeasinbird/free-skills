@@ -1,19 +1,19 @@
 # Canonical Managed Sections
 
-Each section below is the exact text to insert into a project's AGENTS.md,
-including the management markers. During init, paste verbatim, except the
-`agents-md:project:done-checks` block inside `done`, which is a placeholder
-to fill with the project's real checks (see SKILL.md). During update,
-compare the content between markers against these blocks, leaving that
-nested block alone. Several blocks point at step-local procedure in the
-scaffolded `docs/agent-workflow.md` (`scaffolding.md` §agent-workflow);
-a project whose blocks carry those pointers must have that file.
+Each section below is copied verbatim into a project's AGENTS.md, including
+the management markers. During setup, replace the example checks inside the
+`agents-md:project:done-checks` block with the project's real checks.
+
+During an update, compare the text inside each managed block with this file.
+Leave the project-owned checks inside the `done` block unchanged. Some blocks
+point to procedures in `docs/agent-workflow.md`, which the skill scaffolds
+from `scaffolding.md` §agent-workflow. A project that uses those pointers must
+have that file.
 
 Sections: [devlog](#section-devlog),
 [finish-line](#section-finish-line), [context](#section-context),
-[communication](#section-communication),
-[branches](#section-branches),
-[pull-requests](#section-pull-requests), [commits](#section-commits),
+[communication](#section-communication), [branches](#section-branches),
+[pull-requests](#section-pull-requests), [commits](#section-commits), and
 [done](#section-done).
 
 ---
@@ -22,40 +22,40 @@ Sections: [devlog](#section-devlog),
 
 <!-- agents-md:managed:devlog -->
 
-## Decision notes (devlog)
+## Decision Notes (devlog)
 
-`devlog/` holds selective decision records, not session logs: at most
-one note per work unit or PR in the ordinary case, named
-`YYYY-MM-DD-HHMM-slug.md`. `devlog/README.md` is the protocol; most
-work needs no note.
+`devlog/` holds selected decision records, not session logs. Most work needs
+no note. In the ordinary case, keep at most one note per work unit or PR. Name
+it `YYYY-MM-DD-HHMM-slug.md`. Follow the protocol in `devlog/README.md`.
 
-- **Write or update a note only when** the work involves at least one
-  of: a consequential, non-obvious decision that rejects a plausible
-  alternative; an investigation or verification result that materially
-  changes the model, policy, risk, or implementation direction; a
-  durable owner choice that would otherwise exist only in chat;
-  cross-session context the work unit's PR or issue genuinely doesn't
-  carry; or a change on the project's mandatory-note list, where it
-  keeps one. Routine implementation, formatting, ordinary docs,
-  dependency maintenance, mechanical syncs, and uncomplicated fixes
-  need no note unless they reveal something consequential.
-- **Content**: final rationale, rejected alternatives, changed
-  assumptions, significant verification findings, and a "Revisit
-  when ..." condition where one is useful; not commit diffs, test
-  transcripts, or PR status. A note may evolve while its work unit or
-  PR is active; it freezes on merge.
-- **Retrieval**: read the notes linked from the issue or PR at hand;
-  otherwise search by affected path, topic, contract, or decision
-  name. Read the latest note only when resuming the work unit it
-  describes. Prior notes are evidence, not prohibitions: do not
-  silently overturn an explicit owner decision; if new evidence
-  conflicts with one, identify the prior decision, state which
-  assumption or condition changed, and surface the proposed revision.
-- **Actionable deferred work goes to the issue tracker**, not the
-  note. When an issue originates from a note, link the note from the
-  issue; the note may carry a plain historical `Follow-up: #N` link,
-  never a second source of status. An observation that is not yet
-  actionable becomes a "Revisit when ..." statement, not open work.
+- **Write a note only for a lasting decision or discovery.** A note is
+  warranted when the work includes at least one of these:
+
+  - A significant, non-obvious decision that rejects a reasonable option.
+  - A finding that materially changes the model, policy, risk, or direction.
+  - An owner decision that would otherwise exist only in chat.
+  - Essential cross-session context that the issue or PR doesn't carry.
+  - A change on the project's mandatory-note list, when it has one.
+
+- **Skip notes for routine work.** Implementation, formatting, ordinary docs,
+  dependency updates, mechanical syncs, and simple fixes need no note unless
+  they reveal a lasting decision or discovery.
+- **Record the final reasoning.** Include rejected options, changed
+  assumptions, important verification findings, and a "Revisit when ..."
+  condition where one is useful. Do not include diffs, test logs, chronology,
+  or PR status.
+- **Let an active note evolve.** Update it while its work unit or PR is open.
+  Freeze it when the PR merges.
+- **Find notes from the work first.** Read notes linked from the current issue
+  or PR. Otherwise, search by path, topic, contract, or decision name. Read
+  the latest note only when resuming the work unit it describes.
+- **Treat old notes as evidence, not rules.** Do not silently overturn an
+  explicit owner decision. When new evidence conflicts with one, name the old
+  decision, explain which assumption or condition changed, and propose the
+  revision.
+- **Track deferred work in issues.** Link the note from an issue that starts
+  there. The note may keep a historical `Follow-up: #N` link, but never a
+  second status record. Put non-actionable observations in "Revisit when ...".
 
 <!-- /agents-md:managed:devlog -->
 
@@ -65,63 +65,72 @@ work needs no note.
 
 <!-- agents-md:managed:finish-line -->
 
-## Default agent finish line
+## Default Agent Finish Line
 
-For any request to change code, docs, assets, or project state, the
-default endpoint is **an open, review-ready PR with required checks
-green**, not a merged branch. Merging is a human decision; do not merge
-your own PR unless the user explicitly asks, or the project has adopted
-an opt-in self-merge workflow.
+For changes to code, docs, assets, or project state, finish with an open,
+review-ready PR and green required checks. Leave the PR unmerged. Merge only
+when the user asks or the project has an explicit self-merge policy.
 
-Before implementation, establish a lightweight work contract: objective,
-testable acceptance criteria, scope, dependencies and blockers, and explicit
-non-goals. Direct user-assigned work needs no issue; the prompt and PR
-carry the contract. Persist it in a tracker issue when the
-work must survive a session boundary, pass sequentially between agents or
-sessions (even within one short session), coordinate concurrent workers, or
-join a backlog; a sequential handoff puts the durable input and output in
-the issue and its comments, never only in transient chat. Actionable work
-deferred out of the unit's scope gets a tracker issue before handoff.
+Before implementation, define a small work contract:
 
-A project may declare optional work-unit stages in an unmanaged,
-project-specific section. While a declared stage is active, its recorded
-allowed mutations and finish line govern: an implementation stage runs
-only the checklist steps they permit and stops at its recorded
-transition, a non-implementation stage follows its own record instead,
-and completing a stage hands off to the next without authorizing it to
-begin. Work that is not a declared stage runs the checklist in full,
-minus any action a separately declared stage owns.
+- Objective.
+- Testable acceptance criteria.
+- Scope.
+- Dependencies and blockers.
+- Explicit non-goals.
 
-By default, begin work only through explicit user assignment. An issue, label,
-backlog entry, satisfied dependency, completed plan, or claim is not
-authorization to select and start work. Agent self-selection requires an
-explicit project-specific opt-in policy.
+A direct user request needs no issue. The request and PR carry its contract.
+Use a tracker issue when the work must:
+
+- Continue in a later session.
+- Pass between agents or sessions, even during one short session.
+- Coordinate concurrent workers.
+- Enter a backlog.
+
+When one agent or session hands work to another, use the issue and its
+comments. Put there what the next one needs and what the previous one produced,
+not only chat. Before handoff, create an issue for actionable work deferred
+beyond the current scope.
+
+A project may define optional work-unit stages in a project-specific section
+outside the managed blocks. An active stage controls what may change and where
+to stop:
+
+- An implementation stage runs only its allowed checklist steps and stops
+  where the active stage says to stop.
+- A non-implementation stage follows its own record.
+- Finishing one stage hands work off. It doesn't authorize the next stage.
+- Work outside a declared stage runs the full checklist, except actions owned
+  by another declared stage.
+
+Start work only from an explicit user assignment. An issue, label, backlog
+entry, satisfied dependency, completed plan, or claim isn't authorization.
+An agent may choose work for itself only when an explicit project policy
+allows it.
 
 The implementation checklist:
 
-1. Read the README and, when resuming a work unit, its issue or PR and any
-   decision note they link. Resolve the default branch explicitly, update it
-   from its remote, and start from that exact tip (see Branches; only a
-   declared stacked PR starts elsewhere).
-2. Create one correctly named branch from that tip in a dedicated worktree
-   or equivalent isolated checkout (see Branches for the primary-checkout
-   exception).
-3. Make the scoped change, with the docs/tests/assets that keep it complete
-   and, where the project keeps decision notes, a note when the work meets
-   its triggers.
-4. Run the relevant verification plus the standard lint/build/test checks;
-   if any check cannot run, record the exact gap in the PR.
-5. Commit one concern at a time with a body that says why.
-6. Push, open the PR with the template, and remove sections that do not apply.
-7. Hand off per "Handing off the PR" (under Pull requests); leave the PR
-   open for a human to review and merge.
+1. Read the README. When resuming work, also read its issue or PR and linked
+   decision notes. Resolve the default branch and update it from its remote.
+   Start from that exact tip. Only a declared stacked PR may start elsewhere;
+   see Branches.
+2. Create a correctly named branch in a dedicated worktree or equivalent
+   isolated checkout. See Branches for the primary-checkout exception.
+3. Make the scoped change. Include the docs, tests, and assets needed to keep
+   it complete. Add a decision note only when its triggers apply.
+4. Run relevant verification and the standard lint, build, and test checks.
+   Record any check you could not run in the PR.
+5. Commit one concern at a time. Explain why in each commit body.
+6. Push and open the PR with the template. Remove sections that don't apply.
+7. Follow "Handing Off the PR" under Pull Requests. Leave the PR open for a
+   human to review and merge.
 
-For changes on a **destructive path** (delete/cleanup), a
-**credential-leak surface**, or a **returned-object-trust boundary**
-(trusting fields of a value handed back by an external call or
-deserializer), read `docs/agent-workflow.md` §refute-first before
-committing and run the verification pass it describes; a docs typo or
-an off-path refactor doesn't trigger it.
+Before committing work on a destructive path, credential-leak surface, or
+returned-object trust boundary, read `docs/agent-workflow.md` §refute-first and
+run its verification pass. A destructive path includes delete or cleanup. A
+returned-object trust boundary is where code trusts fields returned by an
+external call or deserializer. This extra pass doesn't apply to a docs typo or
+unrelated refactor.
 
 <!-- /agents-md:managed:finish-line -->
 
@@ -131,40 +140,29 @@ an off-path refactor doesn't trigger it.
 
 <!-- agents-md:managed:context -->
 
-## Context discipline
+## Context Discipline
 
-The working context is finite, and everything held in it is re-sent
-with every later tool call, so transient bulk pulled in early taxes
-every step after it. Durable state belongs in files (the PR body, the
-issue, a decision note where the project keeps one); keep the working
-context to what the current step needs.
+Working context is limited. Content added now is sent again with later tool
+calls, so early noise makes every later step more expensive. Keep durable
+state in files, such as the issue, PR body, or decision note. Keep only what
+the current step needs in working context.
 
-- **Keep raw bulk out.** Prefer targeted, bounded reads and searches
-  (a file region, a match list, a filtered log tail) over whole-file
-  dumps and unfiltered search output; don't page a large artifact into
-  context when a bounded query answers the question.
-- **Delegate broad exploration.** Where your platform and session
-  support delegation, offload broad exploration and mechanical sweeps
-  to a delegate that returns conclusions (findings, `file:line`
-  pointers, a short digest), never its raw output. Where they don't,
-  fall back to the bounded reads and searches above. Scale to size
-  either way: for a question a couple of targeted reads can answer,
-  spawning a delegate costs more than it saves.
-- **Right-size delegated work.** Where the platform exposes a model
-  class or effort level for delegated work, send mechanical scanning
-  and digesting to the cheapest class that handles it reliably;
-  frontier capability spent on rote reading is waste. Where it
-  doesn't, skip this.
-- **No quiet fan-out.** One delegate for exploration or review is
-  normal. Parallel multi-agent fan-outs multiply cost invisibly;
-  before launching one, state the expected scale and proceed with the
-  user's go-ahead or within a budget they already set.
-- **Prefer a fresh session over a bloated one.** The PR body (plus a
-  decision note when one exists) carries the durable state, so at a
-  natural boundary (a PR handed off, a review round closed, a new work
-  unit) in a long session, suggest continuing in a fresh session
-  seeded with the PR number rather than pushing on; the accumulated
-  context adds little to the next unit and dominates its cost.
+- **Keep raw bulk out.** Prefer a relevant file section, match list, or
+  filtered log tail over a whole file or unfiltered output.
+- **Delegate broad reading when supported.** Use a delegate for large searches
+  or mechanical sweeps only when the platform and session permit it. Ask for
+  conclusions, `file:line` references, and a short summary, never raw output.
+- **Use bounded reads when delegation is unavailable.** A few targeted reads
+  are also better than a delegate for a small question.
+- **Match the delegate to the task.** When you can choose a model or effort
+  level, use the cheapest capable option for mechanical reading. Skip this when
+  the platform offers neither choice.
+- **Explain large parallel work first.** One delegate for exploration or
+  review is normal. Before using more, state the expected scale and get the
+  user's approval or stay within a budget they already set.
+- **Suggest a fresh session at a natural boundary.** After a PR handoff,
+  review round, or work unit, a long session adds little value. Suggest a new
+  session seeded with the PR number. The PR and decision note carry the state.
 
 <!-- /agents-md:managed:context -->
 
@@ -174,37 +172,29 @@ context to what the current step needs.
 
 <!-- agents-md:managed:communication -->
 
-## Writing for humans
+## Writing for Humans
 
-Humans scan rather than read: a fifth of the words, weighted toward
-first lines and line-starts, about four open items in mind, rapid
-tune-out of repeated warnings. Write every human-facing artifact
-(handoff, PR body, issue, plan, review comment, question) for that
-reader; never rely on them digging.
+People scan human-facing work such as handoffs, PRs, issues, plans, reviews,
+and questions. Make the important point clear without requiring them to
+translate agent jargon or search for the conclusion.
 
-- **Bottom line first.** Open the artifact with its conclusion,
-  decision, or ask, along with any assumption or caveat it stands or
-  falls on; supporting material follows in descending importance. A
-  reader who stops after the opening still acts correctly.
-- **Front-load every unit.** The first words of a heading, bullet, or
-  paragraph carry its information.
-- **Layer, don't just shrink.** The artifact is also the durable
-  record: the skim layer carries the decision, while evidence,
-  alternatives, and detail live below it or in the linked note or
-  issue, never cut to shorten the skim layer.
-- **Few asks per round, with defaults.** Surface the questions that
-  gate the work, about three at a time, each with a recommended answer
-  and a one-line reason. Convert questions a sensible default settles
-  into visible assumptions the reader can veto; queue the remaining
-  gating questions for a later round rather than assuming through
-  them.
-- **Ration flags, and calibrate them.** Tag severity, flag what
-  changes the reader's decision or how much to trust the result, and
-  make rare critical warnings visually distinct; a page of routine
-  hedges buries the one that matters.
-- **Surface uncertainty; don't polish past it.** State what was not
-  verified and where you are unsure, so the human's attention lands
-  where checking is needed; fluent prose invites rubber-stamping.
+- **Lead with the bottom line.** Start with the conclusion, decision, or ask.
+  Include any assumption or caveat that could change it. Put support below in
+  order of importance.
+- **Front-load each unit.** Begin every heading, bullet, and paragraph with
+  its key words.
+- **Layer detail.** Keep the decision in the skim layer. Put evidence,
+  options, and detail below it or in a linked issue or note. Do not remove
+  needed evidence just to make the text shorter.
+- **Ask about three questions per round.** Start with questions that block the
+  work. Give each a recommended answer and one-line reason. Turn questions
+  with a safe default into visible assumptions the reader can reject. Save
+  remaining blocking questions for the next round.
+- **Reserve flags for meaningful risk.** Label severity when useful. Flag
+  facts that change the decision or confidence in the result. Make rare,
+  critical warnings easy to notice.
+- **State uncertainty plainly.** Say what was not verified and what remains
+  uncertain. Clear writing must not make weak evidence look conclusive.
 
 <!-- /agents-md:managed:communication -->
 
@@ -216,18 +206,26 @@ reader; never rely on them digging.
 
 ## Branches
 
-All work lands through a PR. Resolve and freshly update the repository's
-default branch (`main` below), then create each ordinary work-unit branch
-explicitly from that tip, never from the currently checked-out feature
-branch; a non-default starting point is allowed only for an intentionally
-declared stacked PR. Do the work as atomic commits (see Commits), then open
-a PR; it merges with a real merge commit on a human's call. Never commit
-directly to `main`, with no triviality exception: every bypass erodes the
-`--first-parent` narrative.
+All work lands through a PR. Resolve the default branch (`main` in the
+examples) and update it from its remote. Then create an ordinary work-unit
+branch from that exact tip. Never start from the current feature branch. Only
+a declared stacked PR may use another base.
 
-Name branches `<type>/<short-kebab-slug>`: type from the Conventional
-Commits vocabulary (`feat`, `fix`, `refactor`, `docs`, `chore`), slug
-2–4 kebab-case words naming the work unit:
+Use atomic commits and a real merge commit. Let a human decide when to merge.
+Never commit directly to `main`, even for a small change. Direct commits break
+the `--first-parent` history.
+
+Name a branch `<type>/<short-kebab-slug>`:
+
+- Choose a Conventional Commits type: `feat`, `fix`, `refactor`, `docs`, or
+  `chore`.
+- Use two to four kebab-case words for the work unit.
+- Use exactly one slash. A bare `feat` can't coexist with `feat/x`.
+- Omit ticket numbers, dates, and owner prefixes.
+- Add an owner segment, such as `bnw/feat/...`, only when several people or
+  agents work in parallel.
+
+Examples:
 
 ```text
 feat/worksheet-promotion
@@ -235,33 +233,35 @@ fix/pane-focus-race
 chore/swift-format-sweep
 ```
 
-Exactly one slash (`feat/x` and a bare `feat` can't coexist). No ticket
-numbers, dates, or owner prefixes; prepend an owner segment
-(`bnw/feat/…`) only if multiple people or agents start pushing in
-parallel. Merged branches auto-delete where that repo setting is on;
-delete them after merge where it isn't.
+Merged branches may auto-delete. If the repository doesn't do that, delete
+the branch after merge.
 
-**Break down concurrency before isolating it.** Keep coupled work in one work
-unit, an explicit dependency chain, or an intentionally declared stack; a
-worktree separates checkouts but cannot make logically dependent work safe in
-parallel. Before substantive work, an assigned concurrent unit uses the
-project's forge-visible claim mechanism, when one is defined. The claim
-advertises active occupancy, not authorization; its form is project-specific.
+**Plan concurrency before creating worktrees.** Keep coupled work in one work
+unit, an explicit dependency chain, or a declared stack. Separate worktrees do
+not make dependent changes safe to run in parallel. Before substantive work,
+use the project's claim visible on the code host for an assigned concurrent
+unit, when one exists. A claim only tells others that someone is already
+working; it isn't permission to start.
 
-**Isolate every implementation work unit** in a dedicated worktree or
-equivalent isolated checkout. Where your platform and session support a
-second checkout (a native worktree tool or session flag, or plain
-`git worktree add <path> -b <type>/<slug> <default-branch>`), create the
-branch and checkout from the freshly updated default-branch tip. Use the
-primary checkout only when an explicit user or project instruction requires
-it, or when the platform cannot create another checkout (no multi-checkout
-support, or a sandbox pinned to one directory); then serialize all work on
-one correctly based branch there and report the exception, never running
-concurrent work units in one checkout. Remove a worktree once its branch
-merges, standing outside the one being removed (`git worktree remove <path>`).
+**Isolate every implementation work unit.** Use a dedicated worktree or an
+equivalent separate checkout when the platform and session support one. Create
+it from the freshly updated default-branch tip. For example:
 
-Work that depends on an open PR can stack on its branch instead of
-waiting; see Stacked PRs under Pull requests.
+```sh
+git worktree add <path> -b <type>/<slug> <default-branch>
+```
+
+Use the primary checkout only when the user or project requires it, or the
+platform can't create another checkout. This can happen with no multi-checkout
+support or a sandbox pinned to one directory. In that case, serialize work on
+one correctly based branch, report the exception, and never run concurrent work
+units in that checkout.
+
+After merge, remove the worktree while standing outside it:
+`git worktree remove <path>`.
+
+Work that depends on an open PR may stack on its branch. See Stacked PRs under
+Pull Requests.
 
 <!-- /agents-md:managed:branches -->
 
@@ -271,103 +271,94 @@ waiting; see Stacked PRs under Pull requests.
 
 <!-- agents-md:managed:pull-requests -->
 
-## Pull requests
+## Pull Requests
 
-A PR is one work unit, reviewed as a whole and merged with a real merge
-commit. Commits carry the atomic why (see Commits); the PR carries the
-arc.
+One PR represents one work unit. Review it as a whole and merge it with a real
+merge commit. Commits explain each atomic decision; the PR explains the full
+change.
 
-- **Title**: imperative, ≤ 72 chars, names the outcome, no type prefix
-  or ticket noise ("Fix missing menu bar on unbundled launch"). In the
-  intended repo setup the title (plus its number) is the _entire_ merge
-  commit message; write it for `git log --first-parent` either way.
-- **Body**: scaffolded by the repo's PR template
-  (`.github/pull_request_template.md` on GitHub): Why, What (outcome bullets and a
-  commit map keyed by subject, not SHA), Screenshots (UI changes only),
-  Review Notes (optional), and Verification (bullets starting `Passed:`,
-  `Checked:`, `Attempted:`, or `Not run:`; facts only). Before writing
-  or updating the body, read `docs/agent-workflow.md` §pr-body and meet
-  each section's bar (for UI changes, the Screenshots bar).
-- **Self-review the diff in the PR files view before handing off**: the
-  whole change as one artifact shows stray hunks, leftover debug code,
-  scope creep, and accidental files. This is _mechanical hygiene_, not
-  substantive critique.
-- **Integration evidence belongs to one base commit.** CI results, a
-  full-diff self-review, and a ready-for-handoff claim are valid only for
-  the base commit they were checked against; a base-branch change
-  invalidates all three, however clean the earlier diff looked.
-- **Substantive critique needs fresh, ideally non-self eyes**, since
-  same-context self-review shares the blind spots that produced the
-  code: self-in-context < same-model fresh-context subagent <
-  different-vendor bot / human. The bot reviewer or human is the
-  load-bearing pass. For a non-trivial change, or a repo without a bot
-  reviewer, read `docs/agent-workflow.md` §pre-push-review before
-  pushing and run the platform-gated review it describes.
-- **Record a noticed automated reviewer.** On seeing a bot-authored
-  review or reviewer status signal the project hasn't recorded, read
-  `docs/agent-workflow.md` §reviewer-record and add or augment the
-  record before handing off.
-- **Responding to automated review.** Evaluate each comment on its merits:
-  fix real findings; push back, _with a one-line reason_, on contrived,
-  speculative, or already-fixed ones; never reflexively comply. Reply
-  inline with the disposition and the fixing commit SHA ("Fixed in
-  `<sha>`" / a reasoned decline), then resolve the thread. Where fixes
-  fold into their commits, fold all of a round's fixes and push once
-  before any reply (the fold-then-reply gate in Commits), so every cited
-  SHA is the final, pushed one. Resolving every thread is _not_ a hard
-  merge gate; evaluate-on-merits is.
-- **Fix the class, not just the cited line.** When a finding names one
-  location, sweep the file and repo mechanically (grep for the finding's
-  pattern, don't just eyeball nearby lines) and fix every instance in the
-  same push; the class recurs in sibling sentences and files the citation
-  never named. For validation or parsing code the sweep is the
-  adversarial input-space enumeration in `docs/agent-workflow.md`
-  §review-convergence; read it before widening the cited pattern.
-- **Converge on a bar that rises with the rounds.** Blocking findings
-  (correctness, security, data-loss, broken invariants, red CI) always
-  earn another round; judge that severity yourself, the reviewer's tag
-  being input, not verdict, and when unsure treat a finding as blocking.
-  Once an exchange passes its early rounds or a finding recurs, read
-  `docs/agent-workflow.md` §review-convergence before deciding on
-  another. Hand off with every finding dispositioned (fixed, declined,
-  deferred, or explicitly outstanding).
-- **Keep the body current as review evolves the PR.** The body is the
-  work unit's durable record on the forge: when review adds commits or
-  shifts scope, update What, the
-  commit map (flagging which commits resolve review findings, by
-  subject), and Verification before re-handing-off. The inline reply on
-  each resolved thread is the per-finding record; don't duplicate it
-  into a standing "feedback" section.
-- The intended repo settings enforce the Commits rules: merge commits
-  only (squash and rebase disabled), title-only merge messages, and
-  auto-delete of merged branches. Don't re-enable around them; where
-  they aren't set, hold the same rules manually.
+- **Write an imperative title of at most 72 characters.** Name the outcome,
+  without a type prefix, ticket number, or other tracking text. The title and
+  PR number become the whole merge-commit message in the intended setup. Write
+  it for `git log --first-parent`.
+- **Use the PR template for the body.** Include Why, What, Screenshots for UI
+  changes, optional Review Notes, and Verification. Key the commit map by
+  subject, not SHA. Start verification bullets with `Passed:`, `Checked:`,
+  `Attempted:`, or `Not run:`. Before writing or updating the body, read
+  `docs/agent-workflow.md` §pr-body. For a UI change, meet its Screenshots
+  requirements.
+- **Self-review the full diff in the PR files view.** Look for stray changes,
+  debug code, scope creep, and accidental files. This catches accidental
+  changes; it doesn't check whether the solution is correct.
+- **Repeat integration checks when the base moves.** CI, final diff review,
+  and readiness count only for the base commit you checked. Repeat all three
+  if the base changes.
+- **Use fresh eyes for substantive review.** Reviewing your own work in the
+  same conversation shares the author's blind spots. A review in a fresh
+  conversation is more independent. A bot from another provider or a human is
+  stronger. Rely on a bot or human before handoff. For non-trivial work, or
+  without a bot reviewer, read `docs/agent-workflow.md` §pre-push-review before
+  pushing.
+- **Record an automated reviewer you observe.** If the project has no record
+  for that reviewer or signal, read `docs/agent-workflow.md` §reviewer-record
+  and update the project record before handoff.
+- **Judge review comments on their merits.** Fix real findings. Decline
+  speculative, contrived, or already-fixed findings with a one-line reason.
+  Do not comply automatically.
+- **Reply after the fix is final and pushed.** Reply inline with the outcome:
+  the final commit SHA for a fix, or the reason for a decline. Then resolve the
+  thread. Fold all fixes from one round into their owning commits and push once
+  before replying. Resolving every thread isn't a merge gate; a reasoned
+  outcome is.
+- **Fix the whole defect class.** Search the file and repository for the same
+  pattern and fix every instance in one push. For validation or parsing code,
+  read `docs/agent-workflow.md` §review-convergence before widening a pattern.
+- **Keep reviewing while blockers remain.** Correctness, security, data loss,
+  broken invariants, and red CI always require another round. Decide severity
+  yourself; the reviewer's label is only evidence. When unsure, treat the
+  finding as blocking.
+- **Raise the bar as rounds continue.** After the early rounds, or when a
+  finding recurs, read `docs/agent-workflow.md` §review-convergence before
+  deciding on another round. Before handoff, mark every finding fixed,
+  declined, deferred, or explicitly outstanding.
+- **Keep the PR body current.** When review adds commits or changes scope,
+  update What, the subject-based commit map, and Verification. Mark commits
+  that resolve review findings. Keep each finding's outcome in its inline
+  reply, not a permanent feedback section.
+- **Keep the intended repository rules.** Use merge commits only, disable
+  squash and rebase merges, use title-only merge messages, and auto-delete
+  merged branches. Do not re-enable a disabled method. Enforce these rules
+  manually where repository settings don't.
 
-### Handing off the PR
+### Handing Off the PR
 
-Done means open, green, threads handled, self-reviewed, and no new
-review activity outstanding. Once the PR is up, read
-`docs/agent-workflow.md` §handing-off and follow its sequence:
-review-watch per PR/reviewer first, anchored to the open or push event;
-base-freshness pass with the base commit recorded; required checks
-waited out, never a known-red handoff; self-review; watch closed out
-with findings addressed or the bounded timeout recorded; then stop and
-summarize.
+A PR is ready to hand off when it's open, green, self-reviewed, has no
+unhandled threads, and has no outstanding review activity. After opening the
+PR, read `docs/agent-workflow.md` §handing-off and follow its sequence:
 
-If the user does ask you to merge, read `docs/agent-workflow.md`
-§merge-and-resync before the merge or resync and follow it step by step;
-do not merge or resync from memory.
+1. Start the review watch from the PR open or push event. Only reviewer
+   activity after that event counts as new. After another push, start counting
+   from that push.
+2. Refresh from the current base and record the base commit.
+3. Wait for required checks. Never hand off known-red work.
+4. Self-review the final diff.
+5. Close the watch by handling findings or recording its bounded timeout.
+6. Stop and summarize for the human reviewer.
+
+If the user asks you to merge, read
+`docs/agent-workflow.md` §merge-and-resync first and follow it step by step.
+Do not merge or resync from memory.
 
 ### Reviewing a PR
 
-When asked to review a PR, read `docs/agent-workflow.md` §reviewing-a-pr
-first and hold its bar.
+Before reviewing a PR, read `docs/agent-workflow.md` §reviewing-a-pr and use
+its review bar.
 
 ### Stacked PRs
 
-Before creating a branch or PR that depends on an open PR, read
-`docs/agent-workflow.md` §stacked-prs and declare the base explicitly,
-never the current checkout.
+Before creating a branch or PR that depends on another open PR, read
+`docs/agent-workflow.md` §stacked-prs. Name the base explicitly; never inherit
+it from the current checkout.
 
 <!-- /agents-md:managed:pull-requests -->
 
@@ -379,43 +370,38 @@ never the current checkout.
 
 ## Commits
 
-History serves three uses: diagnostics (blame/bisect lead to a
-cause), reviewability (a PR reads commit-by-commit), and learning (the
-log tells the project's evolution). Rules:
+History supports diagnosis, review, and learning. Keep each commit useful for
+all three.
 
-- **One concern per commit, every commit green.** If the body wants
-  labeled sections (Correctness:/Performance:/…), it's more than one
-  commit; split it. Each commit must build and pass tests on its own;
-  never leave red intermediate states (it breaks bisect).
-- **Body says why, not just what.** Write dense, specific bodies,
-  wrapped ≤ 72 columns, referencing the work unit's decision note when
-  one exists. State change deltas ("27 → 36 tests") if meaningful, never
-  absolute status ("36 tests green"), which goes stale.
-- **Never commit secrets** (credentials, tokens, keys, `.env`
-  contents); reference them by name and use placeholders in examples.
-- **Mechanical churn commits alone.** Reformats, renames, and moves get
-  their own commit, added to `.git-blame-ignore-revs` in the same change
-  (activate locally with
-  `git config blame.ignoreRevsFile .git-blame-ignore-revs`).
-- **Fold review fixes into the commit they belong to.** A fix that
-  review or self-review turns up for an already-pushed commit folds into
-  that commit, never an appended "address review" commit, keeping the
-  merged PR clean and bisectable.
-  Guardrails: every commit still builds and passes tests after the fold;
-  `--force-with-lease`, **feature branch only, never force-push `main`**;
-  only while the PR is unmerged (once merged, a fix is a new commit);
-  update the matching decision note, when one exists, in the same
-  operation. The mechanism (reset/amend/rebase) is your judgement. The
-  fold-then-reply order is a gate: fold and push before writing the
-  inline reply to the review thread, so the reply cites the final
-  commit SHA, verified reachable from the pushed head; a standalone
-  review-fix commit still on the branch at handoff is an unfinished
-  fold, not a done round.
-- **Never squash-merge multi-commit work**: it destroys the atomic
-  structure above. A real merge commit keeps `git log --first-parent` as
-  the work-unit narrative and the full log as the atoms; narrative
-  subjects ("Walking skeleton: end-to-end flow") belong at that merge/PR
-  level.
+- **Keep one concern in each commit, and keep every commit green.** Split a
+  commit whose body needs separate labels such as Correctness and Performance.
+  Each commit must build and pass tests on its own. Never leave a red
+  intermediate state that breaks `git bisect`.
+- **Explain why in the body.** Use specific body text wrapped at 72
+  characters. Link the work unit's decision note when one exists. Report a
+  meaningful change as a delta, such as "27 to 36 tests", not an absolute
+  claim such as "36 tests green" that will go stale.
+- **Never commit secrets.** Keep credentials, tokens, keys, and `.env` values
+  out of commits. Name the secret and use a placeholder in examples.
+- **Separate mechanical churn.** Put formatting, renames, and moves in their
+  own commit. Add that commit to `.git-blame-ignore-revs` in the same change,
+  then enable it locally with
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
+- **Fold review fixes into the commit that caused them.** This includes issues
+  found by review or self-review. Do not append an "address review" commit.
+- **Keep every folded commit green.** Fold only on an unmerged feature branch.
+  After merge, use a new commit. Update the matching active decision note in
+  the same operation when one exists.
+- **Force-push safely after a fold.** Use `--force-with-lease` on the feature
+  branch. Never force-push `main`. The reset, amend, or rebase mechanism is
+  your choice.
+- **Push before replying to review.** The inline reply must cite the final,
+  pushed SHA that contains the fix. A separate review-fix commit left on the
+  branch means the fold is unfinished.
+- **Never squash-merge multi-commit work.** Use a real merge commit so
+  `git log --first-parent` shows the work-unit story and the full log preserves
+  its atomic commits. Put narrative subjects such as "Walking skeleton:
+  end-to-end flow" at the merge or PR level.
 
 <!-- /agents-md:managed:commits -->
 
@@ -425,13 +411,13 @@ log tells the project's evolution). Rules:
 
 <!-- agents-md:managed:done -->
 
-## Definition of done for an increment
+## Definition of Done for an Increment
 
-Each increment is something actively used by the end of the work session:
-not "code complete" or "tests pass" alone, but running and exercised.
-Before calling work done:
+An increment is done only when it's running and exercised by the end of the
+work session. "Code complete" or passing tests alone isn't enough.
 
-The build succeeds, tests pass, and lint and formatting are clean.
+Before calling the work done, confirm that the build succeeds, tests pass,
+and lint and formatting are clean.
 
 <!-- agents-md:project:done-checks -->
 
