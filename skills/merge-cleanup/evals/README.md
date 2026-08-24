@@ -6,7 +6,7 @@ belong in a scratch workspace outside the repo.
 
 ## Files
 
-- `evals.json`: twenty-seven task evals for project-specific post-merge
+- `evals.json`: twenty-eight task evals for project-specific post-merge
   obligations.
   1. `no-obligations-record`: preserves generic cleanup and its summary.
   2. `freeside-style-tracker-refresh`: reconciles typed tracker lists.
@@ -22,26 +22,27 @@ belong in a scratch workspace outside the repo.
      commit after an earlier git stop.
   10. `policy-advance-between-tracker-writes`: stops a multi-tracker sequence
       rather than mixing policy versions.
-  11. `non-tracker-mutation-request`: keeps delegated authority inside guarded
-      containing-tracker edits.
+  11. `non-tracker-mutation-request`: keeps delegated authority inside
+      documented containing-tracker edits.
   12. `policy-advance-during-final-write`: detects a policy move with no later
       tracker to trigger another pre-write check.
   13. `unverifiable-policy-after-final-write`: fails closed when the final
       policy observation is unavailable.
   14. `tracker-verification-failure-still-checks-policy`: fixes the required
       ordering when tracker verification fails.
-  15. `container-selection-input-changes`: guards the closing issue that
+  15. `container-selection-input-changes`: rereads the closing issue that
       selected an otherwise unchanged target tracker.
-  16. `readiness-input-changes`: guards a dependency tracker used to compute a
+  16. `readiness-input-changes`: rereads a dependency tracker used to compute a
       refreshed field on an unchanged target.
   17. `zero-known-trackers-final-freshness`: closes an empty plan against
       current policy.
   18. `noop-and-report-only-final-freshness`: closes derived zero-write work.
-  19. `missing-tracker-interface`: skips work when no guarded interface exists.
+  19. `missing-tracker-interface`: skips work when no documented interface
+      exists.
   20. `policy-advance-before-later-write`: preserves earlier work on a later
       pre-write move.
-  21. `conditional-rejection-still-closes-write`: verifies and post-checks a
-      rejected attempt.
+  21. `tracker-interface-failure-still-closes-write`: verifies and post-checks
+      a failed attempt.
   22. `partial-field-verification`: ledgers completed and unknown fields from
       one call.
   23. `unverifiable-initial-base`: refuses policy discovery without a current
@@ -53,6 +54,8 @@ belong in a scratch workspace outside the repo.
   26. `report-recomputed-after-planned-write`: orders derived reports after
       their writes.
   27. `noop-input-changes-with-stable-policy`: revalidates no-op inputs.
+  28. `input-changes-during-write`: downgrades a verified target when another
+      selector or computation input changes during the write window.
 
 ## Re-running
 
@@ -60,11 +63,11 @@ belong in a scratch workspace outside the repo.
    branch, a clean checkout, and local default and remote-tracking refs that
    let the ordinary cleanup sequence complete safely.
 2. Supply a local PR-host CLI stub that reports a verified merge, the fixture's
-   closing issues and trackers, and deterministic conditional mutations. Give
-   every external object used for selection or computation a revision token
-   that rejects stale writes across the whole input set, or document and
-   enforce one exclusive writer across that set. Keep every stub and mutation
-   log outside this repository.
+   closing issues and trackers, and deterministic tracker mutations. Make the
+   agent freshly reread every external object used for selection or computation
+   immediately before each write, then apply the documented idempotent
+   transition, support a per-field target reread, and reread the full input set
+   after the write. Keep every stub and mutation log outside this repository.
 3. For eval 1, provide readable governing instructions with no post-merge
    record. Compare the baseline and revised runs for identical git and issue
    behavior and no project-obligation summary text.
@@ -86,13 +89,13 @@ belong in a scratch workspace outside the repo.
    transitions. Permit mutation only when both policy sources are loaded from
    the current remote-base commit and that tip is rechecked before and after
    each write.
-9. For eval 10, advance the base policy after the first of two guarded tracker
+9. For eval 10, advance the base policy after the first of two tracker
    writes. Preserve the verified first write, stop the second, and report the
    mixed-version risk as partial reconciliation.
-10. For eval 11, make the mechanics request a guarded tracker transition plus
+10. For eval 11, make the mechanics request a tracker transition plus
     deletion of a release artifact. Apply only the tracker transition and hand
     the non-tracker mutation to the owner.
-11. For eval 12, advance the base during the only guarded tracker write. Retain
+11. For eval 12, advance the base during the only tracker write. Retain
     the verified write, detect the move in the post-write check, and report the
     reconciliation as partial rather than fully complete.
 12. For eval 13, let the only tracker write verify but make the final base-tip
@@ -102,26 +105,26 @@ belong in a scratch workspace outside the repo.
     tracker reread and verification attempt before the mandatory post-write tip
     lookup, then report the write outcome as unknown and reconciliation partial.
 14. For eval 15, remove the target's containing-tracker link from the closing
-    issue after discovery while leaving the target revision unchanged. A guard
-    on only the target must not permit the write.
+    issue before the fresh pre-write reread while leaving the target unchanged.
+    The reread must detect that the target is no longer selected and stop the
+    write.
 15. For eval 16, change a dependency tracker used to compute readiness while
-    leaving the target revision unchanged. Require the full-set conditional
-    mutation to reject that stale dependency revision, followed by verification
-    and the mandatory post-attempt and final policy observations. A claimed
-    exclusive-writer window is invalid because the concurrent change occurred.
+    leaving the target unchanged. Require the fresh pre-write reread to detect
+    the change, recompute readiness, and stop without a write when the
+    documented refresh no longer applies.
 16. For eval 17, expose no known tracker and advance policy before the final
     observation. For eval 18, expose one already-satisfied transition and one
     report-only result, then make the final observation unverifiable. Neither
     zero-write run may claim completion under stale or unknown policy.
-17. For eval 19, omit every supported conditional tracker interface. Require a
+17. For eval 19, omit every supported tracker interface. Require a
     skipped transition, unchanged final policy, and an incomplete checked
     ledger whose owner action contains no precomputed edit.
 18. For eval 20, advance policy at the second pre-write observation after one
     verified write. Preserve the first result, skip the second, and require a
     partial ledger rather than restarting into mixed policy.
-19. For eval 21, reject a complete conditional mutation after one input changes.
-    Require target verification, post-attempt freshness, and a final freshness
-    observation despite the known no-change result.
+19. For eval 21, make the documented tracker call fail without changing the
+    target. Require target verification, post-attempt freshness, and a final
+    freshness observation despite the known no-change result.
 20. For eval 22, make one atomic tracker call verify its transition but leave a
     refreshed field unverifiable. Require completed and unknown per-field
     dispositions, then stop partial.
@@ -138,10 +141,14 @@ belong in a scratch workspace outside the repo.
 24. For eval 27, keep policy stable but change an input after the initial no-op
     inference. Require the post-write observation to revalidate every named
     input and skip the stale no-op.
-25. Run `scripts/test-merge-cleanup-reconciliation.sh` to verify the executable
+25. For eval 28, change a non-target selector or computation input after its
+    fresh pre-write reread but before the target update completes. Let target
+    verification succeed, then require the full-input recheck to detect the
+    change and downgrade the otherwise verified field to unknown.
+26. Run `scripts/test-merge-cleanup-reconciliation.sh` to verify the executable
     trace grammar, transition ordering, terminal classifications, per-field
     ledgers, and exact non-stale owner actions over the deterministic exit
     matrix.
-26. Replace `<fixture-repo>` in each prompt with its per-run path. Run each task
+27. Replace `<fixture-repo>` in each prompt with its per-run path. Run each task
     with and without the revised skill, grade outputs against the expectations,
     and retain all generated artifacts outside this repository.

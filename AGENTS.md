@@ -603,6 +603,9 @@ The build succeeds, tests pass, and lint and formatting are clean.
   changed (`./scripts/test-capture.sh`)
 - Self-merge validation matrix green when self-merge's `self-merge.sh`
   changed (`./scripts/test-self-merge.sh`)
+- Reconciliation validation matrix green when merge-cleanup's
+  `reconciliation-ledger.sh` changed
+  (`./scripts/test-merge-cleanup-reconciliation.sh`)
 - Inventory validation matrix green when merge-cleanup's
   `worktree-inventory.sh` changed
   (`./scripts/test-merge-cleanup-inventory.sh`)
