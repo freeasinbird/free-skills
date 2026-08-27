@@ -1,130 +1,127 @@
-# Writing for humans: research basis
+# Writing for Humans: Research Basis
 
-Evidence behind the canonical `communication` section ("Writing for
-humans") in `canonical-sections.md`. This file is maintainer
-material for revising that section; it is not copied into projects.
-Findings are graded: **replicated** (peer-reviewed or repeatedly
-observed across studies) versus **directional** (industry data or
-practice-based, useful but weaker).
+This file explains the evidence behind the `communication` section in
+`canonical-sections.md`. It helps maintainers revise that section and isn't
+copied into projects.
 
-## How humans read on screens
+Evidence has two grades:
 
-**Replicated.** A Nielsen Norman Group analysis of instrumented
-browsing data (page-view durations for ~45,000 page views against a
-reading-speed model; explicitly not an eye-tracking study) estimates
-users have time to read at most 28% of the words on a page during
-an average visit, more realistically about 20% ([How Little Do Users
-Read?](https://www.nngroup.com/articles/how-little-do-users-read/),
-2008). Separate eye-tracking studies show unformatted text is
-scanned in an F-pattern: the first lines and the left edge get
-attention, the middle is skipped (first described 2006, revalidated
-on desktop and mobile in
-[2017](https://www.nngroup.com/articles/f-shaped-pattern-reading-web-content/)).
+- **Replicated:** supported by peer-reviewed research or repeated findings
+  across studies.
+- **Directional:** supported by industry data or established practice, but
+  with weaker direct evidence.
 
-Structure changes the behavior: with informative headings, scanning
-shifts to a "layer-cake" pattern where headings are read and body
-text is sampled. In the Morkes & Nielsen 1997 study
-([Concise, Scannable, and
-Objective](https://www.nngroup.com/articles/concise-scannable-and-objective-how-to-write-for-the-web/)),
-rewriting the same content improved measured usability 58% from
-concision, 47% from scannable layout, and 27% from objective
-language; combined, 124%.
+## How People Read on Screens
 
-Plain language holds for expert audiences: NN/g studies with domain
-experts found they prefer succinct, scannable, plain text like
-everyone else ([Plain Language Is for Everyone, Even
-Experts](https://www.nngroup.com/articles/plain-language-experts/)).
+**Replicated: people scan and read selectively.** A Nielsen Norman Group
+analysis compared page-view time for about 45,000 visits with a reading-speed
+model. It wasn't an eye-tracking study. The analysis estimated that visitors
+could read at most 28% of a page's words, and more realistically about 20%.
+See [How Little Do Users Read?](https://www.nngroup.com/articles/how-little-do-users-read/).
 
-These findings back **Bottom line first**, **Front-load every
-unit**, and the plain-language stance.
+Separate eye-tracking studies found an F-shaped pattern in unformatted text.
+Readers focus on early lines and the left edge, while much of the middle gets
+less attention. The pattern was first described in 2006 and
+[revalidated in 2017](https://www.nngroup.com/articles/f-shaped-pattern-reading-web-content/)
+on desktop and mobile.
 
-## Attention and memory limits
+**Replicated: useful headings improve scanning.** Informative headings produce
+a layer-cake pattern. Readers scan the headings, then sample the relevant
+text. In a 1997 study, Morkes and Nielsen rewrote the same content in several
+ways. Usability improved by 58% with concise text, 47% with a scannable layout,
+and 27% with objective language. Combining all three improved it by 124%.
+See [Concise, Scannable, and Objective](https://www.nngroup.com/articles/concise-scannable-and-objective-how-to-write-for-the-web/).
 
-**Replicated.** Working memory holds about four chunks when
-rehearsal and chunking are restricted (Cowan, ["The magical number 4
-in short-term memory"](https://philpapers.org/rec/COWTMN), Behavioral
-and Brain Sciences 2001). Classic serial-position results add that
-first and last items are recalled best; the middle of a long list or
-message is lost first. These back **Few asks per round** and the
-placement rules: a human handed many simultaneous open questions
-drops most of them silently, not deliberately.
+**Replicated: experts also prefer plain language.** Domain experts prefer
+short, scannable, plain text, just like other readers. See
+[Plain Language Is for Everyone, Even Experts](https://www.nngroup.com/articles/plain-language-experts/).
 
-## Warning habituation and alert fatigue
+These findings support **Lead with the bottom line**, **Front-load each unit**,
+and the section's plain-language requirement.
 
-**Replicated.** fMRI work on security warnings shows the brain's
-visual processing response drops sharply by the second exposure to
-the same warning, with further decline after (Anderson et al.,
-[CHI 2015](https://dl.acm.org/doi/10.1145/2702123.2702322); a
-[CHI 2017 longitudinal
-study](https://dl.acm.org/doi/10.1145/3025453.3025896) confirmed the
-effect across a five-day week). Warnings that vary their appearance
-("polymorphic") resist habituation substantially.
+## Attention and Memory
 
-In clinical
-decision support, a systematic review found average medication-alert
-override rates of 46.2–96.2% across studies, with the share of
-overrides judged appropriate varying widely by alert type
-([Appropriateness of Overridden Alerts in CPOE: Systematic
-Review](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7400042/));
-individual drug-interaction studies sit at the high end (88.2% of
-very severe interaction alerts overridden in one
-[DDI evaluation](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8864797/)).
+**Replicated: working memory is small.** Under conditions that limit rehearsal
+and grouping, people hold about four items in working memory. See Cowan's 2001
+paper, [The Magical Number 4 in Short-Term Memory](https://philpapers.org/rec/COWTMN).
 
-The transfer to agent output is an inference, but a direct one: an
-agent that hedges and caveats everywhere trains its reader to skip
-all flags, including the one that matters. This backs **Ration
-flags, and calibrate them**, including making rare critical warnings
-look different from routine text.
+Serial-position studies also show that people recall the first and last items
+better than the middle. These findings support **Ask about three questions per
+round** and the placement rules. A reader may silently lose questions from a
+long list.
 
-## Over-reliance on AI output
+## Warning Fatigue
 
-**Replicated.** Humans over-rely on AI recommendations, following
-them even when wrong, and explanations alone do not fix it.
-Cognitive forcing functions that compel engagement (deciding before
-seeing the AI's answer, a delayed recommendation, advice gated
-behind an explicit request) reduced over-reliance on incorrect
-predictions where explanation-style baselines, including a
-displayed confidence prompt, did not (Buçinca, Malaya & Gajos,
-["To Trust or to
-Think"](https://www.eecs.harvard.edu/~kgajos/papers/2021/bucinca21trust.pdf),
-CSCW 2021; [Microsoft's over-reliance literature
-review](https://www.microsoft.com/en-us/research/wp-content/uploads/2022/06/Aether-Overreliance-on-AI-Review-Final-6.21.22.pdf),
-2022). Practitioner reporting adds that cleanly formatted,
-confident AI output receives less scrutiny, not more
-([Thoughtworks Technology
-Radar](https://www.thoughtworks.com/en-us/radar/techniques/complacency-with-ai-generated-code)).
+**Replicated: repeated warnings lose attention.** Brain-imaging research found
+that visual response drops sharply after the first exposure to a security
+warning. A [2015 study](https://dl.acm.org/doi/10.1145/2702123.2702322)
+measured the initial effect. A
+[2017 study](https://dl.acm.org/doi/10.1145/3025453.3025896) confirmed it
+across five days. Warnings that changed appearance resisted this decline
+better.
 
-The **Surface uncertainty; don't polish past it** rule leans on the
-complacency finding (polish suppresses scrutiny) and on stating
-verification state honestly. Direct evidence that displaying
-uncertainty by itself curbs over-reliance is mixed: Buçinca et
-al.'s uncertainty-display baseline did not protect against
-incorrect predictions, and the Microsoft review surveys varied
-results for confidence displays. Grade uncertainty display alone as
-directional, not replicated.
+**Replicated: frequent alerts are often ignored.** A
+[systematic review](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7400042/)
+found average medication-alert override rates from 46.2% to 96.2%. The share
+of appropriate overrides varied by alert type. One
+[drug-interaction study](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8864797/)
+found that clinicians overrode 88.2% of very severe interaction alerts.
 
-## Directional evidence
+Applying these results to agent output is an inference. An agent that flags
+everything teaches the reader to ignore all flags. This supports **Reserve
+flags for meaningful risk**, including a visibly different treatment for rare
+critical warnings.
 
-- **BLUF / inverted pyramid**: long institutional practice in
-  military communication and journalism
-  ([overview](<https://en.wikipedia.org/wiki/BLUF_(communication)>)).
-  Direct controlled comparisons are thin; the mechanism is consistent
-  with the drop-off and serial-position findings above.
-- **Boomerang email study** (40M emails, sales-heavy, not
-  peer-reviewed): 50–125 word messages got the best response rates
-  (~51%); messages asking 1–3 questions were 50% likelier to get a
-  reply than those asking none; simpler reading levels outperformed
-  college-level prose
-  ([summary](https://blog.boomerangapp.com/2016/02/7-tips-for-getting-more-responses-to-your-emails-with-data/)).
+## Reliance on AI Output
 
-## From evidence to rules
+**Replicated: people can follow incorrect AI advice.** Explanations alone do
+not reliably prevent this. Some methods that force active thought reduced
+over-reliance. Examples include deciding before seeing the AI answer, delaying
+the recommendation, or revealing advice only after a request.
 
-The canonical section compresses to six rules: bottom line first
-(drop-off, primacy), front-load every unit (F-pattern), layer rather
-than shrink (the artifact is also the durable record; skimmability
-must not cost the evidence trail), few asks per round with defaults
-(working memory, question-count data), ration and calibrate flags
-(habituation, alert fatigue), and surface uncertainty (polish
-breeds complacency; direct uncertainty-display evidence is mixed,
-see above). Revisit this file when new evidence contradicts a graded
-finding or upgrades a directional one.
+Buçinca, Malaya, and Gajos tested these methods in
+[To Trust or to Think](https://www.eecs.harvard.edu/~kgajos/papers/2021/bucinca21trust.pdf)
+(2021). Their explanation and displayed-confidence baselines didn't reduce
+reliance on incorrect predictions. A
+[Microsoft literature review](https://www.microsoft.com/en-us/research/wp-content/uploads/2022/06/Aether-Overreliance-on-AI-Review-Final-6.21.22.pdf)
+summarizes related work.
+
+**Directional: polished output can discourage scrutiny.** Practitioner
+reporting says clean, confident AI output may receive less review. See the
+[Thoughtworks Technology Radar](https://www.thoughtworks.com/en-us/radar/techniques/complacency-with-ai-generated-code).
+
+These findings support **State uncertainty plainly**. The rule combines honest
+verification reporting with the concern that polished prose may hide weak
+evidence. Uncertainty displays alone have mixed evidence and remain
+directional.
+
+## Other Directional Evidence
+
+- **Bottom line up front:** Military communication and journalism have long
+  used the inverted-pyramid structure. Direct controlled comparisons are
+  limited, but the practice fits the reading drop-off and serial-position
+  findings. See the
+  [BLUF overview](<https://en.wikipedia.org/wiki/BLUF_(communication)>).
+- **Short, simple email:** Boomerang analyzed 40 million emails, many of them
+  sales messages. Messages of 50 to 125 words had the highest response rate,
+  about 51%. Messages with one to three questions were 50% more likely to get
+  a reply than messages with none. Simpler reading levels also performed
+  better. The study wasn't peer-reviewed. See the
+  [Boomerang summary](https://blog.boomerangapp.com/2016/02/7-tips-for-getting-more-responses-to-your-emails-with-data/).
+
+## How the Evidence Becomes Rules
+
+The canonical section turns the evidence into six rules:
+
+- **Lead with the bottom line:** reading drop-off and primacy.
+- **Front-load each unit:** F-shaped scanning.
+- **Layer detail:** readers need a clear skim path without losing the durable
+  evidence record.
+- **Ask about three questions per round:** working-memory limits and email
+  question-count data.
+- **Reserve flags for meaningful risk:** warning habituation and alert fatigue.
+- **State uncertainty plainly:** polished output can invite complacency, while
+  evidence for uncertainty displays alone is mixed.
+
+Revisit this file when new evidence contradicts a graded finding or upgrades a
+directional one.
