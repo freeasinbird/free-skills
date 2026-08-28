@@ -1,0 +1,66 @@
+[
+  {
+    "query": "Rewrite this PR description in plain English, it reads like a policy document",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you tighten this handoff note? It buries what I actually need to do",
+    "should_trigger": true
+  },
+  {
+    "query": "Write the status update for the team: parser swap is merged, CI green, docs still pending",
+    "should_trigger": true
+  },
+  {
+    "query": "Draft the issue for the locale cache bug so the next person can pick it up cold",
+    "should_trigger": true
+  },
+  {
+    "query": "This README section is full of jargon. Make it readable without dropping any of the setup steps",
+    "should_trigger": true
+  },
+  {
+    "query": "Does this review comment read clearly, or am I being too indirect?",
+    "should_trigger": true
+  },
+  {
+    "query": "Write the commit body explaining why we removed the retry wrapper",
+    "should_trigger": true
+  },
+  {
+    "query": "Cut the corporate tone out of this announcement and lead with the decision",
+    "should_trigger": true
+  },
+  {
+    "query": "Rename the parseConfig function to loadConfig across the codebase",
+    "should_trigger": false
+  },
+  {
+    "query": "Fix the failing test in cache_test.go",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a limerick about our flaky CI",
+    "should_trigger": false
+  },
+  {
+    "query": "Make this cover letter sound like Hemingway",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up AGENTS.md for this repo",
+    "should_trigger": false
+  },
+  {
+    "query": "Audit our CLAUDE.md for rules the agent can't act on",
+    "should_trigger": false
+  },
+  {
+    "query": "Translate this error message into Spanish",
+    "should_trigger": false
+  },
+  {
+    "query": "Which license should this library use?",
+    "should_trigger": false
+  }
+]
