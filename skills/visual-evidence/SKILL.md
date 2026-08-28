@@ -17,169 +17,140 @@ description: >-
 
 # Visual Evidence
 
-Produce the before/after screenshots that let a reviewer judge a visual change
-by looking at it instead of reading the diff. This skill owns the _capture
-craft and timing_: deciding a screenshot is warranted, getting a clean
-deterministic before/after pair, and framing it tightly on the change. It does
-**not** upload: once the images are ready it hands them to the **gh-imgup**
-skill, which owns safe upload and the mandatory pre-upload secret review
-(written out under _Compose & attach_ so the review survives even where that
-skill isn't loaded).
+Capture screenshots that let a reviewer judge a visual change without reading
+the diff. Start early because the _before_ state usually disappears when the
+fix lands.
 
-Two skills, one clean seam:
+This skill owns capture timing and craft. It produces clean, tightly framed
+evidence. **gh-imgup** is the skill or CLI that reviews and uploads the finished
+image files.
 
-- **this skill**: _I'm doing or reviewing visual work; produce review
-  evidence._ Capture → compose labeled pair → decide where it goes.
-- **gh-imgup**: _I have image bytes to publish._ Upload to the PR/issue and
-  return Markdown, after its mandatory pre-upload review of each image.
+Follow this procedure:
 
-Reach for this one _early_. The decisive reason is timing: the _before_ state
-usually only exists before the fix lands, so prompting late loses it.
+1. Decide whether the change needs a pair or one _after_ shot.
+2. Capture the _before_ state before changing it.
+3. Capture the _after_ state under identical conditions.
+4. Frame both shots tightly and consistently.
+5. Make the capture deterministic.
+6. Open and check every shot.
+7. Review every image for secrets and private data.
+8. Use gh-imgup to upload and place the evidence.
+9. Verify the rendered result.
 
 ## When to Use It
 
-- Implementing a visual change: a UI bug or regression, a CSS/layout/spacing/
-  color/typography change, a new or restyled component or screen, a theming
-  change: anything where "looks right" is the acceptance test.
-- About to open or review a **PR whose diff touches rendered UI**, where a
-  reviewer would benefit from seeing the result rather than parsing the diff.
+- **Visual implementation:** Use it for a UI bug, regression, restyle, new
+  surface, theme change, or any work judged by appearance.
+- **UI review:** Use it when opening or reviewing a PR that changes rendered
+  UI and screenshots would help the reviewer.
 - The user asks to "show the change", "add a screenshot", or "before/after".
 
-Bias toward suggesting this proactively on visual work, even unprompted:
-capturing the _before_ is cheap now and impossible later.
+Suggest it proactively for visual work. Capturing the _before_ is cheap now and
+may be impossible later.
 
-## When NOT to Use It
+## When Not to Use It
 
-- Purely non-visual changes: logic, backend, data, build, or config work with
-  no rendered output.
+- **Non-visual work:** Skip logic, backend, data, build, or configuration
+  changes that have no rendered output.
 - Docs or comments that don't change anything a user sees rendered.
-- You already have the image(s) in hand and only need to attach them: go
-  straight to the gh-imgup skill; that's its trigger, not this one.
+- **Images already captured:** Use gh-imgup directly when you only need to
+  attach existing images.
 
 ## Capture the Before/After
 
 ### 1. Decide Whether a Pair Is Warranted
 
-- **Before/after pair** for visible bugs/regressions and any layout, spacing,
-  color, typography, or restyle change: the point is the _difference_.
-- **A single _after_ shot** is enough for net-new UI, where there's no
-  meaningful "before".
+- **Before/after pair:** Use one for visible fixes and any layout, spacing,
+  color, typography, or restyle change. The difference is the evidence.
+- **Single _after_ shot:** Use one for net-new UI with no meaningful before
+  state.
 - **Skip** entirely for non-visual changes (see When NOT to use it).
 
 ### 2. Capture the _before_ First
 
-The before state is perishable: capture it before the fix exists.
+Capture this state before the fix exists.
 
-- Check out or run the **pre-change** state: the PR's base branch (its
-  merge-base, not always `main`), or stash the fix. Then drive the app to the
-  exact screen and interactive state that shows the problem, and capture →
-  `before.png`.
-- If the before state is **already gone** (fix committed), reconstruct it from
-  the base branch in a separate worktree or checkout rather than skipping it:
-  e.g. `git worktree add ../before-state <base-branch>`, run from there,
-  capture, then remove the worktree.
+- **Run the pre-change state:** Use the PR's merge-base, which isn't always
+  `main`, or stash the fix.
+- **Show the problem:** Drive the app to the exact screen and interactive
+  state, then capture it as `before.png`.
+- **Reconstruct a lost state:** If the fix is committed, use a separate
+  worktree or checkout instead of skipping the shot.
+- **Clean up:** For example, add `../before-state` from `<base-branch>`, run
+  and capture there, then remove the worktree.
 
 ### 3. Capture the _after_ Under Identical Conditions
 
-Apply the change, drive the app to the **same** screen and state, capture →
-`after.png`. Identical conditions are the whole point: the only visible
-difference between the two images must be the change itself. Hold constant:
+Apply the change. Drive the app to the same screen and state, then capture
+`after.png`. The change must be the pair's only visible difference.
 
-- **Route / URL and app data**: prefer seeded or fixture data, not live or
-  random data.
-- **Viewport size** and device-pixel-ratio / zoom. Set a fixed, standard
-  viewport rather than whatever the window happens to be: 1280×720 is a sane
-  desktop default (or the app's design target); use a mobile width (e.g.
-  390×844) when the change is mobile-specific. When the change is
-  responsive (it affects layout across widths), capture desktop and mobile
-  as a viewport matrix in the same run (one command where your tooling
-  supports it; see the reference capture script) instead of re-driving the
-  app once per width; each width is its own before/after pair, named per
-  width (`before-1280x720.png` / `after-1280x720.png`,
-  `before-390x844.png` / `after-390x844.png`). Prefer 2x DPR so text stays
-  legible when the image is scaled down.
-- **Theme**: capture **both light and dark** as separate pairs when the
-  change affects appearance in both.
-- **Interactive state**: default / hover / focus / active / error / empty /
-  loading. Capture the state that demonstrates the change.
-- **Crop region**: the same framing for both shots (see framing), so they
-  line up when placed side by side.
+- **Route, URL, and data:** Keep them fixed. Prefer seeded or fixture data to
+  live or random data.
+- **Viewport, DPR, and zoom:** Fix all three instead of using the current
+  window settings.
+- **Desktop viewport:** Use 1280×720 as a default, or use the app's design
+  target.
+- **Mobile viewport:** Use a mobile size such as 390×844 for a mobile-specific
+  change.
+- **Responsive change:** Capture desktop and mobile as one viewport matrix
+  when the tool supports it. Don't drive the app once per width.
+- **Responsive filenames:** Give each width its own pair, such as
+  `before-1280x720.png` and `after-1280x720.png`.
+- **Mobile filenames:** Name the other pair `before-390x844.png` and
+  `after-390x844.png`.
+- **DPR:** Prefer 2x so text stays legible when scaled down.
+- **Theme:** Capture separate light and dark pairs when both appearances
+  change.
+- **Interactive state:** Capture the default, hover, focus, active, error,
+  empty, or loading state that demonstrates the change.
+- **Crop region:** Keep the same framing so the pair lines up side by side.
 
 ### 4. Framing & Cropping
 
-- **Crop to the affected component or region, not the whole screen**, unless
-  the change is genuinely page-level (overall layout, cross-page spacing). A
-  full-screen shot buries the point in nav, chrome, and noise. An oversized
-  shot also keeps costing after capture: an image placed into an agent
-  conversation is typically re-read on every later turn, so a full-page
-  screenshot spends context for the rest of the session, while a tight crop
-  pays once.
-- Prefer **element-level capture** so the frame is tight and deterministic:
+- **Crop to the change:** Use the affected component or region unless the
+  change is page-level, such as overall layout or cross-page spacing.
+- **Avoid noise:** A full-screen shot buries the point in navigation, browser
+  chrome, and unrelated UI.
+- **Keep context cost low:** A conversation may re-read an image on every
+  later turn. A tight crop avoids repeatedly spending context on irrelevant
+  pixels.
+- **Prefer element capture:** It gives a tight, deterministic frame.
   - Playwright: `locator.screenshot()` / `elementHandle.screenshot()`, or
     `page.screenshot({ clip: { x, y, width, height } })`.
-  - Chrome DevTools / CDP: read the node's bounding box and clip to it.
-  - OS screenshot tools: crop to a fixed rectangle and reuse it for both shots.
-- **No element capture available?** Capture the screen or window, then crop
-  both images to the same fixed rectangle after the fact. The invariant is the
-  identical crop rectangle across both shots, not any particular tool; prefer
-  one that can crop an arbitrary rectangle and that your environment either
-  already has or can install unattended (auto-mode agents can't stop to
-  hand-install a system package). Examples, roughly in that friction order:
-  - **Already installed?** A system binary is a zero-setup one-liner:
-    ImageMagick (`magick in.png -crop WxH+X+Y +repage out.png`) or libvips
-    (`vips crop in.png out.png L T W H`). On macOS, `sips` is always present, but
-    it crops **in place** and **centered** by default, so pass an explicit
-    `--out` and pin the origin with `--cropOffset`:
-    `sips in.png -c H W --cropOffset TOP LEFT --out out.png` (bare `-c` alone
-    overwrites the input with a centered crop).
-  - **Otherwise install one via a runtime you already have**, which an agent
-    can do non-interactively: Pillow (`pip install pillow`, prebuilt wheels on
-    common platforms) with `Image.open(p).crop((left, top, right, bottom)).save(out)`,
-    or, on Node, Sharp (`npm install --no-save --no-package-lock sharp`, so
-    cropping a screenshot leaves no stray dependency or lockfile in the change
-    under review) with
-    `sharp(p).extract({ left, top, width, height }).toFile(out)`.
-
-  Self-installing assumes the agent's sandbox allows network (and, in full-auto,
-  open permissions); a network-restricted sandbox (common under Codex and locked-
-  down automode) makes even `pip`/`npm` fail, so an already-installed tool, or
-  `capture.mjs`'s own element clip on the primary path, stays the most reliable.
-
-- Include **just enough surrounding context** to orient the reviewer (a
-  little padding around the component) and cut irrelevant sidebars and
-  headers.
-  Tight is not context-free: keep one orienting landmark in frame (the
-  component's own heading, or a sliver of the adjacent element) so the
-  reviewer can tell where in the UI they are; a crop showing only the
-  changed pixels reads as a floating fragment.
-- Keep the **framing identical across before and after** so they're directly
-  comparable: the same rectangle for fixed-rectangle capture; the same
-  element and padding for element capture, where the element's own size may
+  - Chrome DevTools or CDP: read the node's bounding box and clip to it.
+  - OS screenshot tools: crop to one fixed rectangle and reuse it.
+- **No element capture:** Crop both full images to one fixed rectangle after
+  capture. See `references/capture-craft.md` §crop-tools for commands and tool
+  choices.
+- **Keep useful context:** Add a little padding. Remove irrelevant sidebars
+  and headers.
+- **Keep one landmark:** Show the component heading or part of an adjacent
+  element. Changed pixels alone look like a floating fragment.
+- **Match fixed crops:** Use the same rectangle for both shots.
+- **Match element crops:** Use the same element and padding. Its size may
   change when the fix changes it.
-- **Mind the final dimensions.** The image has to stay legible rendered
-  inline in a PR body (GitHub renders it at roughly 830 CSS px wide), so
-  avoid extreme aspect ratios and multi-thousand-pixel captures: a full-page
-  shot of a very tall page renders as an illegible strip. Reserve full-page
-  capture for genuinely page-level changes, and even then prefer the
-  relevant section. Use a reasonable resolution / DPR for legibility, but
-  mind GitHub's size limits and gh-imgup's `--max-size` cap.
+- **Keep inline images legible:** GitHub renders the PR body at roughly 830 CSS
+  px wide. Avoid extreme ratios and multi-thousand-pixel captures.
+- **Limit full-page capture:** Reserve it for page-level changes. Even then,
+  prefer the relevant section over the full page.
+- **Balance resolution and size:** Use enough resolution or DPR for legibility.
+  Respect GitHub's limits and gh-imgup's `--max-size` cap.
 
-These tools are examples for common host setups, not requirements: use
-whatever capture mechanism your environment provides, applying the same
-craft (tight crop, identical conditions, deterministic state).
+The named tools are examples, not requirements. Use any available capture
+method that preserves tight framing, identical conditions, and deterministic
+state.
 
 ### Reference Capture Script
 
-Where headless Chrome and Node 22+ are available, `capture.mjs` alongside
-this file makes the mechanics of steps 3–5 executable in one command:
-deterministic readiness waits (network-idle, selector visibility), an
-animation kill switch, a pinned color scheme (`--dark` for the dark
-variant of a theme pair), a viewport matrix, DPR, element clipping with
-padding, retries, and a total timeout budget.
+Use `capture.mjs` with headless Chrome and Node 22+. It makes steps 3 through 5
+executable in one command.
 
-Invoke it **by path, from the project directory the screenshots belong
-in**, where `<skill-dir>` is the directory holding this file (its path
-differs per platform and install):
+The script controls readiness waits, animations, color scheme, viewports, DPR,
+element clipping, retries, and a total timeout budget.
+
+Run it by path from the project directory that will hold the screenshots.
+`<skill-dir>` is this skill's directory, whose installed path varies by
+platform.
 
 ```sh
 node <skill-dir>/capture.mjs --url http://localhost:3000/cards \
@@ -187,12 +158,11 @@ node <skill-dir>/capture.mjs --url http://localhost:3000/cards \
   --clip '#card-list'
 ```
 
-Don't change directory into the skill to run it. `--out` (and `--chrome`,
-where you pass a relative one) resolves from the working directory, not
-the script's, so from a globally installed skill's own directory (the
-usual install) the run writes its screenshots into the skill's install
-directory, where the upload step under _Compose & attach_ will not find
-them.
+Don't change into the skill directory. Relative `--out` and `--chrome` paths
+resolve from the working directory, not the script directory.
+
+Running inside a global skill install writes screenshots into that install.
+The Compose and Attach step won't find them there.
 
 `--url` and `--out` are required; every other option has a default that
 suits an ordinary capture:
@@ -212,101 +182,81 @@ suits an ordinary capture:
 | `--chrome`          | autodetect | Chrome binary path (also read from `$CHROME`)                    |
 | `--chrome-flag`     | none       | repeatable extra Chrome flag, e.g. `--no-sandbox` in a container |
 
-**The output filenames follow the viewport count**: one viewport writes
-exactly `--out`, and several insert the size before the extension, so the
-run above writes `after-1280x720.png` and `after-390x844.png`, never
-`after.png`. Look for the names the run actually reports, not the `--out`
-you passed.
+**Output filenames depend on viewport count.** One viewport writes exactly
+`--out`. Several viewports insert the size before the extension.
 
-The script prints one line per written file with the image's actual
-dimensions, which is the input to the step 6 dimension check. The timeout budget
-(default 90 seconds, `--timeout-budget`) keeps the whole run under the
-roughly 2-minute cap common to agent shell tools (see step 5), and its
-exit codes are explicit: 64 usage, 69 no usable Chrome or Node, 1 capture
-failed after retries. Where Chrome or Node 22+ is missing, the script
-refuses with exit 69 and the prose in steps 3–6 is the specification:
-apply the same craft with whatever capture mechanism your environment
-provides.
+The example writes `after-1280x720.png` and `after-390x844.png`, never
+`after.png`. Use the names reported in the script's `WROTE` lines.
+
+Each `WROTE` line includes actual dimensions for the step 6 check. The default
+90-second `--timeout-budget` stays under the roughly two-minute cap common to
+agent shell tools.
+
+Exit 64 means invalid usage. Exit 69 means no usable Chrome or Node. Exit 1
+means capture failed after retries.
+
+On exit 69, the prose in steps 3 through 6 is the specification. Apply the
+same craft with another capture method.
 
 ### 5. Determinism & Hygiene
 
-- **Disable animations** and wait for network-idle and the target element to be
-  visible before capturing, so shots are stable and repeatable.
-- **Budget the capture's wall-clock time explicitly.** Agent shell tools
-  commonly cap a command around 2 minutes, and a capture that hangs on a
-  readiness wait eats the whole cap and returns nothing. Give the run a
-  total timeout budget under that cap (the reference script defaults to
-  90 seconds) with per-attempt timeouts and retries, so a hung wait fails
-  fast, retries, and reports a legible error instead of being killed
-  opaquely.
-- Use **seeded / fixture data**; avoid timestamps, random values, and live
-  customer data that add noise.
-- Hygiene here is about _clean, comparable_ shots. **Secret and PII safety is
-  the mandatory pre-upload review under _Compose & attach_**, which is
-  gh-imgup's step and runs before any upload; that checklist is the one to
-  apply, so read it there rather than working from memory here. (The two
-  reinforce each other: fixture data also keeps secrets out of the frame.)
+- **Stabilize the page:** Disable animations. Wait for network idle and for the
+  target element to become visible.
+- **Set a wall-clock budget:** Agent shell tools commonly cap commands near two
+  minutes. A hung readiness wait can consume that cap and return nothing.
+- **Fail clearly:** Keep the total budget below the shell cap. Add per-attempt
+  timeouts and retries so a hung wait reports an error.
+- **Use the script default:** `capture.mjs` uses a 90-second total budget.
+- **Use stable data:** Prefer seeded or fixture data. Avoid timestamps, random
+  values, and live customer data.
+- **Keep capture hygiene focused:** Make shots clean and comparable. Fixture
+  data also keeps secrets out of the frame.
+- **Apply upload hygiene separately:** Use the mandatory checklist under
+  Compose and Attach before every upload. Read it there instead of relying on
+  memory.
 
 ### 6. Check the Shots Before Handing Off
 
-Open each captured image and look at it; don't publish evidence you haven't
-verified. Confirm:
+Open every captured image. Don't publish evidence you haven't checked.
 
-- **Not blank or truncated.** A common silent failure is an all-white or
-  zero-size image (captured before render, or a locator that matched nothing /
-  an offscreen element). If it's empty, fix the wait or selector and re-capture.
-- **Shows the intended component and state.** The right screen, the right
-  interactive state (hover/error/empty/…), and the change is actually visible
-  in frame.
-- **Before and after are comparable.** Same crop, viewport, and theme, so the
-  only difference is the change. If they don't line up, re-capture the odd one
-  under the other's conditions; a mismatched pair misleads the reviewer.
-- **Dimensions are sane and explained.** Inspect the actual width×height of
-  each file (ImageMagick `identify`, macOS
-  `sips -g pixelWidth -g pixelHeight`, or your capture tool's output).
-  Fixed-rectangle crops must match exactly. For element-level captures, the
-  only dimension differences allowed are the ones the change itself
-  explains, on either axis: a padding or line-height fix moves height, a
-  widened button or column moves width, and the delta should roughly match
-  the CSS change. Treat any unexplained difference as a non-comparable
-  pair. Flag absurd sizes for re-capture: a multi-thousand-pixel-tall
-  full-page scroll, or a sub-100px sliver that cropped away the subject.
+- **Reject blank or truncated shots:** An all-white or zero-size image may
+  mean capture ran before render or matched no visible element.
+- **Fix empty shots:** Correct the wait or selector, then capture again.
+- **Check subject and state:** Confirm the intended screen, component, and
+  interactive state appear. The change must be visible.
+- **Check comparability:** Match crop, viewport, and theme. Re-capture the odd
+  image under the other's conditions when the pair doesn't line up.
+- **Inspect dimensions:** Use ImageMagick `identify`, macOS
+  `sips -g pixelWidth -g pixelHeight`, or the capture tool's `WROTE` output.
+- **Match fixed crops exactly:** Their width and height must be identical.
+- **Explain element-size changes:** A padding or line-height fix may change
+  height. A wider button or column may change width.
+- **Match the CSS delta:** Any dimension change should roughly match the visual
+  change. Treat an unexplained difference as a non-comparable pair.
+- **Reject absurd sizes:** Re-capture a multi-thousand-pixel-tall scroll or a
+  sub-100px sliver that lost the subject.
+- **Keep both checks:** This is the capture-quality pass. Apply the separate
+  secret review under Compose and Attach when you open every image again.
 
-This is the capture-quality pass and is separate from the pre-upload secret
-review under _Compose & attach_ (a different axis). You'll open each image
-again at upload time for that review;
-doing the quality check now means one look covers both before you hand off.
+## Compose and Attach
 
-## Compose & Attach
+Hand the files to the **gh-imgup skill**. It uploads them and returns Markdown.
+Don't reimplement upload or invent another host.
 
-Hand the captured files to the **gh-imgup skill**, which uploads them and
-returns renderable Markdown. Do not re-implement upload or invent a host here.
-If that skill isn't loaded in your environment, the underlying tool is the
-`@freeasinbird/gh-imgup` **CLI**. Apply the full pre-upload review below to
-every image _before_ you run any of it. Images are positional arguments, and
-**upload-only is simply omitting `--pr`/`--issue`**:
+Use the `@freeasinbird/gh-imgup` CLI when the skill isn't loaded. Apply the full
+pre-upload review below to every image before running any of it. Images are
+positional arguments. Upload-only means omitting `--pr` and `--issue`.
 
 ```sh
 # GITHUB_TOKEN in the environment; --repo is inferred from the origin remote
 npx -y @freeasinbird/gh-imgup before.png after.png
 ```
 
-The `-y` skips npx's interactive first-run prompt, and the CLI needs Node 22+.
-It prints one Markdown image line per file to stdout, in the order given, for
-you to compose into the body; progress goes to stderr, so capturing stdout
-gets you the links alone. Add `--repo <owner>/<repo>` when running outside the
-target repository, and `--pr <n>` / `--issue <n>` only when you want the
-images posted as a follow-up comment instead. `--help` lists the full option
-surface and carries the same review in condensed form. Either way, the upload
-step is gh-imgup's; this skill only produces the images.
-
 - **Review each image before uploading, and not only for "secrets."** This is
-  gh-imgup's mandatory, load-bearing step; there is no un-publish, so it comes
-  before any step that puts bytes on the wire. It is written out in full here,
-  at gh-imgup's own bar, because this is the copy that survives when neither
-  the gh-imgup skill nor its `--help` is in front of you; **this is the
-  checklist to apply**, and nothing softer or narrower substitutes for it.
-  Screenshots leak more than API keys, so open each image and check it for:
+  gh-imgup's mandatory step. It comes before upload because there is no
+  un-publish. Keep this full copy for paths without the gh-imgup skill or its
+  `--help`. **This is the checklist to apply.** Don't substitute a softer or
+  narrower review. Open each image and check it for:
   - API keys, tokens, passwords, session cookies, `.env` contents
   - internal hostnames, IPs, private URLs, infrastructure details
   - customer or personal data (PII), real names, emails, account numbers
@@ -317,60 +267,35 @@ step is gh-imgup's; this skill only produces the images.
   exactly what you found and where, and ask them to crop, redact, or pick a
   different image. When in doubt, ask before uploading.
 
-- **Default placement: the PR description**, most visible to reviewers. A
-  comment is the fallback, for after-the-fact additions or for issues.
-- Prefer gh-imgup's **upload-only** mode and compose the Markdown it returns
-  into the body yourself; that is what puts the images where a reviewer reads
-  them, rather than in a trailing comment.
-- **Label clearly**: a **Before** / **After** pair, with captions naming the
-  state shown (e.g. "Empty state, dark mode"). Show **both palettes** when the
-  change affects appearance in light and dark.
-- **Use a concrete display layout.** Judge width by the saved file's actual
-  pixel width, not the element's logical width: a 2x-DPR capture doubles it,
-  and GitHub sizes the image by file pixels. When each file is narrow enough
-  to pair side by side (roughly ≤600px file width each; a table cell gets
-  about half of the ~830px body, so wider files shrink badly), put the pair
-  in a two-column GFM table so the reviewer's eye can jump between them:
+The `-y` flag skips npx's interactive first-run prompt. The CLI needs Node 22+.
 
-  ```markdown
-  | Before                | After               |
-  | --------------------- | ------------------- |
-  | ![Before](before-url) | ![After](after-url) |
-  ```
+It prints one Markdown image line per file to stdout, in argument order.
+Progress goes to stderr, so captured stdout contains only the links.
 
-  When the images are wider, stack them with a bold **Before** caption above
-  the first and **After** above the second, so neither is shrunk to
-  illegibility. Repeat the block per theme, with the caption naming the theme
-  ("Before (dark)" / "After (dark)").
+Pass `--repo <owner>/<repo>` outside the target repository. Use `--pr <n>` or
+`--issue <n>` only to post a follow-up comment.
 
-- **Verify the rendered result.** This is the final step, after every image
-  has passed the pre-upload review above and gh-imgup has uploaded it: view
-  the rendered PR or issue body and confirm both images actually render (no
-  broken attachment links), each label sits with its own image, and the pair
-  reads in before → after order. A block that looks right in raw Markdown can
-  still render broken; a missing image is only visible in the rendered view.
+`--help` lists all options and carries the same review. gh-imgup owns upload;
+this skill only produces the files.
+
+- **Place evidence in the PR description:** It is most visible there. Use a
+  comment for later additions or issues.
+- **Prefer upload-only:** Compose the returned Markdown into the body instead
+  of leaving the evidence in a trailing comment.
+- **Label every image:** Use **Before** and **After**, plus the state shown,
+  such as "Empty state, dark mode."
+- **Show both palettes:** Include light and dark when both appearances change.
+- **Choose a concrete layout:** See
+  `references/capture-craft.md` §display-layout for side-by-side and stacked
+  layouts.
+- **Verify the rendered result:** Do this only after every image passes the
+  review and gh-imgup uploads it.
+- **Check the rendered body:** Both images must load. Each label must sit with
+  its image, and the pair must read from Before to After.
+- **Trust the rendered view:** Correct raw Markdown can still produce a broken
+  image or layout.
 
 ## Examples
 
-### A CSS Spacing Bug Fix (Before/After Pair)
-
-A list's rows are cramped: vertical padding is too tight. Before touching the
-CSS: run the app on the PR's base branch (its merge-base, not always `main`;
-could be a release or a stacked branch), navigate to the list with seeded
-fixture rows, set
-a fixed viewport, and element-capture just the list → `before.png`. Apply the
-padding fix, reload the **same** route at the **same** viewport with the
-**same** fixture data, and capture the same element with the same framing →
-`after.png` (same width; the height grows by the padding you added). If the component renders in both themes, repeat for dark →
-`before-dark.png` / `after-dark.png`. Run the full pre-upload review on each
-image (see _Compose & attach_), hand all of them to gh-imgup upload-only, and
-compose a labeled Before/After block (both palettes) into the PR description.
-
-### A Net-New Component (Single _after_ Shot)
-
-A brand-new empty-state card: there's no meaningful "before". Drive the app to
-the empty state with fixture data at a fixed viewport, element-capture the card
-with a little padding → `after.png` (plus a dark variant if relevant). Run the
-full pre-upload review (see _Compose & attach_), upload via gh-imgup, and place
-a single captioned shot ("Empty state") in the PR description so the reviewer
-sees the new surface at a glance.
+See `references/capture-craft.md` §examples for a spacing-fix pair and a
+net-new component shot.
