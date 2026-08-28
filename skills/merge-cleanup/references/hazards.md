@@ -12,33 +12,34 @@ git version. Each section is cited from the rule it justifies as
 ## §merged-not-ancestor
 
 `git branch --merged <base>` lists only branches whose tip is an ancestor of
-that base. That holds for a merge-commit or fast-forward merge, but not for a
+that base. That holds for a merge-commit or fast-forward merge. It fails for a
 squash or rebase merge, where the just-merged branch's tip never becomes an
 ancestor of the base.
 
-Relied on by the identify section (the `--merged` fallback), the verify
-section (what counts as verification in a squash- or rebase-merge repo), and
-step 4 (when `-D` is the correct deletion).
+Relied on by `merge-cleanup.sh`, which verifies the merge from the forge (a
+non-null `mergedAt`) and deletes at the exact merged-head OID rather than by
+ancestry: step 4's remote `--force-with-lease=refs/heads/<branch>:<oid>` and
+step 5's local `git update-ref -d refs/heads/<branch> <oid>`. No current
+command runs `git branch --merged` or `git branch -D`.
 
 ---
 
 ## §tag-shadow
 
-Two distinct bare-name resolution holes, both reachable just before a
-deletion:
+Two bare-name resolution holes open just before a deletion:
 
 - A bare name tail-matches other refs in `git ls-remote`: the pattern
   `<branch>` also matches `bar/<branch>`.
-- Elsewhere, revision lookup tries `refs/tags/` before both `refs/heads/` and
+- Revision lookup tries `refs/tags/` before both `refs/heads/` and
   `refs/remotes/`, so a stray or malicious tag named `<branch>` or
   `<base-remote>/<base-branch>` resolves ahead of the real ref.
 
 A bare fetch or pull refspec is exposed the same way.
 
-Relied on by the identify section (fully qualify every ref a guard resolves
-or compares), step 3 (why the `ls-remote` pattern is qualified at all), step 2
-(the qualified fetch refspec), and `base-landing-plan.sh` (which reports a
-same-named tag, and qualifies both ref reads for this reason).
+Relied on by step 1 (qualifying every ref it resolves or compares), step 3
+(the qualified base-fetch refspec), step 4 (the qualified `git ls-remote
+--heads` pattern that reads the remote head), and `base-landing-plan.sh`,
+which reports a same-named tag and qualifies both ref reads for this reason.
 
 ---
 
@@ -62,8 +63,9 @@ No push refspec expresses the delete while the decoy exists, and a forge-API
 ref delete would run neither the OID comparison nor the lease, so this is a
 stop rather than a workaround.
 
-Relied on by step 3 (the whole-string ref-column comparison and the
-suffix-match stop).
+Relied on by step 4 (the whole-string ref-column comparison over the `git
+ls-remote --heads` rows and the suffix-match stop before the
+`--force-with-lease` delete).
 
 ---
 
@@ -75,10 +77,10 @@ the branch. The bare form prefers a local branch only when one exists; with
 no local branch and a same-named tag, `git checkout <base-branch>` detaches
 `HEAD` at the tag.
 
-Relied on by the identify section (the qualification exception),
-`base-landing-plan.sh` (which reports whether a local branch exists and
-whether a tag shares the name), and step 1 (the detached-`HEAD` confirmation
-that reads it).
+Relied on by `base-landing-plan.sh`, which reports whether a local branch
+exists and whether a tag shares the name, and by step 3's landing, which uses
+the bare `git checkout <base>` (or `git switch`) form and then confirms `HEAD`
+attached to `refs/heads/<base>` rather than detached.
 
 ---
 
@@ -87,277 +89,338 @@ that reads it).
 Quoting a name protects it from the shell, not from git: a value beginning
 with a hyphen reaches git's own option parser and is read as an option there.
 Verified in scratch repos on git 2.50.1 (Apple Git-155), against a ref named
-`-x` and a remote named `-x`:
+`-x` and a remote named `-x`.
 
-- The shape is reachable. `git branch -- -x` refuses ("is not a valid branch
-  name", exit 128), but `git check-ref-format refs/heads/-x` accepts it
-  (exit 0) and `git update-ref refs/heads/-x <oid>` creates it, after which
-  `git branch --list` shows it like any other branch. A forge creating refs
-  through its API is under no stricter constraint than `update-ref`.
-- `git checkout` has no safe spelling for such a name. The bare form fails
-  with an "unknown switch" error (exit 129); `git checkout -- -x` reads the
-  name as a pathspec ("did not match any file(s) known to git", exit 1); the
-  qualified form succeeds and detaches `HEAD` (§checkout-detach). `HEAD`
+### Reachable, and Unspellable by Checkout
+
+A forge or `update-ref` can create a `-x` ref that `git branch` rejects.
+`git branch -- -x` refuses ("is not a valid branch name", exit 128), but
+`git check-ref-format refs/heads/-x` accepts it (exit 0) and
+`git update-ref refs/heads/-x <oid>` creates it; `git branch --list` then
+shows it like any other branch. A forge creating refs through its API is under
+no stricter constraint than `update-ref`.
+
+`git checkout` has no safe spelling for such a name:
+
+- The bare form fails with an "unknown switch" error (exit 129).
+- `git checkout -- -x` reads the name as a pathspec ("did not match any
+  file(s) known to git", exit 1).
+- The qualified form succeeds and detaches `HEAD` (§checkout-detach). `HEAD`
   stayed on `main` through both failures, so what checkout produces is a base
-  branch it cannot switch to, not a silent wrong switch. The creating form
-  refuses too: `checkout -b -x main` consumes `-x` as the argument of `-b` and
-  then rejects the name (exit 128).
-- `git switch` does have one, and keeps the guards checkout's form carries.
-  `git switch --no-overwrite-ignore -- -x` attached `HEAD` to the branch
-  (exit 0, `symbolic-ref` reporting `refs/heads/-x`): `--` is end-of-options
-  there, not a pathspec marker, and the flag is accepted. Against a branch
-  that started tracking a path the worktree held as an ignored file, plain
-  `git switch` overwrote it while the `--no-overwrite-ignore` form aborted
-  (exit 1) with the file and `HEAD` intact, matching `git checkout`
-  identically (§ignored-file-overwrite). It also refuses a same-named tag
-  ("a branch is expected, got tag", exit 128) instead of detaching, and
-  refuses a branch held by another worktree (exit 128). `switch -c` still
-  rejects the name at creation (exit 128), so the local branch has to arrive
-  by fetching `refs/heads/-x` straight into itself, which succeeded and left
-  the branch switchable.
-- That fetched-into-place branch starts with no upstream, where the `-b` form's
-  has one. In an ordinary clone
-  `checkout -b feat2 refs/remotes/origin/feat2` set `branch.feat2.remote` and
-  `.merge` by itself, while fetch-then-switch left both unset and
-  `git pull --ff-only` then failed with "There is no tracking information for
-  the current branch" (exit 1).
-- An untracked base branch is worse than unconfigured, which is why the
-  tracking is set rather than left to the clone. In a clone made
-  `--single-branch --branch main`, whose fetch refspec covers only `main`, a
-  local `-x` fetched into place carried no upstream, and
-  `git branch --set-upstream-to` refused to give it one ("not a branch",
-  exit 128) because the branch falls outside that refspec.
-  `git pull --ff-only` on
-  that branch then fetched what the configured refspec names, `main`, rather
-  than the branch: with the two diverged it aborted ("Not possible to
-  fast-forward", exit 128), and with the branch an ancestor of `main` it
-  **fast-forwarded the local `-x` onto main's tip at exit 0**, leaving remote
-  `-x` where it was. `checkout -b` leaves the branch equally untracked in that
-  clone shape, so this is not specific to the hyphen path. Writing
-  `branch.<name>.remote` and `branch.<name>.merge` directly works in every
-  clone shape (the pull then reported fetching `-x` and was correct), and is
-  what `--set-upstream-to` writes where it succeeds.
-- A case-folding filesystem removes the landing entirely for a base whose name
-  differs from an existing branch only in case, and it does so twice over.
-  Verified on APFS (`core.ignoreCase` true), holding only `refs/heads/main`:
-  `git show-ref --verify --quiet refs/heads/Main` answers yes, because a loose
-  ref folds, so an existence probe built on it plans `create:false` and the
-  landing attaches `HEAD` to a name in no ref listing; while an exact probe
-  plans `create:true` and the prescribed
-  `git checkout --no-overwrite-ignore -b Main refs/remotes/origin/Main` fails
-  with "a branch named 'Main' already exists" (exit 128), the switch path's
-  fetch into `refs/heads/Main` failing likewise. Packed refs do not fold, so the
-  first answer also depends on whether the repository has been packed. Both
-  failures abort the landing, which is why `base-landing-plan.sh` reads refs
-  exactly and stops on a case collision before planning a create git will
-  refuse.
-- A ref name cannot also be a directory of refs, and the create fails in both
-  directions and both storages. Verified on git 2.50.1, all four exit 128: an
-  existing `release` blocks `release/next` ("'refs/heads/release' exists; cannot
-  create 'refs/heads/release/next'"), and an existing `release/next` blocks
-  `release`, each with the existing ref loose and packed. A packed parent
-  leaves no directory behind, so a path stat sees only the loose half of this;
-  the plan compares enumerated names instead, for the branch and for the
-  remote-tracking ref its fetch would write.
+  branch it cannot switch to, not a silent wrong switch.
+- The creating form refuses too: `checkout -b -x main` consumes `-x` as the
+  argument of `-b` and then rejects the name (exit 128).
+
+`git switch` has a safe spelling, and keeps checkout's guards:
+
+- `git switch --no-overwrite-ignore -- -x` attached `HEAD` to the branch
+  (exit 0, `symbolic-ref` reporting `refs/heads/-x`). Here `--` is
+  end-of-options, not a pathspec marker, and the flag is accepted.
+- Against a branch that started tracking a path the worktree held as an
+  ignored file, plain `git switch` overwrote it. The `--no-overwrite-ignore`
+  form aborted (exit 1) with the file and `HEAD` intact, matching
+  `git checkout` (§ignored-file-overwrite).
+- It refuses a same-named tag ("a branch is expected, got tag", exit 128)
+  instead of detaching, and refuses a branch held by another worktree (exit
+  128).
+- `switch -c` still rejects the name at creation (exit 128). So the local
+  branch has to arrive by fetching `refs/heads/-x` straight into itself, which
+  succeeded and left the branch switchable.
+
+### Upstream Is Written, Not Inherited
+
+A fetched-into-place branch starts with no upstream, where the `-b` form has
+one. In an ordinary clone, `checkout -b feat2 refs/remotes/origin/feat2` set
+`branch.feat2.remote` and `.merge` by itself, while fetch-then-switch left
+both unset. `git pull --ff-only` then failed with "There is no tracking
+information for the current branch" (exit 1).
+
+An untracked base branch is worse than unconfigured, so the tracking is set
+rather than left to the clone:
+
+- In a clone made `--single-branch --branch main`, whose fetch refspec covers
+  only `main`, a local `-x` fetched into place carried no upstream, and
+  `git branch --set-upstream-to` refused to give it one ("not a branch", exit 128) because the branch falls outside that refspec.
+- `git pull --ff-only` on that branch then fetched what the configured refspec
+  names, `main`, rather than the branch. With the two diverged it aborted
+  ("Not possible to fast-forward", exit 128); with the branch an ancestor of
+  `main` it fast-forwarded the local `-x` onto main's tip at exit 0, leaving
+  remote `-x` where it was.
+- `checkout -b` leaves the branch equally untracked in that clone shape, so
+  this is not specific to the hyphen path. Writing `branch.<name>.remote` and
+  `branch.<name>.merge` directly works in every clone shape (the pull then
+  reported fetching `-x` and was correct), and is what `--set-upstream-to`
+  writes where it succeeds.
+
+Half a tracking pair behaves exactly like none, so the check reads both keys.
+In the same clone, with `branch.-x.remote` set and `branch.-x.merge` absent,
+`git pull --ff-only` still fast-forwarded local `-x` onto main's tip at exit 0
+while remote `-x` stayed put; the reverse half (`merge` set, `remote` absent)
+did the same. A check reading one key returns success on both of those states,
+including the one an interruption between the two writes leaves behind.
+
+### Namespace, Directory, and Ref-Store Conflicts
+
+A ref name cannot also be a directory of refs; the create fails in both
+directions and both storages. Verified on git 2.50.1, all four exit 128: an
+existing `release` blocks `release/next` ("'refs/heads/release' exists; cannot
+create 'refs/heads/release/next'"), and an existing `release/next` blocks
+`release`, each with the existing ref loose and packed. A packed parent leaves
+no directory behind, so a path stat sees only the loose half of this; the plan
+compares enumerated names instead, for the branch and for the remote-tracking
+ref its fetch would write.
+
+More conflicts hide from a naive scan:
+
 - The blocking ref can sit at or above the namespace boundary, so the
-  enumeration that looks for it starts at `refs/`. Verified: with
-  `refs/remotes/origin` present as a ref and nothing beneath it, the fetch into
-  `refs/remotes/origin/<base>` fails, and with `refs/heads` present as a ref a
-  branch cannot be created at all.
+  enumeration starts at `refs/`. With `refs/remotes/origin` present as a ref
+  and nothing beneath it, the fetch into `refs/remotes/origin/<base>` fails;
+  with `refs/heads` present as a ref, a branch cannot be created at all.
 - A ref that cannot be resolved is omitted from `git for-each-ref` at exit 0,
-  so an enumeration is blind to it while the ref store is not. Verified with a
-  dangling symbolic ref at `refs/heads/release`: the enumeration listed only
-  `main`, and creating `refs/heads/release/next` still failed on the lock. Path
+  so an enumeration is blind to it while the ref store is not. With a dangling
+  symbolic ref at `refs/heads/release`, the enumeration listed only `main`,
+  and creating `refs/heads/release/next` still failed on the lock. Path
   ancestors are therefore stated as well as enumerated.
-- A files repository can hold more than regular loose refs. A dangling
-  filesystem symlink on an ancestor made the plan return `OK` and the create
-  fail; the same symlink aimed at a directory made the fetch succeed while
-  writing the new ref outside `.git`. Ancestor symlinks are therefore a stop,
-  not a directory to follow. At the exact destination the rule differs: git
-  safely replaces a dangling filesystem symlink. It also replaces one that
-  resolves to an enumerated direct ref when the ref advances, leaving the target
-  file unchanged; a symlink to a directory still blocks the update. A broken
-  symbolic ref instead made `checkout -b release` exit 0 and attach `HEAD` to
-  its missing target rather than `refs/heads/release`. The resulting ref and
-  `HEAD`, not the command's exit status alone, are the oracle.
-- Special loose entries must be classified before asking Git to interpret
-  their contents. `git symbolic-ref` opens an exact FIFO, or a FIFO reached
-  through a symlink, and blocks waiting for a writer. On Git 2.43,
-  `for-each-ref` can do the same before destination-specific checks run, even
-  for a special entry outside either destination. A special-node scan of the
-  whole loose ref tree therefore runs before every ref enumeration. Each
-  candidate is first filtered through `git check-ref-format`: Git ignores an
-  entry at an invalid ref path without opening it, so that shape remains safe.
-  The destination checks still apply the narrower update semantics afterward.
-- A failed filesystem scan is not an empty namespace. With a non-empty
-  destination directory unreadable, `find ... | head` hid find's failure and
-  the plan returned `OK`; the fetch then failed on the occupied directory. The
-  scan now captures find's own status and reports `LOOKUP_FAILED`.
-- Reftable has no loose-ref tree to inspect: `.git/refs/heads` is a backend
-  marker file, and treating it as a loose ref false-stopped every missing
-  branch. Its public enumeration also omits dangling symbolic refs. Preparing
-  and aborting a ref transaction can ask the backend whether a destination is
-  available, but `prepare` writes `tables.list.lock`, and an interruption before
-  `abort` strands that lock and blocks later ref updates. A read-only planner
-  can therefore neither inspect reftable exactly nor use that transaction
-  safely; it reports `STOP ref-storage` explicitly instead of a false conflict
-  or a hidden write.
-- A ref-storage extension is active only when the repository's own
-  `core.repositoryFormatVersion` is 1, and repository extensions come from the
-  local repository config. On Git 2.43, a local
-  `extensions.refStorage=reftable` under format 0 remains on the files backend;
-  newer Git rejects that malformed combination before the planner runs. A
-  global value remains inactive even under format 1. Backend detection uses the
-  same activation and scope rules so an ignored value cannot disable cleanup.
-  It also asks Git to parse the format as an integer: valid spellings such as
-  `01`, `+1`, and `0x0` normalize to 1, 1, and 0 rather than becoming
-  unsupported raw strings.
-- Resolvable symbolic refs need an exact check independent of the namespace
-  scan. With `refs/heads/release` symbolic to `refs/heads/victim`, checkout
-  returned success while attaching `HEAD` to `victim`. With
-  `refs/remotes/origin/main` symbolic to the same victim, fetch returned success
-  while advancing the local branch instead of an ordinary tracking ref. Both
-  exact destinations now stop before the redirect.
-- Case aliases apply to remote-tracking refs as well as branches. On a
-  case-folding filesystem, a loose `refs/remotes/origin/main` written by fetch
-  aliases a packed `refs/remotes/Origin/main`, even though the packed entry
-  leaves no path for the destination stat to find. The same folded-name
-  fallback therefore checks both destinations; it excludes an exact tracking
-  ref, which is an ordinary update rather than an alias.
-- Shared refs live in the common git directory, so a ref stat rooted at
-  `git rev-parse --absolute-git-dir` sees none of them from a linked worktree,
-  where that path is `.git/worktrees/<id>`. Verified: a dangling
-  `refs/heads/release` was invisible from the linked worktree and the create
-  failed anyway. The relocate rule puts step 1 in exactly that layout, so the
-  plan resolves `--git-common-dir` instead.
-- `git rev-parse` can echo an option it does not understand while exiting 0.
-  Therefore probing `--path-format=absolute` and falling back only on failure
-  did not fall back on older Git; the echoed option and relative common-dir
-  answer became a bogus multiline path. The plan now asks only for
-  `--git-common-dir`, which is old enough for every supported shape, and
-  resolves its documented relative answer itself.
 - A configured remote name is not necessarily a valid component of a
   remote-tracking ref. `git config remote.bad..remote.url <url>` and
   `git remote get-url -- bad..remote` both succeeded, but the mandatory fetch
   rejected `refs/remotes/bad..remote/main` as an invalid refspec. The complete
   derived destination is now checked with `git check-ref-format` before the
   plan can return `OK`.
-- The plan is necessarily a snapshot. A ref writer that runs after the check
-  can introduce the same namespace conflict before the later fetch or branch
-  create; no read-only script can retain Git's ref lock across those separate
-  commands. Step 1 therefore requires one continuous window of exclusive
-  control over ref-mutating operations from its first plan through step 2's
-  final fetch and fast-forward, including the switch and second plan. This is
-  an operating precondition, not a guarantee the script can manufacture.
-- The aliasing is the filesystem's, not just case: APFS resolves
-  `refs/heads/café` onto an existing `refs/heads/CAFÉ`, and `checkout -b` then
-  fails at exit 128. A fold written in the shell cannot see that, so the guard
-  stats the ref path and lets the filesystem answer; the fold survives only for
-  packed refs, which have no file to stat, and is ASCII-only there.
-- What decides that collision is the ref store, not `core.ignoreCase`, which
-  describes the working tree. Checked as a matrix over both volume types and
-  both ref storages, using a case-sensitive APFS disk image alongside an
-  ordinary folding one: `git show-ref --verify` answers yes exactly where
-  `checkout -b` then fails (folding volume, loose ref) and no in the other
-  three, including a folding volume whose ref is packed, where the create
-  succeeds and makes both refs. On a case-sensitive volume with
-  `core.ignoreCase` forced true, the create also succeeds, so a guard reading
-  the flag refuses a landing git performs. The stop therefore probes what git
-  resolves rather than what the flag claims.
-- Configuration is not fixed across a checkout, and this reaches further than
-  the tracking keys: an `includeIf "onbranch:<name>"` section can supply any
-  key, `remote.<name>.url` included. Verified on git 2.50.1 with the URL moved
-  into such a section: the pre-landing plan validated it while `feature` was
-  checked out and the post-landing plan reported `LOOKUP_FAILED remote`.
-  A different valid fallback URL instead made the resync fetch from another
-  repository. Nothing a preflight reads predicts either value, because git
-  evaluates `onbranch` against whichever branch is checked out at the time, so
-  **every config-derived field in the plan is an answer about the branch that
-  was checked out when it ran**. The sequence therefore lands first,
-  re-resolves and validates the base remote before resyncing, completes the
-  resync before deleting the remote head, and re-resolves the head role again
-  at deletion time. A missing or changed mapping now leaves the remote head
-  intact.
-- Tracking configuration is not fixed across a checkout, which is why the
-  decision to write it is taken after the landing rather than from the plan
-  that preceded it. An `includeIf "onbranch:<name>"` section applies only while
-  that branch is the checked-out one, so on git 2.50.1, with such a section
-  supplying `branch.main.remote` and `.merge` while `feature` was checked out,
-  both keys read back normally there and were gone the moment `main` was
-  checked out, leaving `git pull --ff-only` reporting "There is no tracking
-  information for the current branch".
-- Half a tracking pair behaves exactly like none, which is why the check reads
-  both keys. In the same clone, with `branch.-x.remote` set and
-  `branch.-x.merge` absent, `git pull --ff-only` still fast-forwarded local
-  `-x` onto main's tip at exit 0 while remote `-x` stayed put; the reverse half
-  (`merge` set, `remote` absent) did the same. A check reading one key returns
-  success on both of those states, including the one an interruption between
-  the two writes leaves behind.
-- `git switch` is the one command the sequence needs that a still-supported git
-  may lack (it arrived in 2.23), so step 1's plan probes for it before naming a
-  switch landing. `git switch -h` distinguishes the two (usage and exit
-  129 where the command exists; "is not a git command" and exit 1 where it does
-  not, checked against a deliberately bogus `git switchx -h`), but invoking the
-  command is the wrong way to ask, and `base-landing-plan.sh` does not: where
-  switch is not a builtin an `alias.switch` is expanded in its place, and git
-  runs a `!`-prefixed alias as a shell command with the `-h` appended.
-  Reproduced on git 2.50.1 against a stand-in alias name: `git <alias> -h` with
-  `alias.<name>=!touch <path>` created the file, so the probe would have
-  executed arbitrary code inside a preflight that promises to touch nothing.
-  `git --list-cmds=builtins` answers the same question and expands no alias;
-  an alias cannot shadow a builtin, so where switch exists the list is also
-  honest (verified: `alias.switch` was ignored on 2.50.1). A read that fails
-  counts as absent, which is fail-safe because absence is a stop taken while
-  nothing has been deleted, and `--list-cmds` predates switch by five releases
-  (2.18), so a git too old to answer is too old to have the command.
-- Every other site is terminable. `git branch -d -- -x` and its forced form
-  `git branch -D -- -x` both deleted the ref (exit 0), where each without the
-  terminator is an "unknown switch"; with a remote named `-x`,
-  `git ls-remote --heads -x`,
-  `git fetch -x <refspec>`, and `git fetch --prune -x` each failed with an
-  "unknown switch" error (exit 129) while the `--` form of all three
-  succeeded. `git worktree remove -- -wt` removed a hyphen-named worktree.
-- The terminator changes nothing for ordinary names: `ls-remote`, both fetch
-  forms, and
-  `git push --delete --force-with-lease=<ref>:<oid> -- <remote> <ref>`
-  behaved as they did without it, and that push still refused a stale lease
-  with "stale info" (exit 1), leaving the remote ref in place.
 
-- Three names defeat the switch anyway, and not through option parsing, so no
-  terminator reaches them: git resolves `-` (the previous branch), `@` (a
-  synonym for HEAD), and `HEAD` as revision shorthand before it looks in
-  `refs/heads`. Each was created as a real branch on git 2.50.1 with another
-  branch checked out. `git switch --no-overwrite-ignore -- -` switched to the
-  previous branch and exited 0; `git checkout --no-overwrite-ignore @` stayed
-  where it was and exited 0; the `HEAD` spelling attached to
-  `refs/heads/heads/HEAD`. The `@` result was re-checked with the branches
-  deliberately at different commits, since same-commit branches make a silent
-  no-op hard to tell from a successful switch: with `refs/heads/@` at main's
-  commit and `other` checked out, the checkout left `HEAD` on `other` at
-  `other`'s commit, and the switch spelling refused outright with "a branch is
-  expected, got 'refs/heads/other'", which is git naming the expansion it
-  performed. No spelling tried lands on them:
-  `switch refs/heads/-` and its terminated form both exit 128, and
-  `checkout refs/heads/-` detaches. The rest of the awkward space is fine,
-  checked the same way: `--`, `-x`, `-h`, `--all`, `a/b`, and each of
-  `FETCH_HEAD`, `ORIG_HEAD`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REBASE_HEAD`,
-  `REVERT_HEAD`, `BISECT_HEAD`, and `AUTO_MERGE` all attach correctly, so the
-  refusal is three literals and not a pattern.
+A files repository can hold more than regular loose refs:
+
+- A dangling filesystem symlink on an ancestor made the plan return `OK` and
+  the create fail; the same symlink aimed at a directory made the fetch
+  succeed while writing the new ref outside `.git`. Ancestor symlinks are
+  therefore a stop, not a directory to follow.
+- At the exact destination the rule differs: git safely replaces a dangling
+  filesystem symlink. It also replaces one that resolves to an enumerated
+  direct ref when the ref advances, leaving the target file unchanged; a
+  symlink to a directory still blocks the update.
+- A broken symbolic ref instead made `checkout -b release` exit 0 and attach
+  `HEAD` to its missing target rather than `refs/heads/release`. The resulting
+  ref and `HEAD`, not the command's exit status alone, are the oracle.
+
+Special loose entries must be classified before asking Git to interpret their
+contents. `git symbolic-ref` opens an exact FIFO, or a FIFO reached through a
+symlink, and blocks waiting for a writer. On Git 2.43, `for-each-ref` can do
+the same before destination-specific checks run, even for a special entry
+outside either destination. A special-node scan of the whole loose ref tree
+therefore runs before every ref enumeration. Each candidate is first filtered
+through `git check-ref-format`: Git ignores an entry at an invalid ref path
+without opening it, so that shape remains safe. The destination checks still
+apply the narrower update semantics afterward.
+
+A failed filesystem scan is not an empty namespace. With a non-empty
+destination directory unreadable, `find ... | head` hid find's failure and the
+plan returned `OK`; the fetch then failed on the occupied directory. The scan
+now captures find's own status and reports `LOOKUP_FAILED`.
+
+Resolvable symbolic refs need an exact check independent of the namespace
+scan. With `refs/heads/release` symbolic to `refs/heads/victim`, checkout
+returned success while attaching `HEAD` to `victim`. With
+`refs/remotes/origin/main` symbolic to the same victim, fetch returned success
+while advancing the local branch instead of an ordinary tracking ref. Both
+exact destinations now stop before the redirect.
+
+### Case-Folding Collisions
+
+A case-folding filesystem can remove the landing entirely, for a base whose
+name differs from an existing branch only in case, and it does so twice over.
+Verified on APFS (`core.ignoreCase` true), holding only `refs/heads/main`:
+
+- `git show-ref --verify --quiet refs/heads/Main` answers yes, because a loose
+  ref folds. So an existence probe built on it plans `create:false` and the
+  landing attaches `HEAD` to a name in no ref listing.
+- An exact probe instead plans `create:true`, and the prescribed
+  `git checkout --no-overwrite-ignore -b Main refs/remotes/origin/Main` fails
+  with "a branch named 'Main' already exists" (exit 128), the switch path's
+  fetch into `refs/heads/Main` failing likewise.
+- Packed refs do not fold, so the first answer also depends on whether the
+  repository has been packed. Both failures abort the landing, which is why
+  `base-landing-plan.sh` reads refs exactly and stops on a case collision
+  before planning a create git will refuse.
+
+Case aliases apply to remote-tracking refs as well as branches. On a
+case-folding filesystem, a loose `refs/remotes/origin/main` written by fetch
+aliases a packed `refs/remotes/Origin/main`, even though the packed entry
+leaves no path for the destination stat to find. The same folded-name fallback
+therefore checks both destinations; it excludes an exact tracking ref, which
+is an ordinary update rather than an alias.
+
+The aliasing is the filesystem's, not just case. APFS resolves
+`refs/heads/café` onto an existing `refs/heads/CAFÉ`, and `checkout -b` then
+fails at exit 128. A fold written in the shell cannot see that, so the guard
+stats the ref path and lets the filesystem answer; the fold survives only for
+packed refs, which have no file to stat, and is ASCII-only there.
+
+What decides the collision is the ref store, not `core.ignoreCase`, which
+describes the working tree. Checked as a matrix over both volume types and
+both ref storages, using a case-sensitive APFS disk image alongside an
+ordinary folding one:
+
+- `git show-ref --verify` answers yes exactly where `checkout -b` then fails
+  (folding volume, loose ref) and no in the other three, including a folding
+  volume whose ref is packed, where the create succeeds and makes both refs.
+- On a case-sensitive volume with `core.ignoreCase` forced true, the create
+  also succeeds, so a guard reading the flag refuses a landing git performs.
+  The stop therefore probes what git resolves rather than what the flag
+  claims.
+
+### Reftable and Ref-Storage Extensions
+
+Reftable has no loose-ref tree to inspect. `.git/refs/heads` is a backend
+marker file, and treating it as a loose ref false-stopped every missing
+branch. Its public enumeration also omits dangling symbolic refs. Preparing
+and aborting a ref transaction can ask the backend whether a destination is
+available, but `prepare` writes `tables.list.lock`, and an interruption before
+`abort` strands that lock and blocks later ref updates. A read-only planner
+can therefore neither inspect reftable exactly nor use that transaction
+safely; it reports `STOP ref-storage` explicitly instead of a false conflict
+or a hidden write.
+
+A ref-storage extension is active only when the repository's own
+`core.repositoryFormatVersion` is 1, and repository extensions come from the
+local repository config:
+
+- On Git 2.43, a local `extensions.refStorage=reftable` under format 0 remains
+  on the files backend; newer Git rejects that malformed combination before
+  the planner runs. A global value remains inactive even under format 1.
+- Backend detection uses the same activation and scope rules so an ignored
+  value cannot disable cleanup. It also asks Git to parse the format as an
+  integer: valid spellings such as `01`, `+1`, and `0x0` normalize to 1, 1,
+  and 0 rather than becoming unsupported raw strings.
+
+### Linked-Worktree Common Dir
+
+Shared refs live in the common git directory, so a ref stat rooted at
+`git rev-parse --absolute-git-dir` sees none of them from a linked worktree,
+where that path is `.git/worktrees/<id>`. A dangling `refs/heads/release` was
+invisible from the linked worktree and the create failed anyway. The relocate
+rule puts the landing plan in exactly that layout, so it resolves
+`--git-common-dir` instead.
+
+`git rev-parse` can echo an option it does not understand while exiting 0. So
+probing `--path-format=absolute` and falling back only on failure did not fall
+back on older Git; the echoed option and relative common-dir answer became a
+bogus multiline path. The plan now asks only for `--git-common-dir`, which is
+old enough for every supported shape, and resolves its documented relative
+answer itself.
+
+### Config Changes Under the Checked-Out Branch
+
+Configuration is not fixed across a checkout, and this reaches further than the
+tracking keys. An `includeIf "onbranch:<name>"` section can supply any key,
+`remote.<name>.url` included:
+
+- Verified on git 2.50.1 with the URL moved into such a section: the
+  pre-landing plan validated it while `feature` was checked out, and the
+  post-landing plan reported `LOOKUP_FAILED remote`. A different valid fallback
+  URL instead made the resync fetch from another repository.
+- Nothing a preflight reads predicts either value, because git evaluates
+  `onbranch` against whichever branch is checked out at the time. So every
+  config-derived field in the plan is an answer about the branch that was
+  checked out when it ran.
+- The sequence therefore lands first, re-resolves and validates the base
+  remote before resyncing, completes the resync before deleting the remote
+  head, and re-resolves the head role again at deletion time. A missing or
+  changed mapping now leaves the remote head intact.
+
+Tracking configuration is not fixed across a checkout either, which is why the
+decision to write it is taken after the landing rather than from the plan that
+preceded it. An `includeIf "onbranch:<name>"` section applies only while that
+branch is the checked-out one. On git 2.50.1, with such a section supplying
+`branch.main.remote` and `.merge` while `feature` was checked out, both keys
+read back normally there and were gone the moment `main` was checked out,
+leaving `git pull --ff-only` reporting "There is no tracking information for
+the current branch".
+
+### Probing for Switch Safely
+
+`git switch` is the one command the sequence needs that a still-supported git
+may lack (it arrived in 2.23), so the landing plan probes for it before naming
+a switch landing. `git switch -h` distinguishes the two (usage and exit 129
+where the command exists; "is not a git command" and exit 1 where it does not,
+checked against a deliberately bogus `git switchx -h`), but invoking the
+command is the wrong way to ask, and `base-landing-plan.sh` does not.
+
+Where switch is not a builtin, an `alias.switch` is expanded in its place, and
+git runs a `!`-prefixed alias as a shell command with the `-h` appended.
+Reproduced on git 2.50.1 against a stand-in alias name: `git <alias> -h` with
+`alias.<name>=!touch <path>` created the file. The probe would have executed
+arbitrary code inside a preflight that promises to touch nothing.
+
+`git --list-cmds=builtins` answers the same question and expands no alias; an
+alias cannot shadow a builtin, so where switch exists the list is also honest
+(verified: `alias.switch` was ignored on 2.50.1). A read that fails counts as
+absent, which is fail-safe: absence is a stop taken while nothing has been
+deleted. And `--list-cmds` predates switch by five releases (2.18), so a git
+too old to answer is too old to have the command.
+
+### The Plan Is a Snapshot
+
+The plan is necessarily a snapshot. A ref writer that runs after the check can
+introduce the same namespace conflict before the later fetch or branch create;
+no read-only script can retain Git's ref lock across those separate commands.
+The landing therefore requires one continuous window of exclusive control over
+ref-mutating operations, from its first plan through the final fetch and
+fast-forward, including the switch and second plan. This is an operating
+precondition, not a guarantee the script can manufacture.
+
+### Terminators, and Three Names That Defeat Them
+
+Every other site is terminable with `--`:
+
+- `git branch -d -- -x` and its forced form `git branch -D -- -x` both deleted
+  the ref (exit 0), where each without the terminator is an "unknown switch".
+- With a remote named `-x`, `git ls-remote --heads -x`, `git fetch -x
+<refspec>`, and `git fetch --prune -x` each failed with an "unknown switch"
+  error (exit 129), while the `--` form of all three succeeded.
+- `git worktree remove -- -wt` removed a hyphen-named worktree.
+
+The terminator changes nothing for ordinary names. `ls-remote`, both fetch
+forms, and `git push --delete --force-with-lease=<ref>:<oid> -- <remote>
+<ref>` behaved as they did without it, and that push still refused a stale
+lease with "stale info" (exit 1), leaving the remote ref in place.
+
+Three names defeat the switch anyway, and not through option parsing, so no
+terminator reaches them: git resolves `-` (the previous branch), `@` (a
+synonym for HEAD), and `HEAD` as revision shorthand before it looks in
+`refs/heads`. Each was created as a real branch on git 2.50.1 with another
+branch checked out:
+
+- `git switch --no-overwrite-ignore -- -` switched to the previous branch and
+  exited 0; `git checkout --no-overwrite-ignore @` stayed where it was and
+  exited 0; the `HEAD` spelling attached to `refs/heads/heads/HEAD`.
+- The `@` result was re-checked with the branches deliberately at different
+  commits, since same-commit branches make a silent no-op hard to tell from a
+  successful switch. With `refs/heads/@` at main's commit and `other` checked
+  out, the checkout left `HEAD` on `other` at `other`'s commit, and the switch
+  spelling refused outright with "a branch is expected, got
+  'refs/heads/other'", which is git naming the expansion it performed.
+- No spelling tried lands on them: `switch refs/heads/-` and its terminated
+  form both exit 128, and `checkout refs/heads/-` detaches.
+- The rest of the awkward space is fine, checked the same way: `--`, `-x`,
+  `-h`, `--all`, `a/b`, and each of `FETCH_HEAD`, `ORIG_HEAD`, `MERGE_HEAD`,
+  `CHERRY_PICK_HEAD`, `REBASE_HEAD`, `REVERT_HEAD`, `BISECT_HEAD`, and
+  `AUTO_MERGE` all attach correctly, so the refusal is three literals and not
+  a pattern.
 
 So exactly one shape is a stop, and it is a stop because git has no spelling
-for it rather than because this skill declines to write one: qualification
-carries the ref sites, `--` carries the positional remotes and bare refs,
-`git switch` carries the one switch `git checkout` cannot spell, and `-`, `@`,
-and `HEAD` carry nothing, since two of the three land silently on the wrong
+for it, not because this skill declines to write one. Qualification carries
+the ref sites, `--` carries the positional remotes and bare refs, and
+`git switch` carries the one switch `git checkout` cannot spell. `-`, `@`, and
+`HEAD` carry nothing, since two of the three land silently on the wrong
 branch. The skill still uses `git checkout` everywhere else, since `git switch`
-is documented as experimental (git 2.50.1) and a second switching command earns
-its place only where the first cannot express the name.
+is documented as experimental (git 2.50.1) and a second switching command
+earns its place only where the first cannot express the name.
 
-Relied on by the identify section (the pass-`--` rule and the checkout
-exception), `base-landing-plan.sh` (every decision above: the verb the name
-shape picks, the two-refspec fetch that creates it, the `git switch` probe, and
-the two-key upstream check), step 1 (running the plan the script prints), the
-worktree preflight (the terminated removal), and the terminators in steps 1–5.
+Relied on by `base-landing-plan.sh` (every landing decision above: the verb
+the name shape picks, the two-refspec fetch that creates the branch, the
+`git switch` probe, and the two-key upstream check), step 3 (which runs that
+landing plan), the worktree preflight (the terminated `git worktree remove`),
+and the `--` terminators throughout the sequence.
 
 ---
 
@@ -370,23 +433,27 @@ worktree, three steps of the sequence refuse, all verified against git:
 - A fetch or merge into the base branch refuses with "refusing to
   fetch/update into branch checked out at ...".
 - `git branch -d -- '<branch>'` refuses while `<branch>` is still checked out
-  in a worktree (re-verified in the terminated form the identify section now
+  in a worktree (re-verified in the terminated form the sequence now
   requires).
 
 A fourth interaction, the removal the remedy prescribes, is not on that list:
 it does not refuse on the caller's account. Git weighs the target worktree's
-contents, never the caller's location, so a removal aimed at the worktree the
-session is standing in succeeds exactly when it would have succeeded from
-anywhere else, unlinking the directory at exit 0 and leaving the next git
-command to die with "Unable to read current working directory" (re-verified on
-git 2.50.1 for the absolute path, `.`, and a symlink to the same worktree; the
-repro sits with the other removal hazards in §worktree-remove-destroys). The
-refusal it does have, on a dirty target, fires the same from inside as from
-outside, so it is the under-covering refusal that section documents and not a
-guard against this. Naming the worktree the removal runs from is the
+contents, never the caller's location. So a removal aimed at the worktree the
+session is standing in succeeds exactly when it would have from anywhere else:
+it unlinks the directory at exit 0 and leaves the next git command to die with
+"Unable to read current working directory". (Re-verified on git 2.50.1 for the
+absolute path, `.`, and a symlink to the same worktree; the repro sits with
+the other removal hazards in §worktree-remove-destroys.)
+
+The refusal it does have, on a dirty target, fires the same from inside as
+from outside. So it is the under-covering refusal that section documents, not
+a guard against this. Naming the worktree the removal runs from is the
 preflight's only guard here.
 
-Relied on by the worktree preflight.
+Relied on by the worktree preflight: step 2's `worktree_scan`, which stops for
+the owner to remove a linked worktree still holding the head branch. When the
+base branch is checked out in another linked worktree, it instead directs the
+caller to rerun with that worktree as `--checkout` rather than remove it.
 
 ---
 
@@ -396,53 +463,61 @@ Relied on by the worktree preflight.
 untracked files", which reads like a fail-safe and is not one. Verified in
 scratch repos on git 2.50.1:
 
-- An ignored file does not trip the refusal at all, so a worktree holding
-  only a gitignored `.env` reads as clean and is deleted with the directory.
+- An ignored file does not trip the refusal at all, so a worktree holding only
+  a gitignored `.env` reads as clean and is deleted with the directory.
 - A tracked file carrying `assume-unchanged` or `skip-worktree`, then edited,
   is reported by neither `git status -uall --porcelain` nor its `--ignored`
   form nor `git diff`, while `git ls-files -v` marks it (`h` and `S`
   respectively). Removal destroyed both files with exit 0.
-- Running the removal from inside the worktree being removed also exits 0:
-  git unlinks the directory and the shell is left on a path that no longer
-  exists.
-- The flag alone is not the hazard, the flag on a path that is still there
-  is: a sparse checkout marks every excluded path `S` while leaving it absent
-  from disk. A sparse worktree reported `S` for its excluded file with the
-  path gone, a clean `status -uall --porcelain --ignored`, and removal
-  completing at exit 0, so an unconditional stop on `S` would refuse every
-  sparse worktree. `git ls-files -v` also prints every ordinary cached file
-  as `H`, so both halves of the filter are load-bearing.
-- The rows are relative to the worktree they describe, not to the caller.
-  Inventorying a sibling worktree from the base checkout, an
-  assume-unchanged edit to a file that exists only on the feature branch gave
-  the row `h only-on-feat.txt`; testing that spelling from the base checkout
-  reported absent while the same test prefixed with the worktree path
-  reported present, and `status -uall --porcelain --ignored` was empty
-  throughout. `--full-name` keeps the rows root-relative even when the `-C`
-  target is a subdirectory (`f.txt` becomes `sub/f.txt`), so prefixing with
-  the worktree root is then the complete anchor.
-- Reading that listing without `-z` reopens the hole it was meant to close.
-  `git ls-files -v` C-quotes a path holding a newline or tab (observed as
+- Running the removal from inside the worktree being removed also exits 0: git
+  unlinks the directory and the shell is left on a path that no longer exists.
+
+The flag alone is not the hazard; the flag on a path that is still there is. A
+sparse checkout marks every excluded path `S` while leaving it absent from
+disk. A sparse worktree reported `S` for its excluded file with the path gone,
+a clean `status -uall --porcelain --ignored`, and removal completing at exit
+0, so an unconditional stop on `S` would refuse every sparse worktree.
+`git ls-files -v` also prints every ordinary cached file as `H`, so both
+halves of the filter are load-bearing.
+
+The rows are relative to the worktree they describe, not to the caller:
+
+- Inventorying a sibling worktree from the base checkout, an assume-unchanged
+  edit to a file that exists only on the feature branch gave the row
+  `h only-on-feat.txt`. Testing that spelling from the base checkout reported
+  absent, while the same test prefixed with the worktree path reported
+  present, and `status -uall --porcelain --ignored` was empty throughout.
+- `--full-name` keeps the rows root-relative even when the `-C` target is a
+  subdirectory (`f.txt` becomes `sub/f.txt`), so prefixing with the worktree
+  root is then the complete anchor.
+
+Reading that listing without `-z` reopens the hole it was meant to close:
+
+- `git ls-files -v` C-quotes a path holding a newline or tab (observed as
   `"odd\nname"` and `"odd\ttab"`), so an existence test against the printed
-  spelling fails and drops the row; `-vz` printed both paths raw. A dangling
-  symlink fails `[ -e ]` while remaining a directory entry that removal
-  takes, so the presence test also asks `[ -L ]`. In the same repository, an
-  assume-unchanged edit to each of those three paths left
-  `status -uall --porcelain` empty, so nothing else would have caught them.
-- The tag space was enumerated once rather than narrowed finding by finding:
-  in a default `-v` listing, `H` is an ordinary cached file, any lowercase
-  tag (`h`, `s`) means assume-unchanged, `S` means skip-worktree, and `M`
-  marks an unmerged path, which the status read reports independently
-  (`UU`). The flagged set is therefore exactly the lowercase rows plus `S`.
-- Absence is not innocence either, which is the correction to the bullet
-  above: an `assume-unchanged` file that was **deleted** still reports `h`,
-  and both status forms stay empty, so exempting every absent row discards an
-  uncommitted deletion. Reproduced for both flags. Sparse checkout is the one
-  benign absence, so an absent row is exempt only when it is `S` **and** that
-  worktree reports `core.sparseCheckout=true` (a per-worktree setting: it read
-  `true` in a sparse worktree and unset in a plain one). Residual and
-  deliberate: a skip-worktree deletion _inside_ a sparse worktree reads as an
-  ordinary exclusion.
+  spelling fails and drops the row; `-vz` printed both paths raw.
+- A dangling symlink fails `[ -e ]` while remaining a directory entry that
+  removal takes, so the presence test also asks `[ -L ]`.
+- In the same repository, an assume-unchanged edit to each of those three
+  paths left `status -uall --porcelain` empty, so nothing else would have
+  caught them.
+
+The tag space was enumerated once rather than narrowed finding by finding. In
+a default `-v` listing, `H` is an ordinary cached file, any lowercase tag
+(`h`, `s`) means assume-unchanged, `S` means skip-worktree, and `M` marks an
+unmerged path, which the status read reports independently (`UU`). The flagged
+set is therefore exactly the lowercase rows plus `S`.
+
+Absence is not innocence either, which is the correction to the finding above:
+
+- An `assume-unchanged` file that was **deleted** still reports `h`, and both
+  status forms stay empty, so exempting every absent row discards an
+  uncommitted deletion. Reproduced for both flags.
+- Sparse checkout is the one benign absence, so an absent row is exempt only
+  when it is `S` **and** that worktree reports `core.sparseCheckout=true` (a
+  per-worktree setting: it read `true` in a sparse worktree and unset in a
+  plain one). Residual and deliberate: a skip-worktree deletion _inside_ a
+  sparse worktree reads as an ordinary exclusion.
 
 Two more surfaced once the check was a script, both verified:
 
@@ -458,13 +533,13 @@ Two more surfaced once the check was a script, both verified:
 
 Because the flag's purpose is that git stops checking the file, no inventory
 can decide whether its contents differ, which is why a flagged row is itself
-the finding rather than its diff. These rules are what
-`worktree-inventory.sh` implements, and `scripts/test-merge-cleanup-inventory.sh`
-holds one case per bullet above, so a later change either keeps them or turns
-the matrix red.
+the finding rather than its diff. These rules are what `worktree-inventory.sh`
+implements, and `scripts/test-merge-cleanup-inventory.sh` holds one case per
+finding above, so a later change either keeps them or turns the matrix red.
 
-Relied on by the worktree preflight (which runs that script and stops on any
-non-zero exit).
+Relied on by `worktree-inventory.sh`, which implements these rules. The
+orchestrator does not run it: its step 2 preflight stops for the owner to
+remove a linked head worktree instead.
 
 ---
 
@@ -480,9 +555,9 @@ repo, against an ignored `.env` that the base branch still tracks:
   `git merge --ff-only --no-overwrite-ignore` aborts and preserves it;
   `git pull` itself rejects `--no-overwrite-ignore`.
 
-Relied on by step 1 (every landing command it may run) and step 2 (the
-resync). `base-landing-plan.sh` deliberately does not read ignored files: the
-flag makes git itself abort, so predicting the overwrite would add a stop where
+Relied on by step 3: every landing command it may run, and the base resync.
+`base-landing-plan.sh` deliberately does not read ignored files: the flag
+makes git itself abort, so predicting the overwrite would add a stop where
 git already has one.
 
 ---
@@ -500,8 +575,9 @@ with `status.showUntrackedFiles=no` set in the repository config:
   untracked-file refusal described above having stopped firing too; under the
   default configuration the same removal refused with exit 128.
 
-Relied on by `base-landing-plan.sh` (the dirty-tree guard step 1 reads) and by
-`worktree-inventory.sh`, which pass `-uall` explicitly for this reason.
+Relied on by every guard that passes `-uall` explicitly for this reason: the
+step 2 preflight's dirty-tree stop (`git status -uall --porcelain`),
+`base-landing-plan.sh`, and `worktree-inventory.sh`.
 
 ---
 
@@ -519,10 +595,10 @@ overlap because a wildcard matches slashes. On a case-folding ref filesystem,
 `origin` and `Origin` alias too. Pruning one can update or delete tracking refs
 owned by the other at exit 0.
 
-Relied on by `merge-cleanup.sh`, which prunes a canonical validated URL with an
-explicit heads-to-remote-tracking refspec, disables prune-tags for that fetch,
-and stops when configured remote names have component-prefix or filesystem
-alias overlap.
+Relied on by step 5's prune in `merge-cleanup.sh`, which prunes a canonical
+validated URL with an explicit heads-to-remote-tracking refspec, disables
+prune-tags for that fetch, and stops when configured remote names have
+component-prefix or filesystem alias overlap.
 
 ---
 
@@ -533,4 +609,8 @@ against `HEAD` only when none is. Cleanup prunes a step later, so the
 not-yet-pruned `<head-remote>/<branch>` usually still contains the tip and
 satisfies that check.
 
-Relied on by step 4 (why the step runs its own merge check first).
+Relied on by nothing in the current sequence: `merge-cleanup.sh` deletes the
+local head with `git update-ref -d refs/heads/<branch> <oid>` (step 5), whose
+OID lease replaces the `git branch -d` upstream/HEAD check this section
+documents. Retained as the evidence for choosing `update-ref -d` over
+`git branch -d`.
