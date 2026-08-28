@@ -22,7 +22,7 @@ confirming the merge landed, and the pre-delete guards have no git-only
 substitute. Where no such CLI is available, stop at the open PR and hand the
 merge to the user rather than merging on checks you could not verify.
 
-## When this applies
+## When This Applies
 
 The default agent finish line is an open, review-ready PR; merging is a
 human decision. Use this skill **only** when one of these is true:
@@ -60,7 +60,7 @@ agent carries the full review burden. Do not merge until all of these hold:
 If any guardrail fails and cannot be resolved in the session, stop at the
 open PR and say exactly what is blocking the merge.
 
-## Merging and cleanup
+## Merging and Cleanup
 
 The merge-and-cleanup sequence is destructive (it can delete a remote branch
 and rewrites a working tree), and nearly every one of its hazards was found by
@@ -161,7 +161,7 @@ exists: stop at the open PR and hand the merge to the user, per the
 prerequisite above. The specification is also the place to read when you
 need to understand or explain why a guard stopped.
 
-## Review-watch shutdown
+## Review-Watch Shutdown
 
 Once the PR is merged, a review watch still running for it (a backgrounded
 poller, a scheduled wake-up, or a delegated watcher from a skill like

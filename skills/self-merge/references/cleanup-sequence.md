@@ -1,4 +1,4 @@
-# The guarded merge-and-cleanup sequence: prose specification
+# The Guarded Merge-and-Cleanup Sequence: Prose Specification
 
 `self-merge.sh`, bundled alongside `SKILL.md`, is the **canonical
 executable form** of this sequence; prefer it over re-deriving anything
@@ -83,7 +83,7 @@ read exit codes, and treat unknown as "keep the branch, stop".
   before the configured deadline, so a long polling interval cannot extend
   that deadline.
 
-## 2. Preflight the workspace
+## 2. Preflight the Workspace
 
 In the checkout the cleanup will rewrite, all of these hold or the
 sequence stops:
@@ -113,7 +113,7 @@ sequence stops:
   casefolding makes the existing branch-prefix directory, not only
   `refs/heads`, load-bearing.
 
-## 3. Preflight linked worktrees
+## 3. Preflight Linked Worktrees
 
 - Find the head branch's worktree from `git worktree list --porcelain -z`,
   which emits NUL-terminated **fields**: strip the `worktree` keyword,
@@ -172,7 +172,7 @@ sequence stops:
   switch makes that same worktree cease to hold the head. No head match also
   proceeds normally.
 
-## 4. Land on the base branch
+## 4. Land on the Base Branch
 
 - After the pre-mutation symbolic-ref rejection, test for a direct local base
   branch with `git show-ref --verify --quiet refs/heads/<base>`;
@@ -213,7 +213,7 @@ upstream, which in a fork clone can be the fork's stale copy. A refused
 fast-forward (divergence, or an ignored file the base started tracking) is
 a stop; never resolve it with reset or force.
 
-## 6. Delete the remote head branch
+## 6. Delete the Remote Head Branch
 
 Only reach this step after the base resync succeeds. Re-resolve the head remote
 under the base branch's effective configuration before any existence read or
@@ -302,7 +302,7 @@ mapping now in force.
   so a push landing between check and delete fails the delete instead of
   losing the new work.
 
-## 7. Preserve the local branch and prune
+## 7. Preserve the Local Branch and Prune
 
 - Keep the local branch and report `kept_manual`. Git exposes no portable
   deletion that combines an expected-old OID with the

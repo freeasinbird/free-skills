@@ -29,7 +29,7 @@ repository.
   implementer verify or replan, without reinspecting, republishing, or repairing
   drift automatically.
 
-## Forward-testing
+## Forward-Testing
 
 Run each case in a fresh context with the skill and only the raw request and
 artifacts named by the fixture. Do not include the required actions, forbidden

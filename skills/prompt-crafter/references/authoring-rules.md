@@ -47,7 +47,7 @@ When a rule diverges per tool, variants should differ in wording and emphasis,
 not intent. Most principles are genuinely tool-neutral and belong once,
 verbatim, in a shared core.
 
-### Sources (last verified 2026-08-24)
+### Sources (Last Verified 2026-08-24)
 
 - Anthropic, "Prompting best practices"
   (<https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices>):

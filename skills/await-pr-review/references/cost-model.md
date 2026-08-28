@@ -1,4 +1,4 @@
-# Cost model: the derivations
+# Cost Model: The Derivations
 
 The routing and waiting decisions live in `SKILL.md`; fix-round decisions live
 in `review-response.md`, which the exchange owner reads before addressing
@@ -16,7 +16,7 @@ pricing change.
 - [Conductor accounting](#conductor-whole-exchange-accounting)
 - [Conductor rotation](#conductor-context-rotation)
 
-## Single wake vs cache-keepalive wakes (step 3)
+## Single Wake vs Cache-Keepalive Wakes (Step 3)
 
 The default resume is a single wake on activity: the watcher fires once and
 the main agent pays one full-context read, often cache-cold when the review
@@ -40,7 +40,7 @@ This break-even assumes current typical pricing multipliers (cached read on
 the order of 0.1x a cold read); re-derive the ten-wake figure if those
 multipliers shift.
 
-## Detection inside a timer wake (step 3)
+## Detection Inside a Timer Wake (Step 3)
 
 The section above prices the wake; this one prices what runs inside it. A
 wake that rebuilds the detection itself pays, per wake, the tool-call round
@@ -52,7 +52,7 @@ code, leaving the wake's marginal cost as the context replay it was going to
 pay anyway. Over a 25-minute wait on a 5-minute gap that is five hand-rolled
 query rounds traded for five exit codes.
 
-## Observed reviewer latency and the warm-wake swing (step 3)
+## Observed Reviewer Latency and the Warm-Wake Swing (Step 3)
 
 Observed Codex reviews landed 2m54s–4m46s after each push, right around a
 5-minute cache TTL, so a ~75s poll tends to detect the review and fire its
@@ -63,7 +63,7 @@ cached-read fraction versus a full cold read). Treat the latency band as
 observed for one reviewer, not a guarantee, but it is a further reason to
 prefer the tight cadence on the no-model path.
 
-## Delegated fix round: what delegation actually saves (step 4)
+## Delegated Fix Round: What Delegation Actually Saves (Step 4)
 
 Delegating a round to a subagent does not save main-agent wakes; it adds
 them (the spawn turn, then a completion wake to read the report), and a
@@ -75,7 +75,7 @@ fixer replays only its own small one. That is why `review-response.md` requires
 both a long round (many findings, a wide class sweep, dozens of tool calls) and
 a main context that dwarfs the fixer's brief.
 
-## Persistent fixer amortization (step 4)
+## Persistent Fixer Amortization (Step 4)
 
 The per-round break-even makes short rounds look like they never justify
 delegation. But a convergence loop is many rounds, and what changes across
@@ -89,7 +89,7 @@ a persistent fixer likely wins on any longer exchange (roughly 4+ rounds)
 even when each round on its own falls below the per-round break-even, while
 the per-round rule still governs a one-shot round.
 
-## Conductor: whole-exchange accounting
+## Conductor: Whole-Exchange Accounting
 
 The sections above price a single round. Over an exchange, orchestration is
 itself a per-round cost: with the main agent owning the loop, each round
@@ -150,7 +150,7 @@ equivalent connector or API loop otherwise. A connector with instantaneous
 reads but no conductor-local wait or scheduled same-conductor wake fails the
 gate and uses the main-owned mechanism ladder.
 
-## Conductor: context rotation
+## Conductor: Context Rotation
 
 Rotation is a mid-exchange optimization, not a routing or safety rule. Evaluate
 it only after an existing convergence checkpoint records a justified go and

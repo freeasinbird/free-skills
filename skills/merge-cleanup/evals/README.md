@@ -57,7 +57,7 @@ belong in a scratch workspace outside the repo.
   28. `input-changes-during-write`: downgrades a verified target when another
       selector or computation input changes during the write window.
 
-## Re-running
+## Re-Running
 
 1. Create a separate scratch git repository per eval with a merged feature
    branch, a clean checkout, and local default and remote-tracking refs that

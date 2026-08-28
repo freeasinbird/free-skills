@@ -28,7 +28,7 @@ belong in a session workspace outside the repo.
   backend or perf fixes, docs changes, desktop screenshots, UI test
   authoring.
 
-## Re-running
+## Re-Running
 
 1. Instantiate the fixture app in a scratch workspace: a tiny static
    site in its own git repo (an HTML card list with seeded fixture

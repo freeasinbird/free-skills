@@ -22,7 +22,7 @@ free, and what you build with it is yours. This skill adds three things:
 2. A `LICENSING-PHILOSOPHY.md` explaining why this license was chosen
 3. A license section in the README linking to both
 
-## License selection criteria
+## License Selection Criteria
 
 Analyze the repository to understand what type of work it is. The
 license follows from the project type:
@@ -53,14 +53,14 @@ When classifying, look at:
 
 ## Steps
 
-### 1. Check for existing license
+### 1. Check for Existing License
 
 Look for existing license files: `LICENSE`, `LICENSE.md`, `LICENSE.txt`,
 `COPYING`, or similar. If any exist, note what's there; this context
 informs the suggestion in the next step and tells you whether you'll need
 the user's permission to replace.
 
-### 2. Suggest a license
+### 2. Suggest a License
 
 Analyze the repository and present your recommendation:
 
@@ -85,7 +85,7 @@ license. Let the user know why and end gracefully. If the existing license
 _is_ one of the five and the user wants to keep it, skip the LICENSE write
 step but continue with the philosophy file and README section.
 
-### 3. Write the LICENSE file
+### 3. Write the LICENSE File
 
 Fetch the license text using this priority order:
 

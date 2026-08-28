@@ -1,4 +1,4 @@
-# Defect taxonomy (review lens)
+# Defect Taxonomy (Review Lens)
 
 The classes a real audit of a multi-tool prompt family surfaced, ordered
 roughly by severity. Every review pass should hunt all of them. Each entry
