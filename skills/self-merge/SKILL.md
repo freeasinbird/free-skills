@@ -11,74 +11,77 @@ description: >-
 
 # Self-Merge
 
-Opt-in workflow that lets an agent merge its own pull request and clean up,
-rather than stopping at an open PR for a human to review and merge. This is
-a deliberate override of the safe default, not a convenience to reach for on
-your own.
+Self-merge lets an agent merge its own pull request and clean up afterward.
+It overrides the safe default of stopping at an open PR for a human to merge.
+Never choose this workflow on your own.
 
-This skill assumes git, a shell, and a PR host CLI (such as `gh`)
-authenticated for the PR's repository. Polling the required checks, merging,
-confirming the merge landed, and the pre-delete guards have no git-only
-substitute. Where no such CLI is available, stop at the open PR and hand the
-merge to the user rather than merging on checks you could not verify.
+This skill needs git, a shell, and a PR host CLI such as `gh`. The CLI must be
+authenticated for the PR's repository. Git alone cannot poll required checks,
+merge the PR, confirm the merge, or run the forge guards before deletion.
+Without the CLI, stop at the open PR and hand the merge to the user.
 
 ## When This Applies
 
-The default agent finish line is an open, review-ready PR; merging is a
-human decision. Use this skill **only** when one of these is true:
+Use this skill only when one of these is true:
 
 - The user has explicitly asked the agent to merge its own work, or
 - The project has adopted self-merge as a standing policy, recorded in
   AGENTS.md (or the equivalent contributor guide).
 
-Do not self-merge by inference. "Address the issue", "open a PR", or
-"fix it" is not a request to merge. If you are unsure whether self-merge
-is in effect, stop at the open PR and ask.
+Don't infer permission from "Address the issue," "open a PR," or "fix it."
+Those requests still end at an open, review-ready PR. If permission is
+unclear, stop there and ask.
+
+## Procedure
+
+1. Confirm that the user or project explicitly allows self-merge.
+2. Run the script's `check` phase from the base-branch checkout.
+3. Confirm the review guardrails that the script can't judge.
+4. Run `merge` with the head OID returned by `check`.
+5. Run `cleanup` with the same head OID.
+6. Stop any review watch that became stale when the PR merged.
+7. Report what merged, what cleanup changed, and what remains.
 
 ## Guardrails
 
-Merging your own PR removes the second pair of eyes before merge, so the
-agent carries the full review burden. Do not merge until all of these hold:
+Merging your own PR removes the second pair of eyes. Don't merge until every
+guardrail below holds.
 
-- **Required checks are green.** Poll them until they complete
-  (`gh pr checks <n> --repo '<base-repo>'`); never merge red or
-  still-running. Fix failures on the branch, never merge around them. Pin
-  every PR-record call to the PR's own repository like that: a bare number
-  resolves against the CLI's default repository, which in a fork clone can
-  be the fork or unset, so an unpinned call reports a different PR's checks
-  and the merge would merge that PR.
-- **Self-review the diff in the PR files view.** Look for stray hunks,
-  leftover debug code, scope creep, and anything the editor view hid.
-- **Required review artifacts are attached**, for example GitHub-hosted
-  screenshots for a visible UI change. If you cannot attach them yourself,
-  stop and ask the user rather than merging without them.
-- **The change is reversible and low-blast-radius.** For irreversible or
-  destructive actions (data migrations, force-pushes, release tags,
-  production config), stop at the PR even under self-merge and confirm
-  with the user first.
+- Required checks are green. Poll with
+  `gh pr checks <n> --repo '<base-repo>'` until every check finishes. Never
+  merge while a check is red or running. Fix failures on the branch.
+- Every PR-record call names the PR's repository. A bare number uses the
+  CLI's default repository, which may be the fork or unset in a fork clone.
+  An unpinned call can inspect or merge a different PR.
+- The diff has a final self-review in the PR files view. Check for stray
+  hunks, debug code, scope creep, and changes the editor view hid.
+- Required review artifacts are attached. This includes forge-hosted
+  screenshots for visible UI changes. If you can't attach them, stop and ask
+  the user.
+- The change is reversible and has a low blast radius. For a data migration,
+  force-push, release tag, production configuration, or another destructive
+  action, stop at the PR and confirm with the user again.
 
-If any guardrail fails and cannot be resolved in the session, stop at the
-open PR and say exactly what is blocking the merge.
+If a guardrail fails and can't be fixed in the session, stop at the open PR.
+Tell the user exactly what blocks the merge.
 
 ## Merging and Cleanup
 
-The merge-and-cleanup sequence is destructive (it can delete a remote branch
-and rewrites a working tree), and nearly every one of its hazards was found by
-executing commands rather than reading them, so the sequence ships as an
-executable: `self-merge.sh`, next to this file. It deliberately stops before
-removing a separate linked worktree and always preserves the local branch for
-a separately verified manual cleanup. Run it rather than re-deriving commands
-by hand; its guards encode verified failure modes (ignored-file clobbering,
-tag shadowing, case-folded ref collisions, worktree mis-parsing, merge queues
-that squash) that a hand-rolled sequence re-opens. The regression matrix in
-`scripts/test-self-merge.sh` exercises each guard against real scratch
-repositories.
+The merge-and-cleanup sequence can delete a remote branch and rewrite a
+working tree. Use `self-merge.sh`, next to this file, instead of rebuilding the
+commands by hand. Its guards cover ignored-file clobbering, tag shadowing,
+case-folded ref collisions, worktree mis-parsing, and squash merge queues.
 
-Invoke it **by path, from the checkout the cleanup will rewrite** (the one
-that holds, or will hold, the base branch), where `<skill-dir>` is the
-directory holding this file. Always pass `--repo`; it is required, for the
-fork-clone reason in Guardrails. The sequence is three phases, with the
-judgment between them left to you:
+Most of these hazards were found by running the commands, not by reading them.
+
+The script stops before removing a separate linked worktree. It also keeps the
+local branch for separate, verified cleanup. The regression matrix in
+`scripts/test-self-merge.sh` tests each guard against real scratch repositories.
+
+Invoke the script by path from the checkout that cleanup will rewrite. That
+checkout holds, or will hold, the base branch. Here, `<skill-dir>` is the
+directory that contains this file. Always pass `--repo` for the fork-clone
+reason in Guardrails.
 
 ```sh
 <skill-dir>/self-merge.sh check   --pr <n> --repo <owner/name>
@@ -86,50 +89,74 @@ judgment between them left to you:
 <skill-dir>/self-merge.sh cleanup --pr <n> --repo <owner/name> --head <oid>
 ```
 
-Four optional overrides exist for the cases where the defaults do not fit;
-none is needed on an ordinary same-repository PR:
+Ordinary same-repository PRs need no overrides. Use these only when the
+defaults don't fit:
 
-- `--base-remote <name>` and `--head-remote <name>`: name the remote for the
-  base or head repository instead of letting the script resolve it, for a
-  layout where the resolution is ambiguous (several remotes point at the same
-  repository) or wrong.
-- `--interval <seconds>` and `--cap-minutes <n>`: merge phase only, the
-  spacing between MERGED polls and the total time to wait for the forge to
-  report the merge (defaults 10 and 15). Raise the cap for a slow merge
-  queue.
+- `--base-remote <name>` and `--head-remote <name>` name the base or head
+  remote. Use them when several remotes point to the same repository or the
+  script resolves the wrong remote.
+- `--interval <seconds>` and `--cap-minutes <n>` apply only to `merge`. They
+  set the spacing between `MERGED` polls and the total wait. Defaults are 10
+  seconds and 15 minutes. Raise the cap for a slow merge queue.
 
-1. **check**, before merging: PR open, workspace clean, no git operation
-   in progress, no competing worktree, no head/base name collision, no
-   open PR sharing or stacked on the head branch, and any merge queue's
-   method identified as merge-commit before anything is enqueued. Run it,
-   like every phase, from the base-branch checkout named above, within the
-   clone that pushed the head branch: worktrees share the repository's
-   refs, so in a dedicated-worktree layout (head branch in a linked
-   worktree, base in the primary checkout) the base checkout sees the head
-   branch's tip, and running from the head worktree instead is what the
-   `wrong-checkout` guard stops. The verified head OID check prints is
-   that local tip, and it is what `merge` and `cleanup` pin with `--head`,
-   so the merge is bound to the commit whose checks and diff you actually
-   reviewed.
-2. Confirm the Guardrails above hold (checks green, diff self-reviewed,
-   artifacts attached). The script cannot judge these.
-3. **merge**: re-verifies the queue and consumer guards (check's answers
-   go stale while you verify the guardrails: a stacked PR's retarget can
-   change the base and its queue, and a new PR can start sharing the
-   head), then merges with a real merge commit and an explicit title-only
-   message, and waits until the forge reports the PR merged. A zero exit
-   from a merge command proves enqueueing, not merging, so the wait is
-   part of the phase.
-4. **cleanup**: stops before either branch is mutated when a separate linked
-   head worktree remains: make that checkout idle, remove it as a deliberate
-   step, then rerun cleanup. Otherwise it lands on the base, re-resolves and
-   validates the base remote under that checkout's effective configuration,
-   and fast-forwards before touching the remote feature branch. It then checks
-   whether auto-delete ran rather than assuming it, revalidates the head
-   remote, and deletes the surviving branch behind OID, consumer, and lease
-   guards (a fork's branch is never deleted, only reported), prunes, and
-   reports the local branch as `kept_manual`. Delete that local branch as a
-   separate deliberate step after verifying no worktree uses it.
+### 1. Run `check`
+
+Run `check` before reviewing the final guardrails. It verifies:
+
+- The PR is open.
+- The workspace is clean and no git operation is running.
+- No competing worktree exists.
+- The head and base names don't collide.
+- No open PR shares the head branch or stacks on it.
+- Any merge queue uses merge commits before the PR is enqueued.
+
+Run every phase from the base-branch checkout in the clone that pushed the
+head branch. Worktrees in one clone share refs. The primary checkout can
+therefore see a head branch checked out in a linked worktree. Running from the
+head worktree is the error that the `wrong-checkout` guard stops.
+
+The result includes the local head tip. Pass that OID to `merge` and `cleanup`
+with `--head`. This binds the merge to the commit whose checks and diff you
+reviewed.
+
+### 2. Confirm the Guardrails
+
+Confirm that checks are green, the diff is self-reviewed, and required
+artifacts are attached. The script can't judge these conditions.
+
+### 3. Run `merge`
+
+The `merge` phase repeats the queue and branch-consumer checks. Earlier answers
+can go stale while you review. A stacked PR may be retargeted to another base,
+or a new PR may start using the head branch.
+
+The phase creates a real merge commit with an explicit title-only message. It
+then waits for the forge to report the PR as merged. A zero exit from the merge
+command proves only that the PR was enqueued, so the wait is required.
+
+### 4. Run `cleanup`
+
+If a separate linked worktree still holds the head branch, `cleanup` stops
+before changing either branch. Make that checkout idle, remove it as a
+deliberate step, and rerun `cleanup`.
+
+Otherwise, `cleanup` runs this order:
+
+1. Land on the base branch.
+2. Resolve and validate the base remote under that checkout's configuration.
+3. Fast-forward the base before touching the remote feature branch.
+4. Check whether forge auto-delete already removed the remote branch.
+5. Resolve and validate the head remote again.
+6. Keep a fork's branch and report it instead of deleting it.
+7. Otherwise, delete a surviving branch behind OID, consumer, and lease
+   guards.
+8. Prune remote-tracking refs.
+9. Report the local branch as `kept_manual`.
+
+Delete the local branch only as a separate step. First verify its tip and
+confirm that no worktree uses it.
+
+## Handle Script Results
 
 The last stdout line is the machine-readable result; branch on it and on
 the exit code rather than parsing prose:
@@ -142,41 +169,43 @@ the exit code rather than parsing prose:
 | 64   | usage on stderr        | bad or missing flags: fix the call                                    |
 | 69   | note on stderr         | `gh` missing: stop unless an equivalent authenticated host CLI exists |
 
-Treat every `STOP` as the user's decision, not an obstacle: the guards
-stop exactly where proceeding would destroy work (uncommitted changes, a
-branch other PRs depend on, a squash-configured merge queue, a worktree
-holding invisible edits, unmerged local commits) or would leave the
-repository in a state this skill promised not to create. Never re-run a
-phase with the state "fixed" by force, reset, or a manual delete to get
-past a guard; report what fired and let the user decide. `LOOKUP_FAILED`
-means a listing or fetch did not complete: retry or investigate, and never
-read the empty result as "nothing depends on this branch".
+- Treat every `STOP` as a decision for the user. It marks a state where
+  continuing could destroy work or break this skill's cleanup promises.
+- Examples include uncommitted changes, dependent PRs, a squash merge queue,
+  hidden worktree edits, and unmerged local commits.
+- Never bypass a guard with force, reset, or manual deletion. Report the guard
+  and let the user decide.
+- `LOOKUP_FAILED` means a listing or fetch did not complete. Retry or
+  investigate. Never treat an empty result as proof that nothing depends on
+  the branch.
 
-Where the platform has no `bash` but an authenticated PR-host CLI is
-available, do not improvise the commands from memory: follow
-`references/cleanup-sequence.md`, the prose specification the script
-implements; its consumer, queue, merge, and merged-state guards still
-require that CLI. Where no such CLI is available at all, no fallback
-exists: stop at the open PR and hand the merge to the user, per the
-prerequisite above. The specification is also the place to read when you
-need to understand or explain why a guard stopped.
+Without `bash`, use `references/cleanup-sequence.md` only when an authenticated
+PR-host CLI remains available. Don't improvise the commands from memory. The
+consumer, queue, merge, and merged-state guards still need that CLI.
+
+Without any authenticated PR-host CLI, no fallback exists. Stop at the open
+PR and hand the merge to the user. Read the specification when you need to
+understand or explain a guard.
 
 ## Review-Watch Shutdown
 
-Once the PR is merged, a review watch still running for it (a backgrounded
-poller, a scheduled wake-up, or a delegated watcher from a skill like
-await-pr-review) is watching a finished PR. Self-merge is the likeliest
-place for one to outlive its PR, since the watch starts when the PR opens
-and the merge follows minutes later. The trigger is the merge, not a clean
-cleanup run: the watch is stale the moment the PR merges, so the step still
-applies when a guard stopped the cleanup partway. Where the platform lets
-you list and stop background tasks, stop the watch and say so. Where it
-doesn't, don't invent a mechanism: note that the watch will end on its own
-(such watchers self-terminate on activity or when their time cap expires)
-so a later wake-up reporting nothing is expected noise, not a failure.
+A review watch becomes stale when the PR merges. This includes a background
+poller, scheduled wake-up, or delegated watcher from a skill such as
+await-pr-review.
+
+Self-merge watches often outlive their PR. The watch starts when the PR opens,
+and the merge may follow only minutes later.
+
+The trigger is the merge, not a successful cleanup. Stop the watch even when
+a guard stops cleanup partway. If the platform can list and stop background
+tasks, stop the watch and report it.
+
+If the platform can't stop the watch, don't invent a mechanism. Say that it
+will end after activity or its time cap. A later empty wake-up is expected
+noise, not a failure.
 
 ## Summarize
 
-Summarize what merged, what was deleted and resynced, any watch stopped or
-left to expire, and anything a guard stopped (dirty tree, worktree layout,
-OID mismatch, diverged base) that now needs the user.
+Report what merged, what was deleted and resynced, and whether a watch stopped
+or will expire. Name any guard that still needs the user, such as a dirty tree,
+worktree conflict, OID mismatch, or diverged base.

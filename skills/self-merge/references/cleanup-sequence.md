@@ -1,326 +1,428 @@
 # The Guarded Merge-and-Cleanup Sequence: Prose Specification
 
-`self-merge.sh`, bundled alongside `SKILL.md`, is the **canonical
-executable form** of this sequence; prefer it over re-deriving anything
-here, because most of the hazards below were found by executing the
-commands, not by reading them. This file is the specification the script
-implements. Read it when the script cannot run and an equivalent
-authenticated PR-host CLI can still perform every forge guard, or to
-understand why a guard stopped. Without such a CLI, stop at the open PR
-and hand the merge to the user. Evidence for every claim lives in the
-work unit's decision note
-(`devlog/2026-07-24-2311-self-merge-resync-guards.md`).
+`self-merge.sh`, bundled beside `SKILL.md`, is the canonical executable form
+of this sequence. Use it when possible. This file explains the sequence and
+the guards it implements.
 
-Two rules govern every step. **Bind, don't paste**: every value that
-reaches a command (branch, remote, path, OID, title) is untrusted input;
-capture it from the command that produces it into a variable and reference
-it double-quoted, never retype or single-quote it (a contained single
-quote breaks out, and a pasted name is evaluated by the shell: a ref named
-with a command substitution executed when substituted into a snippet's
-source). Pass `--` before positional remotes, paths, and bare refs so a
-leading-hyphen value cannot read as an option; `git checkout` cannot be
-terminated that way (`--` means pathspec there), so a leading-hyphen
-branch name is a stop, not a quoting exercise. The PR number is the one
-pass-as-is exception, and only after confirming it is digits only. **An
-empty result is not a negative result**: a listing that failed (auth,
-network, API) returns nothing, exactly like a listing that found nothing;
-read exit codes, and treat unknown as "keep the branch, stop".
+Most hazards below were found by running commands, not by reading them.
+
+Read this file when the script can't run but an authenticated PR-host CLI can
+still perform every forge guard. Also read it to understand why a guard
+stopped. Without that CLI, stop at the open PR and hand the merge to the user.
+
+Evidence for every claim lives in the work unit's decision note:
+`devlog/2026-07-24-2311-self-merge-resync-guards.md`.
+
+## Rules for Every Step
+
+Bind values instead of pasting them:
+
+- Treat every branch, remote, path, OID, and title as untrusted input.
+- Capture each value from the command that produces it. Store it in a variable
+  and reference it double-quoted.
+- Never retype or single-quote a captured value. A contained single quote
+  breaks out. A pasted name is evaluated by the shell, so a ref containing a
+  command substitution can run when inserted into a snippet.
+- Pass `--` before positional remotes, paths, and bare refs. This stops a
+  leading-hyphen value from becoming an option.
+- Treat `git checkout` as the exception. There, `--` starts a pathspec, so a
+  leading-hyphen branch name is a stop instead of a quoting problem.
+- Pass the PR number as-is only after confirming that it contains digits only.
+
+An empty result doesn't prove absence:
+
+- A failed listing can return nothing, just like a successful empty listing.
+- Read each exit code. Treat an unknown result as "keep the branch, stop."
 
 ## 1. Merge
 
-- Ask the branch-consumer questions **before** merging: where the
-  repository auto-deletes head branches, the merge itself destroys a
-  shared head before any cleanup guard can look. Check both directions,
-  excluding the PR itself: open PRs whose **head** is this branch (one
-  branch can back several PRs; for a fork head use the API's
-  `head=<owner>:<branch>` filter, since `gh pr list --head` rejects that
-  form) and open PRs whose **base** is this branch (stacked work). Any hit
-  is a stop for the user, and the questions are re-asked immediately
-  before the merge command runs: the answers go stale while checks and
-  the self-review happen.
-- Where the base branch carries a merge queue, identify the queue's
-  integration method before enqueueing, from the branch-rules API
-  (`gh api --paginate
-"repos/<repo>/rules/branches/<url-encoded-branch>"`, the
-  `merge_queue` rule's parameters): the queue, not the `--merge` flag,
-  picks the merge shape, and a squash queue flattens the history
-  irreversibly. Percent-encode the branch (a `#` or `?` in the name
-  truncates the URL path and reads the wrong branch's rules). The CLI's
-  `ruleset` commands have no JSON output and cannot report the method.
-  Aggregate every page before treating an empty result as no queue.
-  Multiple queue rules, any method other than a merge commit, or a
-  payload shape you cannot identify is a stop. Re-identify the queue on
-  the base the PR has at merge time: a stacked PR's auto-retarget can
-  change the base branch, and with it which queue applies, between the
-  pre-merge checks and the merge itself. A queue enqueue cannot carry the
-  command's explicit subject and body through to the eventual commit, so
-  a `MERGE` queue also requires repository merge-commit settings
-  `PR_TITLE` and `BLANK`; refresh those settings at the final pre-enqueue
-  boundary or stop.
-- Read the base repository's `fork`, `forks_count`, and
-  `delete_branch_on_merge` fields from the forge. When the repository is
-  a fork or a root with forks, the same-repository head lives in a fork
-  network whose consumers cannot be enumerated. If auto-delete is
-  enabled, stop before a direct merge or queue enqueue: the branch can
-  also head PRs elsewhere in the network, and the forge would delete it
-  before cleanup reaches the keep-fork-network path.
-- Merge pinned to the reviewed head:
-  `gh pr merge <n> --repo <repo> --merge --match-head-commit <verified-oid>`,
-  where the verified OID is the local branch tip this session pushed
-  (a forge-reported head can move with a third party's push; a missing
-  local branch is therefore a stop, not a fallback to the forge's value).
-  Pass a title-only message explicitly, reading the title from the forge
-  and refusing an empty or `null` read, or a failed lookup writes
-  `null (#<n>)` permanently into history. Read the title before the final
-  queue, consumer, and auto-delete guards; refresh repository settings
-  after the consumer queries, then make no further forge read before the
-  merge command, minimizing the window where auto-delete can change after
-  it was checked.
-- A zero exit proves enqueueing, not merging. Only the forge reporting
-  state `MERGED` with a non-null `mergedAt` releases the cleanup; deleting
-  a branch while the PR waits in a queue can cancel the merge and take the
-  branch's last copies with it. Cap each retry sleep by the time remaining
-  before the configured deadline, so a long polling interval cannot extend
-  that deadline.
+### Check Branch Consumers
+
+Ask the branch-consumer questions before merging. Auto-delete can remove a
+shared head during the merge, before any cleanup guard runs.
+
+- Check open PRs whose head is this branch. One branch can back several PRs.
+- For a fork head, use the API filter `head=<owner>:<branch>`. The command
+  `gh pr list --head` rejects that form.
+- Check open PRs whose base is this branch. These are stacked PRs.
+- Exclude the current PR from both checks.
+- Stop for the user when either check finds a consumer.
+- Ask both questions again immediately before merging. The answers can change
+  while checks and self-review run.
+
+### Verify the Merge Queue
+
+If the base branch has a merge queue, identify its integration method before
+enqueueing. The queue chooses the merge shape, not the `--merge` flag. A
+squash queue destroys the intended history.
+
+- Query the branch-rules API with `gh api --paginate
+"repos/<repo>/rules/branches/<url-encoded-branch>"`.
+- Read the `merge_queue` rule's parameters.
+- Percent-encode the branch. A `#` or `?` in the name can truncate an
+  unencoded URL and read another branch's rules.
+- Don't use the CLI's `ruleset` commands. They have no JSON output and can't
+  report the integration method.
+- Aggregate every page before treating an empty result as no queue.
+- Stop on multiple queue rules, any method other than a merge commit, or a
+  payload shape you can't identify.
+
+Check the queue again on the PR's base at merge time. Auto-retargeting a
+stacked PR can change its base and queue after the first check.
+
+A queued merge can't carry the command's explicit subject and body into the
+eventual commit. A `MERGE` queue therefore also needs the repository settings
+`PR_TITLE` and `BLANK`. Refresh both settings at the final pre-enqueue boundary
+or stop.
+
+### Check the Fork Network and Auto-Delete
+
+Read the repository's `fork`, `forks_count`, and `delete_branch_on_merge`
+fields from the forge.
+
+A fork, or a root repository with forks, has branch consumers that
+same-repository queries can't enumerate. If auto-delete is enabled, stop
+before a direct merge or queue enqueue. Otherwise, the merge can delete a
+branch used elsewhere in the fork network before cleanup can keep it.
+
+### Pin the Merge to the Reviewed Head
+
+Run
+`gh pr merge <n> --repo <repo> --merge --match-head-commit <verified-oid>`.
+The verified OID must be the local branch tip this session pushed. A
+forge-reported head can move after a third-party push, so a missing local
+branch is a stop.
+
+Pass an explicit title-only message. Read the title from the forge, and refuse
+an empty or `null` result. Otherwise, a failed lookup can write
+`null (#<n>)` permanently into history.
+
+Keep the final reads in this order:
+
+1. Read the title.
+2. Repeat the queue, consumer, and auto-delete guards.
+3. Refresh repository settings after the consumer queries.
+4. Make no more forge reads before merging.
+
+This order narrows the window in which auto-delete can change after its check.
+
+### Wait for the Merge
+
+A zero exit proves only that the PR was enqueued. Start cleanup only after the
+forge reports state `MERGED` and a non-null `mergedAt`.
+
+Deleting the branch while a queued PR waits can cancel the merge and destroy
+the branch's last copies. Cap every retry sleep by the time left before the
+deadline. A long polling interval must not extend the deadline.
 
 ## 2. Preflight the Workspace
 
-In the checkout the cleanup will rewrite, all of these hold or the
-sequence stops:
+Run these checks in the checkout that cleanup will rewrite. Stop if any check
+fails.
 
-- `git status -uall --porcelain` is empty. The `-uall` is load-bearing:
-  `status.showUntrackedFiles=no` empties a plain `--porcelain`, so a guard
-  that inherits repository configuration can be switched off by the
-  repository it protects.
-- No git operation is in progress. `--porcelain` reports none of them, so
-  test the per-worktree paths returned by `git rev-parse --git-path` for
-  `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_START`,
-  `rebase-merge`, and `rebase-apply` (including a symlink at one of those
-  paths); `rebase-apply` also covers an interrupted `git am`. Do not test
-  the names as revisions: an ordinary local branch named `MERGE_HEAD`
-  resolves through `refs/heads/` and is not a paused merge.
-- No other worktree holds the base branch (run the sequence from that
-  worktree instead), and the head branch does not resolve to the same ref
-  as the base or default branch. Probe the checkout filesystem rather than
-  trusting mutable `core.ignorecase`: when the filesystem is case-insensitive,
-  `refs/heads/Main` and `refs/heads/main` are one ref file even if that setting
-  is false, and the case-spelled delete removes the base branch that git
-  refuses to delete under its own name.
-  Probe candidate names component by component in temporary, invalid-ref
-  children of the corresponding existing loose-head directories, because
-  their inherited filesystem semantics may also fold Unicode case or composed
-  and decomposed forms that an ASCII transform cannot detect. Directory-scoped
-  casefolding makes the existing branch-prefix directory, not only
-  `refs/heads`, load-bearing.
+- Require an empty `git status -uall --porcelain`. The `-uall` is required
+  because `status.showUntrackedFiles=no` can hide untracked files from plain
+  `--porcelain` output.
+- Require no git operation in progress. `--porcelain` doesn't report these
+  operations.
+- Use `git rev-parse --git-path` to locate `MERGE_HEAD`, `CHERRY_PICK_HEAD`,
+  `REVERT_HEAD`, `BISECT_START`, `rebase-merge`, and `rebase-apply` for this
+  worktree. Treat a symlink at any path as active state. `rebase-apply` also
+  covers interrupted `git am` work.
+- Don't test operation names as revisions. A normal local branch named
+  `MERGE_HEAD` resolves through `refs/heads/` and isn't a paused merge.
+- Require that no other worktree holds the base branch. Run cleanup from that
+  worktree instead.
+- Require that the head branch doesn't resolve to the base or default branch.
+
+Probe the checkout filesystem instead of trusting `core.ignorecase`. On a
+case-insensitive filesystem, `refs/heads/Main` and `refs/heads/main` can be one
+file even when that setting is false. Deleting the case-spelled head would
+then delete the base branch.
+
+Probe candidate names one path component at a time. Use temporary, invalid-ref
+children inside the matching existing loose-head directories. Their filesystem
+rules may fold Unicode case or composed and decomposed forms. An ASCII-only
+case transform can't detect those collisions. Directory-scoped case folding
+makes each existing branch-prefix directory load-bearing, not only
+`refs/heads`.
 
 ## 3. Preflight Linked Worktrees
 
-- Find the head branch's worktree from `git worktree list --porcelain -z`,
-  which emits NUL-terminated **fields**: strip the `worktree` keyword,
-  pair each path with the `branch` field that follows, and verify the path
-  is the record whose branch is the PR's head (bound from the forge, never
-  inferred from `HEAD`). Allow zero or one matching record; zero means no
-  worktree currently checks out that branch, while several are ambiguous and
-  must stop. Apply the same cardinality guard to the base branch before
-  resync, and require its unique match, when present, to be the current
-  checkout. Never route a path through a command substitution (it strips a
-  trailing newline) or a line-oriented parse (a spaced or newline-bearing path
-  mis-targets a sibling worktree), and do not substitute macOS `awk` with a
-  NUL record separator (it silently returns nothing). A NUL-capable reader
-  (`read -d ''` in bash or zsh, or python3) or a stop are the options.
-- Reject a symbolic local base before remote resolution: checkout follows its
-  target, so discovering the mismatch afterward is already too late. Validate
-  any local head ref before relying on the path too: a symbolic ref is a stop,
-  and an ordinary ref must still equal the pinned merged head. Then repeat the
-  head-worktree scan immediately before remote resolution and any mutation,
-  closing layout changes during the local-ref checks. Use this fresh unique
-  match for the inventory and stop below.
-- When the unique head match is a separate worktree, probe its own operation
-  state before handing off its removal:
-  operation state is per-worktree, so the cleanup checkout's preflight says
-  nothing about the other worktree, and a merge paused there with no tree
-  delta leaves every file inventory empty while manual removal would delete
-  the worktree and its paused state with exit 0. Run the same probes as the
-  preflight, against the worktree.
-- Inventory the other worktree from outside it: removal deletes the directory
-  outright, an ignored file does not trigger git's own untracked-file refusal,
-  and a tracked file carrying `assume-unchanged` or `skip-worktree` is
-  invisible to every porcelain form while removal destroys it with exit 0.
-  Read `git ls-files -vz --full-name` and keep the rows whose first column is
-  a lowercase letter (assume-unchanged) or `S` (skip-worktree); `H` is an
-  ordinary cached file, so an unfiltered reading flags every worktree. Test
-  each kept row with `[ -e ]` or `[ -L ]` against its path prefixed with the
-  worktree's own, since rows are relative to that worktree rather than to the
-  caller, and a dangling symlink fails `-e` while removal still takes it.
-  Exempt an absent path only when its tag is `S` and that worktree reports
-  `core.sparseCheckout=true`: sparse checkout leaves every excluded path
-  absent, while an absent assume-unchanged row is an uncommitted deletion.
-  Keep `-z` throughout, because the plain form C-quotes a path holding a
-  newline or tab and an existence test on that spelling fails. Anything found
-  is a stop; never remove the worktree the shell stands in (git deletes the
-  current worktree without complaint).
-- A separate linked head worktree is a stop **before any remote or local
-  branch mutation**. Inventory its operation and file state so hidden work
-  gets a specific diagnosis, but leave even a clean worktree intact. Git
-  exposes no portable operation that atomically verifies a worktree's
-  detached `HEAD`, inventories its files, removes it, verifies the branch
-  OID, and enforces the checked-out-worktree guard: a concurrent reset can
-  otherwise move a clean detached `HEAD` after the check, and removal drops
-  its only ref and reflog. Stop concurrent users, remove that worktree as a
-  separate deliberate step, then rerun cleanup. This does not stop cleanup
-  when it starts inside the clean head checkout itself: the later base-branch
-  switch makes that same worktree cease to hold the head. No head match also
-  proceeds normally.
+### Find the Head and Base Worktrees
+
+Read `git worktree list --porcelain -z`. Its output contains NUL-terminated
+fields, not NUL-terminated records.
+
+1. Strip the `worktree` keyword.
+2. Pair each path with the following `branch` field.
+3. Match the branch against the PR head received from the forge. Never infer
+   it from `HEAD`.
+4. Accept zero or one head match. Zero means no worktree checks out the head;
+   several matches are ambiguous and must stop.
+5. Apply the same count check to the base branch before resync. When one base
+   match exists, require it to be the current checkout.
+
+Don't send a path through command substitution because it strips a trailing
+newline. Don't use a line-based parser because spaces and newlines can
+mis-target another worktree. Don't use macOS `awk` with a NUL record separator
+because it silently returns nothing. Use a NUL-capable reader such as
+`read -d ''` in bash or zsh, use python3, or stop.
+
+### Validate Local Refs and Repeat the Scan
+
+Reject a symbolic local base before resolving remotes. Checkout follows the
+symbolic target, so a later mismatch check is already too late.
+
+Validate the local head before trusting its worktree path. A symbolic head ref
+is a stop. A direct head ref must equal the pinned merged head.
+
+Repeat the head-worktree scan immediately before remote resolution or any
+mutation. This closes layout changes during the local-ref checks. Use only the
+fresh unique match for the remaining inventory and stop decisions.
+
+### Check the Other Worktree's Operation State
+
+When the unique head match is a separate worktree, inspect its operation
+state. Operation state belongs to each worktree. A clean preflight in the
+cleanup checkout says nothing about another checkout.
+
+A paused merge can have no tree delta and an empty file inventory. Run the
+same operation probes against the other worktree. Otherwise, manual removal
+can delete its paused state and still exit 0.
+
+### Inventory Hidden Files
+
+Inventory the other worktree from outside it. Removal deletes its directory.
+Ignored files don't trigger git's untracked-file refusal. Tracked files marked
+`assume-unchanged` or `skip-worktree` are also hidden from porcelain output.
+Removal can destroy those hidden files and still exit 0.
+
+1. Read `git ls-files -vz --full-name`.
+2. Keep rows whose first column is a lowercase letter or `S`. Lowercase marks
+   `assume-unchanged`; `S` marks `skip-worktree`. Ignore `H`, which marks a
+   normal cached file.
+3. Test each kept row with `[ -e ]` or `[ -L ]`. Prefix its path with that
+   worktree's path because rows are relative to the worktree, not the caller.
+4. Keep the symlink check because a dangling symlink fails `-e` but removal
+   still deletes it.
+5. Exempt an absent path only when its tag is `S` and that worktree reports
+   `core.sparseCheckout=true`. Sparse checkout omits excluded paths. An absent
+   assume-unchanged path is an uncommitted deletion.
+6. Keep `-z` through the full read. Plain output C-quotes paths containing a
+   newline or tab, so an existence test on the displayed spelling fails.
+7. Stop when the inventory finds anything.
+
+Never remove the worktree in which the shell is running. Git can delete that
+worktree without complaint.
+
+### Stop Before Removing a Separate Worktree
+
+A separate linked head worktree is a stop before any local or remote branch
+mutation. Inventory its operation and file state to give a specific diagnosis,
+but leave even a clean worktree intact.
+
+Git has no portable atomic operation that verifies a worktree's detached
+`HEAD`, inventories files, removes the worktree, verifies the branch OID, and
+enforces the checked-out guard. A concurrent reset can move a clean detached
+`HEAD` after the check. Removal can then drop its only ref and reflog.
+
+Stop concurrent users. Remove that worktree as a separate, deliberate step,
+then rerun cleanup. This stop doesn't apply when cleanup starts inside the
+clean head checkout. The later base switch releases that same worktree from
+the head. No head match also proceeds normally.
 
 ## 4. Land on the Base Branch
 
-- After the pre-mutation symbolic-ref rejection, test for a direct local base
-  branch with `git show-ref --verify --quiet refs/heads/<base>`;
-  `rev-parse --verify` is satisfied by a same-named tag, and a bare checkout
-  then detaches `HEAD` at the tag while the real base stays stale.
-- Existing local branch: `git checkout --no-overwrite-ignore <base>`.
-  Missing: fetch `refs/heads/<base>` into the remote-tracking ref first
-  (the start-point can be absent in a fresh, single-branch, or sparse
-  clone), then `git checkout --no-overwrite-ignore --no-track -b` from it.
-  Suppressing automatic tracking prevents the pre-landing remote from
-  surviving a branch-conditioned remote change. Both switches refuse to
-  overwrite an ignored file the base tracks; that refusal is a stop, and a
-  plain checkout clobbers the file silently.
-- Confirm `git symbolic-ref -q HEAD` reports `refs/heads/<base>` after the
-  switch, whichever path ran.
-- Resolve the base remote again after checkout. An `includeIf "onbranch:…"`
-  can remove the old mapping or reveal a different URL. An auto-selected or
-  explicit hosted remote must still match the repository API's authoritative
-  clone endpoints. A hostless path is an explicit trust decision: expand Git's
-  leading `~/` and `~user/` path syntax, resolve any other relative path from
-  the worktree root, and follow every symlink before and after checkout. Then
-  require the post-checkout destination to remain the canonical destination
-  trusted before checkout. A hosted replacement can instead be validated
-  against the forge; a different hostless destination is not a new implicit
-  trust decision.
-- When cleanup created the local base, configure both tracking keys after
-  that validation: `branch.<base>.remote` names the post-landing remote and
-  `branch.<base>.merge` names `refs/heads/<base>`. A later pull must not use
-  the pre-landing remote or leave the cleanup-created branch untracked.
+- After rejecting symbolic refs, check for a direct local base with
+  `git show-ref --verify --quiet refs/heads/<base>`. Don't use
+  `rev-parse --verify`; a same-named tag satisfies it, and a bare checkout can
+  detach `HEAD` at the tag while the real base stays stale.
+- For an existing branch, run `git checkout --no-overwrite-ignore <base>`.
+- For a missing branch, first fetch `refs/heads/<base>` into the
+  remote-tracking ref. The start point may be absent in a fresh,
+  single-branch, or sparse clone. Then run
+  `git checkout --no-overwrite-ignore --no-track -b` from that ref.
+- Suppress automatic tracking on branch creation. A branch-conditioned remote
+  change must not preserve the pre-landing remote.
+- Stop when either checkout would overwrite an ignored file tracked by the
+  base. A plain `git checkout` silently overwrites that file.
+- Confirm that `git symbolic-ref -q HEAD` reports `refs/heads/<base>` after
+  either checkout path.
+
+Resolve the base remote again after checkout. An
+`includeIf "onbranch:…"` rule can remove the old mapping or reveal another
+URL.
+
+For a hosted remote, require its URL to match the repository API's
+authoritative clone endpoints. For a hostless path, make an explicit trust
+decision before checkout:
+
+- Expand Git's leading `~/` and `~user/` path syntax.
+- Resolve other relative paths from the worktree root.
+- Follow every symlink before and after checkout.
+- Require the post-checkout destination to equal the trusted canonical
+  destination.
+
+A hosted replacement can be checked against the forge. A different hostless
+destination isn't a new implicit trust decision and must stop.
+
+When cleanup creates the local base, set both tracking keys after validation.
+Set `branch.<base>.remote` to the post-landing remote. Set
+`branch.<base>.merge` to `refs/heads/<base>`. Don't retain the pre-landing
+remote or leave the new branch untracked.
 
 ## 5. Resync
 
-Fetch the base explicitly, then
+Fetch the base explicitly. Then run
 `git merge --ff-only --no-overwrite-ignore refs/remotes/<remote>/<base>`.
-Not `git pull`: its merge step updates ignored files by default, it
-rejects `--no-overwrite-ignore`, and a bare pull follows the configured
-upstream, which in a fork clone can be the fork's stale copy. A refused
-fast-forward (divergence, or an ignored file the base started tracking) is
-a stop; never resolve it with reset or force.
+
+Don't use `git pull`. Its merge step overwrites ignored files by default, and
+it rejects `--no-overwrite-ignore`. A bare pull also follows the configured
+upstream, which can be a fork's stale copy.
+
+A refused fast-forward is a stop. Causes include divergence or an ignored file
+that the base started tracking. Never resolve it with reset or force.
 
 ## 6. Delete the Remote Head Branch
 
-Only reach this step after the base resync succeeds. Re-resolve the head remote
-under the base branch's effective configuration before any existence read or
-delete; no remote name or URL read before checkout is evidence about the
-mapping now in force.
+Reach this step only after base resync succeeds. Resolve the head remote again
+under the base branch's active configuration before any existence check or
+delete. No remote name or URL read before checkout proves the current mapping.
 
-- The remote consulted and the remote written must be the same
-  repository: git prefers configured `pushurl` entries for pushes while
-  `ls-remote` reads the fetch URL, and a push sends to **every**
-  configured push URL while a plain push-URL query returns only the
-  first. Require **exactly one** effective push destination and require it
-  to carry the fetch URL's identity: two different destinations broadcast
-  the delete, while two identical destinations delete successfully once
-  and then fail the second lease against stale information. Query the full
-  set (`git remote get-url --push --all`) and reject blank records before
-  mutation; a valid URL followed by an empty one still makes Git delete at
-  the valid destination before failing. The returned URL is already
-  `insteadOf`/`pushInsteadOf`-expanded (verified), so config rewrites are
-  covered by the same comparison, captured without stripping trailing
-  newlines (a newline-ending path and its newline-less sibling are two
-  repositories); a remote whose raw configured URLs contain a newline
-  cannot be compared through any line-based listing at all, and is a
-  stop. Compare hosted URLs by transport, lowercased authority, and their
-  complete, case-preserved repository path: HTTP(S), git, SSH URL, and SCP
-  transports are distinct endpoints even with the same host and path.
-  Strip credential userinfo at its last `@` for non-SSH schemes (a colon
-  in `user:pass` must not truncate the host), but retain the SSH/SCP
-  username because different remote users can resolve the same relative
-  path to different repositories. Treat userless SCP `host:path` forms as
-  hosted, parse bracketed IPv6 SCP hosts through their closing bracket,
-  and keep the port (two ports are two endpoints; differing spellings of
-  a default port fail closed).
-  Deployment-specific prefixes, path case, and a terminal `.git` remain
-  part of this identity, since
-  `https://host/a/owner/name.git` and
-  `https://host/b/owner/name.git` can name different repositories, as can
-  paths that differ only by case or `.git`; derive and normalize the
-  forge's `owner/name` tail separately when auto-resolving a remote.
-  A URL with no host is a local path and compares by its full path, since
-  truncating to a tail equates `/a/owner/name` with
-  `/b/owner/name` and stripping `.git` equates the sibling directories
-  `repo` and `repo.git`. Normalize the exact lowercase-scheme forms
-  `file:///path` and `file://localhost/path` to Git's local absolute-path
-  semantics (the `localhost` authority is case-insensitive); keep other
-  file authorities and scheme spellings under a distinct identity rather
-  than stripping the scheme, since `file://localhost/tmp/a.git` and the
-  relative path `localhost/tmp/a.git` address different repositories. A
-  split identity is a stop. Before auto-selecting a base or head remote,
-  or accepting an explicit hosted one, compare its fetch URL against the
-  repository API's authoritative HTTPS and SSH clone endpoint identities,
-  including the complete hosted path; matching only host plus
-  `owner/name` can accept a deployment prefix or SSH user that names
-  another repository. Only a true hostless path is an explicit
-  local-remote trust decision, and any hostless mapping still in force must
-  resolve to the same canonical destination trusted before checkout. Resolve
-  relative paths from the worktree root and follow symlinks on both
-  sides of the boundary. A hosted mismatch, changed local destination,
-  non-local file
-  authority, or malformed hosted form is a stop.
-- Check whether auto-delete already ran:
-  `git ls-remote --exit-code --heads -- <remote> refs/heads/<branch>`.
-  Exit 2 is a genuine absence; exit 128 is a transport or auth failure and
-  must stop the sequence (an unreachable remote otherwise reads as
-  auto-delete having done its job). On exit 0, accept only a line whose
-  ref column equals `refs/heads/<branch>` full-string: the pattern also
-  matches a branch literally named `refs/heads/<branch>`.
-- If such a suffix-matching sibling exists alongside the real branch, the
-  delete itself is inexpressible: git suffix-matches push destinations, so
-  both `--delete` and the `:ref` form refuse with "dst refspec matches
-  more than one" (verified on git 2.50), and a forge-API delete re-runs no
-  lease check. Stop and surface it.
-- The surviving ref's OID must equal the verified head that merged, and
-  the forge's reported head must agree; any disagreement means the branch
-  moved or was reused after the merge and may carry unmerged work.
-- Re-ask the consumer questions at delete time (the pre-merge answer can
-  go stale), and refresh fork-network membership at the same boundary.
-  Keep a fork's branch unconditionally (per-repository queries cannot
-  enumerate a fork network), and keep a same-repository branch too when
-  the repository is a fork or a root with forks, since its branches live
-  in the same unenumerable network; before merging, additionally list
-  open PRs in the recorded lineage (parent and source) whose head is this
-  branch, with no cross-repository number exclusion, because another
-  repository's PR can share this PR's number without being it. Then
-  delete atomically:
-  `git push --delete --force-with-lease='refs/heads/<branch>:<verified-oid>' -- <remote> refs/heads/<branch>`,
-  so a push landing between check and delete fails the delete instead of
-  losing the new work.
+### Require One Read-and-Write Destination
+
+The remote you inspect must be the repository you write. Git uses configured
+`pushurl` entries for pushes, while `ls-remote` reads the fetch URL. A push
+writes to every configured push URL, but a plain push-URL query shows only the
+first.
+
+- Require exactly one effective push destination.
+- Require that destination to have the fetch URL's identity.
+- Reject two different destinations because they broadcast the delete.
+- Reject two identical destinations because one delete succeeds and the
+  second lease fails against stale data.
+- Read the full set with `git remote get-url --push --all`.
+- Reject blank records before mutation. A valid URL followed by a blank can
+  delete at the valid destination before Git reports failure.
+- Treat `insteadOf` and `pushInsteadOf` rewrites as already expanded in the
+  returned URL.
+- Capture URLs without stripping trailing newlines. A path ending in a
+  newline and its newline-less sibling are different repositories.
+- Stop when raw configured URLs contain a newline. No line-based listing can
+  compare them safely.
+
+### Compare Hosted Identities
+
+Compare hosted URLs by these full components:
+
+- Keep the transport. HTTP(S), git, SSH URL, and SCP transports are distinct
+  endpoints even when host and path match.
+- Lowercase the authority. Keep the complete repository path with its case.
+- For non-SSH schemes, strip credential userinfo at the last `@`. A colon in
+  `user:pass` must not truncate the host.
+- For SSH and SCP, keep the username. Different remote users can resolve the
+  same relative path to different repositories.
+- Treat userless SCP `host:path` forms as hosted.
+- Parse bracketed IPv6 SCP hosts through their closing bracket.
+- Keep the port. Different ports are distinct, and alternate spellings of a
+  default port fail closed.
+- Keep deployment prefixes, path case, and a terminal `.git`.
+
+For example, `https://host/a/owner/name.git` and
+`https://host/b/owner/name.git` can name different repositories. Paths that
+differ only by case or `.git` can also differ. When auto-resolving a remote,
+derive and normalize the forge's `owner/name` tail separately.
+
+### Compare Local and File Identities
+
+A URL with no host is a local path. Compare its full path. Truncating to the
+tail would equate `/a/owner/name` with `/b/owner/name`. Removing `.git` would
+equate sibling directories `repo` and `repo.git`.
+
+Normalize only the exact lowercase-scheme forms `file:///path` and
+`file://localhost/path` to Git's local absolute-path rules. The `localhost`
+authority is case-insensitive.
+
+Keep other file authorities and scheme spellings as distinct identities.
+Don't strip the scheme. For example, `file://localhost/tmp/a.git` and the
+relative path `localhost/tmp/a.git` name different repositories.
+
+### Compare Against the Forge
+
+Before auto-selecting a base or head remote, compare its fetch URL with the
+repository API's authoritative HTTPS and SSH clone identities. Apply the same
+check to an explicit hosted remote. Compare the complete hosted path. Host plus
+`owner/name` alone can accept a deployment prefix or SSH user that names
+another repository.
+
+Only a true hostless path is a local-remote trust decision. Resolve relative
+paths from the worktree root and follow symlinks on both sides of checkout.
+Require any active hostless mapping to equal the canonical destination trusted
+before checkout.
+
+Stop for a split identity, hosted mismatch, changed local destination,
+non-local file authority, or malformed hosted form.
+
+### Check Whether Auto-Delete Ran
+
+Run
+`git ls-remote --exit-code --heads -- <remote> refs/heads/<branch>`.
+
+- Exit 2 proves absence.
+- Exit 128 means transport or authentication failure and must stop.
+- On exit 0, accept only a line whose ref column exactly equals
+  `refs/heads/<branch>`. The pattern also matches a branch literally named
+  `refs/heads/<branch>`.
+
+If that suffix-matching sibling exists beside the real branch, stop. Git
+suffix-matches push destinations, so both `--delete` and the `:ref` form fail
+with "dst refspec matches more than one". This was verified on git 2.50. A
+forge API delete is unsafe because it doesn't repeat the lease check.
+
+### Recheck the Branch Before Deletion
+
+- Require the surviving ref's OID to equal the verified merged head.
+- Require the forge-reported head to match. Any mismatch means the branch
+  moved or was reused and may contain unmerged work.
+- Repeat the branch-consumer checks because the pre-merge answer can go stale.
+- Refresh fork-network membership at the same boundary.
+- Keep a fork's branch unconditionally because repository-local queries can't
+  enumerate its network.
+- Also keep a same-repository branch when the repository is a fork or a root
+  with forks.
+- Before merging, list open PRs in the recorded parent and source lineage
+  whose head is this branch. Don't exclude matching PR numbers across
+  repositories because another repository's PR can share this PR's number.
+
+When every guard passes, delete atomically with
+`git push --delete --force-with-lease='refs/heads/<branch>:<verified-oid>' -- <remote> refs/heads/<branch>`.
+The lease makes a concurrent push fail the delete instead of losing new work.
 
 ## 7. Preserve the Local Branch and Prune
 
-- Keep the local branch and report `kept_manual`. Git exposes no portable
-  deletion that combines an expected-old OID with the
-  checked-out-worktree guard: `git update-ref -d` supplies the former but
-  can delete a branch another worktree just checked out and leave its
-  symbolic `HEAD` dangling; `git branch -d` supplies the latter but can
-  delete a backward-repointed ref after an exact-tip check. Delete the
-  local branch as a separate deliberate step after verifying its tip and
-  that no worktree uses it. Determine raw ref presence without
-  dereferencing so a dangling symbolic ref cannot masquerade as absence:
-  ask `git symbolic-ref -q <ref>` first, then
-  `git show-ref --verify --quiet <ref>` for an ordinary direct ref, then
-  repeat the symbolic probe before declaring absence so a direct ref
-  replaced between reads by a dangling symref remains present. Do not
-  require the newer `git show-ref --exists`. Recompute presence at
-  reporting time so a branch created during cleanup is also reported
-  `kept_manual`.
-- Prune with the remote named (`git fetch --prune -- <remote>`); a bare
-  `--prune` prunes only the default remote. A prune failure leaves cleanup
-  incomplete and must be reported as unknown or partial, never as a
-  successful cleanup.
+Keep the local branch and report `kept_manual`. Git has no portable deletion
+that combines an expected-old OID with the checked-out-worktree guard.
+
+- `git update-ref -d` checks the old OID, but it can delete a branch that
+  another worktree just checked out. That leaves its symbolic `HEAD` dangling.
+- `git branch -d` protects checked-out branches, but it can delete a ref moved
+  backward after an exact-tip check.
+
+Delete the local branch only as a separate, deliberate step. First verify its
+tip and confirm that no worktree uses it.
+
+Determine raw ref presence without dereferencing:
+
+1. Run `git symbolic-ref -q <ref>`.
+2. If it isn't symbolic, run `git show-ref --verify --quiet <ref>` for a direct
+   ref.
+3. Repeat the symbolic probe before reporting absence. A direct ref can become
+   a dangling symbolic ref between reads.
+4. Don't require the newer `git show-ref --exists`.
+5. Recompute presence when reporting. A branch created during cleanup must
+   also be reported `kept_manual`.
+
+Prune only the named remote with `git fetch --prune -- <remote>`. A bare
+`--prune` touches only the default remote. If pruning fails, report cleanup as
+unknown or partial, never successful.
