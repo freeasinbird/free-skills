@@ -2,10 +2,10 @@
 
 `watch-review.sh`, bundled beside `SKILL.md`, is the canonical executable
 detector where a shell and host CLI are available. An API or repository
-connector can implement the same detector contract when they are not. Read
-this reference when capturing a baseline, detecting an unrecorded reviewer,
-invoking the watcher, scheduling repeated wakes, or polling through a
-connector because the script cannot run.
+connector can implement the same detector contract when they can't. Read this
+reference when capturing a baseline, detecting an unrecorded reviewer, invoking
+the watcher, scheduling repeated wakes, or polling through a connector because
+the script can't run.
 
 ## Contents
 
@@ -20,16 +20,16 @@ connector because the script cannot run.
 
 ## Event-Anchored Baselines
 
-Anchor the baseline to the event that should produce the pass, not to watcher
-startup:
+The baseline is the timestamp each poll compares activity against. Anchor it to
+the event that should produce the pass, not to watcher startup:
 
 - An open- or push-triggered wait uses the host's PR open/ready or push event
   timestamp.
 - A manual no-push recheck uses the request timestamp and snapshots reviews
   already present when the request is made.
 - A commit's authored or committed time is not a push time.
-- A local or host clock reading taken after `git push` returns is later than
-  the event and can silently bank a review that arrived in the gap.
+- A local or host clock reading taken after `git push` returns is later than the
+  event and can silently bank a review that arrived in the gap.
 
 Prefer a host event. The repository event feed carries `PushEvent` with a
 timestamp and pushed head:
@@ -39,8 +39,8 @@ gh api --paginate "repos/OWNER/REPO/events?per_page=100" --jq \
   '.[] | select(.type == "PushEvent") | {created_at, ref: .payload.ref, head: .payload.head}'
 ```
 
-The feed can lag, retains a bounded history, and does not show a fork's push
-in the base repository. A force-push also appears on the PR timeline:
+The feed can lag, retains a bounded history, and does not show a fork's push in
+the base repository. A force-push also appears on the PR timeline:
 
 ```sh
 gh api --paginate "repos/OWNER/REPO/issues/PR/timeline?per_page=100"
@@ -50,24 +50,27 @@ Select `head_ref_force_pushed` and its `created_at`. A plain push creates no
 equivalent timeline event; `committed` entries can have a null top-level
 timestamp.
 
-When no host event resolves, bound the event with two readings from the
-host's clock:
+When no host event resolves, bound the event with two readings from the host's
+clock:
 
 1. Take the first immediately before the push. This is the watcher baseline.
 2. Take the second immediately after the push. Keep it only to disambiguate
    matching activity; never pass it as the baseline.
 
-An item after the second reading certainly postdates the push. An item
-between readings is ambiguous, so refetch it and keep waiting while
-attribution remains unresolved. Early baselines are recoverable because the
-expected-head filter rejects much superseded activity; late baselines
-silently drop the awaited pass.
+Attribute an item by where it falls:
 
-If the exchange begins after the push and no host event resolves, the
-pre-push reading does not exist. Do not invent a late baseline or report the
-round quiet, clean, or complete. Record that this round cannot be
-disambiguated, continue only on activity that can independently be tied to
-the expected head/round, and carry the attribution gap into the final ledger.
+- An item after the second reading certainly postdates the push.
+- An item between readings is ambiguous, so refetch it and keep waiting while
+  attribution stays unresolved.
+
+Early baselines are recoverable because the expected-head filter rejects much
+superseded activity; late baselines silently drop the awaited pass.
+
+If the exchange begins after the push and no host event resolves, the pre-push
+reading does not exist. Do not invent a late baseline or report the round quiet,
+clean, or complete. Record that this round can't be disambiguated, continue only
+on activity that can independently be tied to the expected head/round, and carry
+the attribution gap into the final ledger.
 
 Use the host's `Date` response header, not the local clock:
 
@@ -81,15 +84,15 @@ fallback caveats in mind: replies on existing threads retain an old anchor,
 reactions carry no commit, and GitHub can re-anchor a comment's `commit_id` as
 the PR advances.
 
-Whatever the baseline source, confirm which round a signal covered. GitHub
-stamps a review with the head current at submission, not necessarily the head
-the reviewer analyzed. A review already running during a push can therefore
-land afterward and appear to cover the new head. Clean-pass reactions are
-harder because they carry no head at all.
+Whatever the baseline source, confirm which round a signal covered. This round
+attribution matters because GitHub stamps a review with the head current at
+submission, not necessarily the head the reviewer analyzed. A review already
+running during a push can therefore land afterward and appear to cover the new
+head. Clean-pass reactions are harder because they carry no head at all.
 
-At the same boundary, record the expected PR head plus base branch and base
-tip from the host. Pass the expected head to the watcher; retain the base for
-the final freshness guard.
+At the same boundary, record the expected PR head plus base branch and base tip
+from the host. Pass the expected head to the watcher; retain the base for the
+final freshness guard.
 
 ## Snapshot Sources and Paging
 
@@ -124,42 +127,58 @@ through REST. When hand-rolling, use the matching paged endpoints:
 - `issues/PR/reactions`
 
 For terminal readiness, page the full `reviewThreads` connection to exhaustion
-even when the visible page is resolved; an unresolved thread past the first
-page remains blocking. A terminal composite snapshot is valid only when the PR
-exists, its lifecycle state is open, every required query succeeded, every
-required scalar and collection is present with the expected shape, and every
-required connection was exhausted. Compare both `baseRefName` and `baseRefOid`
-with the recorded base; a same-tip retarget still invalidates integration
-evidence. Treat missing required fields, null where a field contract requires a
-value, malformed values, partial results, or unpaged connections as incomplete
-evidence, not empty state. Preserve documented nullability: `closedAt` and
-`mergedAt` are expected to be null when `state` is `OPEN`.
+even when the visible page is resolved; an unresolved thread past the first page
+remains blocking. Also compare both `baseRefName` and `baseRefOid` with the
+recorded base; a same-tip retarget still invalidates integration evidence.
+
+A terminal composite snapshot is valid only when all of these hold:
+
+- The PR exists and its lifecycle state is open
+- Every required query succeeded
+- Every required scalar and collection is present with the expected shape
+- Every required connection was exhausted
+
+Treat any of these as incomplete evidence, not empty state:
+
+- A missing required field
+- A null where a field contract requires a value
+- A malformed value
+- A partial result
+- An unpaged connection
+
+Preserve documented nullability: `closedAt` and `mergedAt` are expected to be
+null when `state` is `OPEN`.
 
 Require two consecutive complete terminal composite scans with identical
-canonical results. Compare PR lifecycle, head, base, required checks, pending
-push, every review, comment, and reply identity and timestamp, and the complete
-thread map, including every thread ID, `isResolved` state, and latest comment
-identity. Compare page metadata too. If any value differs, discard both
-mixed-time scans and restart until two complete scans match. Individual page
-sequences or a partial boundary fingerprint do not prove coherent state.
+canonical results. Compare across both scans:
+
+- PR lifecycle, head, base, required checks, and pending push
+- Every review, comment, and reply identity and timestamp
+- The complete thread map, including every thread ID, `isResolved` state, and
+  latest comment identity
+- Page metadata
+
+If any value differs, discard both mixed-time scans and restart until two
+complete scans match. Individual page sequences or a partial boundary
+fingerprint do not prove coherent state.
 
 ## Reviewer Identity and Trigger
 
 Establish identity in this order:
 
-1. Use the project's recorded reviewer identity, API login forms, trigger,
-   and progress/clean signals as a strong hint.
-2. Otherwise scan recent PRs for a Bot/App account that submitted a review.
-   CI bots that post checks are not reviewers.
+1. Use the project's recorded reviewer identity, API login forms, trigger, and
+   progress/clean signals as a strong hint.
+2. Otherwise scan recent PRs for a Bot/App account that submitted a review. CI
+   bots that post checks are not reviewers.
 3. If findings reviews never appear, scan PR-description reactions for a
    recurring bot signal shortly after PR events. That can identify a
    clean-pass-only reviewer.
-4. A user assertion counts only if it names a reviewer/login that can be
-   matched and identifies or establishes its trigger.
+4. A user assertion counts only if it names a reviewer/login that can be matched
+   and identifies or establishes its trigger.
 
 If more than one distinct review bot appears, ask which one to await. Past
-activity reveals identity but not necessarily the trigger; establish whether
-it runs on PR events, a command, or a CI job before polling.
+activity reveals identity but not necessarily the trigger; establish whether it
+runs on PR events, a command, or a CI job before polling.
 
 When a reviewer or status signal is newly observed, record its name, login
 forms, trigger, and observed signals in the project's designated conventions
@@ -168,31 +187,30 @@ record that no reviewer exists.
 
 For an unrecorded reviewer scan recent PRs with `gh pr list --state all
 --limit 20 --json number`, then page their reviews and reactions. An App bot's
-reaction login usually supplies the REST form with `[bot]`; strip the suffix
-for the GraphQL review form and record both. A machine-user reviewer keeps its
-plain login.
+reaction login usually supplies the REST form with `[bot]`; strip the suffix for
+the GraphQL review form and record both. A machine-user reviewer keeps its plain
+login.
 
 Request a command-triggered reviewer once when no request is pending. An
 acknowledgement or reaction on the trigger comment is not completion.
 
-Treat a recorded reviewer as stale after two consecutive fully covered waits
-on events that should trigger it produce no matching progress or completion
-signal. Before another capped wait, rerun reviewer detection and update the
-record only when a replacement identity, trigger, or signal is actually
-observed.
+Treat a recorded reviewer as stale after two consecutive fully covered waits, on
+events that should trigger it, produce no matching progress or completion
+signal. Before another capped wait, rerun reviewer detection. Update the record
+only when a replacement identity, trigger, or signal is actually observed.
 
 ## Signals and Login Forms
 
 A round completes only on target-reviewer activity after the baseline:
 
-- a submitted top-level review
-- a new review thread
-- a new comment on an existing review thread
-- a configured clean-pass reaction on the PR description
+- A submitted top-level review
+- A new review thread
+- A new comment on an existing review thread
+- A configured clean-pass reaction on the PR description
 
 An in-progress signal or acknowledgement means keep waiting; absence proves
-nothing. Match reactions by `createdAt`, never bare presence, because a
-leftover reaction from an earlier round can remain on the PR.
+nothing. Match reactions by `createdAt`, never bare presence, because a leftover
+reaction from an earlier round can remain on the PR.
 
 Read the latest review's state and body before declaring a pass clean. A
 `CHANGES_REQUESTED`, or a `COMMENTED` review with a substantive summary, can
@@ -204,8 +222,8 @@ Author fields and login forms follow the API:
 - GraphQL reactions use `user.login`.
 - REST reviews, comments, and reactions all use `user.login`; those payloads
   have no `author` field.
-- An App bot is commonly `name` for GraphQL review authorship and
-  `name[bot]` for REST and reactions. A regular machine user stays plain.
+- An App bot is commonly `name` for GraphQL review authorship and `name[bot]`
+  for REST and reactions. A regular machine user stays plain.
 
 `watch-review.sh` reads REST and normalizes either App-bot form. Use
 `--rest-login` only for a machine-user reviewer or another form the automatic
@@ -222,13 +240,12 @@ Run the script by path from the PR checkout:
 ```
 
 Pass `--repo owner/name` whenever the working directory is not the PR's
-checkout. Do not `cd` into a globally installed skill and rely on its repo
+checkout. Don't `cd` into a globally installed skill and rely on its repo
 default.
 
-Optional flags include `--rest-login`, `--clean-content`,
-`--progress-content`, `--interval`, and `--cap-minutes`.
-`--reaction-login` is a deprecated alias for `--rest-login`, retained for
-older callers.
+Optional flags include `--rest-login`, `--clean-content`, `--progress-content`,
+`--interval`, and `--cap-minutes`. `--reaction-login` is a deprecated alias for
+`--rest-login`, retained for older callers.
 
 | Exit | Report            | Meaning                                             |
 | ---- | ----------------- | --------------------------------------------------- |
@@ -238,48 +255,49 @@ older callers.
 | 64   | usage on stderr   | Invalid invocation; fix it rather than retrying     |
 | 69   | note on stderr    | `gh` missing; this environment cannot run the watch |
 
-For exit 2, `polls_ok:0` means no poll ever observed the PR. Otherwise the
-last poll decides coverage because each poll rescans every source from the
-frozen baseline: `last_poll_ok:true` proves the final window quiet;
-`last_poll_ok:false` means the tail is unobserved. `in_progress_seen` is
-history across a multi-poll run, but on a single final poll it means the
-reviewer was still active at the deadline.
+For exit 2, `polls_ok:0` means no poll ever observed the PR. Otherwise the last
+poll decides coverage because each poll rescans every source from the frozen
+baseline: `last_poll_ok:true` proves the final window quiet; `last_poll_ok:false`
+means the tail is unobserved. `in_progress_seen` is history across a multi-poll
+run, but on a single final poll it means the reviewer was still active at the
+deadline.
 
-Every positive match still needs round attribution before it is accepted.
-If a matched review/comment is stale, scan reactions separately because the
-script exits on the positive item before reaching a clean-pass reaction.
+Every positive match still needs round attribution before it is accepted. If a
+matched review/comment is stale, scan reactions separately because the script
+exits on the positive item before reaching a clean-pass reaction.
 
 ## Connector or API Polling
 
-When the exchange owner has no shell or host CLI, reproduce the watcher
-contract through the available API or repository connector. Use the exact
-frozen baseline and expected head for every poll; never replace them with the
-current time or latest head.
+When the exchange owner has no shell or host CLI, reproduce the watcher contract
+through the available API or repository connector. Use the exact baseline and
+expected head for every poll, both frozen at the event boundary: never replace
+them with the current time or latest head.
 
 Each poll pages the three snapshot sources until it crosses the baseline:
 top-level reviews, review comments including the latest replies on existing
 threads, and configured PR-description reactions. Normalize the review and
 reaction login forms, apply the completion rules above, and confirm round
-attribution before accepting a match. A progress reaction keeps the loop
-active; it is not completion.
+attribution before accepting a match. A progress reaction keeps the loop active;
+it is not completion.
 
 Keep the loop bounded to the same 20–30 minute overall cap and roughly 60–90
 second cadence when the connector can wait without waking the model. If each
 poll wakes the model, use roughly 4–5 minutes and the scheduled wake that
 resumes the same conductor without releasing exchange ownership. The routing
-gate must establish that blocking wait or scheduled-wake capability before
-the conductor starts; instantaneous connector reads with scheduling only for
-the main agent require a main-owned exchange. At the cap, take one final
-complete snapshot and report the equivalent of script coverage: polls or
-snapshots completed, whether the last one succeeded, whether progress was
-seen, and whether the final window is covered. A failed final snapshot is an
-incomplete tail, not a quiet round.
+gate must establish that blocking wait or scheduled-wake capability before the
+conductor starts; instantaneous connector reads with scheduling only for the
+main agent require a main-owned exchange.
+
+At the cap, take one final complete snapshot and report the equivalent of script
+coverage: polls or snapshots completed, whether the last one succeeded, whether
+progress was seen, and whether the final window is covered. A failed final
+snapshot is an incomplete tail, not a quiet round.
 
 Map outcomes to the script semantics so later workflow steps do not depend on
 the transport: review activity, clean pass, covered cap expiry, or broken or
 incomplete observation. Connector-only access changes how the exchange owner
-polls, not what counts as a completed round. Under conductor ownership, grant
-2 supplies the blocking wait or scheduled same-conductor wake. Under main
+polls, not what counts as a completed round. Under conductor ownership, grant 2
+supplies the blocking wait or scheduled same-conductor wake. Under main
 ownership, the mechanism ladder can use a scheduled connector or API poll even
 when scheduling cannot target a subagent.
 
@@ -313,6 +331,6 @@ check should use roughly 4–5 minutes. These are separate layers: a scheduled
 5-minute model wake can run the script every 75 seconds inside a four-minute
 cap.
 
-Bound the whole wait at roughly 20–30 minutes. A clean-pass signal usually
-ends earlier. See `cost-model.md` only when auditing the cache-cadence
-tradeoff or re-deriving these numbers.
+Bound the whole wait at roughly 20–30 minutes. A clean-pass signal usually ends
+earlier. See `cost-model.md` only when auditing the cache-cadence tradeoff or
+re-deriving these numbers.
