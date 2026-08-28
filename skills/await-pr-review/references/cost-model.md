@@ -2,9 +2,9 @@
 
 The routing and waiting decisions live in `SKILL.md`; fix-round decisions live
 in `review-response.md`, which the exchange owner reads before addressing
-findings. This file holds only the arithmetic behind those rules: read it when
-a call is genuinely borderline, or when re-deriving the break-evens after a
-pricing change.
+findings. This file holds only the arithmetic behind those rules: read it when a
+call is genuinely borderline, or when re-deriving the break-evens after a pricing
+change.
 
 ## Contents
 
@@ -18,154 +18,182 @@ pricing change.
 
 ## Single Wake vs Cache-Keepalive Wakes (Step 3)
 
-The default resume is a single wake on activity: the watcher fires once and
-the main agent pays one full-context read, often cache-cold when the review
-takes longer to land than a short prompt-cache TTL (though a fast reviewer
-plus a tight no-model poll can instead land that wake while the cache is
-still warm; see the observed-latency section below). Where the platform can
-instead re-enter the agent on a timer (a scheduled wake-up or self-paced
-loop), each wake replays the main context itself, which is normally the
-costliest pattern.
+The default resume is a single wake on activity. The watcher fires once and the
+main agent pays one full-context read. That read is often cache-cold when the
+review takes longer to land than a short prompt-cache TTL. A fast reviewer plus a
+tight no-model poll can instead land the wake while the cache is still warm; see
+the observed-latency section below.
 
-Timer re-entry becomes the cheaper pattern only in a narrow case: a large main
-context, a steep cached-read discount behind a short cache TTL, and a short
-expected wait. Then waking at the cache-keepalive cadence costs
-the cached-read fraction of a cold read per wake, and keepalive wins while
-wakes times the cached-read price stay under one cold read (at typical
-pricing roughly ten cache-cadence wakes, so waits up to ~45 minutes). With a
-small context, a long wait, or no cached-read discount, the single cold wake
-wins.
+Where the platform can re-enter the agent on a timer instead (a scheduled
+wake-up or self-paced loop), each wake replays the main context itself. That is
+normally the costliest pattern.
 
-This break-even assumes current typical pricing multipliers (cached read on
-the order of 0.1x a cold read); re-derive the ten-wake figure if those
-multipliers shift.
+Timer re-entry is cheaper only in a narrow case: a large main context, a steep
+cached-read discount behind a short cache TTL, and a short expected wait.
+
+Then each wake at the cache-keepalive cadence costs the cached-read fraction of a
+cold read. Keepalive wins while the wake count times the cached-read price stays
+under one cold read. At typical pricing that is roughly ten cache-cadence wakes, so
+waits up to ~45 minutes. With a small context, a long wait, or no cached-read
+discount, the single cold wake wins.
+
+This break-even assumes current typical pricing multipliers (cached read on the
+order of 0.1x a cold read). Re-derive the ten-wake figure if those multipliers
+shift.
 
 ## Detection Inside a Timer Wake (Step 3)
 
-The section above prices the wake; this one prices what runs inside it. A
-wake that rebuilds the detection itself pays, per wake, the tool-call round
-trips for reviews, threads, and reactions plus every payload they return, and
-those payloads then sit in the main context for the rest of the session, so
-the cost compounds across wakes rather than resetting at each one.
-`watch-review.sh` collapses those three sources to one command and one exit
-code, leaving the wake's marginal cost as the context replay it was going to
-pay anyway. Over a 25-minute wait on a 5-minute gap that is five hand-rolled
-query rounds traded for five exit codes.
+The section above prices the wake; this one prices what runs inside it.
+
+A wake that rebuilds the detection itself pays, per wake, the tool-call round
+trips for reviews, threads, and reactions, plus every payload they return. Those
+payloads then sit in the main context for the rest of the session, so the cost
+compounds across wakes rather than resetting at each one.
+
+`watch-review.sh` collapses those three sources to one command and one exit code,
+leaving the wake's marginal cost as the context replay it was going to pay
+anyway. Over a
+25-minute wait on a 5-minute gap, that is five hand-rolled query rounds traded
+for five exit codes.
 
 ## Observed Reviewer Latency and the Warm-Wake Swing (Step 3)
 
 Observed Codex reviews landed 2m54s–4m46s after each push, right around a
-5-minute cache TTL, so a ~75s poll tends to detect the review and fire its
-single wake while the main context is still cache-warm, whereas a coarse
-~270s grid would not detect it until a later tick and would wake the agent
-cold: at typical pricing a roughly 12x swing on that one wake read (the
-cached-read fraction versus a full cold read). Treat the latency band as
-observed for one reviewer, not a guarantee, but it is a further reason to
-prefer the tight cadence on the no-model path.
+5-minute cache TTL. So a ~75s poll tends to detect the review and fire its single
+wake while the main context is still cache-warm. A coarse ~270s grid would not
+detect it until a later tick and would wake the agent cold: at typical pricing a
+roughly 12x swing on that one wake read (the cached-read fraction versus a full
+cold read).
+
+Treat the latency band as observed for one reviewer, not a guarantee. It is still
+a further reason to prefer the tight cadence on the no-model path.
 
 ## Delegated Fix Round: What Delegation Actually Saves (Step 4)
 
-Delegating a round to a subagent does not save main-agent wakes; it adds
-them (the spawn turn, then a completion wake to read the report), and a
-fresh fixer must first rebuild working context the main agent already has
-(re-reading the diff, the touched files, the conventions). What delegation
-saves is everything in between: each tool call replays the calling agent's
-context, so a long round replays the main context once per call while a
-fixer replays only its own small one. That is why `review-response.md` requires
-both a long round (many findings, a wide class sweep, dozens of tool calls) and
-a main context that dwarfs the fixer's brief.
+Delegating a round to a subagent does not save main-agent wakes; it adds them:
+the spawn turn, then a completion wake to read the report. A fresh fixer must
+also rebuild working context the main agent already has, by re-reading the diff,
+the touched files, and the conventions.
+
+What delegation saves is everything in between. Each tool call replays the
+calling agent's context, so a long round replays the main context once per call,
+while a fixer replays only its own small one. That is why `review-response.md`
+requires both a long round (many findings, a wide class sweep, dozens of tool
+calls) and a main context that dwarfs the fixer's brief.
 
 ## Persistent Fixer Amortization (Step 4)
 
 The per-round break-even makes short rounds look like they never justify
-delegation. But a convergence loop is many rounds, and what changes across
-them is the rebuild cost. A fresh fixer each round re-pays the context
-rebuild every time (re-reading the diff, the touched files, the
-conventions), so over N rounds it pays `N × R_rebuild`; a fixer kept alive
-across the loop pays that rebuild once (`1 × R_rebuild`), then reuses its
-warm context, and it keeps each round's debris (its findings and fixes) out
-of the main context, since only the compact reports cross back. That is why
-a persistent fixer likely wins on any longer exchange (roughly 4+ rounds)
-even when each round on its own falls below the per-round break-even, while
-the per-round rule still governs a one-shot round.
+delegation. But a convergence loop is many rounds, and what changes across them
+is the rebuild cost.
+
+A fresh fixer each round re-pays the context rebuild every time (re-reading the
+diff, the touched files, the conventions), so over N rounds it pays
+`N × R_rebuild`. A fixer kept alive across the loop pays that rebuild once
+(`1 × R_rebuild`), then reuses its warm context. It also keeps each round's
+debris, its findings and fixes, out of the main context, since only the compact
+reports cross back.
+
+That is why a persistent fixer likely wins on any longer exchange (roughly 4+
+rounds), even when each round on its own falls below the per-round break-even.
+The per-round rule still governs a one-shot round.
 
 ## Conductor: Whole-Exchange Accounting
 
 The sections above price a single round. Over an exchange, orchestration is
-itself a per-round cost: with the main agent owning the loop, each round
-wakes it at least once (the watcher firing) before any fix work starts, and
-each wake replays the full main context. Writing `C_main` for the main
-context and `C_cond` for the conductor's, an N-round exchange with J
-surfaced interruptions, counting everything the conductor surfaces short
-of the terminal report (judgment calls and no-go or materially uncertain
-convergence escalations alike), `J_user` of them routed on to the user, costs
-roughly `(N + J_user) × C_main` under main ownership: one wake per round plus
-a second main-agent turn when each user's answer resumes the loop. Conductor
-ownership costs `(2 + J + J_user) × C_main`: the spawn, the terminal
-report, one wake per surfaced interruption, and, for a user-routed one, a
-second main-agent turn when the user's answer arrives before the
-conductor can resume. Beyond those wakes, every watch and fix tool call
-bills at `C_cond` instead of `C_main`.
+itself a per-round cost. With the main agent owning the loop, each round wakes it
+at least once (the watcher firing) before any fix work starts, and each wake
+replays the full main context.
 
-Measured sessions (a 2026-08 local usage audit; the 2026-08-02 devlog note
-records it) put `C_main` at 300–500k tokens in real PR sessions against a
-20–60k conductor brief, a 5x to 25x per-call ratio paid at cached-read
-prices on every call. On orchestration wakes alone the conductor wins
-when `2 + J + J_user < N + J_user`, which cancels to `2 + J < N` because
-the user-answer turns occur under either owner. The per-call savings close
-the gap well before that,
-since a single fix round of a few dozen tool calls replays roughly
-`20 × C_main` when run in-main against `20 × C_cond` under a conductor,
-and at the measured 5x to 25x ratio that one round's difference already
-exceeds the conductor's two fixed wakes (`2 × C_main`).
+The accounting uses these terms:
 
-The comparison
-stays governed by the formula, not a blanket rule: rounds carrying real
-fix work favor the conductor, while an exchange whose interruptions
-rival its rounds (`J` large against N, e.g. two one-call rounds each
-requiring a separate main-agent judgment) favors the already-awake main
-agent. A user-routed pause contributes to both `J` and `J_user`: surfacing
-the interruption remains conductor-specific, but the answer turn is shared
-and does not move the wake-only break-even.
-A one-round exchange favors the main agent only when that round is
-itself trivial (a couple of calls); by the ratio above, a single
-substantive fix round already repays the conductor's fixed wakes.
+- `C_main`: the main context replayed per wake or per in-main tool call.
+- `C_cond`: the conductor's smaller context, replayed per conductor tool call.
+- `N`: every review round in the exchange, whether or not it carries fix work;
+  each one wakes the main agent once (the watcher firing).
+- `J`: surfaced interruptions, counting everything the conductor surfaces short
+  of the terminal report (judgment calls and no-go or materially uncertain
+  convergence escalations alike).
+- `J_user`: the subset of `J` routed on to the user.
 
-N and J are unknowable at invocation, when the owner is chosen, so the
-formula audits an exchange in hindsight; it does not route one upfront.
-Routing lives in SKILL.md's owner decision, which defaults to the
-conductor on the platform gate alone: the asymmetry above means a clean
-pass under a conductor wastes at most one main-context wake over the
-cheapest in-main watch (its two fixed wakes against the watcher's one),
-while a substantive exchange wrongly kept in-main pays the 5x to 25x
-per-call ratio on every tool call of every round.
+Main ownership costs roughly `(N + J_user) × C_main`: one wake per round, plus a
+second main-agent turn when each user's answer resumes the loop.
 
-Inside the conductor a script-backed bounded foreground poll, costliest on the
-main thread, is free while waiting (no model tokens while the script polls,
-nothing user-facing blocked). A connector-only conductor pays for model wakes
-but still keeps fix-round state out of the main context when those wakes resume
-the same conductor without releasing ownership. `SKILL.md` therefore selects a
-conductor-local detector directly, using the script where available and an
-equivalent connector or API loop otherwise. A connector with instantaneous
-reads but no conductor-local wait or scheduled same-conductor wake fails the
-gate and uses the main-owned mechanism ladder.
+Conductor ownership costs `(2 + J + J_user) × C_main`: the spawn, the
+terminal report, one wake per surfaced interruption, and, for a user-routed one,
+a second main-agent turn when the user's answer arrives before the conductor can
+resume. Beyond those wakes, every watch and fix tool call bills at `C_cond`
+instead of `C_main`.
+
+Measured sessions put `C_main` at 300–500k tokens in real PR sessions against a
+20–60k conductor brief: a 5x to 25x per-call ratio, paid at cached-read prices on
+every call. (A 2026-08 local usage audit; the 2026-08-02 devlog note records it.)
+
+On orchestration wakes alone, the conductor wins when
+`2 + J + J_user < N + J_user`, which cancels to `2 + J < N` because the
+user-answer turns occur under either owner.
+
+The per-call savings close the gap well before that. A single fix round of a few
+dozen tool calls replays roughly
+`20 × C_main` when run in-main, against `20 × C_cond` under a conductor. At the
+measured 5x to 25x ratio, that one round's difference already exceeds the
+conductor's two fixed wakes (`2 × C_main`).
+
+The comparison stays governed by the formula, not a blanket rule:
+
+- Rounds carrying real fix work favor the conductor.
+- An exchange whose interruptions rival its rounds favors the already-awake main
+  agent (`J` large against N, e.g. two one-call rounds each requiring a separate
+  main-agent judgment).
+
+A user-routed pause contributes to both `J` and `J_user`: surfacing the
+interruption stays conductor-specific, but the answer turn is shared and does not
+move the wake-only break-even. A one-round exchange favors the main agent only
+when that round is itself trivial (a couple of calls); by the ratio above, a
+single substantive fix round already repays the conductor's fixed wakes.
+
+N and J are unknowable at invocation, when the owner is chosen, so the formula
+audits an exchange in hindsight; it does not route one upfront.
+
+Routing lives in SKILL.md's owner decision, which defaults to the conductor on
+the platform gate alone. The asymmetry above is why. A clean pass under a
+conductor wastes at most
+one main-context wake over the cheapest in-main watch: its two fixed wakes
+against the watcher's one. A substantive exchange wrongly kept in-main pays the
+5x to 25x per-call ratio on every tool call of every round.
+
+Inside the conductor, a script-backed bounded foreground poll is free while
+waiting: no model tokens while the script polls, nothing user-facing blocked. The
+same poll is the costliest pattern on the main thread. A connector-only conductor
+pays for model wakes, but still keeps fix-round state out of the main context
+when those wakes resume the same conductor without releasing ownership.
+
+`SKILL.md` therefore selects a conductor-local detector directly, using the
+script where available and an equivalent connector or API loop otherwise. A
+connector with instantaneous reads but no conductor-local wait or scheduled
+same-conductor wake fails the gate and uses the main-owned mechanism ladder.
 
 ## Conductor: Context Rotation
 
 Rotation is a mid-exchange optimization, not a routing or safety rule. Evaluate
-it only after an existing convergence checkpoint records a justified go and
-the exchange reaches the quiescent transfer boundary in `conductor.md`.
+it only after an existing convergence checkpoint records a justified go and the
+exchange reaches the quiescent transfer boundary in `conductor.md`.
 
-Let `K` be the expected remaining conductor calls, `C_old` the accumulated old
-conductor context replayed by each call, and `C_new` the replacement's smaller
-context replay. Let `H_old` be the old conductor's pointer-record write cost,
-`S_main` be all main-agent coordination turns (reconstructing the private brief,
-spawning the replacement, receiving its reconciliation, persisting only the
-forge-derived result, coordinating the ownership transfer, and sending the
-replacement the activation message that tells it release landed), and `R_new`
-the replacement's pointer-record read, private-brief load, read-only forge
-refresh, reconciliation, and state reconstruction cost. Continuing costs
-roughly:
+The comparison uses these terms:
+
+- `K`: the expected remaining conductor calls.
+- `C_old`: the accumulated old-conductor context replayed by each call.
+- `C_new`: the replacement's smaller context replay.
+- `H_old`: the old conductor's pointer-record write cost.
+- `S_main`: all main-agent coordination turns: reconstructing the private brief,
+  spawning the replacement, receiving its reconciliation,
+  persisting only the forge-derived result, coordinating the ownership transfer,
+  and sending the replacement the activation message that tells it release
+  landed.
+- `R_new`: the replacement's pointer-record read, private-brief load, read-only
+  forge refresh, reconciliation, and state reconstruction cost.
+
+Continuing costs roughly:
 
 ```text
 K × C_old
@@ -184,19 +212,23 @@ K × (C_old - C_new) > H_old + S_main + R_new
 ```
 
 Estimate the terms for the work actually expected, including watcher wakes,
-fixes, verification, replies, and terminal scans. The pointer-record write runs
-at the old context size; every coordination turn, private-brief reconstruction,
-and persisted forge-derived reconciliation result in the ownership handshake
-replays the main context; and the pointer-record read, forge refresh, and
-reconstruction grow the new context before remaining calls begin. Omitting any
-of those terms creates a false saving. When little work is likely to remain, or
-the estimate is materially uncertain, keep the existing conductor.
+fixes, verification, replies, and terminal scans. Three of them are easy to
+undercount:
+
+- The pointer-record write runs at the old context size.
+- Every coordination turn, private-brief reconstruction, and persisted
+  forge-derived reconciliation result in the ownership handshake replays the main
+  context.
+- The pointer-record read, forge refresh, and reconstruction grow the new context
+  before remaining calls begin.
+
+Omitting any of those terms creates a false saving. When little work is likely to
+remain, or the estimate is materially uncertain, keep the existing conductor.
 
 On current hosts `K`, `C_old`, and `C_new` are not observable: no host exposes
-its own context size, the replacement's, or its remaining-call count. The
-comparison is therefore applied through a qualitative proxy at the checkpoint.
-Rotate only when both of these hold; either one failing keeps the existing
-conductor:
+its own context size, the replacement's, or its remaining-call count. So apply
+the comparison through a qualitative proxy at the checkpoint. Rotate only when
+both of these hold; either one failing keeps the existing conductor:
 
 - The checkpoint's evidence expects several more blocker-sustained fix rounds,
   not a final triage push.
@@ -204,11 +236,11 @@ conductor:
   output, host compaction or context-limit warnings, or repeated within-turn
   state reconstruction.
 
-The proxy stays advisory. It never turns either condition into a fixed
-threshold, and both conjoined keep a single strained signal from forcing a
-handoff that little remaining work would not repay.
+The proxy stays advisory. It never turns either condition into a fixed threshold,
+and the two conjoined keep a single strained signal from forcing a handoff that
+little remaining work would not repay.
 
-This comparison is advisory at a checkpoint. It does not turn ten rounds,
-elapsed time, idle time, context size, or any other fixed threshold into an
-automatic kill switch, and it never relaxes the quiescence or exactly-once
+This comparison is advisory at a checkpoint. It does not turn ten rounds, elapsed
+time, idle time, context size, or any other fixed threshold into an
+automatic kill switch. It never relaxes the quiescence or exactly-once
 ownership-transfer gates.
