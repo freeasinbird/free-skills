@@ -6,7 +6,7 @@ Software is a communal craft. Every project depends on work that came before it:
 
 The moat in software is execution: infrastructure, platform, service, craft. It doesn't need to be at the level of ideas. If someone builds something valuable using our work, that value belongs to them. But if someone improves the knowledge itself (fixes a bug, refines an algorithm, extends a pattern), that improvement belongs to everyone.
 
-## How we choose licenses
+## How We Choose Licenses
 
 We match the license to the type of work.
 

@@ -1,4 +1,4 @@
-# Review detection and waiting
+# Review Detection and Waiting
 
 `watch-review.sh`, bundled beside `SKILL.md`, is the canonical executable
 detector where a shell and host CLI are available. An API or repository
@@ -18,7 +18,7 @@ connector because the script cannot run.
 - [Scheduled wake contract](#scheduled-wake-contract)
 - [Cadence and cap](#cadence-and-cap)
 
-## Event-anchored baselines
+## Event-Anchored Baselines
 
 Anchor the baseline to the event that should produce the pass, not to watcher
 startup:
@@ -91,7 +91,7 @@ At the same boundary, record the expected PR head plus base branch and base
 tip from the host. Pass the expected head to the watcher; retain the base for
 the final freshness guard.
 
-## Snapshot sources and paging
+## Snapshot Sources and Paging
 
 Capture three independent sources:
 
@@ -143,7 +143,7 @@ identity. Compare page metadata too. If any value differs, discard both
 mixed-time scans and restart until two complete scans match. Individual page
 sequences or a partial boundary fingerprint do not prove coherent state.
 
-## Reviewer identity and trigger
+## Reviewer Identity and Trigger
 
 Establish identity in this order:
 
@@ -181,7 +181,7 @@ signal. Before another capped wait, rerun reviewer detection and update the
 record only when a replacement identity, trigger, or signal is actually
 observed.
 
-## Signals and login forms
+## Signals and Login Forms
 
 A round completes only on target-reviewer activity after the baseline:
 
@@ -211,7 +211,7 @@ Author fields and login forms follow the API:
 `--rest-login` only for a machine-user reviewer or another form the automatic
 normalization cannot derive.
 
-## Watcher invocation
+## Watcher Invocation
 
 Run the script by path from the PR checkout:
 
@@ -249,7 +249,7 @@ Every positive match still needs round attribution before it is accepted.
 If a matched review/comment is stale, scan reactions separately because the
 script exits on the positive item before reaching a clean-pass reaction.
 
-## Connector or API polling
+## Connector or API Polling
 
 When the exchange owner has no shell or host CLI, reproduce the watcher
 contract through the available API or repository connector. Use the exact
@@ -283,7 +283,7 @@ polls, not what counts as a completed round. Under conductor ownership, grant
 ownership, the mechanism ladder can use a scheduled connector or API poll even
 when scheduling cannot target a subagent.
 
-## Scheduled wake contract
+## Scheduled Wake Contract
 
 A scheduled wake changes re-entry, not detection. Every wake executes the same
 detector contract, through the script or equivalent API/connector snapshots,
@@ -306,7 +306,7 @@ one final `--cap-minutes 0` script poll or complete connector snapshot so the
 tail is scanned, then stop and report quiet, pending, or incomplete. The
 scheduler must be cancellable and must avoid overlapping runs.
 
-## Cadence and cap
+## Cadence and Cap
 
 A no-model poll can check every 60–90 seconds. Any path that wakes a model per
 check should use roughly 4–5 minutes. These are separate layers: a scheduled

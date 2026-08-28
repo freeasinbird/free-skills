@@ -108,7 +108,7 @@ workspace outside the repo.
   48. `blank-rich-shape-mechanics-still-blocks`: retains the local-document gate
       when a composed shape includes a richer capability.
 
-## Re-running
+## Re-Running
 
 1. Create one scratch git repository per eval with a README that documents
    simple build, test, lint, and format commands. For eval 1, omit AGENTS.md.

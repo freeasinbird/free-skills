@@ -39,7 +39,7 @@ authority. Obey a platform-required approval prompt, but do not invent a
 conversational permission gate when invocation and the workflow safeguards
 already authorize the action.
 
-## Route ownership before waiting
+## Route Ownership Before Waiting
 
 **Default to one conductor subagent.** First resolve only the event-boundary
 facts needed for its brief. Request the least inherited parent context the
@@ -126,9 +126,9 @@ judgment, not the cheapest watcher tier. Read that reference before spawning;
 it contains the ready-to-use brief, turn discipline, checkout alignment,
 rotation protocol, and lease rules.
 
-## The exchange
+## The Exchange
 
-### 1. Resolve the PR and anchor the baseline
+### 1. Resolve the PR and Anchor the Baseline
 
 Resolve the current branch's PR and record the event that should produce the
 next pass. For an open- or push-triggered wait, use the host's open, ready, or
@@ -147,7 +147,7 @@ check belongs to the exchange owner and is not repeated later.
 Read `references/detection.md` for host-event queries, the two-reading
 pre-push fallback, source paging, login forms, and attribution caveats.
 
-### 2. Identify and, if needed, request the reviewer
+### 2. Identify and, If Needed, Request the Reviewer
 
 Prefer the project's recorded automated-reviewer identity, trigger, and
 status signals. Otherwise detect a bot that actually submits reviews or a
@@ -160,7 +160,7 @@ existing reviewer, in the project's designated unmanaged conventions section.
 Never record an absence. Request a command-triggered reviewer once when no
 request is pending; do not re-trigger every poll.
 
-### 3. Wait for new activity
+### 3. Wait for New Activity
 
 **Conductor-owned exchange:** when a shell and host CLI are available, run
 `watch-review.sh` as a bounded foreground command inside the conductor. When
@@ -222,7 +222,7 @@ All detection mechanics, scheduled-wake rules, cadence, status reactions, API
 field/login forms, and script exit semantics live in
 `references/detection.md`.
 
-### 4. Address feedback
+### 4. Address Feedback
 
 Read `references/review-response.md` before changing the branch. Its gates are
 part of this workflow, not optional advice.
@@ -249,7 +249,7 @@ main ownership, delegate a fixer only when write-capable delegation is
 available and permitted, the round is long, and the main context dwarfs the
 fixer's brief; otherwise address it in main.
 
-### 5. Converge on a rising bar
+### 5. Converge on a Rising Bar
 
 After a fix push, advance the baseline and await the newly triggered pass. A
 decline-only round ends the exchange because unchanged code needs no confirming
@@ -300,7 +300,7 @@ with a tested script or check.
 The full taper, final-push, checkpoint, recurrence, refute-pass, and ledger
 rules live in `references/review-response.md`.
 
-### 6. Report the ledger
+### 6. Report the Ledger
 
 Every finding ends as fixed (pushed SHA), declined (reason), deferred (linked
 issue), or explicitly outstanding for the human. State any no-blocker call

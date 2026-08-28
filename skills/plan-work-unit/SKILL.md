@@ -20,7 +20,7 @@ contract and one current implementation plan that a fresh implementation task
 can follow. Planning is this operation's finish line; it never authorizes
 implementation.
 
-## Hold the routing boundary
+## Hold the Routing Boundary
 
 - **Plan or replan an issue:** use this skill. "Plan #N" both selects and
   authorizes the planning operation; a project restriction can still narrow
@@ -61,7 +61,7 @@ comment mutations through pull requests. Only a declaration that speaks to
 issue or comment writes, or to this operation's planning handoff, restricts
 this surface. Absent such a restriction, proceed.
 
-## Establish the planning surface
+## Establish the Planning Surface
 
 Verify the planning preconditions first, from the project instructions and the
 forge alone, before inspecting the repository or preparing any artifact: no
@@ -108,7 +108,7 @@ capabilities, and any dependency or authorization blocker. Do not claim the
 issue, create an implementation branch, edit implementation files, or open a
 pull request.
 
-## Write the contract and plan
+## Write the Contract and Plan
 
 Write the contract record and the plan comment with ordinary care, not a lock.
 Prefer an append or field-scoped edit over a whole-body replacement, so a
@@ -128,7 +128,7 @@ exclusive-ownership model, follow it. Carry the grounding revision into the
 handoff and the invalidation criteria into the plan, so a later task can tell
 whether the plan still holds.
 
-## Complete the authoritative contract
+## Complete the Authoritative Contract
 
 Bring the issue body, or the project-designated work-contract record, to the
 shape the project requires. Preserve useful context and unrelated owner text.
@@ -165,7 +165,7 @@ known dependency or ordering blocker does not prevent the planning handoff;
 record it in the contract and plan. Stop planning only when missing information
 or an owner decision prevents a truthful contract or code-grounded plan.
 
-## Author one current implementation plan
+## Author One Current Implementation Plan
 
 Post the plan only after the contract is complete, whether implementation is
 startable or explicitly blocked. Start it by naming the selected authoritative
@@ -190,7 +190,7 @@ supports them, distinguish confirmed facts from assumptions, and keep
 alternatives or deferred work out of the execution sequence unless they block
 the unit.
 
-## Keep a single current plan
+## Keep a Single Current Plan
 
 Search the issue for an existing implementation-plan comment before posting.
 On replanning, apply the retirement-first rule above to any plan already known
@@ -211,7 +211,7 @@ retirement-first rule above, stop with the old plan visibly non-current, and
 report the partial unsafe state, including the prepared replacement text the
 failed write was meant to publish.
 
-## Report the handoff
+## Report the Handoff
 
 Verify that the authoritative contract record selected earlier, either the
 issue body or the project-designated record, contains the complete contract.

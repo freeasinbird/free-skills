@@ -1,4 +1,4 @@
-# Review response and convergence
+# Review Response and Convergence
 
 Read this reference before changing the branch in response to an automated
 review and while deciding whether another round earns its cost.
@@ -14,7 +14,7 @@ review and while deciding whether another round earns its cost.
 - [Finding-class recurrence](#finding-class-recurrence)
 - [Disposition ledger](#disposition-ledger)
 
-## Disposition rules
+## Disposition Rules
 
 Evaluate each finding on its merits:
 
@@ -28,7 +28,7 @@ Evaluate each finding on its merits:
 A round dispositions every finding it contains, not only the blockers that
 earned another round. Nothing carries silently into a later pass.
 
-## Fold, push, verify, reply, resolve
+## Fold, Push, Verify, Reply, Resolve
 
 Where the project folds review fixes into their originating commits, the
 round order is a gate:
@@ -58,7 +58,7 @@ If the project appends review-fix commits instead, cite the pushed fix commit
 as-is. The pushed-ref verification still applies. A decline has no commit;
 reply with the reason only.
 
-## Main-owned fixer choices
+## Main-Owned Fixer Choices
 
 This section applies only after the conductor was skipped for a named gate.
 
@@ -83,7 +83,7 @@ If a main-owned exchange grows to roughly four or more rounds and the
 platform can resume a write-capable fixer, keep the same fixer alive. It pays
 the context rebuild once and keeps round debris out of the main context.
 
-## Rising convergence bar
+## Rising Convergence Bar
 
 A fix round is a round that pushes code. Decline-only rounds do not advance
 the count and end the exchange because no new pass is needed for unchanged
@@ -103,7 +103,7 @@ before waiting. Otherwise the watcher immediately replays old feedback. A
 push-triggered reviewer runs again automatically; a command-triggered one
 must be requested once after the push.
 
-## Final triage push
+## Final Triage Push
 
 From the third fix round onward, a pass with no blockers is the taper signal.
 Triage every non-blocker:
@@ -127,7 +127,7 @@ the foreground wait is cheap, so the conductor waits to quiescence.
 Past the final triage push, a new blocker reopens fix rounds. Further
 non-blockers receive terminal deferrals or declines without another push.
 
-## Thrash and checkpoints
+## Thrash and Checkpoints
 
 Stop and surface thrash when:
 
@@ -145,7 +145,7 @@ or materially uncertain call with the current ledger for human judgment.
 Repeat the checkpoint at the same cadence while blockers continue; an earlier
 go does not authorize an unbounded loop.
 
-## Finding-class recurrence
+## Finding-Class Recurrence
 
 Classify every finding, regardless of source, and sweep its class on first
 appearance. If a second member appears despite that sweep, widen the class
@@ -165,7 +165,7 @@ instruction omitted another clause indicate prose is re-deriving a program.
 Escalate to the owner with the recurrence evidence and recommend moving the
 rule into a small tested script or check.
 
-## Disposition ledger
+## Disposition Ledger
 
 At termination every finding has exactly one state:
 

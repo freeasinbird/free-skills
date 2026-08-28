@@ -10,7 +10,7 @@ work with [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
 [Codex](https://openai.com/index/introducing-codex/), and other agents that
 load `SKILL.md` prompts.
 
-## Quick install
+## Quick Install
 
 The [`skills` CLI](https://github.com/vercel-labs/skills) installs straight
 from this repo (no clone) on macOS, Linux, and Windows:
@@ -52,7 +52,7 @@ where your agent looks for skills:
 The [quick install](#quick-install) above is the easiest path; use the methods
 below for manual setup or a git-tracked local clone.
 
-### Manual install
+### Manual Install
 
 Place the skill yourself: copy or symlink its directory into the agent's
 skills location (symlink it from a clone if you want it to track upstream),
@@ -65,7 +65,7 @@ mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/license-philosopher" ~/.claude/skills/license-philosopher
 ```
 
-### Convenience: link every skill from a clone (macOS / Linux)
+### Convenience: Link Every Skill From a Clone (macOS / Linux)
 
 If you'd rather not use Node, or you keep a local clone and prefer
 git-tracked symlinks, the `link-skills.sh` helper installs all skills into
@@ -84,7 +84,7 @@ Re-run it after a `git pull` that adds or removes skills. Pass `--adopt` to
 replace an earlier copied install with a tracking symlink; see
 `scripts/link-skills.sh --help` for all options.
 
-## Repository layout
+## Repository Layout
 
 ```text
 skills/

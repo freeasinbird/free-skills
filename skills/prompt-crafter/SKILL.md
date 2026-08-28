@@ -57,7 +57,7 @@ The working knowledge lives in three references, loaded on demand:
 - `references/verification.md`: The mechanical check battery as
   copy-pasteable commands.
 
-## Workflow: Review or Audit An Existing Prompt Set
+## Workflow: Review or Audit an Existing Prompt Set
 
 1. **Load the prior decisions relevant to the payloads being reviewed.**
    Read the host project's authoring conventions, then any decision

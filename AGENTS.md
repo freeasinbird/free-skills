@@ -171,7 +171,7 @@ translate agent jargon or search for the conclusion.
 
 <!-- /agents-md:managed:communication -->
 
-## Build, test, run
+## Build, Test, Run
 
 This is a markdown-only project: no compile or build step.
 
@@ -193,7 +193,7 @@ npx prettier --check '**/*.md'
 npx prettier --write '**/*.md'   # to fix
 ```
 
-### Readability report
+### Readability Report
 
 ```sh
 ./scripts/check-readability.sh [file ...]
@@ -214,7 +214,7 @@ Checks below. Broader Markdown and script CI remains future work.
 CLAUDE.md is a pointer that imports AGENTS.md; edit AGENTS.md, never the
 pointer.
 
-## Project structure
+## Project Structure
 
 ```text
 skills/
@@ -228,7 +228,7 @@ file is `SKILL.md`: the skill prompt with YAML frontmatter (name and
 description) that an agent loads to execute the skill. Additional files
 (reference material, examples, sub-prompts) may live alongside it.
 
-## Architecture invariants
+## Architecture Invariants
 
 1. **One directory per skill.** All skill content lives under
    `skills/<skill-name>/`. No top-level loose skill files. This prevents

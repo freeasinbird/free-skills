@@ -5,7 +5,7 @@ commands, and coding standards) live in
 [AGENTS.md](AGENTS.md). That file is the single source of truth for both
 human contributors and automated agents.
 
-## AI-assisted contributions
+## AI-Assisted Contributions
 
 AI-assisted contributions are welcome when they are understood, reviewed, and maintained by the human contributor.
 

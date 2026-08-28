@@ -36,7 +36,7 @@ Two skills, one clean seam:
 Reach for this one _early_. The decisive reason is timing: the _before_ state
 usually only exists before the fix lands, so prompting late loses it.
 
-## When to use it
+## When to Use It
 
 - Implementing a visual change: a UI bug or regression, a CSS/layout/spacing/
   color/typography change, a new or restyled component or screen, a theming
@@ -48,7 +48,7 @@ usually only exists before the fix lands, so prompting late loses it.
 Bias toward suggesting this proactively on visual work, even unprompted:
 capturing the _before_ is cheap now and impossible later.
 
-## When NOT to use it
+## When NOT to Use It
 
 - Purely non-visual changes: logic, backend, data, build, or config work with
   no rendered output.
@@ -56,9 +56,9 @@ capturing the _before_ is cheap now and impossible later.
 - You already have the image(s) in hand and only need to attach them: go
   straight to the gh-imgup skill; that's its trigger, not this one.
 
-## Capture the before/after
+## Capture the Before/After
 
-### 1. Decide whether a pair is warranted
+### 1. Decide Whether a Pair Is Warranted
 
 - **Before/after pair** for visible bugs/regressions and any layout, spacing,
   color, typography, or restyle change: the point is the _difference_.
@@ -66,7 +66,7 @@ capturing the _before_ is cheap now and impossible later.
   meaningful "before".
 - **Skip** entirely for non-visual changes (see When NOT to use it).
 
-### 2. Capture the _before_ first
+### 2. Capture the _before_ First
 
 The before state is perishable: capture it before the fix exists.
 
@@ -79,7 +79,7 @@ The before state is perishable: capture it before the fix exists.
   e.g. `git worktree add ../before-state <base-branch>`, run from there,
   capture, then remove the worktree.
 
-### 3. Capture the _after_ under identical conditions
+### 3. Capture the _after_ Under Identical Conditions
 
 Apply the change, drive the app to the **same** screen and state, capture →
 `after.png`. Identical conditions are the whole point: the only visible
@@ -105,7 +105,7 @@ difference between the two images must be the change itself. Hold constant:
 - **Crop region**: the same framing for both shots (see framing), so they
   line up when placed side by side.
 
-### 4. Framing & cropping
+### 4. Framing & Cropping
 
 - **Crop to the affected component or region, not the whole screen**, unless
   the change is genuinely page-level (overall layout, cross-page spacing). A
@@ -168,7 +168,7 @@ These tools are examples for common host setups, not requirements: use
 whatever capture mechanism your environment provides, applying the same
 craft (tight crop, identical conditions, deterministic state).
 
-### Reference capture script
+### Reference Capture Script
 
 Where headless Chrome and Node 22+ are available, `capture.mjs` alongside
 this file makes the mechanics of steps 3–5 executable in one command:
@@ -228,7 +228,7 @@ refuses with exit 69 and the prose in steps 3–6 is the specification:
 apply the same craft with whatever capture mechanism your environment
 provides.
 
-### 5. Determinism & hygiene
+### 5. Determinism & Hygiene
 
 - **Disable animations** and wait for network-idle and the target element to be
   visible before capturing, so shots are stable and repeatable.
@@ -247,7 +247,7 @@ provides.
   apply, so read it there rather than working from memory here. (The two
   reinforce each other: fixture data also keeps secrets out of the frame.)
 
-### 6. Check the shots before handing off
+### 6. Check the Shots Before Handing Off
 
 Open each captured image and look at it; don't publish evidence you haven't
 verified. Confirm:
@@ -277,7 +277,7 @@ review under _Compose & attach_ (a different axis). You'll open each image
 again at upload time for that review;
 doing the quality check now means one look covers both before you hand off.
 
-## Compose & attach
+## Compose & Attach
 
 Hand the captured files to the **gh-imgup skill**, which uploads them and
 returns renderable Markdown. Do not re-implement upload or invent a host here.
@@ -352,7 +352,7 @@ step is gh-imgup's; this skill only produces the images.
 
 ## Examples
 
-### A CSS spacing bug fix (before/after pair)
+### A CSS Spacing Bug Fix (Before/After Pair)
 
 A list's rows are cramped: vertical padding is too tight. Before touching the
 CSS: run the app on the PR's base branch (its merge-base, not always `main`;
@@ -366,7 +366,7 @@ padding fix, reload the **same** route at the **same** viewport with the
 image (see _Compose & attach_), hand all of them to gh-imgup upload-only, and
 compose a labeled Before/After block (both palettes) into the PR description.
 
-### A net-new component (single _after_ shot)
+### A Net-New Component (Single _after_ Shot)
 
 A brand-new empty-state card: there's no meaningful "before". Drive the app to
 the empty state with fixture data at a fixed viewport, element-capture the card

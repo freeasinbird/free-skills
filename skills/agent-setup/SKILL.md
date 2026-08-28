@@ -27,7 +27,7 @@ are managed across projects; project-specific sections (build/test/run,
 architecture invariants, conventions) are guided interactively during
 init and left untouched during updates.
 
-## Detecting mode
+## Detecting Mode
 
 - When one request explicitly asks for both setup (init, adoption, or update)
   and coordination reassessment, protect any existing AGENTS.md before setup
@@ -66,8 +66,8 @@ init and left untouched during updates.
   around malformed remnants leaves a partially adopted file that only
   fails later, so the user should fix or remove them first. One exact,
   correctly ordered nested pair with no managed `done` block is not a
-  remnant: that is the documented opt-out (see "Managed section
-  markers"), so it doesn't trigger this stop, and such a file falls to
+  remnant: that is the documented opt-out (see "Managed Section
+  Markers"), so it doesn't trigger this stop, and such a file falls to
   the adoption bullet below.
 - AGENTS.md exists without markers → ask whether to adopt management or
   leave unmanaged. To adopt: match sections to canonical keys by heading,
@@ -114,7 +114,7 @@ the High-assurance mandatory-note list beside it. Update mode reads
 this line; it is the profile's only record (no separate config or
 metadata file).
 
-## Init mode
+## Init Mode
 
 1. Read the project to understand language, build system, test framework,
    and directory structure.
@@ -142,7 +142,7 @@ metadata file).
    Verify that write before moving on: init pastes the managed blocks by
    hand, and every comparison update mode makes depends on their
    byte-exactness. Where the running agent can execute shell scripts, run
-   the comparator described under "Update mode". Under Decision-log or
+   the comparator described under "Update Mode". Under Decision-log or
    High-assurance, pass `--require-all` and require exit 0. Under
    Standard, drop the flag: the run must exit 0 with `missing: devlog`
    as its only missing line and every other key reporting `ok:`. Without
@@ -170,18 +170,18 @@ metadata file).
    exception, where the pointers in the blocks make a stale copy drift
    to fix rather than an offer); never overwrite silently.
 
-7. Audit standard project files; see "Standard project files" below.
+7. Audit standard project files; see "Standard Project Files" below.
    Report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
-   Also check for an automated-reviewer record; see "Automated reviewer
-   record" below.
-8. Check the settings listed under "Repo settings" below and offer to align
+   Also check for an automated-reviewer record; see "Automated Reviewer
+   Record" below.
+8. Check the settings listed under "Repo Settings" below and offer to align
    them. Report any that can't be checked or set (wrong permissions,
    non-GitHub forge).
 9. Summarize what was created, what the user should fill in, which
    standard files are missing, and which repo settings need attention.
 
-## Update mode
+## Update Mode
 
 1. Read `references/canonical-sections.md` for current canonical text.
 2. Read the project's AGENTS.md.
@@ -197,7 +197,7 @@ metadata file).
    either absent or exactly one correctly ordered pair, and, when a
    managed `done` block is present, that pair sits inside it. (One exact
    pair with no managed `done` block is the documented opt-out, not a
-   malformation; see "Managed section markers".) On any malformation, stop and report it; never refresh
+   malformation; see "Managed Section Markers".) On any malformation, stop and report it; never refresh
    (a broken boundary would pull project-specific text into the managed
    region, and the refresh would delete it). Nothing below reads the file
    for meaning until its boundaries are trusted, so this precedes the
@@ -227,7 +227,7 @@ metadata file).
      record the line.
 5. Protect the reviewer record before refreshing: if an automated-reviewer
    record appears inside a managed block, resolve its location first; see
-   "Automated reviewer record".
+   "Automated Reviewer Record".
 6. For each managed block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`,
@@ -243,10 +243,10 @@ metadata file).
    work-unit stage record. Within either record, create or change only the
    requested fields or stages; preserve every unrequested field or stage and
    all unrelated unmarked content verbatim. The only structural exception is
-   an owner-approved legacy-stage migration described under "Work-unit stages
-   (optional)"; it may relocate an unrequested stage's existing lines without
-   altering them. See "Work contracts and coordination" and "Work-unit stages
-   (optional)".
+   an owner-approved legacy-stage migration described under "Work-Unit Stages
+   (Optional)"; it may relocate an unrequested stage's existing lines without
+   altering them. See "Work Contracts and Coordination" and "Work-Unit Stages
+   (Optional)".
 8. If a canonical section is missing entirely, offer to insert it at its
    conventional position; a section carrying `docs/agent-workflow.md`
    `§slug` pointers settles that file in the same decision (see
@@ -301,9 +301,9 @@ metadata file).
 
 10. Audit standard project files (see below) and flag any newly missing;
     also check the automated-reviewer record, any coordination model, and any
-    optional work-unit stage record; see "Automated reviewer record", "Work
-    contracts and coordination", and "Work-unit stages (optional)".
-11. Check the settings listed under "Repo settings" and offer to align any
+    optional work-unit stage record; see "Automated Reviewer Record", "Work
+    Contracts and Coordination", and "Work-Unit Stages (Optional)".
+11. Check the settings listed under "Repo Settings" and offer to align any
     that have drifted.
 
 Where the running agent can execute shell scripts, run this skill's
@@ -328,7 +328,7 @@ post-write check), not a Standard project, whose absent `devlog` block
 would fail it (see Profiles). Review its diffs with the user as step 6
 describes. Without shell access, follow the steps manually as written.
 
-## Coordination reassessment
+## Coordination Reassessment
 
 Run this mode only for the explicit owner request described under "Detecting
 mode". It analyzes the effective project-specific coordination model and may
@@ -406,24 +406,24 @@ adoption, or managed-section update.
    field change in step 5's exact diff and step 6 applied it; otherwise leave
    the record unchanged and keep the triggers in the report.
 
-## Conventional section order
+## Conventional Section Order
 
 ```text
-1. Header/intro                          (project-specific)
-2. Decision notes                        (managed: devlog;
+1. Header/Intro                          (project-specific)
+2. Decision Notes                        (managed: devlog;
                                           note-keeping profiles only)
-3. Default agent finish line             (managed: finish-line)
-4. Context discipline                    (managed: context)
-5. Writing for humans                    (managed: communication)
-6. Build, test, run                      (project-specific)
+3. Default Agent Finish Line             (managed: finish-line)
+4. Context Discipline                    (managed: context)
+5. Writing for Humans                    (managed: communication)
+6. Build, Test, Run                      (project-specific)
 7. [Other project-specific sections]     (project-specific)
 8. Branches                              (managed: branches)
-9. Pull requests + Handing off the PR    (managed: pull-requests)
+9. Pull Requests + Handing Off the PR    (managed: pull-requests)
 10. Commits                              (managed: commits)
-11. Definition of done for an increment  (managed: done)
+11. Definition of Done for an Increment  (managed: done)
 ```
 
-## Managed section markers
+## Managed Section Markers
 
 Each canonical section is wrapped with HTML comment markers:
 
@@ -452,7 +452,7 @@ markers behind as plain project content; that is expected and fine. An
 absent `devlog` block under Standard is that project's profile rather
 than an opt-out (see Profiles).
 
-## Project-specific section guidance
+## Project-Specific Section Guidance
 
 During init, guide the user through these sections interactively. If
 the project is too early for these decisions (fresh repo, no code yet),
@@ -467,7 +467,7 @@ gotcha catalog) belongs in `docs/` behind a one-line pointer that names
 when to read it ("before editing the parser, read
 `docs/format-spec.md`"), not inlined.
 
-### Work contracts and coordination
+### Work Contracts and Coordination
 
 Use these defaults: direct user-assigned work needs no issue; concurrent,
 backlog, or cross-session work uses a tracker issue; agents do not self-select;
@@ -517,9 +517,9 @@ In update mode, detect and report whether an existing coordination record has
 all four fields. Preserve it as unmanaged content unless the owner explicitly
 requests a field change. Do not reassess an established model while syncing
 canonical sections; topology reassessment is a separate owner-assigned work
-unit under "Coordination reassessment".
+unit under "Coordination Reassessment".
 
-### Work-unit stages (optional)
+### Work-Unit Stages (Optional)
 
 When a project adopts distinct stages, record them in an unmanaged,
 project-specific AGENTS.md section near the `Agent-setup profile:` line. That
@@ -593,7 +593,7 @@ leave the record unchanged. Leave an absent record alone unless the owner
 explicitly requests stage adoption; then create only the requested stage
 definitions. Never fabricate a stage record or move it inside a managed block.
 
-### Header/intro
+### Header/Intro
 
 Write a one-paragraph intro: project name, pointer to the spec document
 (usually README.md), and a sentence on what AGENTS.md covers. Also write
@@ -601,7 +601,7 @@ the canonical file rule into AGENTS.md (intro or CI subsection):
 "CLAUDE.md is a pointer that imports AGENTS.md; edit AGENTS.md, never
 the pointer."
 
-### Build, test, run
+### Build, Test, Run
 
 - Detect language and build system from project files. If no code
   exists yet, leave this section as a placeholder and skip to
@@ -619,18 +619,18 @@ the pointer."
   `clippy` for Rust). The goal is a single command that can lint and a
   single command that can format, both runnable in CI.
 
-### Architecture invariants (optional)
+### Architecture Invariants (Optional)
 
 - Ask: "What rules protect this codebase's structural integrity?"
 - Each invariant states what it prevents and how it's enforced.
 - Number them for stable cross-references.
 
-### Conventions & gotchas (optional)
+### Conventions & Gotchas (Optional)
 
 - Ask: "What non-obvious patterns or footguns should a new contributor know?"
 - Framework traps, naming conventions, testing patterns, runtime quirks.
 
-### Definition of done: project checks
+### Definition of Done: Project Checks
 
 The managed `done` section includes a tool-agnostic expectation that the
 build succeeds, tests pass, and lint and formatting are clean, followed by
@@ -639,13 +639,13 @@ a placeholder for project-specific verification steps. During init, fill the
 verification commands (build command, test command, lint/format command,
 visual check method, schema round-trip if applicable).
 
-## Standard project files
+## Standard Project Files
 
 Audit for these during init and update. Report presence/absence; don't
 create them (content is project-specific), just flag what's missing and
 note why it matters.
 
-### Root signal files (GitHub-recognized)
+### Root Signal Files (GitHub-Recognized)
 
 | File                 | Purpose                                         | When needed       |
 | -------------------- | ----------------------------------------------- | ----------------- |
@@ -655,7 +655,7 @@ note why it matters.
 | `CODE_OF_CONDUCT.md` | Community standards (GitHub links from sidebar) | Open-source       |
 | `SECURITY.md`        | Vulnerability reporting policy (GitHub sidebar) | Has users         |
 
-### CI configuration
+### CI Configuration
 
 The workflow conventions assume CI exists: the finish line polls
 required checks, the commits section requires every commit green, and
@@ -666,7 +666,7 @@ lint and formatting. Check for any of:
 "Your workflow conventions depend on CI but no CI configuration was
 detected." Don't create a CI config (too project-specific), just warn.
 
-### Scaffolded by this skill (created, not just audited)
+### Scaffolded by This Skill (Created, Not Just Audited)
 
 | File                               | Purpose                                                   |
 | ---------------------------------- | --------------------------------------------------------- |
@@ -677,7 +677,7 @@ detected." Don't create a CI config (too project-specific), just warn.
 | `.github/pull_request_template.md` | PR body scaffold                                          |
 | `docs/agent-workflow.md`           | Step-local procedure the managed blocks point at          |
 
-### docs/ (project-specific; only `docs/agent-workflow.md` above is canonical)
+### docs/ (Project-Specific; Only `docs/agent-workflow.md` Above Is Canonical)
 
 | File                   | Purpose                                       | When needed      |
 | ---------------------- | --------------------------------------------- | ---------------- |
@@ -688,7 +688,7 @@ Note: projects may have additional `docs/` files for format specs,
 API references, or other concerns. These two are the baseline worth
 flagging; everything else is project-specific.
 
-## Repo settings
+## Repo Settings
 
 Several canonical conventions name or benefit from repository settings:
 merged branches auto-delete, a real merge commit is the only merge method,
@@ -745,7 +745,7 @@ On GitHub, `allow_update_branch` is the **Always suggest updating pull request
 branches** setting under Settings → General → Pull Requests. On other forges,
 look for the equivalent stale-branch/update suggestion. If the setting or its
 read is unavailable because of the forge, plan, or permissions, report that
-limitation clearly and point to the canonical "Handing off the PR" manual
+limitation clearly and point to the canonical "Handing Off the PR" manual
 freshness procedure; never infer that an unread setting is disabled.
 
 Before offering to restrict Actions workflow permissions, inspect
@@ -759,7 +759,7 @@ that prevents Actions from creating or approving pull requests. An owning
 organization or enterprise may also lock either value. Report that policy
 constraint instead of treating the setting as unsupported or disabled.
 
-### Required checks and CI matrices
+### Required Checks and CI Matrices
 
 When branch protection is configured, required status checks are matched
 by context name, and a skipped required check counts as satisfied. Both
@@ -800,7 +800,7 @@ report the limitation and point to the canonical manual freshness procedure.
 A forge merge queue may be reported as an optional capability for a busy
 repository, but it is not a canonical requirement.
 
-## Automated reviewer record
+## Automated Reviewer Record
 
 The managed `pull-requests` section tells agents to record a noticed
 automated reviewer so a review-watch can resolve who to wait on without

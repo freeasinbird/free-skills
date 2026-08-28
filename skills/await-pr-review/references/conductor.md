@@ -1,4 +1,4 @@
-# Conductor contract
+# Conductor Contract
 
 Read this reference before spawning or resuming a conductor. It owns the
 whole-exchange mechanics that do not belong in the routing-focused entry
@@ -14,7 +14,7 @@ point.
 - [Context rotation](#context-rotation)
 - [Stranded-conductor recovery](#stranded-conductor-recovery)
 
-## Spawn brief
+## Spawn Brief
 
 Start the conductor with the least inherited parent context the host exposes.
 For Codex collaboration use `fork_turns: "none"`; for Claude Code use an
@@ -76,7 +76,7 @@ conventions itself. Its reports stay compact: finding ID, one-line
 disposition, final pushed SHA or issue, checks status, and only enough context
 to decide a surfaced call.
 
-## Turn discipline
+## Turn Discipline
 
 The conductor retains ownership for the exchange. It pauses or ends a turn
 only for:
@@ -104,7 +104,7 @@ failed and the exchange belongs in the main agent. A background process
 completion that re-enters only the main-agent layer does not satisfy this
 contract; it can strand the exchange and send a misleading completion notice.
 
-## Checkout gate
+## Checkout Gate
 
 The conductor rewrites and force-pushes the PR branch, so it needs either:
 
@@ -140,7 +140,7 @@ Exclusivity lasts through surfaced pauses until the terminal ledger. A human
 change requested mid-exchange goes through the conductor or ends the exchange
 first.
 
-## Pinned force-with-lease
+## Pinned Force-With-Lease
 
 Every rewritten push pins the lease explicitly:
 
@@ -159,7 +159,7 @@ A failed pinned lease means someone else pushed. Stop, fetch, incorporate the
 observed remote head into local history, re-run the relevant verification,
 then advance the lease to that incorporated head for the retry.
 
-## Quiescence and reporting
+## Quiescence and Reporting
 
 The conductor waits out every review its own push triggers, including a final
 locally verifiable triage push. It emits the terminal ledger only at
@@ -214,7 +214,7 @@ thread states, current PR head, current base and its freshness result, pending
 push or review state, and any watch coverage gap. It is the conductor's
 completion, not a question to answer.
 
-## Context rotation
+## Context Rotation
 
 Preserve the same conductor through ordinary waits and review rounds. A long
 idle period, elapsed time, context size, or fixed round count is not a reason
@@ -344,7 +344,7 @@ read-only reconciliation is provisional acceptance, not permission to mutate,
 check out the PR branch in a second worktree, or claim checkout ownership
 before the one-time transfer.
 
-## Stranded-conductor recovery
+## Stranded-Conductor Recovery
 
 Treat any conductor completion notice whose report says it is still waiting
 as a stranded exchange, whether it is an ordinary conductor or an activated
