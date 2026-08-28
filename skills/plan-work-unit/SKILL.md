@@ -15,10 +15,25 @@ description: >-
 
 # Plan Work Unit
 
-Turn an explicitly assigned issue-planning operation into a durable work
-contract and one current implementation plan that a fresh implementation task
-can follow. Planning is this operation's finish line; it never authorizes
+Turn one explicitly assigned issue into a complete contract and one current,
+code-grounded implementation plan. The verified planning handoff is the finish
+line. A fresh implementation task can use it, but planning never authorizes
 implementation.
+
+Use this skill for "Plan #N" or "replan #N." Do not use it for "Handle #N,
+implementation plan in comments," where the plan is implementation input. Keep
+assessment, overlap, review, and in-chat proposal requests read-only unless the
+user explicitly authorizes planning writes.
+
+Follow this procedure:
+
+1. Verify preconditions from project instructions and the forge.
+2. Read the whole issue, inspect the repository, and record the grounding
+   revision.
+3. Retire and verify any stale plan before changing the contract.
+4. Complete the authoritative work-contract record.
+5. Post one current plan.
+6. Verify both writes, report the handoff, and stop.
 
 ## Hold the Routing Boundary
 
@@ -34,143 +49,112 @@ implementation.
   specification does not become a mutation target unless the requested
   operation says to modify it.
 
-Project instructions and explicit owner decisions govern this workflow. The
-selected work-contract record is authoritative for the work unit; the issue
-plan explains how to execute that contract and cannot silently change policy,
-scope, dependencies, or authorization.
+## Check Preconditions and Restrictions
 
-An explicit request to plan or replan an issue authorizes this operation's
-planning-only writes: bringing the authoritative work-contract record to shape,
-posting one implementation-plan comment, and making any invalidation or
-retirement edit those require. Its finish line is the verified planning handoff,
-with no branch or pull request; planning never authorizes implementation. A
-directly assigned planning request is its own authorization, so it does not
+Project instructions and explicit owner decisions govern this workflow. A
+direct plan or replan request authorizes its planning-only writes. It does not
 require a separately declared planning stage.
 
-Honor a project declaration that narrows this. When project instructions route
-every issue or comment mutation through a pull request, forbid planning-only
-writes, or declare an active stage whose allowed mutations exclude part of this
-operation's surface, that restriction governs: report the conflict as an error
-that names the restricting declaration, and stop before repository inspection or
-artifact preparation rather than performing a permitted subset of the writes.
-Read a declaration for what it actually routes. A generic default that ends
-work units changing code, docs, assets, or project state at an open pull
-request governs those deliverables, not this operation: a workflow that itself
-directs contracts or deferred work into tracker issues has not routed issue or
-comment mutations through pull requests. Only a declaration that speaks to
-issue or comment writes, or to this operation's planning handoff, restricts
-this surface. Absent such a restriction, proceed.
+The authoritative work-contract record is the selected source of truth for the
+unit. The issue plan is an implementation aid. It cannot silently change the
+contract's policy, scope, dependencies, or authorization.
 
-## Establish the Planning Surface
+Planning-only writes have a fixed mutation surface: the contract, one plan
+comment, and any required invalidation or retirement edit. The planning
+handoff ends without a branch or pull request.
 
-Verify the planning preconditions first, from the project instructions and the
-forge alone, before inspecting the repository or preparing any artifact: no
-project restriction above forbids the operation's mutation surface, the
-contemplated contract record, plan comments, and invalidation targets named
-above; and the forge offers the write capabilities that surface needs.
+A project restriction governs when it does any of the following:
 
-That mutation surface is fixed by the operation, not discovered by
-inspection: any run can find, only after inspecting code, that the contract
-or a prior plan must change, so an active stage authorizing only part of the
-surface is a restriction on the whole surface even when a particular run would
-touch just the authorized part. If a restriction covers any part of the
-surface, or project policy routes this operation's writes or its handoff
-through a pull request, report
-the error above and stop: do not perform even a permitted subset of the writes,
-do not begin that different branch-and-PR operation, and do not prepare
-ready-to-post contract or plan text.
+- Routes every issue or comment mutation through a pull request.
+- Forbids planning-only writes.
+- Declares an active stage whose allowed mutations exclude any part of the
+  fixed surface.
 
-With the preconditions verified, read the entire issue, including
-existing plan comments and linked decisions. Inspect the relevant code,
-interfaces, tests, documentation, declared dependencies, and verification
-commands. Do not infer the implementation from the issue title or produce a
-repository-agnostic outline.
+Read each declaration for what it actually routes:
 
-Record the repository revision you inspected, such as a commit identifier or
-platform equivalent, resolved from the project-declared planning base or the
-repository host's authoritative default-branch reference. This revision is the
-plan's provenance: it lets a later implementer check whether the plan has gone
-stale, so record one that can be re-checked, not a mutable local branch or
-working snapshot.
+- A generic open-PR default for code, docs, assets, or project state does not
+  restrict this operation.
+- Only a declaration about issue or comment writes, or the planning handoff,
+  restricts this surface.
 
-Identify the authoritative work-contract record from project instructions. Use
-the project-designated record when one exists; otherwise select the issue body.
-Keep that selection explicit and unchanged through preparation, planning writes,
-post-write verification, plan publication, and the final handoff.
+A precondition failure is either a restriction on any part of the surface or
+a forge that lacks a required write capability. Check these preconditions
+first, using only project instructions and the forge.
 
-Discover the project's current coordination model from its instructions,
-records, code boundaries, architecture, and recent work-unit evidence. Plans
-are evidence of intended work, not proof of safe concurrency or ordering. When
-the evidence conflicts, name the conflict and use the project's safe default.
+Report the failure as an error. Name the restricting declaration and uncovered
+targets, or name the missing capability. State what change would make the
+precondition pass. Stop before repository inspection or artifact preparation.
+Do not perform a permitted subset, start a branch-and-PR detour, or prepare
+contract or plan text.
 
-Confirm the requested operation, repository, issue state, forge write
-capabilities, and any dependency or authorization blocker. Do not claim the
-issue, create an implementation branch, edit implementation files, or open a
-pull request.
+The operation fixes the whole mutation surface before inspection. A stage
+that permits only one target still restricts the whole operation. If no such
+restriction exists and the forge supports the writes, proceed.
 
-## Write the Contract and Plan
+Once a planning write persists, a later failure is not a precondition error.
+It is the partial unsafe state covered under Replan.
 
-Write the contract record and the plan comment with ordinary care, not a lock.
-Prefer an append or field-scoped edit over a whole-body replacement, so a
-concurrent owner edit is not overwritten; on a last-write-wins forge a
-whole-body write can still lose a concurrent edit and no reread detects that, so
-do not claim it cannot happen. After writing, confirm the write reached the
-intended target with the intended content, and that exactly one current plan
-exists where a plan should; report a failed, wrong-target, or duplicate-plan
-result as an unsafe state rather than claiming completion.
+## Inspect and Record the Revision
 
-The plan is grounded in the revision you recorded, and that grounding is
-provenance, not a guarantee: the repository moves between planning and
-implementation, and no write-time check closes that gap. Do not invent a lock
-the project has not defined, re-inspect to chase a moving reference, or repair
-drift automatically; when a project declares a serialization or
-exclusive-ownership model, follow it. Carry the grounding revision into the
-handoff and the invalidation criteria into the plan, so a later task can tell
-whether the plan still holds.
+After preconditions pass:
+
+1. Read the whole issue, including plan comments and linked decisions.
+2. Inspect the relevant code, interfaces, tests, documentation, dependencies,
+   and verification commands. Do not infer an implementation from the title or
+   write a repository-agnostic outline.
+3. Record a re-checkable grounding revision, such as a commit identifier or
+   platform equivalent. Resolve it from the declared planning base or the
+   repository host's authoritative default-branch reference. This revision is
+   provenance for later staleness checks, not a mutable local branch or working
+   snapshot.
+4. Select the project-designated contract record. If none exists, select the
+   issue body. Keep that selection explicit and fixed through the run.
+5. Discover the coordination model from project instructions, records, code
+   boundaries, architecture, and recent work-unit evidence. Plans show intent,
+   not proof of safe concurrency or order. Name conflicting evidence and use
+   the project's safe default.
+6. Confirm the operation, repository, issue state, write capability,
+   dependencies, and authorization blockers. Do not claim the issue, create an
+   implementation branch, edit implementation files, or open a pull request.
 
 ## Complete the Authoritative Contract
 
-Bring the issue body, or the project-designated work-contract record, to the
-shape the project requires. Preserve useful context and unrelated owner text.
-At minimum, make these explicit when they apply:
+Bring the selected authoritative record to the shape the project requires.
+Preserve useful context and unrelated owner text. At minimum, make these
+explicit when they apply:
 
-- objective and testable acceptance criteria;
-- non-goals and scope boundaries;
-- affected public, data, configuration, workflow, or shared contracts;
-- declared implementation, test, documentation, and generated paths;
-- dependencies, blockers, and the evidence that satisfies them;
-- serialization, mutual exclusion, branch ancestry, and integration order.
+- Objective and testable acceptance criteria.
+- Non-goals and scope boundaries.
+- Affected public, data, configuration, workflow, or shared contracts.
+- Declared implementation, test, documentation, and generated paths.
+- Dependencies, blockers, and the evidence that satisfies them.
+- Serialization, mutual exclusion, branch ancestry, and integration order.
 
-Reconcile stale claims against the repository before updating the contract.
-If code reality changes the scope materially, update the contract rather than
-letting the plan contradict it. If an owner decision is needed to resolve the
-contract, record the precise blocker. On a blocked replan, before stopping,
-prevent the previous plan from appearing current: edit it to mark it blocked
-and name the invalidating fact, or post one linked invalidation comment when
-editing is unavailable. Reread to confirm the exact former plan is visibly
-blocked or deprecated and that no competing plan remains current. If that
-verification fails, report the still-actionable plan as an unsafe state
-requiring manual action. Do not invent a replacement plan merely to retire the
-stale one.
+Reconcile stale claims against the repository first. If code reality changes
+the scope, update the contract instead of letting the plan contradict it. If
+an owner decision is needed, record the precise blocker.
 
-On any replan, once evidence establishes that the existing plan is invalid,
-retire it before publishing a replacement: mark the exact current plan blocked
-or deprecated and confirm that retirement by reread, then update the contract
-if needed and publish the replacement plan. If any later write or verification
-fails, stop with the old plan already non-current and report the partial state;
-never rely on a later replacement write to retire known-stale instructions.
+### Blocked Replan
+
+When a blocker prevents a truthful replacement plan:
+
+1. Edit the old plan to mark it blocked and name the invalidating fact. If
+   editing is unavailable, post one linked invalidation comment.
+2. Reread the exact plan. Confirm it is visibly blocked or deprecated and no
+   competing plan remains current.
+3. Report failed verification as an unsafe state that needs manual action.
+4. Do not invent a replacement only to retire a stale plan.
 
 A complete contract may describe a unit whose implementation is blocked. A
-known dependency or ordering blocker does not prevent the planning handoff;
-record it in the contract and plan. Stop planning only when missing information
-or an owner decision prevents a truthful contract or code-grounded plan.
+known dependency or ordering blocker does not stop the planning handoff. Record
+it in the contract and plan. Stop planning only when missing information or an
+owner decision prevents a truthful contract or code-grounded plan.
 
-## Author One Current Implementation Plan
+## Post One Current Plan
 
 Post the plan only after the contract is complete, whether implementation is
-startable or explicitly blocked. Start it by naming the selected authoritative
-work-contract record and stating that the plan is an implementation aid.
-Include:
+startable or blocked. Start by naming the authoritative work-contract record
+and saying the plan is an implementation aid. Include:
 
 1. **Startability:** open blockers, satisfied dependencies, required
    serialization, and what event permits implementation to start.
@@ -185,57 +169,70 @@ Include:
 5. **Finish line:** the project's implementation handoff endpoint, while
    stating that this planning operation does not begin it.
 
-Make the plan startable by a fresh task. Name exact paths where evidence
-supports them, distinguish confirmed facts from assumptions, and keep
-alternatives or deferred work out of the execution sequence unless they block
-the unit.
+- Make the plan startable by a fresh task.
+- Name exact paths where evidence supports them.
+- Separate confirmed facts from assumptions.
+- Keep alternatives and deferred work out of the sequence unless they block
+  the unit.
 
-## Keep a Single Current Plan
+### Replan
 
 Search the issue for an existing implementation-plan comment before posting.
-On replanning, apply the retirement-first rule above to any plan already known
-invalid, then edit its comment into the replacement when the forge supports
-comment editing. If editing is unavailable, post one superseding comment that
-links to the retired plan and explicitly identifies itself as the only current
-plan; do not leave competing comments that both appear current. Use whatever
-forge API, CLI, or interface is available, without assuming a platform-specific
+Use retirement-first when evidence shows that the current plan is invalid:
+
+1. Retire the exact current plan before publishing its replacement. Mark it
+   blocked or deprecated, then confirm the retirement by reread. Update the
+   contract if needed only after the old plan is non-current.
+2. Edit the retired comment into the replacement when the forge supports it.
+   Otherwise, post one superseding comment that links the retired plan and
+   identifies itself as the only current plan. Never leave competing current
+   comments.
+3. If a later write or verification fails, stop with the old plan non-current.
+   Report the partial unsafe state and include the prepared replacement text.
+   State that planning is blocked, not complete.
+
+Never rely on a later replacement write to retire stale instructions. Use any
+available forge API, CLI, or interface without assuming a platform-specific
 tool.
 
-If the available environment cannot perform the authorized planning writes,
-and no planning write has yet mutated state, that missing capability is a
-failed precondition: report it as an error naming the capability, never as a
-blocked or complete planning outcome, and do not present prepared text as a
-handoff artifact. A publication path that fails only after earlier planning
-writes have persisted is not that precondition error: follow the
-retirement-first rule above, stop with the old plan visibly non-current, and
-report the partial unsafe state, including the prepared replacement text the
-failed write was meant to publish.
+## Use Safe Write Hygiene
+
+- Write the contract and plan with ordinary care, not an invented lock.
+- Prefer an append or field-scoped edit over a whole-body replacement.
+- On a last-write-wins forge, a whole-body write can lose a concurrent edit.
+  No reread detects that loss, so do not claim otherwise.
+- Confirm each write reached the intended target with the intended content.
+  Also confirm that exactly one current plan exists.
+- Report a failed, wrong-target, or duplicate result as an unsafe state.
+- Treat the grounding revision as provenance, not a guarantee. Repository
+  movement leaves a gap that no write-time check closes.
+- Do not invent a lock, reinspect to chase a moving reference, or repair drift
+  automatically. Follow any declared serialization or exclusive-ownership
+  model.
+- Put the grounding revision in the handoff and the invalidation criteria in
+  the plan.
 
 ## Report the Handoff
 
-Verify that the authoritative contract record selected earlier, either the
-issue body or the project-designated record, contains the complete contract.
-Separately verify that the issue contains one unambiguous current plan. When
-both verifications succeed, report their locations and any implementation
-blocker plus the repository revision the plan is grounded in. If the
-authoritative default-branch reference has advanced past that revision, say so
-and recommend the implementer verify the plan against current code or request a
-replan; do not reinspect and republish here. Then explicitly state that planning
-is finished and implementation was not started or authorized.
+### Finished
 
-When missing information or an owner decision prevented a truthful contract or
-code-grounded plan, verify any required prior-plan invalidation, report the
-precise blocker, and state that planning is blocked, not finished. If the prior
-plan remains actionable, identify that unsafe state and its location instead
-of presenting a clean blocked handoff. Do not present an incomplete selected
-contract record as the planning handoff. In either outcome, do not continue
-into implementation in the same operation.
+1. Verify that the selected authoritative record contains the complete
+   contract.
+2. Separately verify that the issue has one unambiguous current plan.
+3. Report both locations, any implementation blocker, and the grounding
+   revision.
+4. If the default branch has advanced, say so and recommend verification or a
+   replan. Do not reinspect and republish here.
+5. State that planning is finished and implementation was not started or
+   authorized.
 
-A failed planning precondition (a project restriction that forbids part of the
-mutation surface, or an absent forge write capability), detected before any
-planning write has persisted, never reaches this handoff: report it as an error
-the moment it is detected, not as a blocked or finished planning result, and
-never with prepared artifacts standing in for the writes the environment
-refused.
-Once a planning write has persisted, a later write failure is the partial
-unsafe state the rules above already report, not a precondition error.
+### Blocked
+
+1. Verify any required prior-plan invalidation and report the precise blocker.
+2. State that planning is blocked, not finished.
+3. If the prior plan remains actionable, report its location as an unsafe
+   state.
+4. Never hand off an incomplete authoritative record.
+
+Precondition errors never reach this section. After a finished or blocked
+handoff, do not continue into implementation in the same operation.
