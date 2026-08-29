@@ -85,7 +85,11 @@ def strip_frontmatter(text):
         return text
     for index in range(1, len(lines)):
         if lines[index].strip() == "---":
-            return "".join(lines[index + 1 :])
+            blanked = []
+            for line in lines[: index + 1]:
+                content = line.rstrip("\r\n")
+                blanked.append(line[len(content) :])
+            return "".join(blanked + lines[index + 1 :])
     return text
 
 
