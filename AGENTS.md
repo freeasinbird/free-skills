@@ -205,14 +205,27 @@ length.
 All lengths use whitespace-separated word counts. The report exits 0 after
 any successful run and doesn't enforce readability thresholds.
 
+Gate prose changed since a branch or commit's merge base with:
+
+```sh
+./scripts/check-readability.sh --gate --base origin/main [file ...]
+```
+
+Touched sentences may have at most 40 words, and touched paragraphs may have
+at most 120. Put `<!-- readability: allow -->` on its own line to start an
+exempt region. End it with `<!-- readability: end -->`, or let it continue to
+the end of the file. For an untracked file, run `git add -N <path>` before a
+local gate check. Gate mode prints per-file word deltas without enforcing
+them. It exits 1 for length violations and 2 for usage or environment errors.
+
 ### CI
 
 Pull requests run two workflows. `.github/workflows/commit-messages.yml`
 publishes the `check` context for the exact feature-branch commit range against
 the Mechanical Commit-Message Checks below. `.github/workflows/markdown.yml`
-publishes `markdown-checks` for Markdown lint and formatting, the prose-tic,
-skill-structure, and managed-sync checks, plus one context for every script
-test matrix.
+publishes `markdown-checks` for Markdown lint and formatting, the touched-prose
+gate, the prose-tic, skill-structure, and managed-sync checks, plus one context
+for every script test matrix.
 
 `CLAUDE.md` imports `AGENTS.md`. Edit `AGENTS.md`, never the pointer.
 
@@ -584,6 +597,9 @@ and lint and formatting are clean.
 
 - Markdown lint clean (`npx markdownlint-cli2 '**/*.md'`)
 - Format clean (`npx prettier --check '**/*.md'`)
+- Readability gate clean on touched prose
+  (`./scripts/check-readability.sh --gate --base origin/main`): sentences at
+  most 40 words and paragraphs at most 120, unless an in-file allow region
 - Prose-tic check clean (`./scripts/check-prose-tics.sh`): no em dashes,
   misused en dashes, or stock AI openers in markdown outside `devlog/`
 - Skill structure check clean (`./scripts/check-skill-structure.sh`):

@@ -56,6 +56,10 @@ basic=$(fixture basic.md 'One two. Three four five! Six?')
 run_case 'basic sentence boundaries' 0 "$basic"
 expect_row 'basic metrics' "$basic" 6 2 3 0 6
 
+closers=$(fixture closers.md 'One two.** Three four.) Five six?"')
+run_case 'sentence boundaries include Markdown closers' 0 "$closers"
+expect_row 'Markdown closer metrics' "$closers" 6 2 2 0 6
+
 abbreviation=$(fixture abbreviation.md 'Use e.g. simple words here.')
 run_case 'simple abbreviation rule' 0 "$abbreviation"
 # The specified punctuation rule treats the period after "e.g." as a
@@ -276,6 +280,181 @@ if ! grep -Fq '| tracked.md |' "$work/default-output" || \
   echo 'FAIL: default file-set inclusions or exclusions'
   fails=$((fails + 1))
 fi
+
+# --- gate mode checks touched ranges and reports word deltas ---
+gate_repo=$work/gate-repo
+mkdir -p "$gate_repo/scripts" "$gate_repo/devlog" "$gate_repo/.claude"
+cp "$checker" "$gate_repo/scripts/"
+git -C "$gate_repo" -c init.defaultBranch=main init -q
+git -C "$gate_repo" config user.name 'Readability Test'
+git -C "$gate_repo" config user.email 'readability@example.invalid'
+
+long_line=$(words 15)
+long_end="$(words 15)."
+long_end_changed="changed $(words 14)."
+printf '%s\n' "$long_line" "$long_line" "$long_end" '' \
+  'Short paragraph.' >"$gate_repo/legacy.md"
+
+ten_words="$(words 10)."
+{
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    printf '%s\n' "$ten_words"
+  done
+} >"$gate_repo/paragraph.md"
+
+printf 'two words.\n' >"$gate_repo/delta-modified.md"
+printf 'three base words.\n' >"$gate_repo/delta-deleted.md"
+git -C "$gate_repo" add .
+git -C "$gate_repo" commit -qm 'Fixture base'
+
+run_gate_case() { # run_gate_case <name> <expected-exit> [checker args...]
+  local name=$1 expected=$2 actual=0
+  shift 2
+  last_output=$work/output
+  "$gate_repo/scripts/check-readability.sh" "$@" >"$last_output" 2>&1 || \
+    actual=$?
+  total=$((total + 1))
+  if [ "$actual" -ne "$expected" ]; then
+    echo "FAIL: $name (expected exit $expected, got $actual)"
+    sed 's/^/  | /' "$last_output"
+    fails=$((fails + 1))
+  fi
+}
+
+restore_gate_repo() {
+  git -C "$gate_repo" restore --staged .
+  git -C "$gate_repo" restore .
+  git -C "$gate_repo" clean -fdq
+}
+
+run_gate_case 'gate requires base' 2 --gate
+total=$((total + 1))
+if ! grep -Fqx \
+  'usage: check-readability.sh [--gate --base <ref>] [file ...]' \
+  "$last_output"; then
+  echo 'FAIL: gate without base prints usage'
+  fails=$((fails + 1))
+fi
+run_gate_case 'base requires gate' 2 --base main
+
+printf '%s\n' "$long_line" "$long_line" "$long_end_changed" '' \
+  'Short paragraph.' >"$gate_repo/legacy.md"
+run_gate_case 'wrapped touched long sentence fails' 1 --gate --base main
+total=$((total + 1))
+if ! grep -Fqx \
+  'legacy.md:1: sentence of 45 words (limit 40)' "$last_output"; then
+  echo 'FAIL: wrapped sentence violation or line number'
+  fails=$((fails + 1))
+fi
+restore_gate_repo
+
+printf '%s\n' "$long_line" "$long_line" "$long_end" '' \
+  'Changed paragraph.' >"$gate_repo/legacy.md"
+run_gate_case 'untouched long sentence passes' 0 --gate --base main
+restore_gate_repo
+
+printf '%s\n' "$(words 41)." >"$gate_repo/café.md"
+git -C "$gate_repo" add -N café.md
+run_gate_case 'intent-to-add long sentence fails' 1 --gate --base main
+total=$((total + 1))
+if ! grep -Fqx 'café.md:1: sentence of 41 words (limit 40)' \
+  "$last_output"; then
+  echo 'FAIL: intent-to-add file was not gated'
+  fails=$((fails + 1))
+fi
+restore_gate_repo
+
+printf 'changed %s\n' "$(words 9)." >"$gate_repo/paragraph.md"
+for _ in 1 2 3 4 5 6 7 8 9 10 11; do
+  printf '%s\n' "$ten_words" >>"$gate_repo/paragraph.md"
+done
+run_gate_case 'touched 120-word paragraph passes' 0 --gate --base main
+restore_gate_repo
+
+printf 'changed extra %s\n' "$(words 9)." >"$gate_repo/paragraph.md"
+for _ in 1 2 3 4 5 6 7 8 9 10 11; do
+  printf '%s\n' "$ten_words" >>"$gate_repo/paragraph.md"
+done
+run_gate_case 'touched 121-word paragraph fails' 1 --gate --base main
+total=$((total + 1))
+if ! grep -Fqx \
+  'paragraph.md:1: paragraph of 121 words (limit 120)' "$last_output"; then
+  echo 'FAIL: paragraph violation or threshold'
+  fails=$((fails + 1))
+fi
+restore_gate_repo
+
+printf '%s\n' '<!-- readability: allow -->' "$(words 41)." \
+  '<!-- readability: end -->' "$(words 42)." \
+  >"$gate_repo/region.md"
+git -C "$gate_repo" add -N region.md
+run_gate_case 'allow region ends at end marker' 1 --gate --base main
+total=$((total + 1))
+if ! grep -Fqx \
+  'region.md:4: sentence of 42 words (limit 40)' "$last_output"; then
+  echo 'FAIL: region end did not restore gating'
+  fails=$((fails + 1))
+fi
+restore_gate_repo
+
+printf '%s\n' '<!-- readability: allow -->' \
+  "- $(words 41)." \
+  "> $(words 42)." \
+  '| heading |' '| --- |' "| $(words 43). |" \
+  >"$gate_repo/region-eof.md"
+git -C "$gate_repo" add -N region-eof.md
+run_gate_case 'allow region reaches end across structures' 0 \
+  --gate --base main
+restore_gate_repo
+
+git -C "$gate_repo" mv legacy.md renamed-legacy.md
+run_gate_case 'pure rename has no touched prose' 0 --gate --base main
+total=$((total + 1))
+if ! grep -Fqx \
+  '| renamed-legacy.md | 47 | 47 | +0 |' "$last_output"; then
+  echo 'FAIL: pure rename word delta lost its source path'
+  fails=$((fails + 1))
+fi
+run_gate_case 'explicit pure rename has no touched prose' 0 \
+  --gate --base main "$gate_repo/renamed-legacy.md"
+restore_gate_repo
+
+printf '%s\n' '---' 'title: Hidden words' '---' "$(words 41)." \
+  >"$gate_repo/frontmatter-line.md"
+git -C "$gate_repo" add -N frontmatter-line.md
+run_gate_case 'frontmatter keeps gate line numbers' 1 --gate --base main
+total=$((total + 1))
+if ! grep -Fqx \
+  'frontmatter-line.md:4: sentence of 41 words (limit 40)' \
+  "$last_output"; then
+  echo 'FAIL: frontmatter shifted the gate line number'
+  fails=$((fails + 1))
+fi
+restore_gate_repo
+
+printf 'four changed words now.\n' >"$gate_repo/delta-modified.md"
+rm "$gate_repo/delta-deleted.md"
+printf 'five brand new words here.\n' >"$gate_repo/delta-new.md"
+git -C "$gate_repo" add -A
+run_gate_case 'gate word deltas are report-only' 0 --gate --base main
+for expected in \
+  '| delta-deleted.md | 3 | 0 | -3 |' \
+  '| delta-modified.md | 2 | 4 | +2 |' \
+  '| delta-new.md | 0 | 5 | +5 |'; do
+  total=$((total + 1))
+  if ! grep -Fqx "$expected" "$last_output"; then
+    echo "FAIL: missing word-delta row: $expected"
+    fails=$((fails + 1))
+  fi
+done
+restore_gate_repo
+
+mkdir -p "$gate_repo/devlog" "$gate_repo/.claude"
+printf '%s\n' "$(words 41)." >"$gate_repo/devlog/excluded.md"
+printf '%s\n' "$(words 41)." >"$gate_repo/.claude/excluded.md"
+git -C "$gate_repo" add -N devlog/excluded.md .claude/excluded.md
+run_gate_case 'gate excludes devlog and claude trees' 0 --gate --base main
+restore_gate_repo
 
 # --- an empty default file set is a successful empty report ---
 empty_repo=$work/empty-repo

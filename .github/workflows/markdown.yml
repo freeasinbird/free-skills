@@ -16,6 +16,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch pull-request base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --no-tags --unshallow origin "$BASE_SHA"
+          else
+            git fetch --no-tags origin "$BASE_SHA"
+          fi
+      - name: Check touched prose length
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          ./scripts/check-readability.sh --gate --base "$BASE_SHA" |
+            tee -a "$GITHUB_STEP_SUMMARY"
       # Pin npx tools so an upstream release cannot break an unrelated PR.
       - name: Check Markdown lint
         run: npx markdownlint-cli2@0.23.2 '**/*.md'
