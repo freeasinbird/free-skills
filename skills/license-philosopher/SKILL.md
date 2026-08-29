@@ -22,6 +22,18 @@ free, and what you build with it is yours. This skill adds three things:
 2. A `LICENSING-PHILOSOPHY.md` explaining why this license was chosen
 3. A license section in the README linking to both
 
+Use this skill when a repository needs a license under this philosophy or the
+user asks for one.
+
+Follow six steps:
+
+1. Check for an existing license.
+2. Suggest a license and ask the user to choose.
+3. Write the `LICENSE` file.
+4. Add `LICENSING-PHILOSOPHY.md`.
+5. Update the README.
+6. Report what changed.
+
 ## License Selection Criteria
 
 Analyze the repository to understand what type of work it is. The
@@ -35,13 +47,10 @@ license follows from the project type:
 | Local applications and tools | GPL-3.0      | `gpl-3.0`       | CLI entry point, desktop app, local tool; users download and run it on their machine                                |
 | Network services             | AGPL-3.0     | `agpl-3.0`      | Server entry point, HTTP routes, WebSocket handlers, deployed and accessed over a network                           |
 
-For libraries, the rule is to use the strongest weak-copyleft license the
-target ecosystem can actually honor. LGPL-3.0 is the default, but its
-relinking obligation is unworkable where static linking or bundling is the
-norm (Rust, Go, bundled JavaScript, mobile SDKs), and an unenforceable
-copyleft protects nothing. There, MPL-2.0 is the strongest weak copyleft that
-actually functions. Default to LGPL-3.0; override to MPL-2.0 only for those
-static-link / bundled ecosystems.
+For libraries, use the strongest weak-copyleft license the target ecosystem
+can honor. Default to LGPL-3.0. Use MPL-2.0 only where static linking or
+bundling is the norm (Rust, Go, bundled JavaScript, mobile SDKs), because an
+unenforceable copyleft protects nothing.
 
 When classifying, look at:
 
@@ -62,7 +71,9 @@ the user's permission to replace.
 
 ### 2. Suggest a License
 
-Analyze the repository and present your recommendation:
+#### Recommendation
+
+Analyze the repository and recommend a license. Include:
 
 - What type of project you think this is, and why
 - Which license that maps to
@@ -70,22 +81,28 @@ Analyze the repository and present your recommendation:
 - If an existing license was found, mention it and how your suggestion
   compares
 
-Then present all five options and ask the user which they'd like to use.
-Frame your analysis as a suggestion; the user may have context you don't
-(e.g., a library that will soon become a standalone tool, or a CLI that's
-really a network service wrapper). Accept their choice without pushback.
+#### Ask the User
 
-If an existing license file will be replaced, confirm that's acceptable
-before proceeding.
+Present all five options and ask the user which they'd like to use. Frame your
+analysis as a suggestion. The user may have context you don't, such as a
+library that will soon become a standalone tool or a CLI that's really a
+network service wrapper.
 
-**Short-circuit rule**: If the repo already has a license that isn't one of
-the five supported by this philosophy, and the user doesn't want to change
-it, stop here: the philosophy file would be incoherent with the actual
-license. Let the user know why and end gracefully. If the existing license
-_is_ one of the five and the user wants to keep it, skip the LICENSE write
-step but continue with the philosophy file and README section.
+Accept their choice without pushback. Confirm before replacing an existing
+license file.
+
+#### Short-circuit
+
+- **Unsupported license kept:** Stop if the existing license isn't one of the
+  five and the user keeps it. Explain that the philosophy file would conflict
+  with the actual license.
+- **Supported license kept:** Skip the `LICENSE` write if the existing license
+  is one of the five and the user keeps it. Continue with the philosophy file
+  and README section.
 
 ### 3. Write the LICENSE File
+
+#### Fetch Order
 
 Fetch the license text using this priority order:
 
@@ -103,43 +120,45 @@ Fetch the license text using this priority order:
 
 Write the result to `LICENSE` in the project root.
 
-**Copyright notice**: GPL-3.0, LGPL-3.0, and AGPL-3.0 include a preamble
-suggesting how to apply the license to your work. After writing the LICENSE
-file, if the license recommends a copyright/program notice (as GPL, LGPL,
-and AGPL do at the end of their text), note this to the user; they may
-want to add the suggested notice to their source files. The LICENSE file
-itself is the canonical license text and should not be modified.
+#### License Files and Notices
 
-**LGPL-3.0 note**: The LGPL-3.0 is a set of additional permissions on top
-of GPL-3.0. A project using LGPL-3.0 needs both texts. Write the GPL-3.0
-text as `LICENSE` and the LGPL-3.0 additional terms as `LICENSE.LESSER`.
+| License      | Files written                                                              | Manual notice                                                                                                                           |
+| ------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| CC BY-SA 4.0 | `LICENSE`                                                                  | None                                                                                                                                    |
+| LGPL-3.0     | `LICENSE` with GPL-3.0 text and `LICENSE.LESSER` with LGPL-3.0 permissions | Point the user to the copyright/program notice recommended at the end of the license text                                               |
+| MPL-2.0      | One `LICENSE`                                                              | Point the user to the Exhibit A per-file notice: "This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0…" |
+| GPL-3.0      | `LICENSE`                                                                  | Point the user to the copyright/program notice recommended at the end of the license text                                               |
+| AGPL-3.0     | `LICENSE`                                                                  | Point the user to the copyright/program notice recommended at the end of the license text                                               |
 
-**MPL-2.0 note**: MPL-2.0 is self-contained file-level copyleft: its text
-stands alone, so write it as a single `LICENSE` with no companion file
-(unlike LGPL-3.0 above). MPL also carries a per-file source-code notice
-(Exhibit A, "This Source Code Form is subject to the terms of the Mozilla
-Public License, v. 2.0…"). Because the copyleft attaches per file, point the
-user to add that notice to their covered source files, the same
-manual-notice step as the copyright notice above, not an edit to the
-canonical `LICENSE` text.
+- The `LICENSE` file is the canonical license text. Never modify it.
+- For GPL-3.0, LGPL-3.0, and AGPL-3.0, point the user to the recommended
+  copyright/program notice for source files.
+- LGPL-3.0 adds permissions to GPL-3.0, so a project needs both texts.
+- MPL-2.0 is self-contained file-level copyleft, so it needs no companion
+  file.
+- The MPL-2.0 notice is a manual step for covered source files. Don't add it
+  to `LICENSE`.
 
 ### 4. Add LICENSING-PHILOSOPHY.md
 
 Read `references/LICENSING-PHILOSOPHY.md` from this skill's directory and
-write it verbatim to `LICENSING-PHILOSOPHY.md` in the project root. Do not
-modify the content.
+write it verbatim to `LICENSING-PHILOSOPHY.md` in the project root; don't
+modify it.
 
 ### 5. Update the README
 
-Add a license section to the project's README.md (or README if no .md
-variant exists). If no README exists at all, note this to the user and
-suggest they create one; don't create a README just for the license
-section.
+#### Placement
 
-If a license section already exists (a heading containing "License" or
-"Licensing"), replace its content. Otherwise, add the section near the end
-of the file: before any final footer or "acknowledgments" section if one
-exists, otherwise at the very end.
+- **README.md exists:** Add the license section there.
+- **Only README exists:** Add the license section there when no .md variant
+  exists.
+- **No README exists:** Tell the user and suggest they create one. Don't create
+  a README just for the license section.
+- **A license section exists:** Replace the content under a heading containing
+  "License" or "Licensing".
+- **No license section exists:** Add one near the end. Put it before a final
+  footer or "acknowledgments" section when one exists. Otherwise, put it at
+  the end.
 
 Use this format:
 
