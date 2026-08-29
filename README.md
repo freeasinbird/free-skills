@@ -1,14 +1,13 @@
 # free-skills
 
-Open, platform-agnostic prompt skills for AI coding agents.
+free-skills provides open, platform-agnostic prompt skills for AI coding
+agents.
 
-Skills are self-contained prompt instructions that teach an agent how to
-perform a specific task: reviewing code, setting up a project, running a
-deploy checklist, etc. Each skill is a directory under `skills/` with a
-`SKILL.md` entry point that any compatible agent can load and execute. They
-work with [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
-[Codex](https://openai.com/index/introducing-codex/), and other agents that
-load `SKILL.md` prompts.
+Each self-contained skill teaches an agent a task, such as reviewing code or
+setting up a project. A skill lives under `skills/` and uses `SKILL.md` as its
+entry point. [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
+[Codex](https://openai.com/index/introducing-codex/), and other compatible
+agents can load and run these prompts.
 
 ## Quick Install
 
@@ -44,8 +43,8 @@ For manual setup or linking every skill from a clone, see
 
 ## Installation
 
-A skill is just a `SKILL.md` directory, so installing one means putting it
-where your agent looks for skills:
+Install a skill by putting its `SKILL.md` directory where your agent looks for
+skills:
 
 - **Claude Code**: `~/.claude/skills/<name>/`
 - **Codex**: `~/.agents/skills/<name>/`
@@ -55,11 +54,12 @@ below for manual setup or a git-tracked local clone.
 
 ### Manual Install
 
-Place the skill yourself: copy or symlink its directory into the agent's
-skills location (symlink it from a clone if you want it to track upstream),
-or point your agent at the skill's `SKILL.md` and ask it to follow it. For
-example, to symlink one skill into Claude Code from a clone (the skills
-directory may not exist yet on a fresh setup, so create it first):
+Copy or symlink the skill directory into your agent's skills location. A
+symlink from a clone will track upstream changes. You can instead point your
+agent at `SKILL.md` and ask it to follow the file.
+
+This example links one skill into Claude Code from a clone. Create the skills
+directory first because a fresh setup may not have one:
 
 ```sh
 mkdir -p ~/.claude/skills
@@ -68,11 +68,9 @@ ln -s "$PWD/skills/license-philosopher" ~/.claude/skills/license-philosopher
 
 ### Convenience: Link Every Skill From a Clone (macOS / Linux)
 
-If you'd rather not use Node, or you keep a local clone and prefer
-git-tracked symlinks, the `link-skills.sh` helper installs all skills into
-both Claude Code and Codex from a clone and keeps them current. It symlinks
-every skill into `~/.claude/skills` and `~/.agents/skills`, so a single
-`git pull` refreshes them all:
+Use `link-skills.sh` if you don't want Node or prefer symlinks from a local
+clone. The helper links every skill into Claude Code and Codex. It uses
+`~/.claude/skills` and `~/.agents/skills`, so one `git pull` refreshes both:
 
 ```sh
 git clone https://github.com/freeasinbird/free-skills.git
