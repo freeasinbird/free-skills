@@ -563,7 +563,20 @@ async function main() {
       await Promise.race([gone, sleep(1500)]);
       if (child.exitCode === null) child.kill('SIGKILL');
     }
-    if (profile) fs.rmSync(profile, { recursive: true, force: true });
+    if (profile) {
+      try {
+        fs.rmSync(profile, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
+      } catch {
+        process.stderr.write(
+          `capture.mjs: warning: could not remove profile ${profile}\n`,
+        );
+      }
+    }
   };
   const fail = async (message) => {
     process.stderr.write(`capture.mjs: ${message}\n`);

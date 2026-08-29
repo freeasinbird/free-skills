@@ -165,6 +165,7 @@ fi
 
 # Live smoke: end-to-end capture against a local fixture, only where the
 # script's own discovery finds a real Chrome (and Node has WebSocket).
+# Successive processes exercise real Chrome profile cleanup as well as capture.
 # A missing browser SKIPs; a present browser that fails to capture FAILs.
 cat > "$TMP/fixture.html" <<'EOF'
 <!doctype html>
@@ -198,8 +199,12 @@ capture_fixture() { # <out> [extra capture.mjs flags...]
   out="$1"; shift
   left=$(suite_left)
   [ "$left" -lt 3 ] && return 1
+  log="$out.log"
   env -u CHROME node "$SCRIPT" --url "file://$TMP/fixture.html" --out "$out" \
-    --wait-for '#late' --timeout-budget "$left" "$@" >/dev/null 2>&1
+    --wait-for '#late' --timeout-budget "$left" "$@" >"$log" 2>&1
+  got=$?
+  [ "$got" -eq 0 ] || cat "$log" >&2
+  return "$got"
 }
 
 # Capture the fixture's #target clipped, then print the PNG's WxH; 0x0
@@ -232,6 +237,52 @@ if [ "$got" -ne 0 ]; then
   smoke_fail=$((smoke_fail + 1))
   echo "FAIL: live smoke capture exited $got" >&2
 else
+  # A profile-removal race after a successful write is cleanup residue, not a
+  # failed capture. Inject that exact boundary fault and require a scoped
+  # warning while leaving every screenshot assertion intact. The preload also
+  # makes a best-effort removal with the original function at process exit.
+  cat > "$TMP/fail-profile-cleanup.cjs" <<'EOF'
+const fs = require('node:fs');
+const path = require('node:path');
+const { syncBuiltinESMExports } = require('node:module');
+const originalRmSync = fs.rmSync;
+let profile = '';
+fs.rmSync = (target, options) => {
+  if (!profile && path.basename(target).startsWith('capture-mjs-')) {
+    profile = target;
+    const error = new Error('injected profile cleanup failure');
+    error.code = 'ENOTEMPTY';
+    throw error;
+  }
+  return originalRmSync(target, options);
+};
+process.on('exit', () => {
+  if (profile) {
+    try {
+      originalRmSync(profile, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+    } catch {}
+  }
+});
+syncBuiltinESMExports();
+EOF
+  NODE_OPTIONS="--require=$TMP/fail-profile-cleanup.cjs" \
+    capture_fixture "$TMP/cleanup-warning.png" --viewport 1280x720 --dpr 1
+  cleanup_got=$?
+  cleanup_log="$TMP/cleanup-warning.png.log"
+  if [ "$cleanup_got" -eq 0 ] && [ -f "$TMP/cleanup-warning.png" ] && \
+    grep -Eq '^capture\.mjs: warning: could not remove profile .*/capture-mjs-[^/[:space:]]+$' \
+      "$cleanup_log"; then
+    smoke_pass=$((smoke_pass + 1))
+  else
+    smoke_fail=$((smoke_fail + 1))
+    echo "FAIL: profile cleanup failure must warn without failing capture" >&2
+  fi
+
   for want in "$TMP/smoke-1280x720.png:1280x720" "$TMP/smoke-390x844.png:390x844"; do
     f="${want%%:*}"; dims="${want##*:}"
     if [ -f "$f" ] && [ "$(png_dims "$f")" = "$dims" ]; then

@@ -207,9 +207,12 @@ any successful run and doesn't enforce readability thresholds.
 
 ### CI
 
-Pull requests run `.github/workflows/commit-messages.yml`. It checks the exact
-feature-branch commit range against the Mechanical Commit-Message Checks
-below. Broader Markdown and script CI remains future work.
+Pull requests run two workflows. `.github/workflows/commit-messages.yml`
+publishes the `check` context for the exact feature-branch commit range against
+the Mechanical Commit-Message Checks below. `.github/workflows/markdown.yml`
+publishes `markdown-checks` for Markdown lint and formatting, the prose-tic,
+skill-structure, and managed-sync checks, plus one context for every script
+test matrix.
 
 `CLAUDE.md` imports `AGENTS.md`. Edit `AGENTS.md`, never the pointer.
 
