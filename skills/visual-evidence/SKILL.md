@@ -258,9 +258,9 @@ npx -y @freeasinbird/gh-imgup before.png after.png
   `--help`. **This is the checklist to apply.** Don't substitute a softer or
   narrower review. Open each image and check it for:
   - API keys, tokens, passwords, session cookies, `.env` contents
-  - internal hostnames, IPs, private URLs, infrastructure details
-  - customer or personal data (PII), real names, emails, account numbers
-  - anything from a terminal, editor, browser devtools, or notification that
+  - Internal hostnames, IPs, private URLs, infrastructure details
+  - Customer or personal data (PII), real names, emails, account numbers
+  - Anything from a terminal, editor, browser devtools, or notification that
     wasn't meant to be shared
 
   If an image contains any of these, **do not upload it**: stop, tell the user
