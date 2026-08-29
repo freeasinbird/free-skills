@@ -51,29 +51,24 @@ path.write_text(text.replace(old, new, 1), encoding="utf-8")
 PY
 }
 
-replace_last() { # replace_last <file> <old> <new>
-  python3 - "$1" "$2" "$3" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-old, new = sys.argv[2:]
-text = path.read_text(encoding="utf-8")
-index = text.rfind(old)
-if index < 0:
-    raise SystemExit(f"missing final occurrence in {path}")
-path.write_text(text[:index] + new + text[index + len(old):], encoding="utf-8")
-PY
+setup() { # setup <step> <command...>: abort when a fixture mutation fails
+  local step=$1
+  shift
+  if ! "$@"; then
+    echo "fixture setup failed: $step" >&2
+    exit 1
+  fi
 }
 
 both() { # both <root> <old> <new>: keep canonical and AGENTS.md in sync
   local root=$1 old=$2 new=$3
-  replace_once "$root/skills/agent-setup/references/canonical-sections.md" "$old" "$new"
-  replace_once "$root/AGENTS.md" "$old" "$new"
+  setup "replace_once canonical-sections.md" replace_once \
+    "$root/skills/agent-setup/references/canonical-sections.md" "$old" "$new"
+  setup "replace_once AGENTS.md" replace_once "$root/AGENTS.md" "$old" "$new"
 }
 
 pair() { # pair <root> <text>: append to the workflow reference and template
-  python3 - "$1" "$2" <<'PY'
+  setup "pair $1" python3 - "$1" "$2" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -167,8 +162,12 @@ pair "$root" $'## refute-first\n\nRepeated text.'
 t 1 'duplicate reference heading is rejected' "$root" \
   'has repeated §slug heading\(s\)'
 
+commit_rule='- **Keep one concern in each commit'
+
 root=$(repo byte-budget)
-both "$root" '- **One concern per commit' '- **One concern per commit 1234567890'
+# Pad beyond the full budget so the fixture holds at any block size.
+both "$root" "$commit_rule" \
+  "$commit_rule $(head -c 20001 /dev/zero | tr '\0' x)"
 t 1 'managed blocks over the byte budget are rejected' "$root" \
   'managed blocks [0-9]+ bytes exceed the 20000 budget'
 
@@ -178,8 +177,8 @@ t 1 'reference and template drift is rejected' "$root" \
   'drift: docs/agent-workflow.md differs from .* §agent-workflow'
 
 root=$(repo managed-drift)
-replace_once "$root/AGENTS.md" '- **One concern per commit' \
-  '- **One changed concern per commit'
+setup "replace_once AGENTS.md" replace_once "$root/AGENTS.md" "$commit_rule" \
+  '- **Keep one changed concern in each commit'
 t 1 'managed-block drift is rejected' "$root" '^drift: commits$'
 
 root=$(repo trailing-punctuation)
@@ -203,10 +202,6 @@ t 0 'a heading inside a tilde fence is ignored' "$root" \
   'ok: pointers \(9 slugs\)'
 
 root=$(repo backtick-fenced-heading)
-template="$root/skills/agent-setup/references/scaffolding.md"
-replace_once "$template" $'```markdown\n# Agent workflow reference' \
-  $'````markdown\n# Agent workflow reference'
-replace_last "$template" $'\n```\n' $'\n````\n'
 pair "$root" $'```markdown\n## example-heading\n```'
 t 0 'a heading inside a backtick fence is ignored' "$root" \
   'ok: pointers \(9 slugs\)'
