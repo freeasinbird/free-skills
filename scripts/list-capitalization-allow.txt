@@ -1,0 +1,8 @@
+# Exact list-item text allowed to start with a lowercase letter.
+# The await-pr-review routing test grep-locks these forge-record field names.
+
+repository and PR number
+current PR head, base branch and tip, event baseline, and attribution state
+every finding class and disposition
+complete review-thread and required-check state
+the exact next action
