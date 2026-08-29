@@ -1,9 +1,9 @@
 # free-skills
 
-An open-source collection of prompt-based agent skills designed to work
-across platforms (Claude Code, Codex, and others). See
-[README.md](README.md) for the project overview. This file covers
-development conventions, contribution workflow, and project structure.
+free-skills is an open-source collection of prompt-based skills for Claude
+Code, Codex, and other agents. See [README.md](README.md) for the project
+overview. This file defines development conventions, contribution workflow,
+and project structure.
 
 <!-- agents-md:managed:devlog -->
 
@@ -173,7 +173,7 @@ translate agent jargon or search for the conclusion.
 
 ## Build, Test, Run
 
-This is a markdown-only project: no compile or build step.
+This repo contains only Markdown, so it has no compile or build step.
 
 ### Lint
 
@@ -181,10 +181,9 @@ This is a markdown-only project: no compile or build step.
 npx markdownlint-cli2 '**/*.md'
 ```
 
-Gotcha: MD038 is active, so an inline code span can't have a leading or
-trailing space inside the backticks. Wrapping a colon-then-space in backticks
-to show that sequence trips it; describe such whitespace-bearing sequences in
-prose ("a colon-then-space") rather than quoting them in a code span.
+MD038 rejects leading or trailing spaces inside an inline code span. Wrapping
+a colon-then-space in backticks trips this rule. Describe that sequence in
+prose instead.
 
 ### Format
 
@@ -199,20 +198,20 @@ npx prettier --write '**/*.md'   # to fix
 ./scripts/check-readability.sh [file ...]
 ```
 
-The report prints one row per markdown file with its word count, median and
-maximum sentence length, sentences over 40 words, and maximum paragraph
-length. All lengths use whitespace-separated word counts. It is report-only
-and exits 0 after any successful report; no readability thresholds are
-enforced.
+The report prints one row per Markdown file. It includes word count, median
+and maximum sentence length, sentences over 40 words, and maximum paragraph
+length.
+
+All lengths use whitespace-separated word counts. The report exits 0 after
+any successful run and doesn't enforce readability thresholds.
 
 ### CI
 
-Pull requests run `.github/workflows/commit-messages.yml`, which checks the
-exact feature-branch commit range against the Mechanical Commit-Message
-Checks below. Broader Markdown and script CI remains future work.
+Pull requests run `.github/workflows/commit-messages.yml`. It checks the exact
+feature-branch commit range against the Mechanical Commit-Message Checks
+below. Broader Markdown and script CI remains future work.
 
-CLAUDE.md is a pointer that imports AGENTS.md; edit AGENTS.md, never the
-pointer.
+`CLAUDE.md` imports `AGENTS.md`. Edit `AGENTS.md`, never the pointer.
 
 ## Project Structure
 
@@ -223,100 +222,111 @@ skills/
     ...                # Additional files as needed per skill
 ```
 
-Each skill lives in its own directory under `skills/`. The only required
-file is `SKILL.md`: the skill prompt with YAML frontmatter (name and
-description) that an agent loads to execute the skill. Additional files
-(reference material, examples, sub-prompts) may live alongside it.
+Each skill has its own directory under `skills/`. Every skill requires a
+`SKILL.md` prompt with `name` and `description` YAML frontmatter. Reference
+material, examples, and sub-prompts may live beside it.
 
 ## Architecture Invariants
 
-1. **One directory per skill.** All skill content lives under
-   `skills/<skill-name>/`. No top-level loose skill files. This prevents
+1. **Keep one directory per skill.** Put all skill content under
+   `skills/<skill-name>/`. Don't add loose top-level skill files. This prevents
    naming collisions and keeps each skill self-contained.
 
-2. **Platform-agnostic prompts.** Skills must work across Claude Code and
-   Codex (and ideally other agent platforms). Avoid platform-specific tool
-   calls or assumptions in prompt text; when platform-specific behavior is
-   needed, gate it explicitly and document the fallback. **This extends to the
-   agent-setup canonical conventions**: they get copied into downstream
-   AGENTS.md files and run by arbitrary agents, so a convention must not assume
-   a capability either. **Subagents/delegation are the canonical trap:** not
-   every agent or session can spawn a subagent (e.g. a Codex session, or an
-   agent with no subagent concept), so any instruction to delegate must be
-   gated on the platform supporting it and state the fallback (skip it, or use
-   an external/human reviewer), never emitting steps the running agent can't
-   perform. (Surfaced by a P2 review on the fresh-context-review convention;
-   see the 2026-06-26 devlog.)
+2. **Write platform-agnostic prompts.** Skills must work across Claude Code
+   and Codex, and should work on other agent platforms. Don't assume a
+   platform-specific tool or capability.
 
-3. **`SKILL.md` is the entry point.** Every skill directory must contain a
-   `SKILL.md`. This is the file an agent loads to execute the skill.
-   Both Claude Code and Codex discover skills by this filename.
+   - **Gate platform-specific behavior.** State the required capability and
+     document the fallback.
+   - **Apply this rule to agent-setup conventions.** Downstream projects copy
+     these conventions into `AGENTS.md`, where arbitrary agents run them.
+   - **Gate delegation.** Not every agent or session can spawn a subagent.
+     This includes some Codex sessions and agents without a subagent concept.
+     Instruct agents to delegate only when their platform supports it. State
+     the fallback: skip delegation or use an external or human reviewer.
+   - **Keep the review context.** A P2 review of the fresh-context-review
+     convention found this delegation trap. See the 2026-06-26 devlog.
+
+3. **Use `SKILL.md` as the entry point.** Every skill directory must contain
+   this file. Claude Code and Codex both discover skills by this filename.
 
 ## Conventions
 
-- **README skills table is alphabetical by skill name.** Insert a new
-  skill's row in order, not appended at the end.
+- **Keep the README skills table alphabetical.** Insert each new skill by
+  name, not at the end.
 
-- **Write prose without em dashes**; use commas, colons, semicolons, or
-  parentheses instead. This covers skill prompts and the canonical
-  conventions, which downstream projects inherit verbatim. En dashes in
-  numeric ranges ("2–4") are fine.
+- **Write prose without em dashes.** Use commas, colons, semicolons, or
+  parentheses instead. This covers skill prompts and canonical conventions
+  that downstream projects copy verbatim. En dashes may mark numeric ranges
+  such as "2–4."
 
-- **`SKILL.md` frontmatter must parse as YAML; write `description` as a `>-`
-  block scalar.** Skill indexers read `name`/`description` as YAML, so a plain
-  (unquoted) scalar silently fails to load the skill when its text contains a
-  colon-then-space (e.g. `proactively: the`), a leading `#`, or other YAML
-  structural characters. A `>-` folded block scalar keeps the text literal and
-  parse-safe; use it for new skills. Existing plain-scalar descriptions are
-  acceptable only while they stay parse-safe; converting them to `>-` is a
-  welcome hardening. Verify with any YAML parser when unsure. (Surfaced by a P1
-  review on the visual-evidence skill; see the 2026-06-26 devlog.)
+- **Use parse-safe `SKILL.md` frontmatter.** Skill indexers read `name` and
+  `description` as YAML.
 
-- **Agent-setup profile: High-assurance.** Decision notes live in
-  `devlog/` per the Decision notes section. A note is mandatory for:
-  changes to the canonical managed workflow conventions or scaffold
-  templates; changes to branch, PR, review, merge, or release policy;
-  changes on destructive, credential-leak, or returned-object
-  trust-boundary paths; and cross-project prompt decisions that
-  downstream repositories inherit. Routine skill documentation and
-  mechanical syncs are exempt unless they meet a general note trigger.
+  - **Write new descriptions as `>-` block scalars.** This folded form keeps
+    the text literal and parse-safe.
+  - **Keep plain descriptions only while they parse safely.** An unquoted
+    value can fail silently when it contains YAML syntax. Examples include a
+    colon-then-space, a leading `#`, or another structural character.
+  - **Harden existing descriptions when useful.** Converting a safe plain
+    value to `>-` is welcome but not required.
+  - **Verify uncertain frontmatter.** Use any YAML parser.
+  - **Keep the review context.** A P1 review of visual-evidence found this
+    failure. See the 2026-06-26 devlog.
 
-- **This repo dogfoods agent-setup; edit managed conventions in two places.**
-  free-skills' own AGENTS.md is built from the agent-setup skill, so its
-  `<!-- agents-md:managed:* -->` blocks (devlog, finish-line, context,
-  communication, branches, pull-requests, commits, done) mirror the
-  canonical source at
-  `skills/agent-setup/references/canonical-sections.md`. When you change one of
-  those conventions, edit **both** the canonical source **and** this file's
-  matching managed block, keeping the managed text in sync (`diff` them).
-  **Exception:** a managed block may wrap a nested
-  `<!-- agents-md:project:* -->` sub-block (here, `project:done-checks` inside
-  `done`); that content is project-specific by design, so keep it local and
-  never overwrite it with the canonical template. The two-place rule also
-  covers this repo's **scaffolded files**: `devlog/README.md` (which the
-  managed devlog block points to as the authoritative protocol),
-  `docs/agent-workflow.md` (the step-local reference the managed blocks
-  point at by `§slug`; `./scripts/check-managed-sync.sh` diffs it against
-  the template), `CONTRIBUTING.md`, the PR template, and `CLAUDE.md` are
-  live copies of the templates in
-  `skills/agent-setup/references/scaffolding.md`, so an edit to a
-  scaffold template must update the matching live file here too (`diff` them),
-  or the live copy silently contradicts the freshly-synced convention.
-  Sections outside the managed
-  markers (Architecture invariants, Conventions, Build) are free-skills-only;
-  edit those here alone.
+- **Use the High-assurance agent-setup profile.** Store decision notes in
+  `devlog/` as the Decision Notes section requires.
 
-- **Automated reviewer: Codex.** Login `chatgpt-codex-connector` (REST API form
-  `chatgpt-codex-connector[bot]`, which GraphQL also uses for _reactions_);
-  trigger: automatic on PR events (open / mark ready / push; re-reviews after
-  each fix push were observed live on PR 46), or manual
-  `@codex review`. Status signals, observed on PRs 41–44: it reacts on the PR
-  description with 👀 while a review is in progress and 👍 when a pass found
-  nothing (a clean pass may post no review at all); it posts a review only
-  when it has findings. The `await-pr-review` skill shipped in this repo uses
-  this project-specific record when resolving which reviewer to wait for and
-  which signals finish a round; update it if the reviewer, its trigger, or its
-  signals change.
+  A note is mandatory for:
+
+  - Changes to canonical managed workflow conventions or scaffold templates.
+  - Changes to branch, PR, review, merge, or release policy.
+  - Changes on destructive, credential-leak, or returned-object
+    trust-boundary paths.
+  - Cross-project prompt decisions that downstream repositories inherit.
+
+  Routine skill docs and mechanical syncs don't need a note unless they meet
+  a general trigger.
+
+- **Keep dogfooded files in sync.** free-skills uses agent-setup, so several
+  live files mirror canonical sources. Update both sides when a row's content
+  changes. Otherwise, the live copy may contradict a freshly synced project.
+
+  | Live file                                                       | Canonical source                                                    | Verification                      |
+  | --------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------- |
+  | `AGENTS.md` managed blocks                                      | `skills/agent-setup/references/canonical-sections.md`               | `./scripts/check-managed-sync.sh` |
+  | `docs/agent-workflow.md`                                        | `skills/agent-setup/references/scaffolding.md` §agent-workflow      | `./scripts/check-managed-sync.sh` |
+  | `devlog/README.md`, `CONTRIBUTING.md`, PR template, `CLAUDE.md` | Matching sections in `skills/agent-setup/references/scaffolding.md` | `diff`                            |
+
+  The managed blocks are devlog, finish-line, context, communication,
+  branches, pull-requests, commits, and done. The managed devlog block points
+  to `devlog/README.md` as its authoritative protocol. Managed step links use
+  `docs/agent-workflow.md` §slugs.
+
+- **Preserve project sub-blocks.** A managed block may wrap a project-specific
+  block. Keep `project:done-checks` local and never overwrite it from the
+  canonical template.
+
+- **Edit free-skills-only sections here.** Architecture Invariants,
+  Conventions, and Build sit outside the managed markers.
+
+- **Use Codex as the automated reviewer.** This project has the following
+  reviewer record:
+
+  - **Login:** `chatgpt-codex-connector`. REST uses
+    `chatgpt-codex-connector[bot]`; GraphQL uses that form for reactions too.
+  - **Trigger:** Opening a PR, marking it ready, or pushing starts a review.
+    PR 46 showed a new review after each fix push. Use `@codex review` to
+    trigger one manually.
+  - **Status evidence:** PRs 41–44 showed both reaction signals below.
+  - **In-progress signal:** 👀 on the PR description.
+  - **Clean-pass signal:** 👍 on the PR description. A clean pass may post no
+    review.
+  - **Finding signal:** A posted review. Codex posts one only when it finds a
+    problem.
+  - **Consumer:** `await-pr-review` uses this record to choose the reviewer and
+    detect the end of a round. Update the skill if the login, trigger, or
+    signals change.
 
 <!-- TODO: Fill in more as patterns emerge: prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->
@@ -519,30 +529,42 @@ all three.
 ## Mechanical Commit-Message Checks
 
 Pull-request CI runs
-`bash scripts/check-commit-messages.sh <base-ref> <head-ref>` (locally, usually
-`bash scripts/check-commit-messages.sh origin/main HEAD`). It resolves the
-merge base and checks every non-merge commit in `merge-base..head`; merge
-commits and mainline commits brought in by a base-freshness merge are exempt.
-The check reports every offending commit and rule in one run.
+`bash scripts/check-commit-messages.sh <base-ref> <head-ref>`. Locally, run
+`bash scripts/check-commit-messages.sh origin/main HEAD`.
+
+The script resolves the merge base and checks every non-merge commit in
+`merge-base..head`. It exempts merge commits and mainline commits from a
+base-freshness merge. One run reports every offending commit and rule.
 
 Every checked commit must satisfy all of these mechanical rules:
 
-- A subject and a body are required, with line 2 blank between them. The
-  body must contain at least one non-blank line after that separator.
-- The subject is at most 72 characters, does not end in a period, and does
-  not begin with a lowercase ASCII letter. Acronym-, identifier-, and
-  digit-led subjects remain valid.
-- Case-insensitive Conventional Commit prefixes are forbidden for `build`,
-  `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`,
-  and `test`, including scoped and breaking forms such as `feat(api):` and
-  `refactor!:`.
-- Case-insensitive `fixup!` and `squash!` prefixes and standalone `WIP`
-  markers are forbidden.
-- Case-insensitive review-cleanup prefixes are forbidden: `Address review`,
-  `Address PR review`, `Address pull request review`, `Apply review feedback`
-  (with optional `PR` or `pull request` before `review`), `PR feedback`, and
-  `Pull request feedback`. Fold that work into its owning commit instead.
-- Body lines are at most 72 characters. A line with no whitespace is exempt
+- **Require a subject and body.** Line 2 must be blank. At least one non-blank
+  body line must follow.
+- **Constrain the subject.** Use at most 72 characters, no ending period, and
+  no lowercase ASCII letter at the start. Acronym-, identifier-, and
+  digit-led subjects are valid.
+- **Forbid Conventional Commit prefixes, regardless of case.** The forbidden
+  types are:
+
+  - `build`, `chore`, `ci`, `docs`, `feat`, and `fix`.
+  - `perf`, `refactor`, `revert`, `style`, and `test`.
+
+  Scoped and breaking forms, such as `feat(api):` and `refactor!:`, are also
+  forbidden.
+
+- **Forbid temporary markers, regardless of case.** This covers `fixup!` and
+  `squash!` prefixes and standalone `WIP` markers.
+- **Forbid review-cleanup prefixes, regardless of case.** The forbidden
+  prefixes are:
+
+  - `Address review`, `Address PR review`, and `Address pull request review`.
+  - `Apply review feedback`, with optional `PR` or `pull request` before
+    `review`.
+  - `PR feedback` and `Pull request feedback`.
+
+  Fold that work into its owning commit instead.
+
+- **Limit body lines to 72 characters.** A line without whitespace is exempt,
   so an unbreakable URL, object ID, or ref can remain intact.
 
 <!-- agents-md:managed:done -->
@@ -561,11 +583,15 @@ and lint and formatting are clean.
 - Format clean (`npx prettier --check '**/*.md'`)
 - Prose-tic check clean (`./scripts/check-prose-tics.sh`): no em dashes,
   misused en dashes, or stock AI openers in markdown outside `devlog/`
-- Skill structure check clean (`./scripts/check-skill-structure.sh`): valid
-  `SKILL.md` frontmatter (`description` as a `>-` block scalar; see
-  Conventions), no prose paragraph over 15 lines, script flags and their
-  `SKILL.md` documentation in step (shell and JavaScript scripts), and every
-  `references/<file>.md` §slug pointer resolving both ways
+- Skill structure check clean (`./scripts/check-skill-structure.sh`):
+
+  - Valid `SKILL.md` frontmatter, with `description` as a `>-` block scalar.
+  - No prose paragraph over 15 lines.
+  - Shell and JavaScript flags match their `SKILL.md` documentation.
+  - Every `references/<file>.md` §slug pointer resolves both ways.
+
+  See Conventions for the frontmatter rule.
+
 - Skill prompts reviewed for platform-agnostic language (no
   Claude-Code-only or Codex-only assumptions without explicit gates)
 - Managed blocks in sync with the canonical source and
@@ -577,6 +603,8 @@ and lint and formatting are clean.
   (`./scripts/test-check-managed-sync.sh`)
 - Watcher validation matrix green when await-pr-review's `watch-review.sh`
   changed (`./scripts/test-watch-review.sh`)
+- Review-routing matrix green when await-pr-review's routing text or fixtures
+  changed (`./scripts/test-await-pr-review-routing.sh`)
 - Prose-tics matrix green when the prose-tic check changed
   (`./scripts/test-check-prose-tics.sh`)
 - Readability matrix green when `check-readability.sh` changed
