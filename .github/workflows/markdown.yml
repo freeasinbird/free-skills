@@ -40,6 +40,8 @@ jobs:
         run: npx prettier@3.9.6 --check '**/*.md'
       - name: Check prose tics
         run: ./scripts/check-prose-tics.sh
+      - name: Check list capitalization
+        run: ./scripts/check-list-capitalization.sh
       - name: Check skill structure
         run: ./scripts/check-skill-structure.sh
       - name: Check managed-file sync
@@ -55,6 +57,7 @@ jobs:
           - test-await-pr-review-routing.sh
           - test-capture.sh
           - test-check-commit-messages.sh
+          - test-check-list-capitalization.sh
           - test-check-managed-sync.sh
           - test-check-prose-tics.sh
           - test-check-readability.sh

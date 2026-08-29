@@ -224,8 +224,8 @@ Pull requests run two workflows. `.github/workflows/commit-messages.yml`
 publishes the `check` context for the exact feature-branch commit range against
 the Mechanical Commit-Message Checks below. `.github/workflows/markdown.yml`
 publishes `markdown-checks` for Markdown lint and formatting, the touched-prose
-gate, the prose-tic, skill-structure, and managed-sync checks, plus one context
-for every script test matrix.
+gate, prose-tic, list-capitalization, skill-structure, and managed-sync checks,
+plus one context for every script test matrix.
 
 `CLAUDE.md` imports `AGENTS.md`. Edit `AGENTS.md`, never the pointer.
 
@@ -275,6 +275,11 @@ material, examples, and sub-prompts may live beside it.
   parentheses instead. This covers skill prompts and canonical conventions
   that downstream projects copy verbatim. En dashes may mark numeric ranges
   such as "2–4."
+
+- **Capitalize the first word of every list item.** This covers bullets,
+  numbered items, and fragments that continue a lead-in. Keep an exact
+  lowercase string when another file or test pins it. Alternatively, add a
+  capitalized lead word so the pinned string remains unchanged.
 
 - **Use parse-safe `SKILL.md` frontmatter.** Skill indexers read `name` and
   `description` as YAML.
@@ -602,6 +607,9 @@ and lint and formatting are clean.
   most 40 words and paragraphs at most 120, unless an in-file allow region
 - Prose-tic check clean (`./scripts/check-prose-tics.sh`): no em dashes,
   misused en dashes, or stock AI openers in markdown outside `devlog/`
+- List-capitalization check clean
+  (`./scripts/check-list-capitalization.sh`): no lowercase-led Markdown list
+  items outside fenced code, `devlog/`, `.claude/`, or the documented allowlist
 - Skill structure check clean (`./scripts/check-skill-structure.sh`):
 
   - Valid `SKILL.md` frontmatter, with `description` as a `>-` block scalar.
@@ -626,6 +634,8 @@ and lint and formatting are clean.
   changed (`./scripts/test-await-pr-review-routing.sh`)
 - Prose-tics matrix green when the prose-tic check changed
   (`./scripts/test-check-prose-tics.sh`)
+- List-capitalization matrix green when the check changed
+  (`./scripts/test-check-list-capitalization.sh`)
 - Readability matrix green when `check-readability.sh` changed
   (`./scripts/test-check-readability.sh`)
 - Commit-message validation matrix green when the commit-message check changed
