@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Report readability density for markdown files.
+# Report readability density or gate touched prose in markdown files.
 #
 # Counting rules:
 # - A sentence ends at `.`, `!`, or `?` followed by whitespace or the end
@@ -11,53 +11,111 @@
 #   default file set; explicitly named files are measured.
 # - Words are whitespace-separated tokens after structural markdown
 #   markers for headings, list items, and table rows are removed.
+# - Gate mode checks only sentences and units whose line ranges intersect
+#   added or modified lines relative to the merge base. Sentences may have
+#   at most 40 words; units may have at most 120 words.
+# - `<!-- readability: allow -->` starts an exempt region. The region ends
+#   at `<!-- readability: end -->` or the end of the file.
 #
-# Usage: check-readability.sh [file ...]
+# Usage: check-readability.sh [--gate --base <ref>] [file ...]
 #   With no arguments, reports tracked and untracked-unignored *.md files,
 #   excluding devlog/ and .claude/. Explicit paths are resolved relative
 #   to the caller's directory.
+#   Gate mode resolves the merge base of <ref> and HEAD, checks changed
+#   markdown outside devlog/ and .claude/ by default, and prints word deltas.
+#   Run `git add -N <path>` before a local gate check to include a new file.
 #
-# Exit codes: 0 after any report, 2 on a usage or environment error. This
-# script is report-only; readability thresholds are not enforced.
+# Exit codes: 0 after a report or clean gate, 1 for gate violations, and 2
+# on a usage or environment error. Report mode never enforces thresholds.
 set -euo pipefail
+
+usage() {
+  echo "usage: check-readability.sh [--gate --base <ref>] [file ...]" >&2
+}
+
+gate=0
+base=
+arguments=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --gate)
+      gate=1
+      shift
+      ;;
+    --base)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        usage
+        exit 2
+      fi
+      base=$2
+      shift 2
+      ;;
+    --*)
+      usage
+      exit 2
+      ;;
+    *)
+      arguments+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if { [ "$gate" -eq 1 ] && [ -z "$base" ]; } || \
+  { [ "$gate" -eq 0 ] && [ -n "$base" ]; }; then
+  usage
+  exit 2
+fi
 
 # Resolve caller-relative arguments before moving: the paths belong to the
 # directory the report was invoked from.
 files=()
-for arg in "$@"; do
+for arg in "${arguments[@]}"; do
   case "$arg" in
     /*) files+=("$arg") ;;
     *) files+=("$PWD/$arg") ;;
   esac
 done
 cd "$(dirname "$0")/.."
+repo_root=$(pwd -P)
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "readability: python3 is required" >&2
   exit 2
 fi
 
-if [ "${#files[@]}" -eq 0 ]; then
+merge_base=
+if [ "$gate" -eq 1 ]; then
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "readability: gate mode requires a git worktree" >&2
+    exit 2
+  fi
+  if ! merge_base=$(git merge-base "$base" HEAD); then
+    echo "readability: cannot resolve merge base for $base" >&2
+    exit 2
+  fi
+elif [ "${#files[@]}" -eq 0 ]; then
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "readability: default scan requires a git worktree" >&2
     exit 2
   fi
   while IFS= read -r -d '' file; do
-    if [ -f "$file" ]; then
-      files+=("$file")
-    fi
+    [ -f "$file" ] && files+=("$file")
   done < <(git ls-files -z --cached --others --exclude-standard -- \
     '*.md' ':!devlog' ':!.claude')
 fi
 
-if [ "${#files[@]}" -eq 0 ]; then
+if [ "$gate" -eq 0 ] && [ "${#files[@]}" -eq 0 ]; then
   echo "readability: no markdown files to report"
   exit 0
 fi
 
-python3 - "${files[@]}" <<'PY'
+python3 - "$gate" "$merge_base" "$repo_root" "${#files[@]}" \
+  "${files[@]}" <<'PY'
+import os
 import re
 import statistics
+import subprocess
 import sys
 
 
@@ -75,8 +133,24 @@ LIST_PREFIX = re.compile(
     r"^(?P<indent> {0,3})(?P<marker>[-+*]|\d+[.)])"
     r"(?P<spacing>[ \t]{1,4})(?P<text>.*)$"
 )
-SENTENCE_END = re.compile(r"(?<=[.!?])(?:\s+|$)")
+SENTENCE_END = re.compile(
+    r"(?<=[.!?])"
+    r"(?:[*_~]+|[\"'”’»)]|\](?:\([^)]*\))?)*"
+    r"(?:\s+|$)"
+)
 TABLE_DELIMITER = re.compile(r"^:?-{3,}:?$")
+HUNK_HEADER = re.compile(
+    r"^@@ -\d+(?:,\d+)? \+(?P<start>\d+)(?:,(?P<count>\d+))? @@"
+)
+ALLOW_START = re.compile(r"^ {0,3}<!-- readability: allow -->[ \t]*$")
+ALLOW_END = re.compile(r"^ {0,3}<!-- readability: end -->[ \t]*$")
+
+gate_mode = sys.argv[1] == "1"
+merge_base = sys.argv[2]
+repo_root = sys.argv[3]
+file_count = int(sys.argv[4])
+paths = sys.argv[5 : 5 + file_count]
+explicit_mode = bool(paths)
 
 
 def strip_frontmatter(text):
@@ -259,7 +333,7 @@ def fence_container_ended(line, quote_depth, list_indent):
     return indent < list_indent
 
 
-def strip_nonprose(text):
+def strip_nonprose(text, preserve_allow_markers=False):
     lines = text.splitlines(keepends=True)
     kept = []
     fence_char = None
@@ -299,11 +373,20 @@ def strip_nonprose(text):
         if inline_delimiter is not None:
             end = find_code_span_close(line, inline_delimiter, 0)
             if end is None:
-                kept.append(raw_line)
+                kept.append(line_ending if preserve_allow_markers else raw_line)
                 continue
             visible.append(line[:end])
             cursor = end
             inline_delimiter = None
+
+        if (
+            preserve_allow_markers
+            and not in_comment
+            and cursor == 0
+            and (ALLOW_START.match(line) or ALLOW_END.match(line))
+        ):
+            kept.append(raw_line)
+            continue
 
         if cursor == 0 and not in_comment:
             item = list_item_indent(line)
@@ -335,7 +418,7 @@ def strip_nonprose(text):
                     fence_list_indent = active_list_indent
                 fence_char = fence[0]
                 fence_length = len(fence)
-                kept.append(line_ending)
+                kept.append(raw_line if preserve_allow_markers else line_ending)
                 continue
 
         while cursor < len(line):
@@ -349,7 +432,7 @@ def strip_nonprose(text):
                 continue
 
             if line.startswith("<!--", cursor) and not is_escaped(line, cursor):
-                visible.append(" ")
+                visible.append(" excluded " if preserve_allow_markers else " ")
                 in_comment = True
                 cursor += 4
                 continue
@@ -434,6 +517,30 @@ def table_line_indexes(lines):
     return indexes
 
 
+def make_unit(pieces):
+    text_parts = []
+    segments = []
+    cursor = 0
+    for line_number, piece in pieces:
+        piece = piece.strip()
+        if not piece:
+            continue
+        if text_parts:
+            cursor += 1
+        start = cursor
+        text_parts.append(piece)
+        cursor += len(piece)
+        segments.append((start, cursor, line_number))
+    if not text_parts:
+        return None
+    return {
+        "text": " ".join(text_parts),
+        "start": segments[0][2],
+        "end": segments[-1][2],
+        "segments": segments,
+    }
+
+
 def split_units(text):
     units = []
     current = []
@@ -443,13 +550,14 @@ def split_units(text):
 
     def flush():
         nonlocal current, current_kind
-        unit = " ".join(part for part in current if part).strip()
+        unit = make_unit(current)
         if unit:
             units.append(unit)
         current = []
         current_kind = None
 
     for index, line in enumerate(lines):
+        line_number = index + 1
         stripped = line.strip()
         if not stripped:
             flush()
@@ -462,7 +570,7 @@ def split_units(text):
                 r"[ \t]+#+[ \t]*$", "", (match.group("text") or "").strip()
             )
             if heading:
-                units.append(heading)
+                units.append(make_unit([(line_number, heading)]))
             continue
 
         if SETEXT_HEADING.match(line):
@@ -472,7 +580,7 @@ def split_units(text):
         match = LIST_ITEM.match(line)
         if match:
             flush()
-            current = [match.group("text").strip()]
+            current = [(line_number, match.group("text").strip())]
             current_kind = "list"
             continue
 
@@ -480,34 +588,222 @@ def split_units(text):
             flush()
             row = table_text(stripped)
             if row:
-                units.append(row)
+                units.append(make_unit([(line_number, row)]))
             continue
 
         if current_kind != "list" and current_kind != "paragraph":
             current_kind = "paragraph"
-        current.append(stripped)
+        current.append((line_number, stripped))
 
     flush()
     return units
 
 
-def lengths_for(path):
+def read_path(path):
     try:
         with open(path, encoding="utf-8") as handle:
-            text = handle.read()
+            return handle.read()
     except (OSError, UnicodeError) as err:
         print("readability: %s" % err, file=sys.stderr)
         sys.exit(2)
 
+
+def units_for_text(text):
     text = strip_frontmatter(text)
     text = strip_nonprose(text)
-    units = split_units(text)
-    unit_lengths = [len(unit.split()) for unit in units]
+    return split_units(text)
+
+
+def sentence_ranges(unit):
+    text = unit["text"]
+    spans = []
+    start = 0
+    for match in SENTENCE_END.finditer(text):
+        spans.append((start, match.start()))
+        start = match.end()
+    spans.append((start, len(text)))
+
+    sentences = []
+    for start, end in spans:
+        while start < end and text[start].isspace():
+            start += 1
+        while end > start and text[end - 1].isspace():
+            end -= 1
+        if start == end:
+            continue
+        start_line = None
+        end_line = None
+        for segment_start, segment_end, line_number in unit["segments"]:
+            if segment_start <= start < segment_end:
+                start_line = line_number
+            if segment_start <= end - 1 < segment_end:
+                end_line = line_number
+        if start_line is None or end_line is None:
+            print("readability: cannot map sentence to source lines", file=sys.stderr)
+            sys.exit(2)
+        sentences.append(
+            {
+                "text": text[start:end],
+                "start": start_line,
+                "end": end_line,
+            }
+        )
+    return sentences
+
+
+def lengths_for_text(text):
+    units = units_for_text(text)
+    unit_lengths = [len(unit["text"].split()) for unit in units]
     sentence_lengths = []
     for unit in units:
-        sentences = [part.strip() for part in SENTENCE_END.split(unit)]
-        sentence_lengths.extend(len(part.split()) for part in sentences if part)
+        sentence_lengths.extend(
+            len(sentence["text"].split()) for sentence in sentence_ranges(unit)
+        )
     return unit_lengths, sentence_lengths
+
+
+def lengths_for(path):
+    return lengths_for_text(read_path(path))
+
+
+def repo_relative(path):
+    return os.path.relpath(os.path.abspath(path), repo_root)
+
+
+def in_default_gate_scope(path):
+    normalized = os.path.normpath(path).replace(os.sep, "/")
+    return normalized.endswith(".md") and not (
+        normalized.startswith("devlog/")
+        or normalized.startswith(".claude/")
+    )
+
+
+def parse_diff():
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--no-ext-diff",
+            "--no-color",
+            "-M",
+            "-U0",
+            merge_base,
+            "--",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        print("readability: %s" % result.stderr.strip(), file=sys.stderr)
+        sys.exit(2)
+    entries = []
+    current = None
+    for line in result.stdout.splitlines():
+        if line.startswith("diff --git "):
+            if current is not None:
+                entries.append(current)
+            current = {"before": None, "after": None, "ranges": []}
+            continue
+        if current is None:
+            continue
+        if line.startswith("rename from "):
+            current["before"] = line[len("rename from ") :]
+            continue
+        if line.startswith("rename to "):
+            current["after"] = line[len("rename to ") :]
+            continue
+        if line.startswith("--- "):
+            source = line[4:]
+            current["before"] = None if source == "/dev/null" else source[2:]
+            continue
+        if line.startswith("+++ "):
+            destination = line[4:]
+            current["after"] = (
+                None if destination == "/dev/null" else destination[2:]
+            )
+            continue
+        match = HUNK_HEADER.match(line)
+        if not match:
+            continue
+        count = int(match.group("count") or "1")
+        if count:
+            start = int(match.group("start"))
+            current["ranges"].append((start, start + count - 1))
+    if current is not None:
+        entries.append(current)
+    if explicit_mode:
+        selected = {os.path.normpath(repo_relative(path)) for path in paths}
+        return [
+            entry
+            for entry in entries
+            if os.path.normpath(entry["after"] or entry["before"] or "")
+            in selected
+        ]
+    return [
+        entry
+        for entry in entries
+        if in_default_gate_scope(entry["after"] or entry["before"] or "")
+    ]
+
+
+def intersects(start, end, ranges):
+    return any(start <= range_end and range_start <= end for range_start, range_end in ranges)
+
+
+def allowed_ranges(text):
+    lines = text.splitlines()
+    ranges = []
+    start = None
+    for index, line in enumerate(lines):
+        line_number = index + 1
+        if ALLOW_START.match(line):
+            if start is None:
+                start = line_number
+            continue
+        if not ALLOW_END.match(line) or start is None:
+            continue
+        ranges.append((start, line_number))
+        start = None
+    if start is not None:
+        ranges.append((start, len(lines)))
+    return ranges
+
+
+def text_at_base(path):
+    if path is None:
+        return None
+    blob = subprocess.run(
+        ["git", "show", "%s:%s" % (merge_base, path)],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if blob.returncode != 0:
+        return None
+    return blob.stdout
+
+
+def words_at_base(path):
+    text = text_at_base(path)
+    if text is None:
+        return 0
+    unit_lengths, _ = lengths_for_text(text)
+    return sum(unit_lengths)
+
+
+def words_now(path):
+    if path is None:
+        return 0
+    absolute = os.path.join(repo_root, path)
+    if not os.path.exists(absolute):
+        return 0
+    unit_lengths, _ = lengths_for(absolute)
+    return sum(unit_lengths)
 
 
 def format_median(lengths):
@@ -517,10 +813,68 @@ def format_median(lengths):
     return str(int(value)) if value == int(value) else "%.1f" % value
 
 
+if gate_mode:
+    entries = parse_diff()
+    print("| File | Words before | Words after | Delta |")
+    print("| --- | ---: | ---: | ---: |")
+    for entry in sorted(entries, key=lambda item: item["after"] or item["before"]):
+        display_path = entry["after"] or entry["before"]
+        before = words_at_base(entry["before"])
+        after = words_now(entry["after"])
+        print(
+            "| %s | %d | %d | %+d |"
+            % (display_path, before, after, after - before)
+        )
+
+    violations = []
+    for entry in sorted(entries, key=lambda item: item["after"] or ""):
+        relative = entry["after"]
+        ranges = entry["ranges"]
+        if relative is None or not ranges:
+            continue
+        path = os.path.join(repo_root, relative)
+        if not os.path.isfile(path):
+            continue
+        raw_text = read_path(path)
+        marker_text = strip_nonprose(
+            strip_frontmatter(raw_text), preserve_allow_markers=True
+        )
+        exempt = allowed_ranges(marker_text)
+        for unit in units_for_text(raw_text):
+            if not intersects(unit["start"], unit["end"], ranges):
+                continue
+            if intersects(unit["start"], unit["end"], exempt):
+                continue
+            unit_words = len(unit["text"].split())
+            if unit_words > 120:
+                violations.append(
+                    (
+                        relative,
+                        unit["start"],
+                        "paragraph of %d words (limit 120)" % unit_words,
+                    )
+                )
+            for sentence in sentence_ranges(unit):
+                if not intersects(sentence["start"], sentence["end"], ranges):
+                    continue
+                sentence_words = len(sentence["text"].split())
+                if sentence_words > 40:
+                    violations.append(
+                        (
+                            relative,
+                            sentence["start"],
+                            "sentence of %d words (limit 40)" % sentence_words,
+                        )
+                    )
+
+    for path, line_number, message in sorted(violations):
+        print("%s:%d: %s" % (path, line_number, message))
+    sys.exit(1 if violations else 0)
+
 rows = []
 all_units = []
 all_sentences = []
-for path in sorted(sys.argv[1:]):
+for path in sorted(paths):
     units, sentences = lengths_for(path)
     all_units.extend(units)
     all_sentences.extend(sentences)
