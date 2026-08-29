@@ -1,0 +1,58 @@
+name: markdown
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: markdown-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pin npx tools so an upstream release cannot break an unrelated PR.
+      - name: Check Markdown lint
+        run: npx markdownlint-cli2@0.23.2 '**/*.md'
+      - name: Check Markdown formatting
+        run: npx prettier@3.9.6 --check '**/*.md'
+      - name: Check prose tics
+        run: ./scripts/check-prose-tics.sh
+      - name: Check skill structure
+        run: ./scripts/check-skill-structure.sh
+      - name: Check managed-file sync
+        run: ./scripts/check-managed-sync.sh
+
+  matrices:
+    name: ${{ matrix.script }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        script:
+          - test-await-pr-review-routing.sh
+          - test-capture.sh
+          - test-check-commit-messages.sh
+          - test-check-managed-sync.sh
+          - test-check-prose-tics.sh
+          - test-check-readability.sh
+          - test-check-skill-structure.sh
+          - test-compare-managed-blocks.sh
+          - test-merge-cleanup-inventory.sh
+          - test-merge-cleanup-landing.sh
+          - test-merge-cleanup-reconciliation.sh
+          - test-merge-cleanup.sh
+          - test-self-merge.sh
+          - test-watch-review.sh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ripgrep
+        if: matrix.script == 'test-merge-cleanup.sh'
+        run: sudo apt-get update && sudo apt-get install --yes ripgrep
+      - name: Run ${{ matrix.script }}
+        run: ./scripts/${{ matrix.script }}
