@@ -14,13 +14,17 @@ review_response="$repo_root/skills/await-pr-review/references/review-response.md
 line_count=$(wc -l < "$skill" | tr -d ' ')
 word_count=$(wc -w < "$skill" | tr -d ' ')
 
-if (( line_count >= 500 )); then
-  printf 'SKILL.md has %s lines; expected fewer than 500\n' "$line_count" >&2
+# SKILL.md is a routing core that must fit one bounded read (issue #202: about
+# 200 lines). Mechanics and rationale belong in references/, reached through
+# `references/<file>.md` §slug pointers, so a rule that needs more room moves
+# there instead of raising these bounds.
+if (( line_count > 220 )); then
+  printf 'SKILL.md has %s lines; expected at most 220\n' "$line_count" >&2
   exit 1
 fi
 
-if (( word_count >= 5000 )); then
-  printf 'SKILL.md has %s words; expected fewer than 5000\n' "$word_count" >&2
+if (( word_count > 2000 )); then
+  printf 'SKILL.md has %s words; expected at most 2000\n' "$word_count" >&2
   exit 1
 fi
 
