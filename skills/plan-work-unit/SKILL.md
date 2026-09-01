@@ -31,8 +31,8 @@ Follow this procedure:
 2. Read the whole issue, inspect the repository, and record the grounding
    revision.
 3. Retire and verify any stale plan before changing the contract.
-4. Complete the authoritative work-contract record.
-5. Post one current plan.
+4. Complete the authoritative work-contract record, written plainly.
+5. Post one current plan, written plainly.
 6. Verify both writes, report the handoff, and stop.
 
 ## Hold the Routing Boundary
@@ -117,6 +117,35 @@ After preconditions pass:
    dependencies, and authorization blockers. Do not claim the issue, create an
    implementation branch, edit implementation files, or open a pull request.
 
+## Write the Contract and Plan Plainly
+
+The contract and the plan comment are read by people who did not watch the
+planning. Write both so a busy reader understands them on the first pass.
+
+Use the write-plainly skill when it is loaded or your platform can load it.
+Apply it to the contract text and the plan comment, and read its plan example.
+Apply it by default; don't wait for the user to ask for plain output. Keep
+the required headings, terms, and order exact, whether they come from the
+project's own format or from this skill. They are project wording, so
+write-plainly leaves them alone: plain prose rewrites the sentences under a
+heading, never the heading itself.
+
+When no such skill is available, follow these rules instead:
+
+- Lead with the point. Put the decision, blocker, or change first, and the
+  reason after it.
+- Put one thought in each sentence. Prefer a new sentence to a joined clause.
+- Use ordinary words and active verbs: "edit," "run," "fix," not
+  "remediate," "surface," or "make a determination."
+- Cut agent jargon and process language. Say what changes, where, and what
+  stays the same. Don't restate the issue in project-management terms.
+- Name the exact path, command, or interface when the reader has to go there.
+  Keep those identifiers exact.
+- Keep every requirement, caveat, number, and step. Plain doesn't mean
+  shorter at the cost of a fact.
+- Write for a fresh task. Restore the context a later reader needs; a chat
+  reply can lean on the conversation, a plan comment can't.
+
 ## Complete the Authoritative Contract
 
 Bring the selected authoritative record to the shape the project requires.
@@ -174,6 +203,11 @@ and saying the plan is an implementation aid. Include:
 - Separate confirmed facts from assumptions.
 - Keep alternatives and deferred work out of the sequence unless they block
   the unit.
+
+Use the shape the project requires for plan comments. When it requires none,
+use the template in `references/plan-comment.md` §plan-comment. Either shape
+keeps the five parts above and writes their prose under Write the Contract and
+Plan Plainly.
 
 ### Replan
 
