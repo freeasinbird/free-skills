@@ -1,0 +1,43 @@
+# Exact per-layer phrases for review-convergence rules.
+# Columns: rule key, repository-relative layer path, required phrase.
+# The provenance fallback is intentionally reference-only. PR #198 declined
+# carrying "An unobservable signal is not an absent one" into the convention.
+gate-scope	skills/await-pr-review/references/review-response.md	asks for a guard or other behavioral change is real only when it passes two questions
+gate-scope	skills/await-pr-review/SKILL.md	asks for a guard or other behavioral change is real only when you can name what produces the failing state
+gate-scope	docs/agent-workflow.md	asks for a guard or other behavioral change is real only when you can name what produces the failing state
+non-behavioral-merits	skills/await-pr-review/references/review-response.md	Judge a clarity, documentation, naming, or maintainability finding on its merits and severity as before
+non-behavioral-merits	skills/await-pr-review/SKILL.md	Judge a clarity, documentation, naming, or maintainability finding on its merits and severity as before
+reachable-boundary	skills/await-pr-review/references/review-response.md	an input the interface admits at a public or untrusted boundary, or an existing caller for internal code
+reachable-boundary	skills/await-pr-review/SKILL.md	an input the interface admits at a public or untrusted boundary, or an existing caller for internal code
+reachable-boundary	docs/agent-workflow.md	an input the interface admits at a public or untrusted boundary, or an existing caller for internal code
+material	skills/await-pr-review/references/review-response.md	At the expected scale and trust boundary, is the harm real?
+material	skills/await-pr-review/SKILL.md	The harm must also be material at the expected scale
+material	docs/agent-workflow.md	The harm must also matter at the expected scale and trust boundary
+decline-reason	skills/await-pr-review/references/review-response.md	naming the unreachable path, the invariant that already holds, or why the harm is immaterial
+decline-reason	skills/await-pr-review/SKILL.md	naming the unreachable path, the holding invariant, or why the harm is immaterial
+decline-reason	docs/agent-workflow.md	naming the unreachable path, the invariant that holds, or why the harm is immaterial
+unsure-severity	skills/await-pr-review/references/review-response.md	When a reachable defect's severity is unsure, treat it as blocking
+unsure-severity	skills/await-pr-review/SKILL.md	When unsure whether a reachable defect blocks, treat it as blocking
+unsure-severity	docs/agent-workflow.md	When a reachable defect's severity is unsure, treat it as blocking
+unsure-severity	AGENTS.md	When a reachable defect's severity is unsure, treat it as blocking
+unsure-reachability	skills/await-pr-review/references/review-response.md	trace the callers or run the case
+unsure-reachability	skills/await-pr-review/SKILL.md	trace the callers or run the case before patching
+unsure-reachability	docs/agent-workflow.md	When reachability is unsure, trace the callers or run the case before patching
+unsure-reachability	AGENTS.md	When its reachability is unsure, trace the callers or run the case before patching
+shape-signal	skills/await-pr-review/references/review-response.md	hardening whose ledger entry names no input or caller you traced yourself
+shape-signal	skills/await-pr-review/SKILL.md	hardening you traced no caller for
+shape-signal	docs/agent-workflow.md	guards you traced no reaching caller for
+round-count	skills/await-pr-review/references/review-response.md	round count alone never turns a reachable, material defect into a decline
+round-count	skills/await-pr-review/SKILL.md	round count alone never turns a reachable defect into a decline
+round-count	docs/agent-workflow.md	round count alone never turns one into a decline
+removal-candidates	skills/await-pr-review/references/review-response.md	List each piece that fails either as a removal candidate
+removal-candidates	skills/await-pr-review/SKILL.md	List earlier hardening that fails either question as removal candidates
+removal-candidates	docs/agent-workflow.md	list earlier hardening that fails it as removal candidates
+posted-review	skills/await-pr-review/references/review-response.md	posted review is not evidence that work remains
+posted-review	skills/await-pr-review/SKILL.md	posted review is not evidence that work remains
+posted-review	docs/agent-workflow.md	A reviewer that posts only on findings has a floor on new code
+recurrence-real-member	skills/await-pr-review/references/review-response.md	A second member that fails the reachability question is a hardening-check signal, not a class to widen
+recurrence-real-member	skills/await-pr-review/SKILL.md	A second member that fails either question is a hardening-check signal, not a class to widen
+checkpoint-go	skills/await-pr-review/references/review-response.md	A go also requires that the recent blockers passed the two disposition questions
+checkpoint-go	skills/await-pr-review/SKILL.md	blockers that passed the two disposition questions
+checkpoint-go	docs/agent-workflow.md	A go needs blockers that passed the reachability and materiality test
