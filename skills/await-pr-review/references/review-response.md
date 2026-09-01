@@ -15,7 +15,7 @@ review, and while deciding whether another round earns its cost.
 - [Finding-class recurrence](#finding-class-recurrence)
 - [Disposition ledger](#disposition-ledger)
 
-## Disposition Rules
+## §disposition-rules
 
 Evaluate each finding on its merits:
 
@@ -53,7 +53,7 @@ blocking.
 A round dispositions every finding it contains, not only the blockers that
 earned another round. Nothing carries silently into a later pass.
 
-## Fold, Push, Verify, Reply, Resolve
+## §fold-push-verify-reply-resolve
 
 To fold a fix is to squash it into the original commit it belongs to, leaving
 no separate review-fix commit. Where the project folds review fixes this way,
@@ -81,13 +81,15 @@ Use the project's prescribed folding mechanism:
 
 After pushing, resolve the actual remote and PR head from the host. Confirm the
 cited SHA is contained in that pushed ref, and inspect the commit there to
-confirm the fold kept the edit. A fork PR's head need not be `origin`.
+confirm the fold kept the edit. A fork PR's head need not be `origin`. Confirm
+the pushed branch contains no autosquash subjects and no standalone review-fix
+commits.
 
 If the project appends review-fix commits instead, cite the pushed fix commit
 as-is. The pushed-ref verification still applies. A decline has no commit;
 reply with the reason only.
 
-## Main-Owned Fixer Choices
+## §main-owned-fixer-choices
 
 This section applies only after the conductor was skipped for a named gate.
 
@@ -113,7 +115,7 @@ If a main-owned exchange grows to roughly four or more rounds and the platform
 can resume a write-capable fixer, keep the same fixer alive. It pays the
 context rebuild once and keeps round debris out of the main context.
 
-## Rising Convergence Bar
+## §rising-convergence-bar
 
 A fix round is a round that pushes code. Decline-only rounds do not advance the
 count, and they end the exchange, because unchanged code needs no new pass.
@@ -165,7 +167,7 @@ foreground wait is cheap, so the conductor waits to quiescence.
 Past the final triage push, a new blocker reopens fix rounds. Further
 non-blockers receive terminal deferrals or declines without another push.
 
-## Hardening Check
+## §hardening-check
 
 Over-hardening is the third way a loop fails, and the hardest to see from
 inside. Each round's fixes hold, counts may shrink, and every finding gets a
@@ -204,7 +206,7 @@ Removing hardening changes scope, so surface it rather than reverting
 silently. A round count alone never turns a reachable, material defect into a
 decline.
 
-## Thrash and Checkpoints
+## §thrash-and-checkpoints
 
 Stop and surface thrash when either holds:
 
@@ -247,7 +249,7 @@ instruction omitted another clause mean the prose is re-deriving a program.
 Escalate to the owner with the recurrence evidence, and recommend moving the
 rule into a small tested script or check.
 
-## Disposition Ledger
+## §disposition-ledger
 
 At termination every finding has exactly one state:
 
