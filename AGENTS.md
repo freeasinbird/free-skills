@@ -224,8 +224,8 @@ Pull requests run two workflows. `.github/workflows/commit-messages.yml`
 publishes the `check` context for the exact feature-branch commit range against
 the Mechanical Commit-Message Checks below. `.github/workflows/markdown.yml`
 publishes `markdown-checks` for Markdown lint and formatting, the touched-prose
-gate, prose-tic, list-capitalization, skill-structure, and managed-sync checks,
-plus one context for every script test matrix.
+gate, prose-tic, list-capitalization, skill-structure, managed-sync, and
+review-convergence layer checks, plus one context for every script test matrix.
 
 `CLAUDE.md` imports `AGENTS.md`. Edit `AGENTS.md`, never the pointer.
 
@@ -313,11 +313,15 @@ material, examples, and sub-prompts may live beside it.
   live files mirror canonical sources. Update both sides when a row's content
   changes. Otherwise, the live copy may contradict a freshly synced project.
 
-  | Live file                                                       | Canonical source                                                    | Verification                      |
-  | --------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------- |
-  | `AGENTS.md` managed blocks                                      | `skills/agent-setup/references/canonical-sections.md`               | `./scripts/check-managed-sync.sh` |
-  | `docs/agent-workflow.md`                                        | `skills/agent-setup/references/scaffolding.md` §agent-workflow      | `./scripts/check-managed-sync.sh` |
-  | `devlog/README.md`, `CONTRIBUTING.md`, PR template, `CLAUDE.md` | Matching sections in `skills/agent-setup/references/scaffolding.md` | `diff`                            |
+  | Live file                                                                                                        | Canonical source                                                             | Verification                                   |
+  | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------- |
+  | `AGENTS.md` managed blocks                                                                                       | `skills/agent-setup/references/canonical-sections.md`                        | `./scripts/check-managed-sync.sh`              |
+  | `docs/agent-workflow.md`                                                                                         | `skills/agent-setup/references/scaffolding.md` §agent-workflow               | `./scripts/check-managed-sync.sh`              |
+  | `devlog/README.md`, `CONTRIBUTING.md`, PR template, `CLAUDE.md`                                                  | Matching sections in `skills/agent-setup/references/scaffolding.md`          | `diff`                                         |
+  | `skills/await-pr-review/SKILL.md`, `docs/agent-workflow.md` §review-convergence, `AGENTS.md` pull-requests block | Phrases from the reference pinned in `scripts/review-convergence-layers.tsv` | `./scripts/check-review-convergence-layers.sh` |
+
+  When a pinned phrase changes in any layer, update its table row and re-check
+  the other layers in the same change.
 
   The managed blocks are devlog, finish-line, context, communication,
   branches, pull-requests, commits, and done. The managed devlog block points
@@ -621,6 +625,10 @@ and lint and formatting are clean.
 
   See Conventions for the frontmatter rule.
 
+- Review-convergence layer check clean
+  (`./scripts/check-review-convergence-layers.sh`): every summary layer
+  contains the phrases pinned in `scripts/review-convergence-layers.tsv`
+
 - Skill prompts reviewed for platform-agnostic language (no
   Claude-Code-only or Codex-only assumptions without explicit gates)
 - Managed blocks in sync with the canonical source and
@@ -644,6 +652,8 @@ and lint and formatting are clean.
   (`./scripts/test-check-commit-messages.sh`)
 - Skill-structure matrix green when the structure check changed
   (`./scripts/test-check-skill-structure.sh`)
+- Layer-check matrix green when the check or its table changed
+  (`./scripts/test-check-review-convergence-layers.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
   changed (`./scripts/test-capture.sh`)
 - Self-merge validation matrix green when self-merge's `self-merge.sh`
