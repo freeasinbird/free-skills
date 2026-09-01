@@ -13,6 +13,7 @@
 # counts only when dated after the baseline.
 #
 # Usage:
+#   watch-review.sh --help | -h                 # print this block, exit 0
 #   watch-review.sh --pr N --baseline 2026-07-02T05:07:30Z \
 #     --login chatgpt-codex-connector \   # plain or name[bot]; normalized
 #     [--repo owner/name]                 # default: the repo the working
@@ -72,16 +73,21 @@
 #                 verdict on its own: no poll ever observed the PR, so the
 #                 honest report is "could not watch this PR".
 #
-# Exit codes: 0 review activity; 3 clean pass; 2 cap expired; 64 usage
-# error; 69 gh (GitHub CLI) not found on PATH.
+# Exit codes: 0 review activity (or --help); 3 clean pass; 2 cap expired;
+# 64 usage error; 69 gh (GitHub CLI) not found on PATH.
 set -u
 
 PR="" BASELINE="" LOGIN="" REPO="" REST_LOGIN="" REACTION_LOGIN="" HEAD=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
 INTERVAL=75 CAP_MINUTES=25
 
+# The header comment above is the usage text: print it on request to
+# stdout (exit 0) and on a bad invocation to stderr (exit 64).
+print_usage() {
+  sed -n '2,/^set -u$/p' "$0" | sed '$d'
+}
 usage() {
-  sed -n '2,/^set -u$/p' "$0" | sed '$d' >&2
+  print_usage >&2
   exit 64
 }
 
@@ -90,6 +96,7 @@ usage() {
 while [ $# -gt 0 ]; do
   opt="$1"
   case "$opt" in
+    -h|--help) print_usage; exit 0 ;;
     --pr|--baseline|--login|--repo|--rest-login|--reaction-login|--clean-content|--progress-content|--interval|--cap-minutes|--head) ;;
     *) echo "watch-review.sh: unknown option: $opt" >&2; usage ;;
   esac

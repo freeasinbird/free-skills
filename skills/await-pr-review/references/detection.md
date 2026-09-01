@@ -245,7 +245,8 @@ default.
 
 Optional flags include `--rest-login`, `--clean-content`, `--progress-content`,
 `--interval`, and `--cap-minutes`. `--reaction-login` is a deprecated alias for
-`--rest-login`, retained for older callers.
+`--rest-login`, retained for older callers. `--help` (or `-h`) prints the full
+flag summary and exit codes to stdout and exits 0.
 
 | Exit | Report            | Meaning                                             |
 | ---- | ----------------- | --------------------------------------------------- |
