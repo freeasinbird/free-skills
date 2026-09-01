@@ -302,8 +302,14 @@ PR, stops the response round as incomplete evidence.
 
 Handle every finding:
 
-- Evaluate it on its merits. Fix real findings; decline contrived, speculative,
-  or already-fixed ones with a one-line reason.
+- Evaluate it on its merits. A finding that asks for a guard or other
+  behavioral change is real only when you can name what produces the failing
+  state. Name an input the interface admits at a public or untrusted boundary,
+  or an existing caller for internal code. The harm must also be material at
+  the expected scale. Fix real findings; decline the rest with a one-line
+  reason naming the unreachable path, the holding invariant, or why the harm
+  is immaterial. Judge a clarity, documentation, naming, or maintainability
+  finding on its merits and severity as before.
 - Sweep the whole finding class, not only the cited line.
 - Auto-address clear-cut fixes. Surface ambiguous, contentious, or
   design-altering calls to the user.
@@ -331,17 +337,33 @@ Raise the severity bar as rounds continue:
   correctness, security, data loss, broken invariants, or red CI.
 - Triage each non-blocker into a locally verifiable final push, a linked
   follow-up issue, or a reasoned decline.
-- When unsure whether a finding blocks, treat it as blocking.
+- When unsure whether a reachable defect blocks, treat it as blocking. When
+  unsure whether its state is reachable, trace the callers or run the case
+  before patching.
 
 Stop for human judgment on thrash: the same class recurring after a correct,
 complete fix, or fixes producing new problems without net progress.
 
+From fix round 3, run the hardening check in `references/review-response.md`
+before each fix round and at every checkpoint. Its signals are observable: most
+findings citing lines an earlier round added, recent fixes that are all
+hardening you traced no caller for, a diff that grows without delivering the
+PR's What, and a flat finding count. Two signals mean the reviewer is reviewing
+your hardening.
+
+Fix what still passes both disposition questions and clears the bar; a round
+count alone never turns a reachable defect into a decline. List earlier
+hardening that fails either question as removal candidates, and surface the
+ledger. A reviewer that posts only on findings has a floor on new code; a
+posted review is not evidence that work remains.
+
 At about five blocker-sustained fix rounds, make and record a go/no-go
 checkpoint. A go is an internal call: record one line naming the convergence
-evidence, then continue without yielding or asking permission. A no-go, or a
-materially uncertain call, surfaces the current ledger for human judgment.
-Repeat the checkpoint at the same cadence while blockers continue; an earlier
-go does not authorize an unbounded loop.
+evidence and blockers that passed the two disposition questions, then continue
+without yielding or asking
+permission. A no-go, or a materially uncertain call, surfaces the current
+ledger for human judgment. Repeat the checkpoint at the same cadence while
+blockers continue; an earlier go does not authorize an unbounded loop.
 
 Keep the same conductor through ordinary waits, surfaced pauses, and review
 rounds; idle lifetime alone is not a reason to replace it. Consider the
@@ -364,15 +386,17 @@ judgment calls.
 A fixed round count, elapsed time, idle time, or context size alone never
 forces replacement.
 
-Track finding classes across the whole exchange. A second member after a class
-sweep requires a root-cause hypothesis for why the sweep missed it, widens the
-class one level, and earns one fresh-context adversarial refute pass where
-read-only delegation is available. Repeated prose-clause findings on one rule
+Track finding classes across the whole exchange. Widening applies to a real
+second member, one that passes both disposition questions. Such a member
+requires a root-cause hypothesis for why the sweep missed it, widens the class
+one level, and earns one fresh-context adversarial refute pass where read-only
+delegation is available. A second member that fails either question is a
+hardening-check signal, not a class to widen. Repeated prose-clause findings
 surface should trigger an owner escalation to replace the prose program with a
 tested script or check.
 
-The full taper, final-push, checkpoint, recurrence, refute-pass, and ledger
-rules live in `references/review-response.md`.
+The full taper, final-push, hardening-check, checkpoint, recurrence,
+refute-pass, and ledger rules live in `references/review-response.md`.
 
 ### 6. Report the Ledger
 
