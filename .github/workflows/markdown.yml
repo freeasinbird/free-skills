@@ -46,6 +46,8 @@ jobs:
         run: ./scripts/check-skill-structure.sh
       - name: Check managed-file sync
         run: ./scripts/check-managed-sync.sh
+      - name: Check review-convergence layers
+        run: ./scripts/check-review-convergence-layers.sh
 
   matrices:
     name: ${{ matrix.script }}
@@ -61,6 +63,7 @@ jobs:
           - test-check-managed-sync.sh
           - test-check-prose-tics.sh
           - test-check-readability.sh
+          - test-check-review-convergence-layers.sh
           - test-check-skill-structure.sh
           - test-compare-managed-blocks.sh
           - test-merge-cleanup-inventory.sh
