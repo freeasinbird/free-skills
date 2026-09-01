@@ -797,7 +797,7 @@ for forbidden in (
 # strips the ordinary recovery path and contradicts the
 # rotation-replacement-interruption-after-transfer fixture. Scan the section,
 # whitespace-flattened so a line wrap cannot hide the anchor.
-strand_marker = "## Stranded-Conductor Recovery\n"
+strand_marker = "## §stranded-conductor-recovery\n"
 if strand_marker not in text:
     raise SystemExit("conductor reference is missing the stranded-conductor recovery section")
 strand = " ".join(text.split(strand_marker, 1)[1].split("\n## ", 1)[0].split())

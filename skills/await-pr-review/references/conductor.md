@@ -7,6 +7,7 @@ point.
 ## Contents
 
 - [Spawn brief](#spawn-brief)
+- [Host mapping](#host-mapping)
 - [Turn discipline](#turn-discipline)
 - [Checkout gate](#checkout-gate)
 - [Pinned force-with-lease](#pinned-force-with-lease)
@@ -14,7 +15,7 @@ point.
 - [Context rotation](#context-rotation)
 - [Stranded-conductor recovery](#stranded-conductor-recovery)
 
-## Spawn Brief
+## §spawn-brief
 
 Spawn the conductor with the least inherited parent context the host exposes:
 
@@ -36,7 +37,8 @@ Give the conductor one compact, self-contained task with these facts:
 - Automated reviewer login in each required API form, when already recorded
 - Trigger and progress/clean status signals, when already recorded
 - Baseline source and exact timestamp (plus the post-push disambiguation
-  reading when the baseline used the pre-push fallback)
+  reading when the baseline used the pre-push fallback), or the explicit
+  attribution gap when no baseline could be anchored
 - Expected PR head SHA
 - Base branch and base-tip SHA
 - Initial-context mode, or the unsupported-control notice
@@ -50,7 +52,9 @@ Give the conductor one compact, self-contained task with these facts:
 
 When reviewer identity or trigger facts are not recorded yet, say so in the
 brief and assign the conductor the step-2 discovery before it waits. Don't make
-the main agent scan history just to complete the brief.
+the main agent scan history just to complete the brief. Grant checkout
+isolation or exclusivity explicitly, and run the conductor on a model capable
+of editing and review judgment, not the cheapest watcher tier.
 
 In this reference, `current task contract` means that initial contract plus
 every later decision and constraint amendment the user makes through a surfaced
@@ -79,6 +83,35 @@ without parent conversation history. It reads the referenced project conventions
 itself. Keep its reports compact: finding ID, one-line disposition, final
 pushed SHA or issue, checks status, and only enough context to decide a
 surfaced call.
+
+## §host-mapping
+
+Map any agent's actual tools to the four routing grants. These named surfaces
+are concrete examples that prevent repeated capability guesswork; they do not
+replace the generic gate.
+
+- **Codex app:** spawn the conductor with `fork_turns: "none"` so it inherits
+  no parent turns. Collaboration tools that expose spawn and completion
+  notification satisfy grants 1 and 3. Follow-up or resume, plus a
+  conductor-local foreground wait or scheduled same-conductor wake, satisfy
+  grant 2. If agents share the checkout, grant branch exclusivity by having
+  the main agent make no edit, commit, PR-branch fetch, rebase, or push until
+  the terminal ledger. If the main agent must keep changing that checkout,
+  grant 4 does not hold.
+- **Claude Code:** use one ordinary named background subagent, which starts
+  with fresh context, rather than a fork that inherits the parent
+  conversation. Give it explicit worktree isolation. Its blocking foreground
+  wait plus re-messaging the same agent satisfy grant 2; completion
+  notification satisfies grant 3.
+- **Any other agent:** inspect its delegation, conductor-local wait and
+  resume, completion, and checkout controls, then apply the same four-grant
+  gate. An API or connector that can only return instantaneous reads does not
+  satisfy grant 2 unless it can schedule the same conductor to resume without
+  ending the exchange. Request fresh or empty context when the host supports
+  it. When it cannot control inherited context, state that limit and continue
+  with the compact self-contained brief; this optimization gap is not a failed
+  conductor grant. Do not infer a failed gate from unfamiliar tool names; name
+  the concrete missing grant if one is absent.
 
 ## Turn Discipline
 
@@ -109,7 +142,7 @@ ownership gate failed and the exchange belongs in the main agent. A background
 process that re-enters only the main-agent layer doesn't satisfy this contract:
 it can strand the exchange and send a misleading completion notice.
 
-## Checkout Gate
+## §checkout-gate
 
 The conductor rewrites and force-pushes the PR branch, so it needs one of:
 
@@ -122,7 +155,8 @@ silently reinterpret isolation as mandatory on a platform whose subagents share
 the filesystem.
 
 Before the first write, and before any later write after a wait or resume, the
-conductor verifies:
+conductor verifies these checks. Under main ownership, the main agent runs the
+same gate itself:
 
 1. The host-reported PR head equals its checkout HEAD.
 2. The worktree and index are clean, including untracked files.
@@ -164,7 +198,7 @@ A failed pinned lease means someone else pushed. Stop, fetch, incorporate the
 observed remote head into local history, re-run the relevant verification, then
 advance the lease to that incorporated head for the retry.
 
-## Quiescence and Reporting
+## §quiescence-and-reporting
 
 The conductor waits out every review its own push triggers, including a final
 locally verifiable triage push. It emits the terminal ledger only at quiescence:
@@ -228,17 +262,26 @@ Don't declare the PR ready while any of these holds:
 - Any blocker or thread is unresolved
 - A push is pending
 - Reviewer activity after the handled boundary is undispositioned
-- The reviewer is known to be in progress
+- The reviewer is known to be in progress, outside the main-owned
+  final-triage exception in `review-response.md`
 - Review or snapshot coverage is incomplete or broken
 - A required check is failed or incomplete
 - The base is stale
+
+If the current base branch or tip differs from the recorded base, report the
+review exchange complete but integration evidence stale, and return to the
+project's freshness workflow. Do not update the branch as part of the watcher
+role. Wait for every required check and fix any known-red result before
+claiming the PR ready; review completion is not CI completion. Leave the PR
+open for human review and merge unless the project explicitly opts into
+self-merge.
 
 The terminal ledger records every finding disposition, the fresh checks and
 thread states, the current PR head, the current base and its freshness result,
 pending push or review state, and any watch coverage gap. It is the conductor's
 completion, not a question to answer.
 
-## Context Rotation
+## §context-rotation
 
 Keep the same conductor through ordinary waits and review rounds. A long idle
 period, elapsed time, context size, or fixed round count is not a reason to
@@ -403,7 +446,7 @@ reconciliation is provisional acceptance, not permission to mutate, check out
 the PR branch in a second worktree, or claim checkout ownership before the
 one-time transfer.
 
-## Stranded-Conductor Recovery
+## §stranded-conductor-recovery
 
 Treat any conductor completion notice whose report says it is still waiting as a
 stranded exchange. This holds whether it is an ordinary conductor or an

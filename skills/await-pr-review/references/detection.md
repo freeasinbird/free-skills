@@ -7,6 +7,14 @@ reference when capturing a baseline, detecting an unrecorded reviewer, invoking
 the watcher, scheduling repeated wakes, or polling through a connector because
 the script can't run.
 
+The skill assumes an open PR, an automated reviewer that can be identified,
+access to the host's reviews, comments, and reactions through either the
+bundled script or an equivalent API or connector, and a permitted wait or
+re-entry mechanism. A host CLI and shell are preferred, not mandatory. When
+neither the script nor API-based detection can observe the required host data,
+name that missing capability and hand control back rather than pretending to
+watch.
+
 ## Contents
 
 - [Event-anchored baselines](#event-anchored-baselines)
@@ -14,11 +22,12 @@ the script can't run.
 - [Reviewer identity and trigger](#reviewer-identity-and-trigger)
 - [Signals and login forms](#signals-and-login-forms)
 - [Watcher invocation](#watcher-invocation)
+- [Main-owned mechanisms](#main-owned-mechanisms)
 - [Connector or API polling](#connector-or-api-polling)
 - [Scheduled wake contract](#scheduled-wake-contract)
 - [Cadence and cap](#cadence-and-cap)
 
-## Event-Anchored Baselines
+## §event-anchored-baselines
 
 The baseline is the timestamp each poll compares activity against. Anchor it to
 the event that should produce the pass, not to watcher startup:
@@ -88,7 +97,8 @@ Whatever the baseline source, confirm which round a signal covered. This round
 attribution matters because GitHub stamps a review with the head current at
 submission, not necessarily the head the reviewer analyzed. A review already
 running during a push can therefore land afterward and appear to cover the new
-head. Clean-pass reactions are harder because they carry no head at all.
+head. Clean-pass reactions are harder because they carry no head at all. This
+attribution check belongs to the exchange owner and is not repeated later.
 
 At the same boundary, record the expected PR head plus base branch and base tip
 from the host. Pass the expected head to the watcher; retain the base for the
@@ -162,7 +172,7 @@ If any value differs, discard both mixed-time scans and restart until two
 complete scans match. Individual page sequences or a partial boundary
 fingerprint do not prove coherent state.
 
-## Reviewer Identity and Trigger
+## §reviewer-identity-and-trigger
 
 Establish identity in this order:
 
@@ -178,7 +188,8 @@ Establish identity in this order:
 
 If more than one distinct review bot appears, ask which one to await. Past
 activity reveals identity but not necessarily the trigger; establish whether it
-runs on PR events, a command, or a CI job before polling.
+runs on PR events, a command, or a CI job before polling. If the trigger cannot
+be established, ask rather than burning the wait cap.
 
 When a reviewer or status signal is newly observed, record its name, login
 forms, trigger, and observed signals in the project's designated conventions
@@ -229,7 +240,7 @@ Author fields and login forms follow the API:
 `--rest-login` only for a machine-user reviewer or another form the automatic
 normalization cannot derive.
 
-## Watcher Invocation
+## §watcher-invocation
 
 Run the script by path from the PR checkout:
 
@@ -265,9 +276,38 @@ deadline.
 
 Every positive match still needs round attribution before it is accepted. If a
 matched review/comment is stale, scan reactions separately because the script
-exits on the positive item before reaching a clean-pass reaction.
+exits on the positive item before reaching a clean-pass reaction. Branch on
+every exit code, and report incomplete coverage as incomplete, not quiet. A
+round ends only on the activity listed under Signals and Login Forms.
 
-## Connector or API Polling
+Keep one active watch per PR and reviewer. Start it promptly, before waiting
+on required checks. After a new push, advance or replace its baseline instead
+of leaving duplicate watchers alive. Checks stay a separate required wait; the
+review detector does not prove them green.
+
+## §main-owned-mechanisms
+
+After emitting the required `Conductor skipped` line, a main-owned exchange
+chooses the cheapest permitted mechanism that reliably re-enters the main
+agent:
+
+1. A background no-model `watch-review.sh` process whose completion re-enters
+   the agent, when a shell and host CLI are available.
+2. A read-only watcher subagent on the smallest capable model, when
+   background-process re-entry is absent.
+3. A cancellable scheduled API or connector poll, or script invocation, that
+   uses the same frozen baseline and expected head on every wake.
+4. A bounded foreground detector when the main agent can stay active through
+   the wait, using the script or equivalent API or connector snapshots.
+5. Hand back the baseline when none can run. Name the missing capability
+   rather than pretending to watch.
+
+The watcher-only subagent is not the conductor. It must not edit, commit, push,
+trigger a review, reply, or resolve threads. It reports compact IDs,
+timestamps, states, paths and lines, the top-level review body, status
+reactions, and checks state.
+
+## §connector-or-api-polling
 
 When the exchange owner has no shell or host CLI, reproduce the watcher contract
 through the available API or repository connector. Use the exact baseline and
