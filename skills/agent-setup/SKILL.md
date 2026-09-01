@@ -37,7 +37,7 @@ Check the request before the file state, then pick a mode from this table:
 | Request asks only to reassess coordination, not to set up  | Reassessment                     |
 | Request asks for both setup and reassessment               | Combined (see below)             |
 | No AGENTS.md in the project root                           | Init                             |
-| AGENTS.md has `<!-- agents-md:managed:` markers            | Update                           |
+| AGENTS.md has exact `agents-md:managed:` markers           | Update                           |
 | AGENTS.md has marker remnants but no exact managed markers | Stop and report (see below)      |
 | AGENTS.md has no markers and no remnants                   | Adopt or leave unmanaged (below) |
 
@@ -47,76 +47,13 @@ parallel-work setup, or simplify obsolete lanes. Enter Reassessment only from
 that request, never because a recorded reassessment trigger appears satisfied or
 an ordinary init, adoption, or update discovers new evidence.
 
-### Combined Setup and Reassessment
-
-One request asks for both setup (init, adoption, or update) and coordination
-reassessment. Protect any existing AGENTS.md before setup mutates it: run
-reassessment step 1, then only step 2's read-only location preflight.
-
-The preflight does only this:
-
-- Locate every apparent coordination record, stage record, and mechanics line,
-  then apply **Placement** against the current managed ranges.
-- If adoption is requested, derive its planned ranges without editing and treat
-  them as managed for this check.
-- Resolve every syntactically local mechanics target only far enough to check
-  its location. Also derive the ranges and files setup proposes to rewrite.
-
-A marker or location failure that would expose a record, pointer line, or local
-target to overwrite stops both operations.
-
-Don't run the deeper checks yet: record cardinality, field, stage-layout,
-stage-field, mechanics-value, and semantic target-suitability validation. Those
-semantic failures don't make managed setup unsafe.
-
-Then complete the requested setup using the file-state routing above, and run
-the full reassessment (all of steps 1-2) against the resulting setup. If setup
-stops on an unsafe state or an unresolved owner choice, don't continue to
-reassessment. Never discard the setup half of a combined request merely because
-later reassessment validation must stop.
-
-### Marker Remnants: Stop
-
-AGENTS.md has no exact managed markers but carries marker remnants. Stop and
-report them; don't offer adoption. A remnant is either of these:
-
-- A lookalike of the managed marker or the nested `project:done-checks` marker.
-  This is update-mode step 3's malformation rule: comment lines that resemble
-  either marker in spacing, case, or indentation, or carry its text inside a
-  longer line.
-- Any nested `project:done-checks` markers other than exactly one correctly
-  ordered pair: a lone opener or closer, a duplicate, or a close before its
-  open.
-
-Wrapping sections around malformed remnants leaves a partially adopted file
-that only fails later, so the user should fix or remove them first.
-
-One exact, correctly ordered nested pair with no managed `done` block is not a
-remnant. That's the documented opt-out (see "Managed Section Markers"), so it
-doesn't trigger this stop; such a file falls to "Adopt or Leave Unmanaged"
-below.
-
-### Adopt or Leave Unmanaged
-
-AGENTS.md exists without markers. Ask whether to adopt management or leave the
-file unmanaged. To adopt:
-
-1. Match sections to canonical keys by heading.
-2. Wrap each match's existing text as-is in markers.
-3. Gather the project-specific information from init step 4 without overwriting
-   existing unmarked guidance. This includes coordination discovery, and it
-   preserves any existing coordination or stage record under the update-mode
-   rules.
-4. Run the update-mode comparison so the user sees any canonical divergence as
-   a diff.
-
-One exception to as-is: when wrapping a matched `done` section, also wrap its
-existing project checks in the nested `<!-- agents-md:project:done-checks -->`
-markers, text unchanged. Update-mode validation requires the nested pair inside
-a managed `done` block, so a bare wrap would dead-end the adoption. Where an
-exact nested pair is already present (the opt-out routed here from the
-marker-remnants rule above), keep it as it stands and wrap the managed `done`
-block around it; adding a second pair fails that same validation.
+For a request that asks for both setup and reassessment, read
+`references/modes.md` §combined and follow it before setup mutates anything.
+When AGENTS.md carries marker remnants but no exact managed markers, read
+`references/modes.md` §remnants: stop and report them; don't offer adoption.
+When AGENTS.md exists without markers, ask whether to adopt management or
+leave the file unmanaged. To adopt, read `references/modes.md` §adopt and
+follow it.
 
 ## Profiles
 
@@ -152,63 +89,27 @@ only record (no separate config or metadata file).
 3. Choose a profile with the user (see "Profiles"). Present the three
    explicitly and recommend Standard. Apply the Profiles defaults when the run
    is noninteractive or the user has already stated a preference.
-4. Gather the project-specific sections interactively (see "Project-Specific
-   Section Guidance" below). The conventional order interleaves them with the
-   managed sections, so collect this content, or decide on placeholders, before
-   writing.
-5. Settle `docs/agent-workflow.md`, then write AGENTS.md once.
-
-   Settle the reference first: the blocks carry `§slug` pointers into it. If a
-   copy already exists and can't be created or refreshed to the template (step
-   6), say so and leave the dependent blocks out, rather than writing pointers
-   the project can't follow.
-
-   Then write AGENTS.md once, in the conventional section order (see below):
-   - Each canonical section wrapped in its markers (the `devlog` block only
-     under Decision-log or High-assurance).
-   - Project-specific content or placeholders in place.
-   - The `Agent-setup profile:` line, plus the High-assurance mandatory-note
-     list and any justified coordination or work-unit stage record, in an
-     unmanaged section.
-
-   Verify that write before moving on. Init pastes the managed blocks by hand,
-   and every comparison update mode makes depends on their byte-exactness.
-   - Where the running agent can execute shell scripts, run the comparator
-     described under "Update Mode". Under Decision-log or High-assurance, pass
-     `--require-all` and require exit 0. Under Standard, drop the flag: the run
-     must exit 0 with `missing: devlog` as its only missing line and every
-     other key reporting `ok:`.
-   - Without shell access, make the comparator's comparison by hand: read each
-     managed block's whole text back against `references/canonical-sections.md`,
-     excluding the nested `project:done-checks` payload from both sides as step
-     6 does.
-
-   A dropped or reworded sentence inside a block is exactly the drift this check
-   exists to catch; the project's own checks in the nested block are not drift.
-
-6. Create scaffolding files:
-   - `devlog/README.md`: content in `references/scaffolding.md` §devlog-readme
-     (Decision-log and High-assurance profiles only)
-   - `.github/pull_request_template.md`: content in `references/scaffolding.md` §pr-template
-   - `CONTRIBUTING.md`: content in `references/scaffolding.md` §contributing
-   - `CLAUDE.md`: content in `references/scaffolding.md` §claude-md
-   - `docs/agent-workflow.md`: content in `references/scaffolding.md`
-     §agent-workflow (the step-local procedure the managed blocks point at by
-     `§slug`; without it those pointers dangle)
-
-   For any that already exist, don't recreate them. Compare against the template
-   and, on drift, show the diff and offer to refresh; never overwrite silently.
-   This is the same rule as update-mode step 9, including its
-   `docs/agent-workflow.md` exception, where the pointers in the blocks make a
-   stale copy drift to fix rather than an offer.
-
-7. Audit standard project files (see "Standard Project Files" below). Report
-   which are present, which are missing, and suggest creating any that apply.
-   Don't create them (content is project-specific); just flag. Also check for an
-   automated-reviewer record (see "Automated Reviewer Record" below).
-8. Check the settings under "Repo Settings" below and offer to align them.
-   Report any that can't be checked or set (wrong permissions, non-GitHub
-   forge).
+4. Gather the project-specific sections interactively. Read
+   `references/project-sections.md` §guidance for the per-section questions,
+   `references/project-sections.md` §work-contracts for coordination
+   discovery, and `references/project-sections.md` §stages for optional
+   work-unit stages, and follow them. The conventional order in
+   `references/project-sections.md` §section-order interleaves these sections
+   with the managed ones, so collect this content, or decide on placeholders,
+   before writing.
+5. Settle `docs/agent-workflow.md`, then write AGENTS.md once and verify the
+   write. Read `references/managed-blocks.md` §init-write and follow it.
+6. Create the scaffolding files listed in `references/managed-blocks.md`
+   §scaffold-files. For any that already exist, apply that section's drift
+   rules; never overwrite silently.
+7. Audit standard project files: read `references/audit.md` §standard-files,
+   then report which are present, which are missing, and suggest creating any
+   that apply. Don't create them (content is project-specific); just flag.
+   Also check for an automated-reviewer record (see "Automated Reviewer
+   Record" below).
+8. Check the settings in `references/audit.md` §repo-settings and
+   `references/audit.md` §required-checks, and offer to align them. Report
+   any that can't be checked or set (wrong permissions, non-GitHub forge).
 9. Summarize what was created, what the user should fill in, which standard
    files are missing, and which repo settings need attention.
 
@@ -216,53 +117,13 @@ only record (no separate config or metadata file).
 
 1. Read `references/canonical-sections.md` for the current canonical text.
 2. Read the project's AGENTS.md.
-3. Validate the markers before touching anything. Check every one of these:
-   - Every opening `<!-- agents-md:managed:KEY -->` has a matching close after
-     it.
-   - No KEY appears twice.
-   - Every KEY is a known one.
-   - No two blocks overlap. A block that opens inside another's range crosses a
-     boundary even though both keys pair correctly.
-   - No line merely resembles a managed marker or the nested
-     `project:done-checks` marker. An indentation, case, or spacing variant, a
-     mistyped or unknown key, or a marker's text carried inside a longer line is
-     a malformation.
-   - The nested `project:done-checks` markers are either absent or exactly one
-     correctly ordered pair.
-   - When a managed `done` block is present, that pair sits inside it. (One
-     exact pair with no managed `done` block is the documented opt-out, not a
-     malformation; see "Managed Section Markers".)
-
-   On any malformation, stop and report it; never refresh. A broken boundary
-   would pull project-specific text into the managed region, and the refresh
-   would delete it. Nothing below reads the file for meaning until its
-   boundaries are trusted, so this precedes the profile discovery that can
-   negotiate a migration with the user.
-
-4. Discover the profile: look for the `Agent-setup profile:` line.
-   - **Recorded:** preserve it and scope the steps below to it (see Profiles for
-     what Standard's absent `devlog` block means). Never switch a recorded
-     profile without the user's explicit choice.
-   - **Absent, but a legacy setup exists** (a managed `devlog` block, a
-     `devlog/` scaffold, or a session-bookend protocol): offer migration to
-     Decision-log, or High-assurance when the user names mandatory change
-     classes. Show the resulting managed-block and scaffold diffs before
-     applying anything. On acceptance, the block and scaffold changes and the
-     new profile line land through the normal steps below. On decline, change
-     and record nothing; the offer recurs on the next update run. Never delete
-     an existing devlog or switch the project to Standard without the user's
-     explicit choice; the historical entries stay untouched either way.
-
-     When migrating a queue-era devlog, walk the apparently open queue items
-     (`## To promote` bullets, deferrals, needs-human notes without a drain
-     record) once, in prose with the user. An item already resolved or promoted
-     needs nothing. A still-actionable item gets an existing or new tracker
-     issue linked. An only-conditionally-relevant item stays as a historical
-     observation. Never automate this by parsing or mutating old entries.
-
-   - **Absent with no devlog anywhere:** treat as Standard and offer to record
-     the line.
-
+3. Validate the markers before touching anything. Read
+   `references/managed-blocks.md` §marker-validation and check every rule
+   there. On any malformation, stop and report it; never refresh. Nothing
+   below reads the file for meaning until its boundaries are trusted.
+4. Discover the profile: look for the `Agent-setup profile:` line, then read
+   `references/managed-blocks.md` §profile-discovery and follow it. Never
+   switch a recorded profile without the user's explicit choice.
 5. Protect the reviewer record before refreshing. If an automated-reviewer
    record appears inside a managed block, resolve its location first (see
    "Automated Reviewer Record").
@@ -280,615 +141,59 @@ only record (no separate config or metadata file).
    stage record. Within either record, create or change only the requested
    fields or stages; preserve every unrequested field or stage and all unrelated
    unmarked content verbatim. The only structural exception is an owner-approved
-   legacy-stage migration described under "Work-Unit Stages (Optional)"; it may
-   relocate an unrequested stage's existing lines without altering them. See
-   "Work Contracts and Coordination" and "Work-Unit Stages (Optional)".
+   legacy-stage migration described in `references/project-sections.md`
+   §stages; it may relocate an unrequested stage's existing lines without
+   altering them. See `references/project-sections.md` §work-contracts for the
+   coordination record.
 8. If a canonical section is missing entirely, offer to insert it at its
    conventional position. A section carrying `docs/agent-workflow.md` `§slug`
    pointers settles that file in the same decision (see step 9). Under Standard,
    `devlog` is not such a gap (see Profiles).
 9. Check scaffolding files: CLAUDE.md, CONTRIBUTING.md, PR template,
    docs/agent-workflow.md, and, under a note-keeping profile, devlog/README.md.
-   Offer to create any that are missing. For any that exist, compare against the
-   templates in `references/scaffolding.md` and, on drift, show the diff and
-   offer to refresh. These files carry no markers and may hold local
-   customizations, so never overwrite silently; let the user decide per file.
-   Watch `devlog/README.md` especially: the managed `devlog` block points to it
-   as the protocol, and a stale copy contradicts a freshly-synced block.
-
-   `docs/agent-workflow.md` is the exception to "offer". The managed blocks read
-   it by path and `§slug` at the steps that need it, so a missing or stale copy
-   beside synced blocks is a dangling-pointer state: the conventions the blocks
-   point at are unreachable. Report it as drift and create or refresh the file
-   as part of the same sync, not as an optional offer. Local additions do not
-   exempt it, because the blocks depend on its canonical text: restore or
-   refresh that text and keep the project's own sections alongside it, rather
-   than leaving the file as it stands.
-
-   Settle that file with the blocks, never after them. Any write or refresh of a
-   block carrying `§slug` pointers shows this file's state next to that change,
-   so the project accepts or refuses both together. That covers every such write
-   in this skill: init step 5, update steps 6 and 8, and the reviewer-record
-   refresh. When the reference cannot be created or refreshed, those blocks hold
-   at their
-   existing text, or stay out of a new AGENTS.md. A project that takes the
-   blocks anyway is left pointing at procedure it does not have, so record that
-   decline in the report.
-
-   An existing file that holds substantive content the template doesn't is not
-   drift to refresh (except `docs/agent-workflow.md` above): refreshing it would
-   delete material the project relies on. Report the difference and leave such a
-   file as it stands unless the user asks otherwise. `CONTRIBUTING.md` and the
-   PR template are meant to be customized, so a fuller local copy is the
-   project's own documentation, not drift to reduce.
-
-   `CLAUDE.md` is the one file that gets a further offer. Its template is a
-   five-line pointer to AGENTS.md as the single source, so any CLAUDE.md
-   carrying real guidance diffs as a total rewrite. For that file, offer
-   migrate-then-reduce: move the durable, tool-agnostic instructions into the
-   matching project-specific AGENTS.md sections (never into a managed block),
-   keep anything genuinely Claude-specific below the `@AGENTS.md` import, and
-   only then reduce the file toward the template. Never delete the content, and
-   on decline leave the file as it stands and report it.
-
-10. Audit standard project files (see below) and flag any newly missing. Also
-    check the automated-reviewer record, any coordination model, and any
-    optional work-unit stage record (see "Automated Reviewer Record", "Work
-    Contracts and Coordination", and "Work-Unit Stages (Optional)").
-11. Check the settings under "Repo Settings" and offer to align any that have
+   Offer to create any that are missing. For any that exist, compare against
+   the templates in `references/scaffolding.md` and, on drift, show the diff
+   and offer to refresh. Before offering, read
+   `references/managed-blocks.md` §scaffold-files and apply its drift rules,
+   including the `docs/agent-workflow.md` exception. These files carry no
+   markers and may hold local customizations, so never overwrite silently;
+   let the user decide per file.
+10. Audit standard project files (`references/audit.md` §standard-files) and
+    flag any newly missing. Also check the automated-reviewer record, any
+    coordination model, and any optional work-unit stage record (see
+    "Automated Reviewer Record", `references/project-sections.md`
+    §work-contracts, and `references/project-sections.md` §stages).
+11. Check the settings in `references/audit.md` §repo-settings and
+    `references/audit.md` §required-checks, and offer to align any that have
     drifted.
 
 Where the running agent can execute shell scripts, run this skill's
-`scripts/compare-managed-blocks.sh` **from the project root**, giving it
-the script's path inside the skill directory and the project's AGENTS.md
-path (which defaults to `AGENTS.md`):
-
-```sh
-/path/to/agent-setup/scripts/compare-managed-blocks.sh AGENTS.md
-```
-
-The script resolves the canonical sections relative to itself, so it runs
-from any working directory. The AGENTS.md argument resolves from the caller's
-directory instead: run it from the skill directory and a relative project path
-resolves inside the skill, not the project. It performs steps 3 and
-6's mechanical parts in one deterministic pass, validating markers and
-printing a per-block diff that excludes the nested block, with one
-`ok:`, `drift:`, or `missing:` line per key.
-
-A missing block is tolerated
-as the documented opt-out, unless `--require-all` is passed, which turns
-it into a failure. That flag fits a note-keeping profile (and init's
-post-write check), not a Standard project, whose absent `devlog` block
-would fail it (see Profiles). Review its diffs with the user as step 6
-describes. Without shell access, follow the steps manually as written.
+`scripts/compare-managed-blocks.sh` for the mechanical parts of steps 3 and 6.
+Read `references/managed-blocks.md` §comparator for the invocation, its
+working-directory rule, and when to pass `--require-all`. Without shell
+access, follow the steps manually as written.
 
 ## Coordination Reassessment
 
 Run this mode only for the explicit owner request described under "Detecting
 Mode". It analyzes the effective project-specific coordination model and may
 propose a change, but it never edits the model as part of ordinary init,
-adoption, or managed-section update.
-
-1. Establish the AGENTS.md boundary before reading it for meaning.
-   - When the file exists, run update-mode step 3's complete marker validation.
-     On any malformation, stop and report it. Do not analyze coordination
-     content, propose a documentation diff, or edit AGENTS.md or a project
-     coordination document.
-   - When the file is absent, continue with the safe serial baseline, but keep
-     reassessment report-only: do not create AGENTS.md or a project
-     coordination document.
-
-   Applying a recommendation first requires a separately requested init
-   operation, with its normal profile, canonical sections, and scaffolding
-   workflow.
-
-2. Before reading project-specific policy for meaning, locate every apparent
-   fixed-field coordination record, work-unit stage record, and **Detailed
-   mechanics** value in AGENTS.md. Apply the complete input-state table in
-   `references/coordination-discovery.md` §reassess before interpreting any
-   value.
-
-   Validate the **coordination record**:
-   - A present record must contain each of its four fixed fields exactly once. A
-     missing or repeated field is ambiguous owner policy, not evidence to infer.
-   - With no record, the field and mechanics validations don't apply, and the
-     effective model is the safe serial baseline.
-
-   Validate the **stage record**:
-   - Count the project-specific section grouping stage definitions as one stage
-     record, not each definition inside it.
-   - A stage entry begins at an immediate child heading of that section and ends
-     at the next child heading or the section's end; the unique child-heading
-     text is its name.
-   - Within every entry, require each of the six exact field-label bullets once
-     with a non-empty value before the record can inform coordination.
-   - Prose before the first child heading is shared record guidance, not another
-     stage.
-   - Also accept one legacy single-stage record when all six fields appear
-     directly in a stage-specific section exactly once with non-empty values.
-     Use that section heading as its name, and treat descendant headings whose
-     subtrees contain no exact stage-field bullet as content of the stage.
-   - A stage-field bullet below any descendant heading makes the
-     direct-plus-descendant layout ambiguous.
-   - A generic container with all six direct fields is legacy only when it has
-     no descendant heading. Its sole stage's name was not recorded and must be
-     reported as uncertainty, not invented.
-   - Direct fields mixed with child stage entries under a generic container, or
-     a skipped-level heading there without an immediate child entry, are also
-     ambiguous and stop validation.
-
-   Stop on any cardinality, completeness, placement, or target failure and ask
-   the owner to repair the policy; never choose, merge, or edit one version
-   while leaving another. After validation, read the single record, any valid
-   mechanics source, and the single stage record.
-
-   Validate the **mechanics targets**:
-   - A shape-2 external work contract is read-only evidence, not an editable
-     mechanics target. When it's unavailable, report uncertainty rather than
-     rejecting an otherwise valid record.
-   - A legacy blank **Detailed mechanics** value is also valid when the final
-     shape contains only shape 1, shape 2, or both.
-   - Any shape containing shape 3, 4, or 5 requires a safe repository-local,
-     project-specific mechanics document, even when shape 2 or an external work
-     contract is also present.
-   - Every mechanics target that a reassessment may edit must be such a local
-     document outside managed ranges.
-
-3. Follow `references/coordination-discovery.md` §reassess. Examine each
-   available evidence source, name unavailable sources as uncertainty, and
-   distinguish observed facts from inferences. Cite the repository path, work
-   unit, issue relation, owner statement, or other source that supports each
-   material finding.
-4. Report the effective model, any drift between its record and current
-   evidence, and the smallest shape current evidence supports. The outcome may
-   be no change, an upgrade, a simplification, or removal of obsolete topology.
-   Cap any proposed concurrency at demonstrated review and integration capacity.
-5. Before changing AGENTS.md or a project coordination document, show the exact
-   proposed diff, including any **Reassess when** field change, and ask for
-   approval. Never silently rename a lane, reinterpret a relationship, or alter
-   an issue dependency; a rename is an explicit documentation proposal, and
-   issue-dependency inspection is read-only evidence.
-6. On approval, apply only the shown project-specific changes and preserve all
-   unrelated unmanaged content verbatim. Without approval, leave the project
-   unchanged.
-7. State observable triggers for the next reassessment in the report. Put them
-   in the record's **Reassess when** field only when the owner approved that
-   field change in step 5's exact diff and step 6 applied it; otherwise leave
-   the record unchanged and keep the triggers in the report.
-
-## Conventional Section Order
-
-```text
-1. Header/Intro                          (project-specific)
-2. Decision Notes                        (managed: devlog;
-                                          note-keeping profiles only)
-3. Default Agent Finish Line             (managed: finish-line)
-4. Context Discipline                    (managed: context)
-5. Writing for Humans                    (managed: communication)
-6. Build, Test, Run                      (project-specific)
-7. [Other project-specific sections]     (project-specific)
-8. Branches                              (managed: branches)
-9. Pull Requests + Handing Off the PR    (managed: pull-requests)
-10. Commits                              (managed: commits)
-11. Definition of Done for an Increment  (managed: done)
-```
+adoption, or managed-section update. Read `references/modes.md` §reassessment
+and follow its steps in order.
 
 ## Managed Section Markers
 
-Each canonical section is wrapped with HTML comment markers:
-
-```markdown
-<!-- agents-md:managed:KEY -->
-
-## Section Heading
-
-Content...
-
-<!-- /agents-md:managed:KEY -->
-```
-
-Keys: `devlog`, `finish-line`, `context`, `communication`, `branches`,
-`pull-requests`, `commits`, `done`.
-
-The `communication` section's research basis (reading behavior, attention
-limits, warning habituation, AI over-reliance) is summarized in
-`references/writing-for-humans.md`. That file ships with the skill for
-maintainers revising the section; it's never copied into projects.
-
-To opt a section out of management, remove its markers. Update mode notes it as
-missing and offers to re-add it, but won't force it. Opting out `done` this way
-leaves the nested `project:done-checks` markers behind as plain project content;
-that's expected and fine. An absent `devlog` block under Standard is that
-project's profile rather than an opt-out (see Profiles).
-
-## Project-Specific Section Guidance
-
-During init, guide the user through these sections interactively. If the project
-is too early for these decisions (fresh repo, no code yet), write the canonical
-sections and scaffolding, leave placeholders for project-specific sections (a
-TODO comment noting what to fill in), and move on. The user can re-run in update
-mode once the project has shape.
-
-Keep the project-specific payload lean: AGENTS.md is loaded whole into every
-agent session, so its sections should hold rules that apply to most sessions.
-Reference material (a format spec, API detail, a long gotcha catalog) belongs in
-`docs/` behind a one-line pointer that names when to read it ("before editing
-the parser, read `docs/format-spec.md`"), not inlined.
-
-### Work Contracts and Coordination
-
-Use these defaults: direct user-assigned work needs no issue; concurrent,
-backlog, or cross-session work uses a tracker issue; agents do not self-select;
-and neither an issue nor a claim authorizes work.
-
-During init or adoption:
-
-- Ask where persistent work contracts live on the project's forge.
-- Ask whether the project separates planning, implementation, review, or
-  integration into distinct stages with handoffs. Default to the single
-  implementation workflow; record stages only when those handoffs are
-  demonstrated or explicitly requested.
-- Gather the available coordination evidence: plans, existing code,
-  architecture documents, work-unit and PR history, and owner expectations.
-  Treat a plan as evidence, never authority. Use
-  `references/coordination-discovery.md` §evidence to grade the sources and
-  `references/coordination-discovery.md` §shapes to choose the smallest model
-  the evidence supports.
-- With neither a credible plan nor a demonstrated coordination need, keep the
-  safe serial baseline. Treat a speculative, uncorroborated plan the same way.
-  Omit the coordination record unless the owner explicitly requests the
-  fixed-field record from `references/coordination-discovery.md` §record; when
-  requested, record the safe serial shape. No record means serial work, not
-  missing content. Do not invent a lane, ownership map, graph, claim mechanism,
-  or placeholder.
-- When evidence supports a richer model, write the fixed-field record from
-  `references/coordination-discovery.md` §record in unmanaged content near the
-  `Agent-setup profile:` line. For typed relations, stable named streams, or an
-  integration spine, keep the long mechanics in project documentation and
-  point to it from the record.
-- Keep shared-contract serialization separate from component ownership. When
-  needed, distinguish start order, merge order, intentional stacking, and
-  mutual exclusion, and cap recommended concurrency at realistic review and
-  integration capacity. Shared-contract serialization means repo-wide mutual
-  exclusion on the surface, not per-unit ordering; define the mechanics per
-  shape 5 in `references/coordination-discovery.md` §shapes.
-- If concurrency is expected and the project already defines a forge-visible
-  claim mechanism, record how abandoned or stale claims are released or
-  superseded. Never invent one silently; a claim advertises occupancy only.
-- Use `references/coordination-discovery.md` §freeside only to calibrate the
-  evidence required for named streams and an integration spine. Never copy its
-  lane names or project vocabulary as defaults.
-- Ask whether an explicit project-specific policy permits agent
-  self-selection. Without one, self-selection stays disabled.
-
-In update mode, detect and report whether an existing coordination record has
-all four fields. Preserve it as unmanaged content unless the owner explicitly
-requests a field change. Do not reassess an established model while syncing
-canonical sections; topology reassessment is a separate owner-assigned work
-unit under "Coordination Reassessment".
-
-### Work-Unit Stages (Optional)
-
-When a project adopts distinct stages, record them in an unmanaged,
-project-specific AGENTS.md section near the `Agent-setup profile:` line. That
-section is one work-unit stage record and may contain several stage definitions
-with the fields below; the individual stage entries are not separate records.
-No stage record means the default single implementation workflow, not missing
-content. Planning is optional; never create a planning stage merely because the
-project uses tracker issues.
-
-For new or revised policy:
-
-- Give every stage definition one immediate child heading under the
-  stage-record section. The unique child-heading text is the stage name, and
-  its entry ends at the next immediate child heading or the stage-record
-  section's end.
-- Put shared record guidance before the first child heading so it cannot be
-  mistaken for a stage.
-- Under each stage heading, use each exact bold field-label bullet below once
-  with a non-empty value. A value is non-empty only when its rendered inline or
-  continuation text before the next exact field-label bullet or heading contains
-  substantive policy. HTML comments do not count, and placeholder-only text such
-  as `TODO` or `TBD` is empty.
-
-Preserve a legacy single-stage record when each of the six fields appears
-directly in a stage-specific section exactly once with a non-empty value. That
-section heading is the sole stage's name, and all descendant headings are
-content within that stage only when their subtrees contain no exact stage-field
-bullet. If a descendant subtree does contain one, stop on an ambiguous mix of
-direct legacy fields and a possible child entry. A generic container heading,
-such as `Stages`, `Work unit stages`, or `Work-unit stages`, does not supply a
-name. Accept its six complete direct fields as one unnamed legacy stage only
-when it has no descendant headings, and report the missing name as uncertainty.
-Do not require an unrelated migration before update or reassessment.
-
-Under a generic container, direct field bullets mixed with child headings have
-ambiguous boundaries and need owner repair, as does a skipped-level heading
-without an immediate child entry. A missing, empty, repeated, or duplicate-name
-entry also needs repair. Deeper headings inside an immediate-child entry belong
-to that entry. Never combine fields across entries to make one look complete.
-
-For each adopted stage, record:
-
-- **Activation:** the explicit assignment or event that begins the stage.
-- **Allowed mutations:** the state the stage may change.
-- **Required input:** the durable state that must exist before work begins.
-- **Durable output:** the artifact that carries the result beyond the current
-  chat or session.
-- **Finish line:** the condition that completes the stage.
-- **Transition:** how the finished output is handed to the next stage.
-
-Use a tracker issue for a sequential handoff between agents or sessions, even
-when it occurs within one short session. Keep its input and output in the issue
-and its comments, never only in transient chat context. A completed plan,
-issue, claim, or satisfied dependency does not authorize the next stage;
-explicit assignment still does unless the project records a narrower
-activation rule.
-
-Adopt stages incrementally. A later update may add review or integration to an
-existing planning and implementation record without changing the stages the
-owner did not ask to revise. In update mode, detect and report whether an
-existing record is either one complete legacy direct-field entry or gives every
-uniquely named child-heading entry each of the six fields exactly once with a
-non-empty value. Preserve it as unmanaged project content except for
-owner-requested edits.
-
-Adding a sibling stage to a legacy direct-field record requires a structural
-migration:
-
-- Propose an exact diff, ask the owner to name the existing stage when its
-  container heading is generic, and obtain approval before creating that child
-  heading and moving the existing six field bullets and their continuation lines
-  beneath it verbatim.
-- Classify every other direct line in the proposal as either shared pre-entry
-  guidance or existing-stage content, preserve its text and relative order
-  verbatim in that scope, and ask the owner to confirm each classification. Then
-  add only the requested sibling.
-- Without that approval, leave the record unchanged. Leave an absent record
-  alone unless the owner explicitly requests stage adoption; then create only
-  the requested stage definitions. Never fabricate a stage record or move it
-  inside a managed block.
-
-### Header/Intro
-
-Write a one-paragraph intro: project name, pointer to the spec document
-(usually README.md), and a sentence on what AGENTS.md covers. Also write
-the canonical file rule into AGENTS.md (intro or CI subsection):
-"CLAUDE.md is a pointer that imports AGENTS.md; edit AGENTS.md, never
-the pointer."
-
-### Build, Test, Run
-
-- Detect language and build system from project files. If no code
-  exists yet, leave this section as a placeholder and skip to
-  scaffolding.
-- Ask for build, test, and run commands.
-- Ask for targets or entry points, language/runtime version, and CI file
-  location.
-- Ask about enforced constraints (e.g., "no force unwraps", "strict mode").
-- **Lint and format are required, not optional.** The workflow conventions
-  depend on them: definition of done expects a successful build, passing
-  tests, and clean lint and formatting; commits assume CI catches unformatted
-  code. Ask which tools the project uses. If the user has none, help them
-  choose and configure one appropriate for the language (e.g., `swift-format`
-  for Swift, `prettier` + `eslint` for JS/TS, `black` + `ruff` for Python,
-  `rustfmt` + `clippy` for Rust). The goal is a single command that can lint
-  and a single command that can format, both runnable in CI.
-
-### Architecture Invariants (Optional)
-
-- Ask: "What rules protect this codebase's structural integrity?"
-- Each invariant states what it prevents and how it's enforced.
-- Number them for stable cross-references.
-
-### Conventions & Gotchas (Optional)
-
-- Ask: "What non-obvious patterns or footguns should a new contributor know?"
-- Framework traps, naming conventions, testing patterns, runtime quirks.
-
-### Definition of Done: Project Checks
-
-The managed `done` section includes a tool-agnostic expectation that the
-build succeeds, tests pass, and lint and formatting are clean, followed by
-a placeholder for project-specific verification steps. During init, fill the
-`<!-- agents-md:project:done-checks -->` block with the project's actual
-verification commands (build command, test command, lint/format command,
-visual check method, schema round-trip if applicable).
-
-## Standard Project Files
-
-Audit for these during init and update. Report presence/absence; don't
-create them (content is project-specific), just flag what's missing and
-note why it matters.
-
-### Root Signal Files (GitHub-Recognized)
-
-| File                 | Purpose                                         | When needed       |
-| -------------------- | ----------------------------------------------- | ----------------- |
-| `README.md`          | Landing page: what, who, how to start           | Always            |
-| `LICENSE`            | Legal terms (GitHub auto-detects)               | Always            |
-| `CHANGELOG.md`       | Release history (Keep a Changelog format)       | Shipping releases |
-| `CODE_OF_CONDUCT.md` | Community standards (GitHub links from sidebar) | Open-source       |
-| `SECURITY.md`        | Vulnerability reporting policy (GitHub sidebar) | Has users         |
-
-### CI Configuration
-
-The workflow conventions assume CI exists: the finish line polls
-required checks, the commits section requires every commit green, and
-the definition of done expects a successful build, passing tests, and clean
-lint and formatting. Check for any of:
-`.github/workflows/`, `.circleci/`, `Jenkinsfile`, `.gitlab-ci.yml`,
-`Makefile` with a `ci` target, or equivalent. If none is found, flag it:
-"Your workflow conventions depend on CI but no CI configuration was
-detected." Don't create a CI config (too project-specific), just warn.
-
-### Scaffolded by This Skill (Created, Not Just Audited)
-
-| File                               | Purpose                                                   |
-| ---------------------------------- | --------------------------------------------------------- |
-| `CLAUDE.md`                        | Agent entry point; `@`-imports AGENTS.md                  |
-| `AGENTS.md`                        | Development conventions (single source)                   |
-| `CONTRIBUTING.md`                  | Human contribution guide                                  |
-| `devlog/README.md`                 | Decision-note protocol (Decision-log/High-assurance only) |
-| `.github/pull_request_template.md` | PR body scaffold                                          |
-| `docs/agent-workflow.md`           | Step-local procedure the managed blocks point at          |
-
-### docs/ (Project-Specific; Only `docs/agent-workflow.md` Above Is Canonical)
-
-| File                   | Purpose                                       | When needed      |
-| ---------------------- | --------------------------------------------- | ---------------- |
-| `docs/architecture.md` | System design, data model, module boundaries  | Non-trivial code |
-| `docs/concepts.md`     | Domain glossary, mental model for the project | Domain language  |
-
-Note: projects may have additional `docs/` files for format specs,
-API references, or other concerns. These two are the baseline worth
-flagging; everything else is project-specific.
-
-## Repo Settings
-
-Several canonical conventions name or benefit from repository settings:
-merged branches auto-delete, a real merge commit is the only merge method,
-the merge commit message is the PR title alone, and stale PR branches are
-surfaced for an explicit update. Restricted Actions workflow permissions also
-keep the repository token at least privilege unless a workflow declares a
-specific need. The audit keeps that setup true so the canonical text's manual
-fallbacks stay rare.
-
-Treat this as
-**detect → report → offer to align**, never a silent mutation. Changing repo
-settings needs admin rights the agent may not have, so confirm before applying;
-otherwise tell the user the desired state and where to set it.
-
-Settings the conventions use or the audit recommends:
-
-| Setting                                        | Why it matters                                                                              |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Auto-delete head branches on merge             | `branches`/`pull-requests` state merged branches auto-delete                                |
-| Merge-commit-only (squash and rebase off)      | `commits` needs real merge commits for the `--first-parent` history                         |
-| Merge commit message = PR title only           | keeps the body's review material out of history; the title carries the `--first-parent` log |
-| Always suggest updating pull request branches  | surfaces a stale branch and offers an explicit refresh action                               |
-| Default workflow token permissions = read      | makes workflows declare the specific write permissions they need                            |
-| Actions cannot create or approve pull requests | prevents the repository workflow token from creating or approving changes by default        |
-
-These toggles are forge-specific. On GitHub, check and (after confirming)
-set them with `gh`; skip or adapt this on other forges, which expose
-equivalent settings:
-
-```sh
-# Check current state
-gh api repos/{owner}/{repo} \
-  --jq '{delete_branch_on_merge, allow_merge_commit, allow_squash_merge,
-         allow_rebase_merge, merge_commit_title, merge_commit_message,
-         allow_update_branch}'
-
-gh api repos/{owner}/{repo}/actions/permissions/workflow \
-  --jq '{default_workflow_permissions, can_approve_pull_request_reviews}'
-
-# Align (only after confirming with the user)
-gh api -X PATCH repos/{owner}/{repo} \
-  -F delete_branch_on_merge=true \
-  -F allow_merge_commit=true \
-  -F allow_squash_merge=false \
-  -F allow_rebase_merge=false \
-  -F allow_update_branch=true \
-  -f merge_commit_title=PR_TITLE \
-  -f merge_commit_message=BLANK
-
-gh api --method PUT repos/{owner}/{repo}/actions/permissions/workflow \
-  -f default_workflow_permissions=read \
-  -F can_approve_pull_request_reviews=false
-```
-
-On GitHub, `allow_update_branch` is the **Always suggest updating pull request
-branches** setting under Settings → General → Pull Requests. On other forges,
-look for the equivalent stale-branch/update suggestion. If the setting or its
-read is unavailable because of the forge, plan, or permissions, report that
-limitation clearly and point to the canonical "Handing Off the PR" manual
-freshness procedure; never infer that an unread setting is disabled.
-
-Before offering to restrict Actions workflow permissions, inspect
-`.github/workflows/` for jobs that rely on implicit write access or use the
-repository workflow token to create pull requests. Report each affected
-workflow. Prefer explicit workflow or job-level `permissions` for required
-write scopes while retaining the read-only default. If creating pull requests
-from Actions is intentional, surface the conflict and ask whether to keep that
-repository-level exception; a workflow cannot override the repository setting
-that prevents Actions from creating or approving pull requests. An owning
-organization or enterprise may also lock either value. Report that policy
-constraint instead of treating the setting as unsupported or disabled.
-
-### Required Checks and CI Matrices
-
-When branch protection is configured, required status checks are matched
-by context name, and a skipped required check counts as satisfied. Both
-failure modes bite when a single CI job becomes a matrix. Renaming the
-job leaves the required context never reporting, so nothing can merge.
-Keeping the name via a bare fan-in job (`needs:` alone) fails open,
-because a failed matrix leg skips the fan-in and the skipped check
-passes. Keep the required context reporting through a fan-in job with
-`if: always()` and an explicit result test:
-
-```yaml
-check:
-  needs: test # the matrix job
-  if: always() # run even when a leg failed
-  runs-on: ubuntu-latest
-  steps:
-    - run: test "${{ needs.test.result }}" = "success"
-```
-
-During the audit, compare the protected branch's required contexts against the
-workflow job names and flag any context no job reports, and any bare fan-in
-guarding a matrix. Also inspect whether required checks enforce current-base
-freshness. On GitHub, `.required_status_checks.strict: true` is **Require
-branches to be up to date before merging**:
-
-```sh
-gh api repos/{owner}/{repo}/branches/{branch}/protection \
-  --jq '{strict: .required_status_checks.strict,
-         contexts: .required_status_checks.contexts,
-         checks: .required_status_checks.checks}'
-```
-
-When required checks exist and strict freshness is off, report it and offer to
-enable it, preserving the existing check names and app bindings if the user
-accepts. Never change protection silently. If branch protection, strict checks,
-or their read is unavailable because of forge support, plan, or permissions,
-report the limitation and point to the canonical manual freshness procedure.
-A forge merge queue may be reported as an optional capability for a busy
-repository, but it is not a canonical requirement.
+Each canonical section is wrapped in HTML comment markers. Keys: `devlog`,
+`finish-line`, `context`, `communication`, `branches`, `pull-requests`,
+`commits`, `done`. Before writing or wrapping a block, read
+`references/managed-blocks.md` §markers for the marker format, the opt-out
+rule, and the `communication` section's research basis.
 
 ## Automated Reviewer Record
 
 The managed `pull-requests` section tells agents to record a noticed
 automated reviewer so a review-watch can resolve who to wait on without
-re-detecting (the "record a noticed automated reviewer" convention).
-During init and update, check whether the project carries such a record. It's
-typically an "Automated reviewer" entry in a project-specific (unmanaged)
-AGENTS.md section naming the reviewer, its login/account identity (and the
-API-specific form when it differs), its trigger, and any observed status
-signals.
-
-A status signal is an in-progress or clean-pass indicator, such as a
-reaction on the PR description; without a recorded clean-pass signal, a
-review-watch can only time out on a reviewer that posts no review when a pass
-is clean.
-
-Treat this as **detect → report, never fabricate**. A reviewer is usually
-configured after agent-setup first runs, so absence is expected and fine; do not
-infer or invent one. If none is recorded, note that one should be added once a
-reviewer is configured.
-
-The record is durable project state; a managed-block sync must not delete or
-rewrite it silently. If a record sits inside an `agents-md:managed:*` block,
-flag it before any managed-block refresh and offer, in order:
-
-1. Relocate the record verbatim to an unmanaged, project-specific section,
-   then refresh the block.
-2. If relocation is declined: refresh the block and re-insert the record
-   verbatim at its prior position, flagged for later relocation.
-3. If both are declined: skip refreshing that block and report the conflict.
-
-A refresh here writes the block outside update step 6's loop, so it settles
-`docs/agent-workflow.md` in the same decision when the block carries `§slug`
-pointers; see step 9's exception for that file.
+re-detecting. During init and update, check whether the project carries such
+a record: read `references/managed-blocks.md` §reviewer-record-audit and
+follow it. Treat this as **detect → report, never fabricate**. A managed-block
+sync must not delete or rewrite the record silently.
