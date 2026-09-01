@@ -38,11 +38,22 @@
 # Usage:
 #   reconciliation-ledger.sh <trace-file>
 #   reconciliation-ledger.sh -
+#   reconciliation-ledger.sh --skeleton <plan-file>
+#   reconciliation-ledger.sh --skeleton -
 #   reconciliation-ledger.sh --help
 #
-# Output is a canonical plain-text ledger. Exit codes:
+# `--skeleton` reads a plan file holding only the `policy` row and its `plan`
+# rows, then prints a complete trace in the checked order: one pre, guard,
+# attempt, verify, recheck, post block per write item, one observe per no-op
+# and then per report item, and the closing final. Every observation carries
+# its expected value (the policy tip, accepted, changed, fresh); replace each
+# with what was actually observed as the work runs. An unsupported item, or a
+# failed policy source, becomes a skip whose reason is an angle-bracket
+# placeholder to replace. The printed skeleton passes the checker as is.
+#
+# Output is a canonical plain-text ledger, or the skeleton trace. Exit codes:
 #   0   valid trace; RESULT says complete, restart, unstable, incomplete, or partial
-#   2   INVALID trace; do not use it to claim a reconciliation result
+#   2   INVALID trace or plan; do not use it to claim a reconciliation result
 #   64  usage on stderr
 #   69  awk missing or trace unreadable
 set -u
@@ -53,11 +64,19 @@ usage() { # usage [reason]
   exit 64
 }
 
-if [ $# -eq 1 ]; then
-  case "$1" in
-    --help | -h) sed -n '2,/^set -u$/p' "$0" | sed '$d'; exit 0 ;;
-  esac
-fi
+SKELETON=0
+case "${1-}" in
+  --help | -h)
+    [ $# -eq 1 ] || usage
+    sed -n '2,/^set -u$/p' "$0" | sed '$d'
+    exit 0
+    ;;
+  --skeleton)
+    [ $# -eq 2 ] || usage "--skeleton takes exactly one plan file"
+    SKELETON=1
+    shift
+    ;;
+esac
 [ $# -eq 1 ] || usage
 TRACE="$1"
 command -v awk >/dev/null 2>&1 \
@@ -67,7 +86,7 @@ if [ "$TRACE" != - ]; then
     || { echo "reconciliation-ledger.sh: trace is not readable: $TRACE" >&2; exit 69; }
 fi
 
-awk -F '\t' '
+awk -F '\t' -v skeleton="$SKELETON" '
 function invalid(message) {
   if (!bad) print "INVALID line " NR ": " message
   bad = 1
@@ -86,6 +105,66 @@ function require_at_least(want) {
   if (NF < want) invalid("expected at least " want " tab-separated fields, got " NF)
   for (field = 1; field <= NF; field++)
     if ($field == "") invalid("empty field " field)
+}
+function inputs_of(idx, dep_no, list) {
+  for (dep_no = 1; dep_no <= dep_count[idx]; dep_no++)
+    list = list "\t" plan_dep[idx, dep_no]
+  return list
+}
+function print_skeleton(idx) {
+  # The expected value fills every observation slot, so the printed trace is
+  # the happy path the agent overwrites as real observations arrive. Only a
+  # skip reason has no expected value; it gets a placeholder to replace.
+  # Every rejection precedes the first print, so a redirected skeleton file
+  # is either complete or empty apart from the INVALID line.
+  if (source_failed) {
+    if (plan_count == 0) {
+      plan_count = 1
+      plan_item[1] = "project-reconciliation"
+      plan_kind[1] = "report"
+      plan_row[1] = "plan\tproject-reconciliation\treport"
+    }
+    if (plan_count != 1 || plan_item[1] != "project-reconciliation" ||
+        plan_kind[1] != "report") {
+      print "INVALID: failed policy needs one project-reconciliation report umbrella item"
+      exit 2
+    }
+    print policy_row
+    print plan_row[1]
+    print "skip\tproject-reconciliation\t<name the " policy_status \
+      " source, field, or pointer>\tsource"
+    print "final\t" policy
+    return
+  }
+  print policy_row
+  for (idx = 1; idx <= plan_count; idx++) print plan_row[idx]
+  for (idx = 1; idx <= plan_count; idx++)
+    if (plan_kind[idx] == "unsupported")
+      print "skip\t" plan_item[idx] \
+        "\t<name the requested action outside merge-cleanup authority>\tunauthorized"
+  if (policy == "unverifiable") {
+    for (idx = 1; idx <= plan_count; idx++)
+      if (plan_kind[idx] != "unsupported")
+        print "skip\t" plan_item[idx] "\tbase tip was unverifiable at discovery\tpolicy"
+    print "final\tunverifiable"
+    return
+  }
+  for (idx = 1; idx <= plan_count; idx++)
+    if (plan_kind[idx] == "write") {
+      print "pre\t" policy
+      print "guard\tcomplete" inputs_of(idx)
+      print "attempt\taccepted\t" plan_item[idx]
+      print "verify\t" plan_item[idx] "\tchanged"
+      print "recheck\tfresh" inputs_of(idx)
+      print "post\t" policy
+    }
+  for (idx = 1; idx <= plan_count; idx++)
+    if (plan_kind[idx] == "noop")
+      print "observe\t" plan_item[idx] "\tfresh" inputs_of(idx)
+  for (idx = 1; idx <= plan_count; idx++)
+    if (plan_kind[idx] == "report")
+      print "observe\t" plan_item[idx] "\tfresh" inputs_of(idx)
+  print "final\t" policy
 }
 function stop_writes_for_freshness(tip) {
   if (tip == "unverifiable" || policy == "unverifiable" || tip != policy) {
@@ -109,6 +188,7 @@ BEGIN {
     policy = $2
     policy_status = $3
     trace_origin = $4
+    policy_row = $0
     policy_seen = 1
     phase = "planning"
     if (policy == "unverifiable") {
@@ -132,6 +212,7 @@ BEGIN {
     plan_count++
     plan_item[plan_count] = $2
     plan_kind[plan_count] = $3
+    plan_row[plan_count] = $0
     if ($3 != "unsupported") {
       if (NF < 4 && !(source_failed && $2 == "project-reconciliation" && $3 == "report"))
         invalid("write, noop, and report plans must enumerate every input")
@@ -146,6 +227,7 @@ BEGIN {
     next
   }
 
+  if (skeleton) invalid("a skeleton plan holds only policy and plan rows")
   if (phase == "planning") phase = "idle"
   if (phase == "final") invalid("no event may follow final")
 
@@ -400,6 +482,10 @@ END {
   if (!policy_seen) {
     print "INVALID: trace has no policy event"
     exit 2
+  }
+  if (skeleton) {
+    print_skeleton()
+    exit 0
   }
   if (!final_seen) {
     print "INVALID: trace has no final freshness observation"

@@ -91,11 +91,37 @@ project-reconciliation outcome.
 - For an applicable record, enumerate each authorized transition, refreshed
   field, no-op, and report-only result before acting.
 - The script is a non-mutating checker; `--help`, or `-h`, prints the
-  tab-separated event grammar.
+  tab-separated event grammar, and `--skeleton` prints a trace to fill in.
 - Treat exit 2 as an invalid ledger that cannot support a completion claim,
   and any other non-zero exit as a stop.
 - Where bash or awk cannot run, apply the same states manually and say the
   executable check was unavailable.
+
+### Generate the Skeleton
+
+Write the `policy` row and every `plan` row to a plan file, then run
+`reconciliation-ledger.sh --skeleton '<plan-file>'` and save its output as the
+trace.
+
+- The skeleton holds every later event in the checked order: one pre, guard,
+  attempt, verify, recheck, post block per write item, then one observe per
+  no-op and per report item, then final.
+- Every observation slot holds its expected value: the policy tip, `accepted`,
+  `changed`, and `fresh`. Replace each with the observed value as the work
+  runs. The expected value is never evidence.
+- An unsupported item, and the umbrella item of a failed source, become a
+  skip whose reason is an angle-bracket placeholder. Replace it with the exact
+  action or failed source before running the checker.
+- An item that does not run keeps no attempt block. Replace its block with a
+  skip row and the owner-action class.
+- An `unverifiable` policy tip prints no write or observe block. Every item
+  becomes a `policy` skip, and the trace ends `restart` or `unstable`.
+- An `unreadable` or `invalid` policy accepts no plan rows, or exactly the
+  one `project-reconciliation` report row. The skeleton adds that umbrella
+  item when the plan omits it, and rejects any other item.
+- The plan rows are checked as usual, so a duplicate item, a missing input
+  list, an execution row, or a plan under an absent policy exits 2. A
+  rejected plan prints only the `INVALID` line, never a partial trace.
 
 ### The `policy` Event
 
