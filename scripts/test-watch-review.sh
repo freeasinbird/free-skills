@@ -53,6 +53,20 @@ t 2 "abbreviated head" $VALID --head 9c346ab
 t 2 "uppercase head normalized" $VALID --head 9C346AB
 t 2 "every reaction constant maps" $VALID --clean-content ROCKET --progress-content EYES
 
+# --help / -h: the usage block goes to stdout with exit 0, even after other flags,
+# so an agent learns the flags without reading the source (#201).
+t 0 "long help flag" --help
+t 0 "short help flag" -h
+t 0 "help after other flags" $VALID --help
+HELP_OUT=$(PATH="$SHIM:$PATH" bash "$SCRIPT" --help 2>/dev/null)
+HELP_ERR=$(PATH="$SHIM:$PATH" bash "$SCRIPT" --help 2>&1 >/dev/null)
+if printf '%s' "$HELP_OUT" | grep -q '^# Exit codes:' && [ -z "$HELP_ERR" ]; then
+  pass=$((pass + 1))
+else
+  fail=$((fail + 1))
+  echo "FAIL: --help must print the usage block (with exit codes) on stdout and nothing on stderr" >&2
+fi
+
 # Parser: options without values are usage errors, never set -u crashes.
 t 64 "no arguments at all"
 t 64 "trailing bare --pr" --pr

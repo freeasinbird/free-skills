@@ -24,9 +24,10 @@ procedure:
 2. Run the guarded cleanup script.
 3. Interpret the result ledger.
 4. Verify issue closure.
-5. Reconcile project obligations.
-6. Stop the review watch.
-7. Summarize for the owner.
+5. List the obligations found.
+6. Reconcile project obligations.
+7. Stop the review watch.
+8. Summarize for the owner, one line per obligation.
 
 ## Resolve the Work Unit
 
@@ -183,16 +184,44 @@ closure:
 - **If the forge lookup cannot run, state the verification gap** instead of
   silently omitting this stage.
 
+## List the Obligations Found
+
+Discover the project's post-merge obligations before any tracker write, and
+tell the user the list before acting on it. Inspect the authoritative project
+instructions that govern the repository for exactly one fixed-field
+`Post-merge obligations` record whose fields each appear exactly once. Read it
+and its mechanics document as `references/project-obligations.md` §discovery
+requires, then list:
+
+- **Each containing tracker**, with the unit entry and transition the
+  mechanics name for it.
+- **Each field to refresh** in that tracker.
+- **The closing issues** whose verified state selects those trackers.
+- **Any other documented post-merge duty**, including one the record asks for
+  but this skill may not perform.
+
+Write the same list as the trace's `policy` row and `plan` rows. Use `write`
+for a transition or refresh to apply, `noop` for one already satisfied,
+`report` for derived output such as newly unblocked units, and `unsupported`
+for a duty outside this skill's authority. Then generate the trace skeleton:
+
+```sh
+<skill-dir>/reconciliation-ledger.sh --skeleton '<plan-file>' > '<trace-file>'
+```
+
+The skeleton holds the happy-path events in the checked order. Replace each
+expected value with the observed one as the work runs, and replace the block
+of an item that did not run with its `skip` row. With a readably absent
+record, the list is empty: say so in one line, and still close the trace.
+When the record or its mechanics cannot be read, list no items; the skeleton
+adds the one umbrella skip, and its reason names the failed source.
+
 ## Reconcile Project Obligations
 
 Run this after issue-close verification, and only when merge verification
 passed. An earlier mechanical cleanup stop does not block safe reconciliation,
 but continuing requires a freshly resolved current base tip. Report the
 mechanical and project results separately.
-
-Inspect the authoritative project instructions that govern the repository for
-exactly one fixed-field `Post-merge obligations` record whose fields each
-appear exactly once.
 
 Before acting, read these, and use `references/project-obligations.md`
 §freeside-example only as calibration:
@@ -232,9 +261,10 @@ stale local ref.
 **Ledger.** Use `reconciliation-ledger.sh` for every discovery result,
 including readable absence.
 
-- Enumerate work per tracker and per transition or refreshed field. Record
-  each ordered freshness, guard, attempt, target verification, full-input
-  recheck, and disposition event.
+- Start from the skeleton generated in the previous step, which enumerates
+  work per tracker and per transition or refreshed field. Record each ordered
+  freshness, guard, attempt, target verification, full-input recheck, and
+  disposition event as observed, never as expected.
 - Name every external input used by a write, no-op, or report. After all writes
   are dispositioned, reread and recompute no-op and report items before
   recording them fresh.
@@ -263,5 +293,16 @@ Lead with the cleanup outcome. State:
 - Any issue needing manual closure.
 - Whether a review watch stopped or remains to expire.
 
-When project obligations exist, or their required source was unreadable, also
-name what ran, what changed, what remains unresolved, and which owner must act.
+Then report every listed obligation on its own line as done, skipped, or
+blocked, with its reason. Take each state from the ledger:
+
+- **Done** is a `COMPLETED` row: a verified write, a confirmed no-op, or a
+  recomputed report.
+- **Skipped** is a `SKIPPED` row whose fresh rereads showed the item no longer
+  applied, or an `unsupported` item outside this skill's authority.
+- **Blocked** is an `UNKNOWN` row, or a `SKIPPED` row caused by a source,
+  input, tooling, or freshness failure. Quote the ledger's owner action.
+
+An unreadable required source is one blocked line for the whole
+reconciliation. Never fold these lines into a general cleanup verdict; the
+user should see each tracker by name.

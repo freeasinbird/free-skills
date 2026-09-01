@@ -257,8 +257,9 @@ trigger a review, reply, or resolve threads. It reports compact IDs,
 timestamps, states, paths and lines, the top-level review body, status
 reactions, and checks state.
 
-When you select the script, run it from the PR checkout, or pass
-`--repo owner/name` explicitly:
+When you select the script, run it with `--help` for the flag summary and
+exit codes. Run it from the PR checkout, or pass `--repo owner/name`
+explicitly:
 
 ```sh
 <skill-dir>/watch-review.sh --repo owner/name --pr 46 \
