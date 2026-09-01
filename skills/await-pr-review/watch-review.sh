@@ -63,7 +63,8 @@
 # rest of the session); the main agent refetches bodies and threads itself.
 # Persistent API failure surfaces as CAP_EXPIRED too: the cap is the
 # backstop. Read the coverage fields in that payload before reporting the
-# result; each failing poll also names its failure on stderr.
+# result; each failing poll also names its failure on stderr, followed by
+# the first line of gh's own error for every query that failed.
 #   last_poll_ok  the final poll scanned all three sources. Every poll
 #                 rescans from the baseline, so that one scan covers the
 #                 whole wait: true means "no review arrived" is sound, and
@@ -216,9 +217,34 @@ command -v gh >/dev/null 2>&1 || {
   echo "watch-review.sh: gh (GitHub CLI) not found on PATH; cannot watch — use the skill's prose fallback" >&2
   exit 69
 }
+
+# Every GitHub query runs through gh_q so a failure names its cause. The
+# old retry notice listed four guesses (bad token, missing scope, rate
+# limit, wrong repo) and hid which one applied; gh's own stderr says. Its
+# first line is kept, labelled by query, until the next notice prints it.
+# A file rather than a variable, because scans run in subshells.
+ERRF=$(mktemp)
+trap 'rm -f "$ERRF"' EXIT
+gh_q() {
+  gq_label="$1"; shift
+  { gq_err=$(gh "$@" 2>&1 1>&3 3>&-); gq_rc=$?; } 3>&1
+  [ "$gq_rc" -eq 0 ] && return 0
+  gq_line="${gq_err%%$'\n'*}"
+  echo "  $gq_label: ${gq_line:-gh exited $gq_rc with no message}" >> "$ERRF"
+  return "$gq_rc"
+}
+notice() {
+  echo "watch-review.sh: $1" >&2
+  cat "$ERRF" >&2
+  : > "$ERRF"
+}
+retrying() { notice "$1; retrying"; }
+
 if [ -z "$REPO" ]; then
-  REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner) || {
-    echo "watch-review.sh: not in a repo and no --repo given" >&2; usage
+  REPO=$(gh_q "repo lookup" repo view --json nameWithOwner --jq .nameWithOwner) || {
+    echo "watch-review.sh: not in a repo and no --repo given" >&2
+    cat "$ERRF" >&2
+    usage
   }
 fi
 OWNER="${REPO%%/*}" NAME="${REPO##*/}"
@@ -266,7 +292,7 @@ scan_desc() {
   sd_url="$1"; sd_jq="$2"
   sd_a='' sd_b='' sd_edge='' sd_t1=0 sd_t2=0 sd_p=1 sd_status=ok
   while :; do
-    read -r sd_a sd_b sd_edge <<< "$(gh api "${sd_url}sort=created&direction=desc&per_page=100&page=${sd_p}" --jq "$sd_jq" 2>/dev/null)"
+    read -r sd_a sd_b sd_edge <<< "$(gh_q "review comments" api "${sd_url}sort=created&direction=desc&per_page=100&page=${sd_p}" --jq "$sd_jq")"
     case "${sd_a}${sd_b}" in ''|*[!0-9]*) sd_status=err; break ;; esac
     sd_t1=$((sd_t1 + sd_a)); sd_t2=$((sd_t2 + sd_b))
     [ "$sd_edge" = "none" ] && break
@@ -282,12 +308,12 @@ scan_desc() {
 # before the baseline. The count is refreshed every poll, so an item that
 # slips past the computed last page is caught on the next check.
 scan_asc_tail() {
-  st_url="$1"; st_jq="$2"; st_total="$3"
+  st_url="$1"; st_jq="$2"; st_total="$3"; st_label="$4"
   st_a='' st_b='' st_edge='' st_t1=0 st_t2=0 st_status=ok
   st_p=$(( (st_total + 99) / 100 ))
   [ "$st_p" -ge 1 ] || st_p=1
   while [ "$st_p" -ge 1 ]; do
-    read -r st_a st_b st_edge <<< "$(gh api "${st_url}per_page=100&page=${st_p}" --jq "$st_jq" 2>/dev/null)"
+    read -r st_a st_b st_edge <<< "$(gh_q "$st_label" api "${st_url}per_page=100&page=${st_p}" --jq "$st_jq")"
     case "${st_a}${st_b}" in ''|*[!0-9]*) st_status=err; break ;; esac
     st_t1=$((st_t1 + st_a)); st_t2=$((st_t2 + st_b))
     if [ "$st_edge" = "none" ]; then
@@ -317,22 +343,28 @@ while :; do
   # leaves the tail of the wait unobserved, while a mid-run blip followed by
   # a success costs nothing. Reset per poll and report both.
   last_poll_ok=false
-  read -r n_reviews n_reactions <<< "$(gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount}}}}' \
+  read -r n_reviews n_reactions <<< "$(gh_q "count query" api graphql \
+    -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount}}}}' \
     -F o="$OWNER" -F r="$NAME" -F n="$PR" \
-    --jq '"\(.data.repository.pullRequest.reviews.totalCount) \(.data.repository.pullRequest.reactions.totalCount)"' 2>/dev/null)"
+    --jq '"\(.data.repository.pullRequest.reviews.totalCount) \(.data.repository.pullRequest.reactions.totalCount)"')"
   case "${n_reviews:-x}${n_reactions:-x}" in *[!0-9]*)
     # Count query failed; retry next poll. The cap is the backstop. Say so
     # on stderr: this failure skips every scan below, so a run that fails
     # here on every poll would otherwise reach the cap in total silence and
     # read as "no review arrived" when nothing was ever observed.
-    echo "watch-review.sh: count query failed (bad token, missing scope, rate limit, or wrong repo?); retrying" >&2
+    retrying "count query failed"
     n_reviews='' ;;
   esac
   if [ -n "$n_reviews" ]; then
     read -r replies _ c_status <<< "$(scan_desc "repos/$OWNER/$NAME/pulls/$PR/comments?" "$JQ_COMMENTS")"
-    read -r revs _ v_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/pulls/$PR/reviews?" "$JQ_REVIEWS" "$n_reviews")"
+    read -r revs _ v_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/pulls/$PR/reviews?" "$JQ_REVIEWS" "$n_reviews" reviews)"
     if [ $((replies + revs)) -gt 0 ]; then
-      # Positive evidence stands even if a scan later failed part-way.
+      # Positive evidence stands even if a scan later failed part-way, but
+      # the failure still reaches stderr with gh's cause: exiting here
+      # would otherwise leave it unread when the EXIT trap deletes the
+      # file, and the caller cannot tell a complete scan from a partial one.
+      [ "$c_status" = ok ] && [ "$v_status" = ok ] ||
+        notice "scan failed part-way (comments=$c_status reviews=$v_status); positive evidence stands"
       echo "REVIEW_ACTIVITY {\"new_reviews\":$revs,\"new_review_comments\":$replies}"
       exit 0
     fi
@@ -341,9 +373,9 @@ while :; do
     # failed scan, skip the verdict and retry next poll; the cap backstops
     # persistent failure.
     if [ "$c_status" = ok ] && [ "$v_status" = ok ]; then
-      read -r clean eyes r_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/issues/$PR/reactions?" "$JQ_REACTIONS" "$n_reactions")"
+      read -r clean eyes r_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/issues/$PR/reactions?" "$JQ_REACTIONS" "$n_reactions" reactions)"
       if [ "$r_status" != ok ]; then
-        echo "watch-review.sh: reactions scan failed; retrying" >&2
+        retrying "reactions scan failed"
       else
         # Only now has this poll observed all three sources. Counting it
         # after the review and comment scans alone would call a run "watched"
@@ -358,7 +390,7 @@ while :; do
       fi
       [ "$eyes" -gt 0 ] && seen_progress=true
     else
-      echo "watch-review.sh: scan failed (comments=$c_status reviews=$v_status); retrying" >&2
+      retrying "scan failed (comments=$c_status reviews=$v_status)"
     fi
   fi
   remaining=$(( DEADLINE - SECONDS ))

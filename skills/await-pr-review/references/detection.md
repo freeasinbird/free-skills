@@ -267,6 +267,11 @@ flag summary and exit codes to stdout and exits 0.
 | 64   | usage on stderr   | Invalid invocation; fix it rather than retrying     |
 | 69   | note on stderr    | `gh` missing; this environment cannot run the watch |
 
+A failed query prints a notice on stderr followed by the first line of `gh`'s
+own error, labelled by query; a positive exit still prints the notice for a
+scan that failed part-way. Read stderr for the cause instead of guessing at
+the token, scope, rate limit, or repository.
+
 For exit 2, `polls_ok:0` means no poll ever observed the PR. Otherwise the last
 poll decides coverage because each poll rescans every source from the frozen
 baseline: `last_poll_ok:true` proves the final window quiet; `last_poll_ok:false`

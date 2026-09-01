@@ -119,11 +119,12 @@ t 64 "reaction constant injection" $VALID --clean-content 'THUMBS_UP" or true or
 # Detection: the JQ_* filters run for real against canned JSON pages.
 #
 # The shim serves one fixture file per endpoint and page, and executes the
-# caller's own --jq filter over it. A request with no fixture exits 1, which
-# is how the script sees an API failure. Fixtures therefore describe the API
-# the same way the filters read it: paging, author field, timestamps, commit
-# anchors. gh embeds gojq rather than jq, but these filters use only
-# constructs the two share.
+# caller's own --jq filter over it. A request with no fixture fails the way
+# gh does: a two-line error on stderr and exit 1, so the passthrough can be
+# checked to keep the first line and drop the rest. Fixtures therefore
+# describe the API the same way the filters read it: paging, author field,
+# timestamps, commit anchors. gh embeds gojq rather than jq, but these
+# filters use only constructs the two share.
 # ---------------------------------------------------------------------------
 
 BOT='some-bot[bot]'      # the REST form --login some-bot derives
@@ -157,7 +158,11 @@ else
     *) exit 1 ;;
   esac
 fi
-[ -f "$fixture" ] || exit 1
+[ -f "$fixture" ] || {
+  echo "gh: Not Found (HTTP 404) ${target}" >&2
+  echo "second line of the gh error, which the watcher must not repeat" >&2
+  exit 1
+}
 exec jq -r "$filter" "$fixture"
 SHIMEOF
   } > "$SHIMD/gh"
@@ -210,6 +215,9 @@ want_err() {
 }
 want_not_out() {
   case "$OUT" in *"$1"*) bad "stdout has '$1' (got: $OUT)" ;; *) ok ;; esac
+}
+want_not_err() {
+  case "$ERR" in *"$1"*) bad "stderr has '$1' (got: $ERR)" ;; *) ok ;; esac
 }
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -370,6 +378,9 @@ want_out '"last_poll_ok":true'
 # verdict needs a scan that finished, and a run that observed nothing at all
 # must say so rather than reporting a quiet reviewer. Coverage rests on the
 # last poll, since every poll rescans from the baseline.
+# Each retry notice is followed by gh's own first error line for the query
+# that failed, labelled by source, so the cause is on stderr rather than a
+# list of guesses.
 scenario "failed comment scan suppresses the clean-pass verdict"
 counts 0 1; page reviews 1
 page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
@@ -377,7 +388,21 @@ run_watch $VALID
 want_rc 2
 want_out '"polls_ok":0'
 want_out '"last_poll_ok":false'
-want_err 'scan failed'
+want_err 'scan failed (comments=err reviews=ok); retrying
+  review comments: gh: Not Found (HTTP 404)'
+want_not_err 'second line'
+
+# A positive exit does not throw the failure away: the caller re-reads the
+# PR anyway, but gh's cause would otherwise vanish with the temp file.
+scenario "a part-way scan failure still names its cause on a positive exit"
+counts 1 0; page reviews 1 "$(review "$BOT" "$AFTER")"
+run_watch $VALID
+want_rc 0
+want_out 'REVIEW_ACTIVITY {"new_reviews":1'
+want_err 'scan failed part-way (comments=err reviews=ok); positive evidence stands
+  review comments: gh: Not Found (HTTP 404)'
+want_not_err 'retrying'
+want_not_err 'second line'
 
 scenario "unreadable reactions do not count as a completed poll"
 counts 0 1; page reviews 1; page comments 1
@@ -385,14 +410,23 @@ run_watch $VALID
 want_rc 2
 want_out '"polls_ok":0'
 want_out '"last_poll_ok":false'
-want_err 'reactions scan failed'
+want_err 'reactions scan failed; retrying
+  reactions: gh: Not Found (HTTP 404)'
 
 scenario "total API failure is not a clean pass"
 run_watch $VALID
 want_rc 2
 want_out '"polls_ok":0'
 want_out '"last_poll_ok":false'
-want_err 'count query failed'
+want_err 'count query failed; retrying
+  count query: gh: Not Found (HTTP 404)'
+want_not_err 'second line'
+
+# gh's error text is a passthrough, not a replacement for the notice: a gh
+# that fails without saying why still gets its exit status named.
+scenario "a silent gh failure still names the query and exit status"
+ERR=$(PATH="$SHIM:$PATH" bash "$SCRIPT" $VALID 2>&1 >/dev/null)
+want_err 'count query: gh exited 1 with no message'
 
 # A successful poll followed by failures: coverage ends at that poll, so the
 # tail of the wait is unobserved and polls_ok alone would call it quiet.
