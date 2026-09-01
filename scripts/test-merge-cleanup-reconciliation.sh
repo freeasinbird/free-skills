@@ -6,6 +6,8 @@
 # every freshness failure position, source/tool/input-reread stops, mutation
 # and verification failures, rejected attempts, partial fields, and malformed
 # traces that try to bypass the ordering or complete-disposition invariants.
+# The skeleton cases pin the generated trace for every policy status and plan
+# kind, and prove each printed skeleton passes the checker unchanged.
 #
 # Usage: test-merge-cleanup-reconciliation.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -580,11 +582,198 @@ pre	A
 EOF
 want 'no write may begin after a stop condition'
 
+run_skeleton() { # run_skeleton <name> <exit>: plan rows arrive on stdin
+  NAME="$1"
+  expected_rc="$2"
+  plan="$TMP/plan"
+  cat > "$plan"
+  OUT=$("$SUT" --skeleton "$plan" 2>&1)
+  RC=$?
+  if [ "$RC" -eq "$expected_rc" ]; then ok
+  else bad "exit $RC, wanted $expected_rc (got: $OUT)"
+  fi
+}
+same() { # same: the whole output equals the trace on stdin
+  expected=$(cat)
+  if [ "$OUT" = "$expected" ]; then ok
+  else bad "output differs from the expected skeleton (got: $OUT)"
+  fi
+}
+recheck() { # recheck <result>: the skeleton just printed validates to <result>
+  printf '%s\n' "$OUT" > "$TMP/skeleton"
+  OUT=$("$SUT" "$TMP/skeleton" 2>&1)
+  RC=$?
+  if [ "$RC" -eq 0 ]; then ok; else bad "skeleton exit $RC (got: $OUT)"; fi
+  want "RESULT $1"
+}
+
+run_skeleton "a skeleton orders write blocks, no-ops, reports, then final" 0 <<'EOF'
+policy	A	complete	initial
+plan	unblocked	report	T1	T2
+plan	T1:transition	write	closing-issue	T1
+plan	T2:readiness	noop	T2
+plan	T2:transition	write	closing-issue	T2
+EOF
+same <<'EOF'
+policy	A	complete	initial
+plan	unblocked	report	T1	T2
+plan	T1:transition	write	closing-issue	T1
+plan	T2:readiness	noop	T2
+plan	T2:transition	write	closing-issue	T2
+pre	A
+guard	complete	closing-issue	T1
+attempt	accepted	T1:transition
+verify	T1:transition	changed
+recheck	fresh	closing-issue	T1
+post	A
+pre	A
+guard	complete	closing-issue	T2
+attempt	accepted	T2:transition
+verify	T2:transition	changed
+recheck	fresh	closing-issue	T2
+post	A
+observe	T2:readiness	fresh	T2
+observe	unblocked	fresh	T1	T2
+final	A
+EOF
+recheck complete
+want 'COMPLETED T2:transition (changed)'
+want 'COMPLETED unblocked (report)'
+
+run_skeleton "a skeleton for readable absence holds only policy and final" 0 <<'EOF'
+policy	A	absent	initial
+EOF
+same <<'EOF'
+policy	A	absent	initial
+final	A
+EOF
+recheck complete
+
+run_skeleton "a skeleton for a failed source adds the umbrella skip" 0 <<'EOF'
+policy	A	unreadable	initial
+EOF
+same <<'EOF'
+policy	A	unreadable	initial
+plan	project-reconciliation	report
+skip	project-reconciliation	<name the unreadable source, field, or pointer>	source
+final	A
+EOF
+recheck incomplete
+want 'restore or correct the named authoritative current-base source'
+
+run_skeleton "a skeleton for a failed source keeps a supplied umbrella row" 0 <<'EOF'
+policy	A	invalid	initial
+plan	project-reconciliation	report
+EOF
+want 'skip	project-reconciliation	<name the invalid source, field, or pointer>	source'
+recheck incomplete
+
+run_skeleton "a skeleton for a failed source rejects other items" 2 <<'EOF'
+policy	A	unreadable	initial
+plan	T1:transition	write	T1
+EOF
+same <<'EOF'
+INVALID: failed policy needs one project-reconciliation report umbrella item
+EOF
+
+run_skeleton "an unverifiable tip with a failed source stays one umbrella skip" 0 <<'EOF'
+policy	unverifiable	unreadable	initial
+EOF
+same <<'EOF'
+policy	unverifiable	unreadable	initial
+plan	project-reconciliation	report
+skip	project-reconciliation	<name the unreadable source, field, or pointer>	source
+final	unverifiable
+EOF
+recheck restart
+
+run_skeleton "a skeleton skips an unsupported item with the unauthorized class" 0 <<'EOF'
+policy	A	complete	initial
+plan	claim-next	unsupported
+plan	T1:readiness	noop	T1
+EOF
+same <<'EOF'
+policy	A	complete	initial
+plan	claim-next	unsupported
+plan	T1:readiness	noop	T1
+skip	claim-next	<name the requested action outside merge-cleanup authority>	unauthorized
+observe	T1:readiness	fresh	T1
+final	A
+EOF
+recheck incomplete
+want 'authorize and perform this as a separate work unit'
+
+run_skeleton "a skeleton under an unverifiable tip skips every item and restarts" 0 <<'EOF'
+policy	unverifiable	complete	initial
+plan	T1:transition	write	T1
+plan	claim-next	unsupported
+EOF
+same <<'EOF'
+policy	unverifiable	complete	initial
+plan	T1:transition	write	T1
+plan	claim-next	unsupported
+skip	claim-next	<name the requested action outside merge-cleanup authority>	unauthorized
+skip	T1:transition	base tip was unverifiable at discovery	policy
+final	unverifiable
+EOF
+recheck restart
+
+run_skeleton "a skeleton for an unverifiable replacement tip is unstable" 0 <<'EOF'
+policy	unverifiable	complete	replacement
+plan	T1:transition	write	T1
+EOF
+recheck unstable
+
+run_skeleton "a skeleton plan under an absent policy is invalid" 2 <<'EOF'
+policy	A	absent	initial
+plan	T1:transition	write	T1
+EOF
+same <<'EOF'
+INVALID line 2: absent policy cannot plan reconciliation work
+EOF
+
+run_skeleton "a skeleton write plan without inputs is invalid" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write
+EOF
+want 'write, noop, and report plans must enumerate every input'
+
+run_skeleton "a skeleton plan cannot carry execution rows" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	T1
+pre	A
+EOF
+want 'INVALID line 3: a skeleton plan holds only policy and plan rows'
+
+run_skeleton "a skeleton plan keeps the plan validation" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:transition	write	T1
+plan	T1:transition	write	T1
+EOF
+want 'duplicate plan item: T1:transition'
+
+run_skeleton "a skeleton plan without a policy row is invalid" 2 <<'EOF'
+EOF
+want 'trace has no policy event'
+
+NAME="a skeleton plan reads stdin"
+OUT=$(printf 'policy\tA\tabsent\tinitial\n' | "$SUT" --skeleton - 2>&1)
+RC=$?
+if [ "$RC" -eq 0 ]; then ok; else bad "exit $RC, wanted 0 (got: $OUT)"; fi
+want 'final	A'
+
+NAME="--skeleton without a plan file is a usage error"
+OUT=$("$SUT" --skeleton 2>&1)
+RC=$?
+if [ "$RC" -eq 64 ]; then ok; else bad "exit $RC, wanted 64 (got: $OUT)"; fi
+want '--skeleton takes exactly one plan file'
+
 NAME="help documents the trace contract"
 OUT=$("$SUT" --help 2>&1)
 RC=$?
 if [ "$RC" -eq 0 ]; then ok; else bad "exit $RC, wanted 0"; fi
 want 'reconciliation-ledger.sh <trace-file>'
+want 'reconciliation-ledger.sh --skeleton <plan-file>'
 want 'final   <base-tip|unverifiable>'
 
 echo "merge-cleanup reconciliation: $PASS passed, $FAIL failed"
