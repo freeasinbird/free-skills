@@ -61,6 +61,12 @@
 #   CAP_EXPIRED <json>      no reviewer activity within the cap
 # The report is compact by design (the caller's context holds it for the
 # rest of the session); the main agent refetches bodies and threads itself.
+# Every report carries one PR-state field:
+#   unresolved_threads  review threads whose isResolved is false, counted
+#                 on the latest poll that read them (null when none did).
+#                 Threads open since before the baseline count too, so a
+#                 round with unresolved_threads above 0 is not clean,
+#                 whatever the exit code.
 # Persistent API failure surfaces as CAP_EXPIRED too: the cap is the
 # backstop. Read the coverage fields in that payload before reporting the
 # result; each failing poll also names its failure on stderr, followed by
@@ -276,6 +282,11 @@ if [ -n "$HEAD" ]; then
 fi
 JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .created_at > \"$BASELINE\"$HEAD_COMMENTS)] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
 JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at // \"\") > \"$BASELINE\"$HEAD_REVIEWS)] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
+# The per-poll count query also reads the first page of review threads;
+# JQ_THREADS reads each later page. Both count threads whose isResolved is
+# false and hand back the paging cursor.
+JQ_COUNTS='.data.repository.pullRequest | "\(.reviews.totalCount) \(.reactions.totalCount) \([.reviewThreads.nodes[] | select(.isResolved == false)] | length) \(.reviewThreads.pageInfo.hasNextPage) \(.reviewThreads.pageInfo.endCursor // "none")"'
+JQ_THREADS='.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved == false)] | length) \(.pageInfo.hasNextPage) \(.pageInfo.endCursor // "none")"'
 JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\" and .created_at > \"$BASELINE\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
 
 # Both scanners report "t1 t2 status". A malformed page (transient API
@@ -335,6 +346,7 @@ scan_asc_tail() {
 seen_progress=false
 polls_ok=0
 last_poll_ok=false
+unresolved=null
 while :; do
   # Every poll rescans each source from the fixed baseline (both scanners
   # restart and terminate on it), so one successful poll observes the whole
@@ -343,11 +355,10 @@ while :; do
   # leaves the tail of the wait unobserved, while a mid-run blip followed by
   # a success costs nothing. Reset per poll and report both.
   last_poll_ok=false
-  read -r n_reviews n_reactions <<< "$(gh_q "count query" api graphql \
-    -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount}}}}' \
-    -F o="$OWNER" -F r="$NAME" -F n="$PR" \
-    --jq '"\(.data.repository.pullRequest.reviews.totalCount) \(.data.repository.pullRequest.reactions.totalCount)"')"
-  case "${n_reviews:-x}${n_reactions:-x}" in *[!0-9]*)
+  read -r n_reviews n_reactions n_open more cursor <<< "$(gh_q "count query" api graphql \
+    -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}' \
+    -F o="$OWNER" -F r="$NAME" -F n="$PR" --jq "$JQ_COUNTS")"
+  case "${n_reviews:-x}${n_reactions:-x}${n_open:-x}" in *[!0-9]*)
     # Count query failed; retry next poll. The cap is the backstop. Say so
     # on stderr: this failure skips every scan below, so a run that fails
     # here on every poll would otherwise reach the cap in total silence and
@@ -355,7 +366,22 @@ while :; do
     retrying "count query failed"
     n_reviews='' ;;
   esac
+  # Threads past the first page are read the same way. A page that fails
+  # leaves the count short, and a short count would let the caller call a
+  # round clean over threads it never saw, so it fails the poll as the
+  # count query does rather than reporting a low number.
+  while [ -n "$n_reviews" ] && [ "$more" = true ]; do
+    read -r t_open more cursor <<< "$(gh_q "thread page" api graphql \
+      -f query='query($o:String!,$r:String!,$n:Int!,$c:String!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100,after:$c){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}' \
+      -F o="$OWNER" -F r="$NAME" -F n="$PR" -f c="$cursor" --jq "$JQ_THREADS")"
+    case "${t_open:-x}" in *[!0-9]*)
+      retrying "thread page query failed"
+      n_reviews=''; break ;;
+    esac
+    n_open=$((n_open + t_open))
+  done
   if [ -n "$n_reviews" ]; then
+    unresolved=$n_open
     read -r replies _ c_status <<< "$(scan_desc "repos/$OWNER/$NAME/pulls/$PR/comments?" "$JQ_COMMENTS")"
     read -r revs _ v_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/pulls/$PR/reviews?" "$JQ_REVIEWS" "$n_reviews" reviews)"
     if [ $((replies + revs)) -gt 0 ]; then
@@ -365,7 +391,7 @@ while :; do
       # file, and the caller cannot tell a complete scan from a partial one.
       [ "$c_status" = ok ] && [ "$v_status" = ok ] ||
         notice "scan failed part-way (comments=$c_status reviews=$v_status); positive evidence stands"
-      echo "REVIEW_ACTIVITY {\"new_reviews\":$revs,\"new_review_comments\":$replies}"
+      echo "REVIEW_ACTIVITY {\"new_reviews\":$revs,\"new_review_comments\":$replies,\"unresolved_threads\":$unresolved}"
       exit 0
     fi
     # A clean pass is an absence-based verdict: it requires that the
@@ -384,7 +410,7 @@ while :; do
         polls_ok=$((polls_ok + 1))
         last_poll_ok=true
         if [ "$clean" -gt 0 ]; then
-          echo "CLEAN_PASS {\"clean_reactions\":$clean}"
+          echo "CLEAN_PASS {\"clean_reactions\":$clean,\"unresolved_threads\":$unresolved}"
           exit 3
         fi
       fi
@@ -402,5 +428,5 @@ while :; do
   fi
 done
 
-echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"polls_ok\":$polls_ok,\"last_poll_ok\":$last_poll_ok,\"in_progress_seen\":$seen_progress}"
+echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"polls_ok\":$polls_ok,\"last_poll_ok\":$last_poll_ok,\"in_progress_seen\":$seen_progress,\"unresolved_threads\":$unresolved}"
 exit 2

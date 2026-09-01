@@ -123,8 +123,8 @@ t 64 "reaction constant injection" $VALID --clean-content 'THUMBS_UP" or true or
 # gh does: a two-line error on stderr and exit 1, so the passthrough can be
 # checked to keep the first line and drop the rest. Fixtures therefore
 # describe the API the same way the filters read it: paging, author field,
-# timestamps, commit anchors. gh embeds gojq rather than jq, but these
-# filters use only constructs the two share.
+# timestamps, commit anchors, thread cursors. gh embeds gojq rather than jq,
+# but these filters use only constructs the two share.
 # ---------------------------------------------------------------------------
 
 BOT='some-bot[bot]'      # the REST form --login some-bot derives
@@ -137,17 +137,18 @@ write_gh_shim() {
     echo '#!/bin/bash'
     echo "FIX=\"$FIX\""
     cat <<'SHIMEOF'
-filter='.' target='' page=1 prev=''
+filter='.' target='' page=1 prev='' cursor=''
 for a in "$@"; do
   [ "$prev" = "--jq" ] && filter="$a"
   case "$a" in
     graphql) target=graphql ;;
     repos/*) target="$a" ;;
+    c=*) cursor="${a#c=}" ;;   # the -f c=<cursor> thread-page variable
   esac
   prev="$a"
 done
 if [ "$target" = graphql ]; then
-  fixture="$FIX/graphql.json"
+  fixture="$FIX/graphql${cursor:+-$cursor}.json"
 else
   # Anchor on the separator: an unanchored page=N would read per_page=100.
   [[ "$target" =~ [?\&]page=([0-9]+) ]] && page="${BASH_REMATCH[1]}"
@@ -159,7 +160,7 @@ else
   esac
 fi
 [ -f "$fixture" ] || {
-  echo "gh: Not Found (HTTP 404) ${target}" >&2
+  echo "gh: Not Found (HTTP 404) ${target}${cursor:+ after $cursor}" >&2
   echo "second line of the gh error, which the watcher must not repeat" >&2
   exit 1
 }
@@ -173,10 +174,27 @@ SHIMEOF
 # pages its API is meant to serve and any other request reads as a failure.
 scenario() { SCENARIO="$1"; rm -f "$FIX"/*.json; }
 
-# The GraphQL count query, which sizes the backward page walks.
+# The GraphQL count query, which sizes the backward page walks and carries
+# the first page of review threads. counts <reviews> <reactions>
+# [unresolved] [resolved] [next-cursor]; threads_page <cursor> <unresolved>
+# [resolved] [next-cursor] serves a later page under that cursor.
+threads_json() {  # threads_json <unresolved> <resolved> [next-cursor]
+  tj_nodes=""
+  tj_i=0; while [ "$tj_i" -lt "${1:-0}" ]; do
+    tj_nodes="$tj_nodes,{\"isResolved\":false}"; tj_i=$((tj_i + 1)); done
+  tj_i=0; while [ "$tj_i" -lt "${2:-0}" ]; do
+    tj_nodes="$tj_nodes,{\"isResolved\":true}"; tj_i=$((tj_i + 1)); done
+  if [ -n "${3:-}" ]; then tj_page="{\"hasNextPage\":true,\"endCursor\":\"$3\"}"
+  else tj_page='{"hasNextPage":false,"endCursor":null}'; fi
+  printf '{"pageInfo":%s,"nodes":[%s]}' "$tj_page" "${tj_nodes#,}"
+}
 counts() {
-  printf '{"data":{"repository":{"pullRequest":{"reviews":{"totalCount":%s},"reactions":{"totalCount":%s}}}}}' \
-    "$1" "$2" > "$FIX/graphql.json"
+  printf '{"data":{"repository":{"pullRequest":{"reviews":{"totalCount":%s},"reactions":{"totalCount":%s},"reviewThreads":%s}}}}' \
+    "$1" "$2" "$(threads_json "${3:-0}" "${4:-0}" "${5:-}")" > "$FIX/graphql.json"
+}
+threads_page() {
+  printf '{"data":{"repository":{"pullRequest":{"reviewThreads":%s}}}}' \
+    "$(threads_json "$2" "${3:-0}" "${4:-}")" > "$FIX/graphql-$1.json"
 }
 # page <endpoint> <n> [item...]: an empty page is a real, valid response.
 page() {
@@ -293,7 +311,7 @@ counts 0 1; page reviews 1; page comments 1
 page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
 run_watch $VALID
 want_rc 3
-want_out 'CLEAN_PASS {"clean_reactions":1}'
+want_out 'CLEAN_PASS {"clean_reactions":1,"unresolved_threads":0}'
 
 scenario "stale clean-pass reaction is not this round's pass"
 counts 0 1; page reviews 1; page comments 1
@@ -373,6 +391,50 @@ run_watch $VALID
 want_rc 2
 want_out '"polls_ok":1'
 want_out '"last_poll_ok":true'
+want_out '"unresolved_threads":0'
+
+# Unresolved threads ride on every report, whatever ended the wait, and
+# count threads open since before the baseline: the watch reports activity
+# past the baseline, but a round is not clean while any thread stays open.
+scenario "review activity reports the unresolved thread count"
+counts 1 0 2 1; page reviews 1 "$(review "$BOT" "$AFTER")"; page comments 1
+run_watch $VALID
+want_rc 0
+want_out '"unresolved_threads":2}'
+
+scenario "clean pass reports threads still open"
+counts 0 1 1 0; page reviews 1; page comments 1
+page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
+run_watch $VALID
+want_rc 3
+want_out 'CLEAN_PASS {"clean_reactions":1,"unresolved_threads":1}'
+
+scenario "cap expiry reports threads still open"
+counts 0 0 3 2; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID
+want_rc 2
+want_out '"unresolved_threads":3}'
+
+# The thread connection is paged to exhaustion, so a count never stops at
+# the first page, and a page that cannot be read fails the poll rather than
+# reporting a low count as if it were complete.
+scenario "thread count pages past the first page"
+counts 0 0 1 0 p2; threads_page p2 2 1 p3; threads_page p3 1 0
+page reviews 1; page comments 1; page reactions 1
+run_watch $VALID
+want_rc 2
+want_out '"polls_ok":1'
+want_out '"unresolved_threads":4}'
+
+scenario "an unreadable thread page is not a completed poll"
+counts 0 0 1 0 p2
+page reviews 1; page comments 1; page reactions 1
+run_watch $VALID
+want_rc 2
+want_out '"polls_ok":0'
+want_out '"unresolved_threads":null'
+want_err 'thread page query failed; retrying'
+want_err '  thread page: gh: Not Found (HTTP 404)'
 
 # Failure must never masquerade as a completed observation: an absence-based
 # verdict needs a scan that finished, and a run that observed nothing at all
@@ -418,6 +480,7 @@ run_watch $VALID
 want_rc 2
 want_out '"polls_ok":0'
 want_out '"last_poll_ok":false'
+want_out '"unresolved_threads":null'
 want_err 'count query failed; retrying
   count query: gh: Not Found (HTTP 404)'
 want_not_err 'second line'
