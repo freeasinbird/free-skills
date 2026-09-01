@@ -461,12 +461,14 @@ change.
   read `docs/agent-workflow.md` §review-convergence before widening a pattern.
 - **Keep reviewing while blockers remain.** Correctness, security, data loss,
   broken invariants, and red CI always require another round. Decide severity
-  yourself; the reviewer's label is only evidence. When unsure, treat the
-  finding as blocking.
-- **Raise the bar as rounds continue.** After the early rounds, or when a
-  finding recurs, read `docs/agent-workflow.md` §review-convergence before
-  deciding on another round. Before handoff, mark every finding fixed,
-  declined, deferred, or explicitly outstanding.
+  yourself; the reviewer's label is only evidence. When a reachable defect's
+  severity is unsure, treat it as blocking. When its reachability is unsure,
+  trace the callers or run the case before patching.
+- **Raise the bar as rounds continue.** After the early rounds, when a finding
+  recurs, or when findings cite code an earlier round added, read
+  `docs/agent-workflow.md` §review-convergence before deciding on another
+  round. Before handoff, mark every finding fixed, declined, deferred, or
+  explicitly outstanding.
 - **Keep the PR body current.** When review adds commits or changes scope,
   update What, the subject-based commit map, and Verification. Mark commits
   that resolve review findings. Keep each finding's outcome in its inline

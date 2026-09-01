@@ -357,8 +357,17 @@ another review round is required.
 
 - **Continue for every blocker.** Correctness, security, data loss, broken
   invariants, and red CI always earn another round. Decide severity yourself.
-  The reviewer's tag is evidence, not the verdict. When unsure, treat the
-  finding as blocking.
+  The reviewer's tag is evidence, not the verdict. When a reachable defect's
+  severity is unsure, treat it as blocking.
+- **Test reachability before adding a guard.** A finding that asks for a guard
+  or other behavioral change is real only when you can name what produces the
+  failing state. Name an input the interface admits at a public or untrusted
+  boundary, or an existing caller for internal code. The harm must also matter
+  at the expected scale and trust boundary. A guard for a state you cannot
+  reach is hardening, not a fix. Decline it with a one-line reason naming the
+  unreachable path, the invariant that holds, or why the harm is immaterial.
+  When reachability is unsure, trace the callers or run the case before
+  patching.
 - **Handle later non-blockers without another full review.** After the
   early rounds, choose one outcome for each valid non-blocker:
 
@@ -374,9 +383,20 @@ another review round is required.
 - **Stop when review stops making progress.** This happens when the same
   finding returns after a correct, complete fix, or fixes create new problems
   without net progress. Pause and show the human what is stuck.
+- **Notice when the reviewer is reviewing your hardening.** From the third fix
+  round, check two signals: most findings cite lines an earlier round added,
+  and recent fixes are all guards you traced no reaching caller for. When both
+  hold, stop pushing guards. Decline only what fails that test, list earlier
+  hardening that fails it as removal candidates, and show the human. Keep
+  fixing reachable, material defects; the round count alone never turns one
+  into a decline.
+- **Judge a posted review; don't treat it as proof that work remains.** A
+  reviewer that posts only on findings has a floor on new code.
 - **Reassess after many rounds with blockers.** Record whether to continue or
-  ask a human. Revisit that decision if blocker rounds keep accumulating. Do
-  not stop silently or continue on autopilot.
+  ask a human. A go needs blockers that passed the reachability and
+  materiality test, not only shrinking counts. Revisit that decision if
+  blocker rounds keep accumulating. Do not stop silently or continue on
+  autopilot.
 - **Record an outcome for every finding.** Before handoff, mark each one fixed,
   declined, deferred, or explicitly outstanding. Record why no blocker
   required another round. The human decides how to handle outstanding
