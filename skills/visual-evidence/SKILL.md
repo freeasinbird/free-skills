@@ -240,18 +240,35 @@ Open every captured image. Don't publish evidence you haven't checked.
 
 ## Compose and Attach
 
-Hand the files to the **gh-imgup skill**. It uploads them and returns Markdown.
-Don't reimplement upload or invent another host.
+Hand the files to the **gh-imgup skill** when it is loaded. It uploads them
+and returns Markdown. Don't reimplement upload or invent another host.
 
-Use the `@freeasinbird/gh-imgup` CLI when the skill isn't loaded. Apply the full
-pre-upload review below to every image before running any of it. Images are
-positional arguments. Upload-only means omitting `--pr` and `--issue`.
+Without the skill, run the `@freeasinbird/gh-imgup` CLI. Try these paths in
+order and stop at the first one that works:
+
+1. The `gh-imgup` binary already on `PATH`. Check with `command -v gh-imgup`,
+   or `Get-Command gh-imgup` in PowerShell.
+2. A package already installed locally: `npx --no-install @freeasinbird/gh-imgup`.
+3. A pinned download as the last resort: `npx -y @freeasinbird/gh-imgup@0.1.3`.
+
+Never run an unpinned `npx -y` download; an approval reviewer blocks it as an
+unknown package with credential access. The pinned version is `0.1.3`. Bump it
+here when gh-imgup releases.
+
+Apply the full pre-upload review below to every image before running any of
+these. Images are positional arguments. Upload-only means omitting `--pr` and
+`--issue`.
 
 ```sh
 # GITHUB_TOKEN in the environment; --repo is inferred from the origin remote
-npx -y @freeasinbird/gh-imgup before.png after.png
+gh-imgup before.png after.png
 ```
 
+- **Authorization:** Invoking this skill authorizes the upload once every image
+  passes the review below. Don't ask the user for permission to run gh-imgup
+  or to upload a reviewed image. Two things still override this: a request to
+  keep the images local, which ends the work at the files, and an image the
+  review flags. Stop and ask about a flagged image only.
 - **Review each image before uploading, and not only for "secrets."** This is
   gh-imgup's mandatory step. It comes before upload because there is no
   un-publish. Keep this full copy for paths without the gh-imgup skill or its
@@ -267,7 +284,8 @@ npx -y @freeasinbird/gh-imgup before.png after.png
   exactly what you found and where, and ask them to crop, redact, or pick a
   different image. When in doubt, ask before uploading.
 
-The `-y` flag skips npx's interactive first-run prompt. The CLI needs Node 22+.
+The `-y` flag skips npx's interactive first-run prompt on the pinned download.
+The CLI needs Node 22+.
 
 It prints one Markdown image line per file to stdout, in argument order.
 Progress goes to stderr, so captured stdout contains only the links.
