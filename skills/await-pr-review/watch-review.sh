@@ -10,7 +10,11 @@
 # totalCounts). This watcher reads REST only, where reviews, review
 # comments, and reactions all carry their author under user.login in the
 # same name[bot] form, so one login matches all three sources; every signal
-# counts only when dated after the baseline.
+# counts only when dated after the baseline, except that a command request's
+# whole-second creation boundary is inclusive. Artifacts present before a
+# command request are snapshotted by ID, so an earlier same-second artifact
+# cannot satisfy the new request. Its one write is the optional
+# --request-comment, which asks a command-triggered reviewer for a pass.
 #
 # Usage:
 #   watch-review.sh --help | -h                 # print this block, exit 0
@@ -54,11 +58,31 @@
 #                                         # caller confirms which head a
 #                                         # pass covered before treating it
 #                                         # as the post-push round.
+#     [--request-comment <text>]          # command-triggered reviewer: when
+#                                         # no PR comment with exactly this
+#                                         # body is dated at or after
+#                                         # --baseline, post
+#                                         # it once and re-anchor the
+#                                         # baseline to the host's creation
+#                                         # time of that comment. That whole
+#                                         # second is inclusive, so a response
+#                                         # in the request second is visible.
+#                                         # A pending request posts nothing
+#                                         # and keeps --baseline. Either
+#                                         # way stderr names the baseline
+#                                         # the watch ran from.
+#     [--request-artifacts <token>]       # token reported by an earlier
+#                                         # request-comment watch. Pass it
+#                                         # back when re-arming that request
+#                                         # at its inclusive baseline so the
+#                                         # pre-request IDs stay excluded.
 #
-# Prints one report line on exit, tagged for the caller:
-#   REVIEW_ACTIVITY <json>  reviewer review or review comment past baseline
-#   CLEAN_PASS <json>       clean-pass reaction past baseline, nothing else
+# Successful watches print one report line on exit, tagged for the caller:
+#   REVIEW_ACTIVITY <json>  reviewer review or comment in the watch window
+#   CLEAN_PASS <json>       clean reaction in the window, nothing else
 #   CAP_EXPIRED <json>      no reviewer activity within the cap
+# A request whose post result is unknown prints the captured recovery state:
+#   REQUEST_INCOMPLETE <json>  retry with its request_artifacts token
 # The report is compact by design (the caller's context holds it for the
 # rest of the session); the main agent refetches bodies and threads itself.
 # Every report carries one PR-state field:
@@ -81,10 +105,16 @@
 #                 honest report is "could not watch this PR".
 #
 # Exit codes: 0 review activity (or --help); 3 clean pass; 2 cap expired;
-# 64 usage error; 69 gh (GitHub CLI) not found on PATH.
+# 64 usage error; 69 gh (GitHub CLI) not found on PATH; 75 the request
+# comment could not be checked or posted, nothing watched. When exit 75
+# carries REQUEST_INCOMPLETE, pass its request_artifacts token on the retry.
 set -u
 
 PR="" BASELINE="" LOGIN="" REPO="" REST_LOGIN="" REACTION_LOGIN="" HEAD=""
+REQUEST_COMMENT="" REQUEST_GIVEN=""
+REQUEST_ARTIFACTS="" REQUEST_ARTIFACTS_GIVEN=""
+BASELINE_INCLUSIVE=""
+PREEXISTING_REVIEWS="" PREEXISTING_COMMENTS="" PREEXISTING_REACTIONS=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
 INTERVAL=75 CAP_MINUTES=25
 
@@ -104,7 +134,7 @@ while [ $# -gt 0 ]; do
   opt="$1"
   case "$opt" in
     -h|--help) print_usage; exit 0 ;;
-    --pr|--baseline|--login|--repo|--rest-login|--reaction-login|--clean-content|--progress-content|--interval|--cap-minutes|--head) ;;
+    --pr|--baseline|--login|--repo|--rest-login|--reaction-login|--clean-content|--progress-content|--interval|--cap-minutes|--head|--request-comment|--request-artifacts) ;;
     *) echo "watch-review.sh: unknown option: $opt" >&2; usage ;;
   esac
   [ $# -ge 2 ] || { echo "watch-review.sh: $opt requires a value" >&2; usage; }
@@ -121,6 +151,8 @@ while [ $# -gt 0 ]; do
     --interval) INTERVAL="$val" ;;
     --cap-minutes) CAP_MINUTES="$val" ;;
     --head) HEAD="$val" ;;
+    --request-comment) REQUEST_COMMENT="$val"; REQUEST_GIVEN=true ;;
+    --request-artifacts) REQUEST_ARTIFACTS="$val"; REQUEST_ARTIFACTS_GIVEN=true ;;
   esac
 done
 
@@ -171,6 +203,25 @@ if [ -n "$HEAD" ]; then
   esac
   if [ "${#HEAD}" -lt 7 ] || [ "${#HEAD}" -gt 40 ]; then
     echo "watch-review.sh: --head must be a 7-40 char hex commit SHA" >&2; usage
+  fi
+fi
+if [ -n "$REQUEST_GIVEN" ]; then
+  case "$REQUEST_COMMENT" in *[![:space:]]*) ;; *)
+    echo "watch-review.sh: --request-comment must not be blank" >&2; usage ;;
+  esac
+fi
+if [ -n "$REQUEST_ARTIFACTS_GIVEN" ]; then
+  [ -n "$REQUEST_GIVEN" ] || {
+    echo "watch-review.sh: --request-artifacts requires --request-comment" >&2
+    usage
+  }
+  if [[ "$REQUEST_ARTIFACTS" =~ ^r=([0-9]+(,[0-9]+)*)?\;c=([0-9]+(,[0-9]+)*)?\;a=([0-9]+(,[0-9]+)*)?$ ]]; then
+    PREEXISTING_REVIEWS="${BASH_REMATCH[1]//,/$'\n'}"
+    PREEXISTING_COMMENTS="${BASH_REMATCH[3]//,/$'\n'}"
+    PREEXISTING_REACTIONS="${BASH_REMATCH[5]//,/$'\n'}"
+  else
+    echo "watch-review.sh: --request-artifacts must use r=ID,...;c=ID,...;a=ID,..." >&2
+    usage
   fi
 fi
 if [ -n "$REPO" ]; then
@@ -255,6 +306,93 @@ if [ -z "$REPO" ]; then
 fi
 OWNER="${REPO%%/*}" NAME="${REPO##*/}"
 
+# A command-triggered reviewer is requested once per event, never per poll,
+# and the request is the event its pass answers: the host's creation time of
+# the request comment becomes the baseline (detection.md
+# §event-anchored-baselines). Earlier seconds are snapshotted out; the
+# request's creation second stays visible. An identical comment since the
+# caller's baseline is a pending request: post nothing and keep that
+# baseline. The match is at-or-after the baseline, not strictly after it:
+# a re-armed wake passes the re-anchored baseline back, which is the posted
+# request's own creation second, and a strict compare would post it again.
+# The host's since= filter is exclusive too. Expressing the baseline with a
+# +00:01 offset names an instant one minute earlier without date arithmetic,
+# including when the baseline itself falls exactly on a minute boundary.
+# GitHub timestamps every signal to a whole second, so a newly posted request,
+# or a pending request exactly at the supplied baseline, makes that creation
+# second inclusive. Otherwise a response emitted in the same second is lost
+# permanently on this watch and every re-armed watch. Before a new request,
+# snapshot the three reviewer artifact sources by ID. The inclusive filters
+# then ignore only artifacts that provably predate the request while retaining
+# new artifacts from the same second.
+# The text reaches jq through $ENV, never by interpolation, so a quote in
+# it cannot change the filter. Both failures exit 75 before any poll, and a
+# retry is safe: a request that did post is found as pending.
+if [ -n "$REQUEST_GIVEN" ]; then
+  export WATCH_REQUEST_TEXT="$REQUEST_COMMENT"
+  pending=$(gh_q "pending request" api \
+    "repos/$OWNER/$NAME/issues/$PR/comments?since=${BASELINE%Z}%2B00:01&per_page=100" \
+    --jq "[.[] | select(.body == \$ENV.WATCH_REQUEST_TEXT and .created_at >= \"$BASELINE\")] | \"\(length) \([.[] | select(.created_at == \"$BASELINE\")] | length)\"")
+  read -r pending request_at_baseline <<< "$pending"
+  case "${pending:-x}${request_at_baseline:-x}" in *[!0-9]*)
+    notice "could not check for a pending request; nothing posted"
+    exit 75 ;;
+  esac
+  if [ "$pending" -gt 0 ]; then
+    if [ "$request_at_baseline" -gt 0 ]; then
+      BASELINE_INCLUSIVE=true
+      if [ -z "$REQUEST_ARTIFACTS_GIVEN" ]; then
+        notice "an inclusive pending request needs its earlier --request-artifacts token; nothing watched"
+        exit 75
+      fi
+    fi
+    echo "watch-review.sh: request already pending; baseline stays $BASELINE" >&2
+  else
+    if [ -z "$REQUEST_ARTIFACTS_GIVEN" ]; then
+      export WATCH_REST_LOGIN="$REST_LOGIN"
+      export WATCH_SNAPSHOT_BASELINE="$BASELINE"
+      PREEXISTING_REVIEWS=$(gh_q "pre-request reviews" api --paginate \
+        "repos/$OWNER/$NAME/pulls/$PR/reviews?per_page=100" \
+        --jq '.[] | select(.user.login == $ENV.WATCH_REST_LOGIN and (.submitted_at // "") >= $ENV.WATCH_SNAPSHOT_BASELINE) | .id') || {
+        notice "could not snapshot pre-request reviews; nothing posted"
+        exit 75
+      }
+      PREEXISTING_COMMENTS=$(gh_q "pre-request review comments" api --paginate \
+        "repos/$OWNER/$NAME/pulls/$PR/comments?per_page=100" \
+        --jq '.[] | select(.user.login == $ENV.WATCH_REST_LOGIN and .created_at >= $ENV.WATCH_SNAPSHOT_BASELINE) | .id') || {
+        notice "could not snapshot pre-request review comments; nothing posted"
+        exit 75
+      }
+      PREEXISTING_REACTIONS=$(gh_q "pre-request reactions" api --paginate \
+        "repos/$OWNER/$NAME/issues/$PR/reactions?per_page=100" \
+        --jq '.[] | select(.user.login == $ENV.WATCH_REST_LOGIN and .created_at >= $ENV.WATCH_SNAPSHOT_BASELINE) | .id') || {
+        notice "could not snapshot pre-request reactions; nothing posted"
+        exit 75
+      }
+      REQUEST_ARTIFACTS="r=$(printf '%s' "$PREEXISTING_REVIEWS" | tr '\n' ',');c=$(printf '%s' "$PREEXISTING_COMMENTS" | tr '\n' ',');a=$(printf '%s' "$PREEXISTING_REACTIONS" | tr '\n' ',')"
+    fi
+    requested=$(gh_q "request comment" api "repos/$OWNER/$NAME/issues/$PR/comments" \
+      -f body="$REQUEST_COMMENT" --jq .created_at)
+    case "$requested" in
+      ????-??-??T??:??:??Z) case "$requested" in *[!0-9TZ:-]*) requested="" ;; esac ;;
+      *) requested="" ;;
+    esac
+    if [ -z "$requested" ]; then
+      echo "REQUEST_INCOMPLETE {\"request_artifacts\":\"$REQUEST_ARTIFACTS\"}"
+      notice "request comment failed or carried no creation time; nothing watched"
+      exit 75
+    fi
+    BASELINE="$requested"
+    BASELINE_INCLUSIVE=true
+    echo "watch-review.sh: requested review; baseline re-anchored to $BASELINE" >&2
+  fi
+fi
+export WATCH_PREEXISTING_REVIEWS="$PREEXISTING_REVIEWS"
+export WATCH_PREEXISTING_COMMENTS="$PREEXISTING_COMMENTS"
+export WATCH_PREEXISTING_REACTIONS="$PREEXISTING_REACTIONS"
+REQUEST_ARTIFACTS_REPORT=""
+[ -n "$REQUEST_ARTIFACTS" ] && REQUEST_ARTIFACTS_REPORT=",\"request_artifacts\":\"$REQUEST_ARTIFACTS\""
+
 # The loop is deadline-driven, not iteration-counted: sleeping only
 # between N polls would wait (N-1) intervals, quitting short of the
 # documented cap (with interval >= cap, immediately). The final poll runs
@@ -262,7 +400,9 @@ OWNER="${REPO%%/*}" NAME="${REPO##*/}"
 DEADLINE=$(( SECONDS + CAP_MINUTES * 60 ))
 
 # ISO-8601 UTC timestamps compare correctly as strings (the skill's
-# time-not-enumeration rule). Each per-page jq line is "A B EDGE": two
+# time-not-enumeration rule). A request creation second is inclusive because
+# GitHub's timestamps cannot order the request and its response within it.
+# Each per-page jq line is "A B EDGE": two
 # summable match counts and the page's baseline-side edge timestamp (the
 # oldest item on a newest-first page, the first item on an ascending page),
 # or "none" for an empty page. PENDING reviews have no submitted_at; treat
@@ -276,18 +416,20 @@ DEADLINE=$(( SECONDS + CAP_MINUTES * 60 ))
 # lets callers pass an abbreviated SHA.
 HEAD_REVIEWS=""
 HEAD_COMMENTS=""
+BASELINE_OPERATOR=">"
+[ -n "$BASELINE_INCLUSIVE" ] && BASELINE_OPERATOR=">="
 if [ -n "$HEAD" ]; then
   HEAD_REVIEWS=" and ((.commit_id // \"\") | startswith(\"$HEAD\"))"
   HEAD_COMMENTS=" and (((.commit_id // \"\") | startswith(\"$HEAD\")) or .in_reply_to_id != null)"
 fi
-JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .created_at > \"$BASELINE\"$HEAD_COMMENTS)] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
-JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at // \"\") > \"$BASELINE\"$HEAD_REVIEWS)] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
+JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .created_at $BASELINE_OPERATOR \"$BASELINE\"$HEAD_COMMENTS and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_COMMENTS | split(\"\\n\") | index(\$id)) == null))] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
+JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at // \"\") $BASELINE_OPERATOR \"$BASELINE\"$HEAD_REVIEWS and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_REVIEWS | split(\"\\n\") | index(\$id)) == null))] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
 # The per-poll count query also reads the first page of review threads;
 # JQ_THREADS reads each later page. Both count threads whose isResolved is
 # false and hand back the paging cursor.
 JQ_COUNTS='.data.repository.pullRequest | "\(.reviews.totalCount) \(.reactions.totalCount) \([.reviewThreads.nodes[] | select(.isResolved == false)] | length) \(.reviewThreads.pageInfo.hasNextPage) \(.reviewThreads.pageInfo.endCursor // "none")"'
 JQ_THREADS='.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved == false)] | length) \(.pageInfo.hasNextPage) \(.pageInfo.endCursor // "none")"'
-JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at > \"$BASELINE\")] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\" and .created_at > \"$BASELINE\")] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
+JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at $BASELINE_OPERATOR \"$BASELINE\" and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_REACTIONS | split(\"\\n\") | index(\$id)) == null))] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\" and .created_at $BASELINE_OPERATOR \"$BASELINE\" and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_REACTIONS | split(\"\\n\") | index(\$id)) == null))] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
 
 # Both scanners report "t1 t2 status". A malformed page (transient API
 # error, rate limit, missing scope) yields status=err: an error is not
@@ -295,9 +437,17 @@ JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \
 # (CLEAN_PASS, or even pending) from a scan that did not actually complete.
 # Positive matches remain valid evidence even from a partial scan.
 
+# Return true while an edge remains inside the watched time window. The
+# request boundary includes its creation second; ordinary event boundaries
+# remain strictly after the baseline.
+inside_window() {
+  [[ "$1" > "$BASELINE" ]] ||
+    { [ -n "$BASELINE_INCLUSIVE" ] && [ "$1" = "$BASELINE" ]; }
+}
+
 # Newest-first forward walk (review comments support direction=desc): scan
-# page 1 onward, stopping once a page's oldest item is at or before the
-# baseline — every post-baseline item has then been seen. Termination is
+# page 1 onward, stopping once a page's oldest item crosses the baseline.
+# Every item in the watched window has then been seen. Termination is
 # baseline-crossing, so pages scanned track actual post-baseline activity.
 scan_desc() {
   sd_url="$1"; sd_jq="$2"
@@ -307,7 +457,7 @@ scan_desc() {
     case "${sd_a}${sd_b}" in ''|*[!0-9]*) sd_status=err; break ;; esac
     sd_t1=$((sd_t1 + sd_a)); sd_t2=$((sd_t2 + sd_b))
     [ "$sd_edge" = "none" ] && break
-    [[ "$sd_edge" > "$BASELINE" ]] || break
+    inside_window "$sd_edge" || break
     sd_p=$((sd_p + 1))
   done
   echo "$sd_t1 $sd_t2 $sd_status"
@@ -315,8 +465,8 @@ scan_desc() {
 
 # Backward walk for ascending endpoints (reviews, reactions expose no sort
 # parameter): locate the last page from the connection's totalCount, then
-# walk toward page 1, stopping once a page's first (oldest) item is at or
-# before the baseline. The count is refreshed every poll, so an item that
+# walk toward page 1, stopping once a page's first (oldest) item crosses the
+# baseline. The count is refreshed every poll, so an item that
 # slips past the computed last page is caught on the next check.
 scan_asc_tail() {
   st_url="$1"; st_jq="$2"; st_total="$3"; st_label="$4"
@@ -337,7 +487,7 @@ scan_asc_tail() {
       st_p=$((st_p - 1))
       continue
     fi
-    [[ "$st_edge" > "$BASELINE" ]] || break
+    inside_window "$st_edge" || break
     st_p=$((st_p - 1))
   done
   echo "$st_t1 $st_t2 $st_status"
@@ -391,7 +541,7 @@ while :; do
       # file, and the caller cannot tell a complete scan from a partial one.
       [ "$c_status" = ok ] && [ "$v_status" = ok ] ||
         notice "scan failed part-way (comments=$c_status reviews=$v_status); positive evidence stands"
-      echo "REVIEW_ACTIVITY {\"new_reviews\":$revs,\"new_review_comments\":$replies,\"unresolved_threads\":$unresolved}"
+      echo "REVIEW_ACTIVITY {\"new_reviews\":$revs,\"new_review_comments\":$replies,\"unresolved_threads\":$unresolved$REQUEST_ARTIFACTS_REPORT}"
       exit 0
     fi
     # A clean pass is an absence-based verdict: it requires that the
@@ -410,7 +560,7 @@ while :; do
         polls_ok=$((polls_ok + 1))
         last_poll_ok=true
         if [ "$clean" -gt 0 ]; then
-          echo "CLEAN_PASS {\"clean_reactions\":$clean,\"unresolved_threads\":$unresolved}"
+          echo "CLEAN_PASS {\"clean_reactions\":$clean,\"unresolved_threads\":$unresolved$REQUEST_ARTIFACTS_REPORT}"
           exit 3
         fi
       fi
@@ -428,5 +578,5 @@ while :; do
   fi
 done
 
-echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"polls_ok\":$polls_ok,\"last_poll_ok\":$last_poll_ok,\"in_progress_seen\":$seen_progress,\"unresolved_threads\":$unresolved}"
+echo "CAP_EXPIRED {\"baseline\":\"$BASELINE\",\"cap_minutes\":$CAP_MINUTES,\"polls_ok\":$polls_ok,\"last_poll_ok\":$last_poll_ok,\"in_progress_seen\":$seen_progress,\"unresolved_threads\":$unresolved$REQUEST_ARTIFACTS_REPORT}"
 exit 2

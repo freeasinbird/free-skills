@@ -115,8 +115,8 @@ otherwise detect per `references/detection.md` §reviewer-identity-and-trigger.
 If several bot reviewers appear, or the trigger cannot be established, ask
 rather than burning the wait cap. Record a newly observed reviewer or signal
 in the project's designated conventions section; never record an absence.
-Request a command-triggered reviewer once, not every poll. An unrecorded
-reviewer never delays the spawn; the conductor does this discovery.
+Request a command-triggered reviewer once, via `--request-comment`, never per
+poll. An unrecorded reviewer never delays the spawn; the conductor discovers it.
 
 ## 3. Wait for New Activity
 

@@ -265,6 +265,17 @@ Optional flags include `--rest-login`, `--clean-content`, `--progress-content`,
 `--rest-login`, retained for older callers. `--help` (or `-h`) prints the full
 flag summary and exit codes to stdout and exits 0.
 
+`--request-comment <text>` serves a command-triggered reviewer. When no PR
+comment with exactly that body is dated at or after `--baseline`, the watcher
+posts it once and re-anchors the baseline to the host's creation time of the
+posted comment. Activity already on the PR at the request is thereby
+snapshotted out.
+When one does, the request is pending: the watcher posts nothing and keeps
+`--baseline`. Stderr names the baseline the watch ran from. Pass the flag on
+the first watch and again after each push. Exit 75 means the request could
+not be checked or posted and nothing was watched. A retry is safe because a
+request that did post is found as pending.
+
 | Exit | Report            | Meaning                                             |
 | ---- | ----------------- | --------------------------------------------------- |
 | 0    | `REVIEW_ACTIVITY` | Review or review comment after the baseline         |
@@ -272,6 +283,7 @@ flag summary and exit codes to stdout and exits 0.
 | 2    | `CAP_EXPIRED`     | Cap reached; inspect coverage fields                |
 | 64   | usage on stderr   | Invalid invocation; fix it rather than retrying     |
 | 69   | note on stderr    | `gh` missing; this environment cannot run the watch |
+| 75   | note on stderr    | Request not checked or posted; nothing watched      |
 
 Every report carries `unresolved_threads`: the PR's review threads whose
 `isResolved` is false on the latest poll that read them, or `null` when no
@@ -375,8 +387,8 @@ On each wake:
   transport instead of treating the round as quiet.
 
 For the script these states are exits 0 or 3, exit 2 with its coverage fields,
-and exits 64 or 69. Size each script cap just under the wake gap; a connector
-wake normally takes one complete paged snapshot. At the overall deadline, run
+and exits 64, 69, or 75. Size each script cap just under the wake gap; a
+connector wake normally takes one complete paged snapshot. At the overall deadline, run
 one final `--cap-minutes 0` script poll or complete connector snapshot so the
 tail is scanned, then stop and report quiet, pending, or incomplete. The
 scheduler must be cancellable and must avoid overlapping runs.
