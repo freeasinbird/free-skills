@@ -251,7 +251,13 @@ Run the script by path from the PR checkout:
 ```
 
 Pass `--repo owner/name` whenever the working directory is not the PR's
-checkout. Don't `cd` into a globally installed skill and rely on its repo
+checkout, and whenever the project's forge record names the slug. That record
+is an AGENTS.md entry naming the forge host and `owner/name` slug, written
+because a remote on an SSH host alias can leave `gh` unable to infer them.
+Take the slug from that record before any remote, never from a sibling
+project. The watcher takes the slug alone and resolves it against the CLI's
+default host, so set `GH_HOST` to the recorded host whenever that default
+differs. Don't `cd` into a globally installed skill and rely on its repo
 default.
 
 Optional flags include `--rest-login`, `--clean-content`, `--progress-content`,

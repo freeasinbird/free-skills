@@ -37,8 +37,11 @@ the forge CLI, but never select an ambiguous candidate.
 Establish each of these before invoking the script:
 
 - **Base repository and PR number.** Use `host/owner/name` and the positive
-  decimal PR number. Keep the host explicit even when it is `github.com`:
-  `GH_HOST` and the CLI's default host are ambient state, not pinned evidence.
+  decimal PR number. Take the host and slug from the project's forge record
+  when AGENTS.md carries one, an entry naming both, before inferring them from
+  a remote: a remote on an SSH host alias hides both. Keep the host explicit
+  even when it is `github.com`: `GH_HOST` and the CLI's default host are
+  ambient state, not pinned evidence.
 - **The exact worktree the cleanup may rewrite.** Prefer the worktree already
   holding the PR's base branch. Otherwise use the clean feature worktree that
   can land on the base. Pass its root, not a subdirectory.

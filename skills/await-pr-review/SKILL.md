@@ -99,11 +99,12 @@ Conductor skipped: <specific failed grant or allowed exception>.
 ## 1. Resolve the PR and Anchor the Baseline
 
 Anchor the baseline to the host event that should produce the next pass: the
-open, ready, or push event time, or a manual recheck's request time. Never
-use a commit time or a clock read after the event. Record the expected head,
-base branch, and base tip from the host. The main agent captures these at the
-event boundary even when a conductor owns the rest. Mechanics:
-`references/detection.md` §event-anchored-baselines.
+open, ready, or push event time, or a manual recheck's request time. Never use
+a commit time or a clock read after the event. Record the expected head, base
+branch, and base tip from the host; take `--repo` from the project's forge
+record before any remote. The main agent captures these at the event boundary
+even when a conductor owns the rest. Mechanics: `references/detection.md`
+§event-anchored-baselines.
 
 ## 2. Identify and, If Needed, Request the Reviewer
 
@@ -208,13 +209,12 @@ expected remaining work is likely to repay the handoff cost in
 
 ## 6. Report the Ledger
 
-End every finding in exactly one state: fixed (pushed SHA), declined
-(reason), deferred (linked issue), or explicitly outstanding for the human,
-with the rest of `references/review-response.md` §disposition-ledger. Before
-calling the PR ready, the exchange owner takes the fresh live-state snapshot
-and clears the readiness bars in `references/conductor.md`
-§quiescence-and-reporting, which bind under both ownerships; only a
-main-owned final-triage push may hand off with its re-review pending. Review
-completion is not CI completion: wait for every required check, fix any
-known-red result, then leave the PR open for human merge unless the project
-explicitly opts into self-merge.
+End every finding in exactly one state: fixed (pushed SHA), declined (reason),
+deferred (linked issue), or explicitly outstanding for the human, with the rest
+of `references/review-response.md` §disposition-ledger. Before calling the PR
+ready, the exchange owner takes the fresh live-state snapshot and clears the
+readiness bars in `references/conductor.md` §quiescence-and-reporting, which
+bind under both ownerships; only a main-owned final-triage push may hand off
+with its re-review pending. Review completion is not CI completion: wait for
+every required check, fix any known-red result, then leave the PR open for
+human merge unless the project explicitly opts into self-merge.

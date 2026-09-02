@@ -103,8 +103,8 @@ Then write AGENTS.md once, in the conventional section order (see below):
   under Decision-log or High-assurance).
 - Project-specific content or placeholders in place.
 - The `Agent-setup profile:` line, plus the High-assurance mandatory-note
-  list and any justified coordination or work-unit stage record, in an
-  unmanaged section.
+  list, any accepted forge record, and any justified coordination or
+  work-unit stage record, in an unmanaged section.
 
 Verify that write before moving on. Init pastes the managed blocks by hand,
 and every comparison update mode makes depends on their byte-exactness.

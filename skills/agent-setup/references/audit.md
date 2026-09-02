@@ -164,3 +164,76 @@ or their read is unavailable because of forge support, plan, or permissions,
 report the limitation and point to the canonical manual freshness procedure.
 A forge merge queue may be reported as an optional capability for a busy
 repository, but it is not a canonical requirement.
+
+## §forge-record
+
+Forge CLI calls such as `gh --repo` need the forge host and the `owner/name`
+slug. Both are plain when the remote URL names the forge's canonical host,
+such as `github.com`. A remote whose host is an SSH alias hides them, for
+example `git@bnw.github.com:owner/name.git` or `git@github-work:owner/name.git`.
+An agent that reads that URL sees an unfamiliar host. One that guesses the
+owner from a sibling project sends every call to a repository that doesn't
+exist, and the forge answers each one with a resolution error.
+
+During init and update, list the remotes with a userinfo-redacted `git remote
+-v`. Validate any forge record AGENTS.md already carries against the base
+repository's remote, whatever that remote's host. Both consumers prefer the
+record over the remote, so a transfer or a switch to a canonical URL can leave
+a stale record routing them. Offer a new record only when the base remote's
+host isn't the forge's canonical host: an entry in an unmanaged,
+project-specific section that states the forge host and the `owner/name` slug.
+Treat the audit as **detect → report → offer to write**, never a silent
+mutation:
+
+- Redact userinfo from every remote URL as it is read. `git remote -v` and
+  `git remote get-url` print an HTTP(S) URL's password or token verbatim,
+  so pipe either through `sed -E 's#://[^/@]*@#://***@#'`. Host and path
+  survive it, so every derivation below still works, and an SSH URL's
+  `git@` is untouched. Never print or record a credential; report only that
+  one was present.
+- Derive the slug from the base remote's fetch URL, read with that redacted
+  `git remote get-url <remote>`, as `owner/name` without `.git`. One remote
+  can carry a separate push URL naming a fork, which `git remote -v` lists
+  beside the fetch URL, so treat `git remote get-url --push` output as role
+  evidence only.
+- Treat `ssh -G <alias>` as a hint and never as the answer. It reports the
+  SSH transport endpoint, so it echoes an unconfigured alias back with exit
+  0, and it names a transport-only host such as `ssh.github.com` under a
+  port-443 config.
+- Confirm the host with `gh repo view --json nameWithOwner,url` in the
+  audited checkout, whose `url` names it. Accept that answer only when its
+  `nameWithOwner` matches the derived slug, because a second remote or a
+  configured `gh repo set-default` points the argument-less form at another
+  repository. `gh` maps any `*.github.com` alias to `github.com` and no
+  other, so a failed resolution is expected for other aliases, not evidence
+  against the record. Ask the user when `gh` cannot resolve the alias or
+  answers for another repository.
+- Offer to add the record, to correct one that disagrees with the base
+  repository's remote, or to remove one whose repository that remote no
+  longer names. Identify that remote first, and record any other remote by
+  its role only, so a fork's head remote never rewrites the base slug. Show
+  the exact text first; this is unmanaged project content.
+
+Write the record following the reviewer-record pattern, as a bullet in the
+same project-specific conventions section:
+
+```markdown
+- **Use `owner/name` on GitHub for forge calls.** This project has the
+  following forge record:
+
+  - **Host:** `github.com`.
+  - **Slug:** `owner/name`.
+  - **Remote:** `origin` is `git@bnw.github.com:owner/name.git`;
+    `bnw.github.com` is an SSH host alias for `github.com`. Pass
+    `--repo owner/name` to `gh`; never derive the owner from a sibling
+    project.
+  - **Consumers:** `await-pr-review` and `merge-cleanup` read this record
+    before inferring a repository from a remote.
+```
+
+The host records what the alias resolves to, so the `owner/name` slug is
+correct only for a CLI whose default host is that host. A canonical-host
+remote needs no new record, so report nothing beyond validating one that
+already exists. A fork layout records the base repository's slug and names
+the head remote's role beside it. Never move the record inside a managed
+block, and never delete or rewrite one during a sync.
