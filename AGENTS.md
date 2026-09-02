@@ -313,12 +313,12 @@ material, examples, and sub-prompts may live beside it.
   live files mirror canonical sources. Update both sides when a row's content
   changes. Otherwise, the live copy may contradict a freshly synced project.
 
-  | Live file                                                                                                        | Canonical source                                                             | Verification                                   |
-  | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------- |
-  | `AGENTS.md` managed blocks                                                                                       | `skills/agent-setup/references/canonical-sections.md`                        | `./scripts/check-managed-sync.sh`              |
-  | `docs/agent-workflow.md`                                                                                         | `skills/agent-setup/references/scaffolding.md` §agent-workflow               | `./scripts/check-managed-sync.sh`              |
-  | `devlog/README.md`, `CONTRIBUTING.md`, PR template, `CLAUDE.md`                                                  | Matching sections in `skills/agent-setup/references/scaffolding.md`          | `diff`                                         |
-  | `skills/await-pr-review/SKILL.md`, `docs/agent-workflow.md` §review-convergence, `AGENTS.md` pull-requests block | Phrases from the reference pinned in `scripts/review-convergence-layers.tsv` | `./scripts/check-review-convergence-layers.sh` |
+  | Live file                                                                                                                                                                | Canonical source                                                             | Verification                                   |
+  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ---------------------------------------------- |
+  | `AGENTS.md` managed blocks                                                                                                                                               | `skills/agent-setup/references/canonical-sections.md`                        | `./scripts/check-managed-sync.sh`              |
+  | `docs/agent-workflow.md`                                                                                                                                                 | `skills/agent-setup/references/scaffolding.md` §agent-workflow               | `./scripts/check-managed-sync.sh`              |
+  | `devlog/README.md`, `CONTRIBUTING.md`, PR template, `CLAUDE.md`                                                                                                          | Matching sections in `skills/agent-setup/references/scaffolding.md`          | `diff`                                         |
+  | `skills/await-pr-review/SKILL.md`, `skills/await-pr-review/references/conductor-brief.md`, `docs/agent-workflow.md` §review-convergence, `AGENTS.md` pull-requests block | Phrases from the reference pinned in `scripts/review-convergence-layers.tsv` | `./scripts/check-review-convergence-layers.sh` |
 
   When a pinned phrase changes in any layer, update its table row and re-check
   the other layers in the same change.

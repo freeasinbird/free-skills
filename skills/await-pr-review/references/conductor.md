@@ -46,9 +46,9 @@ Give the conductor one compact, self-contained task with these facts:
 - Conductor-local wait or scheduled same-conductor wake mechanism
 - Checkout path and whether it is isolated or exclusively assigned
 - Project review-response, commit, verification, and handoff conventions
-- Paths to `SKILL.md`, this reference, `detection.md`, and
-  `review-response.md`
-- The operating contract below
+- The path to `references/conductor-brief.md`, the conductor's one startup
+  read, which carries the operating contract and points to the deeper
+  references on demand
 
 When reviewer identity or trigger facts are not recorded yet, say so in the
 brief and assign the conductor the step-2 discovery before it waits. Don't make
@@ -60,29 +60,13 @@ In this reference, `current task contract` means that initial contract plus
 every later decision and constraint amendment the user makes through a surfaced
 judgment call.
 
-Use this operating contract in the brief:
-
-```text
-Own steps 1 through 5 of the review exchange until a terminal disposition
-ledger. Stay awake for the whole exchange. Run watch-review.sh as a bounded
-foreground command when a shell and host CLI are available; otherwise use an
-equivalent bounded API or connector polling loop, with scheduled wakes that
-resume this same conductor when it cannot delay in-turn. Never release
-exchange ownership or emit terminal completion merely to wait. Fix, fold,
-push, verify, reply, resolve, advance the baseline, and re-watch under the
-skill's rising bar. Surface only judgment calls, no-go or materially uncertain
-convergence escalations, an armed context-rotation handoff or
-read-only reconciliation result for the main agent to coordinate, or the
-terminal ledger. Before any write, verify a clean checkout at the expected PR
-head. Keep the force-with-lease pinned to the newest remote head already
-contained in local history.
-```
-
-The conductor must be able to act from the brief plus those referenced files
-without parent conversation history. It reads the referenced project conventions
-itself. Keep its reports compact: finding ID, one-line disposition, final
-pushed SHA or issue, checks status, and only enough context to decide a
-surfaced call.
+The brief file carries the operating contract, so the spawn message need not
+repeat it. The conductor must be able to act from the spawn message plus that
+one file without parent conversation history; it opens `detection.md`,
+`review-response.md`, and this reference only where the brief points to them.
+It reads the referenced project conventions itself. Keep its reports compact:
+finding ID, one-line disposition, final pushed SHA or issue, checks status,
+and only enough context to decide a surfaced call.
 
 ## §probes
 
@@ -410,8 +394,7 @@ amendment the user made through surfaced judgment calls. It also contains:
   that will transfer that exact path to the replacement
 - Ownership state before rotation and the exact old-to-new transfer point
 - Project review-response, commit, verification, and handoff conventions
-- Paths to `SKILL.md`, this reference, `detection.md`, and
-  `review-response.md`
+- The path to `references/conductor-brief.md`
 - Plus the current operating contract, including every post-spawn amendment made
   through surfaced judgment calls
 

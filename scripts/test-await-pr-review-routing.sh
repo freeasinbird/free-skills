@@ -864,6 +864,7 @@ for required in \
   'bounded foreground API or connector polling' \
   'current task contract at spawn' \
   'task-specific user constraints' \
+  'Its one startup read is `references/conductor-brief.md`' \
   'Rotation arms after every third fix round' \
   'time, idle time, or poll count alone never forces replacement'; do
   if ! grep -Fq "$required" <<< "$skill_flat"; then
@@ -968,6 +969,42 @@ if ! grep -Fq \
   printf 'conductor turn discipline cannot surface rotation handoff\n' >&2
   exit 1
 fi
+
+# The conductor's single startup read carries the operating contract, the
+# checkout gate, the watch signals, the round order, the rising bar, the
+# rotation trigger, and the ledger, so the spawn brief can point at one file.
+brief="$repo_root/skills/await-pr-review/references/conductor-brief.md"
+if [ ! -f "$brief" ]; then
+  echo 'conductor-brief.md is missing' >&2
+  exit 1
+fi
+for required in \
+  'Own the review exchange, from the anchored baseline through convergence' \
+  'an armed context-rotation handoff or' \
+  'Before the first write, and before any write after a wait or resume' \
+  '--force-with-lease=<branch>:<last-pushed-sha>' \
+  'unresolved_threads' \
+  'Pass the checkout gate before that edit' \
+  'commit and push the record as its own commit under the pinned lease' \
+  'Attribute each match to a round per `references/detection.md`' \
+  'A fix round is a round that pushes a change, whatever the file type' \
+  'escalate to the owner with the recurrence evidence' \
+  'Rotation arms at the end of your third fix round' \
+  'Elapsed time, idle time, and poll count never arm it' \
+  'request the reviewer once before the first watch' \
+  'it needs only the ordinary severity call' \
+  'Emit the terminal ledger only at quiescence'; do
+  if ! grep -Fq -- "$required" "$brief"; then
+    printf 'conductor-brief.md is missing: %s\n' "$required" >&2
+    exit 1
+  fi
+done
+for pointer_target in "$conductor" "$skill"; do
+  if ! grep -Fq 'references/conductor-brief.md' "$pointer_target"; then
+    printf '%s does not name references/conductor-brief.md\n' "$pointer_target" >&2
+    exit 1
+  fi
+done
 
 for required in \
   'H_old + S_main + R_new + K × C_new' \

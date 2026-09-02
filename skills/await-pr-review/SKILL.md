@@ -43,11 +43,13 @@ Decide who owns the exchange before you read feedback, wait on CI, or start
 any watcher. **Default to one conductor subagent.** It owns steps 1 to 5 and
 wakes the main agent only for a judgment call, a no-go or uncertain
 convergence escalation, an armed rotation handoff at a quiescent boundary,
-or its terminal ledger. Resolve only the event-boundary facts its brief needs, then spawn it
-with the least inherited context the host exposes and the brief in
-`references/conductor.md` §spawn-brief. The brief opens with the
+or its terminal ledger. Resolve only the event-boundary facts its brief
+needs, then spawn it with the least inherited context the host exposes and
+the brief in `references/conductor.md` §spawn-brief. The brief opens with the
 current task contract at spawn: objective, acceptance criteria, scope,
 dependencies and blockers, non-goals, and task-specific user constraints.
+Its one startup read is `references/conductor-brief.md`; it opens the other
+references only where that file points.
 
 **Apply one platform-neutral gate through four probes.** A conductor owns the
 exchange when all four grants hold. Decide each grant from observable evidence,

@@ -6,7 +6,30 @@ to 14 times. The cost was fix, fold, verify, and reply work inside a subagent
 that started at 48k to 62k tokens of inherited prompt, then read `SKILL.md`,
 `conductor.md`, `detection.md`, and `review-response.md` before its first
 action. The largest reached 719k tokens of context over 365 turns without
-rotating. This note records the lever adopted and the one declined.
+rotating. This note records the two levers adopted and the one declined.
+
+## One Startup Read Instead of Four
+
+Chose a single `references/conductor-brief.md` over the four-reference read.
+The brief carries the operating contract, checkout gate, watch signals, round
+order, rising bar, rotation trigger, and ledger format, and points to the
+deeper references only where a round needs them. The spawn message still
+carries the task contract and event-boundary facts.
+
+Rejected shrinking each reference further: #202 already cut `SKILL.md`, and
+the four-file total stayed near 70k characters because the references also
+serve the main agent and on-demand lookups. Rejected putting the whole
+contract in the spawn message: the main agent would replay it every turn and
+it would drift per session.
+
+The brief is now a review-convergence summary layer, so the layer table pins
+the same phrases in it that it pins in `SKILL.md`.
+
+In review, the brief's reviewer-record sentence drew a finding in three
+consecutive rounds, each naming a step it omitted: gate order, then commit,
+then push and re-anchor. That is the recurrence-by-rule case the brief
+prescribes an escalation for, so the remedy was to point the sentence at the
+existing gate and step 6 mechanics and pin it in the routing matrix.
 
 ## Numeric Rotation, Revising the #148 Decision
 
