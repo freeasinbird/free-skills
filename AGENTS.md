@@ -367,8 +367,9 @@ material, examples, and sub-prompts may live beside it.
     `bnw.github.com` is an SSH host alias for `github.com`. Pass
     `--repo freeasinbird/free-skills` to `gh`; never derive the owner from a
     sibling project.
-  - **Consumers:** `await-pr-review` and `merge-cleanup` read this record
-    before inferring a repository from a remote.
+  - **Consumers:** `await-pr-review`, `merge-cleanup`, `self-merge`, and
+    `visual-evidence` read this record before inferring a repository from a
+    remote.
 
 <!-- TODO: Fill in more as patterns emerge: prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->

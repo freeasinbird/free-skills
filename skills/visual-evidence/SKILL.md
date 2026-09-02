@@ -260,7 +260,7 @@ these. Images are positional arguments. Upload-only means omitting `--pr` and
 `--issue`.
 
 ```sh
-# GITHUB_TOKEN in the environment; --repo is inferred from the origin remote
+# GITHUB_TOKEN set; add --repo when the forge record names the slug
 gh-imgup before.png after.png
 ```
 
@@ -290,8 +290,21 @@ The CLI needs Node 22+.
 It prints one Markdown image line per file to stdout, in argument order.
 Progress goes to stderr, so captured stdout contains only the links.
 
-Pass `--repo <owner>/<repo>` outside the target repository. Use `--pr <n>` or
-`--issue <n>` only to post a follow-up comment.
+Pass `--repo <owner>/<repo>` outside the target repository, and whenever the
+project's forge record names the slug. That record is an AGENTS.md entry
+naming the forge host and `owner/name` slug, written because a remote on an
+SSH host alias can leave gh-imgup unable to infer them. Take the slug from
+that record before any remote, never from a sibling project.
+
+Without a record, gh-imgup infers `--repo` from a `github.com` origin remote
+and rejects any other host, so pass the remote path's slug only when its host
+is an SSH alias for `github.com`.
+
+gh-imgup uploads only to `github.com`, so a recorded or remote host that
+doesn't canonicalize to `github.com`, GitHub Enterprise included, is a stop:
+keep the evidence local.
+
+Use `--pr <n>` or `--issue <n>` only to post a follow-up comment.
 
 `--help` lists all options and carries the same review. gh-imgup owns upload;
 this skill only produces the files.

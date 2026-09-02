@@ -28,6 +28,10 @@ Bind values instead of pasting them:
 - Treat `git checkout` as the exception. There, `--` starts a pathspec, so a
   leading-hyphen branch name is a stop instead of a quoting problem.
 - Pass the PR number as-is only after confirming that it contains digits only.
+- Take `<repo>` from the project's forge record, an AGENTS.md entry naming the
+  forge host and `owner/name` slug, before inferring it from a remote. Never
+  take it from a sibling project.
+- Set `GH_HOST` to the recorded host whenever the CLI's default differs.
 
 An empty result doesn't prove absence:
 
