@@ -136,6 +136,7 @@ or handing back the baseline while naming the missing capability.
 Under either owner, keep one active watch per PR and reviewer, invoked and
 ended per `references/detection.md` §watcher-invocation; an in-progress
 reaction is not completion, and incomplete coverage is incomplete, not quiet.
+Every report carries `unresolved_threads`; above zero, the round is not clean.
 
 ## 4. Address Feedback
 
