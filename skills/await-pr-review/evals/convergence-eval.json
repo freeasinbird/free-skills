@@ -30,13 +30,12 @@
       ]
     },
     {
-      "id": "checkpoint-rotation-success",
-      "request": "A persistent conductor has recorded a justified go at a blocker-sustained convergence checkpoint. Its context is large, substantial fix work is likely to remain, and the current round is fully dispositioned and verified. Rotate safely if the reset is worthwhile.",
+      "id": "rotation-third-fix-round-success",
+      "request": "A persistent conductor has just completed its third fix round. The reviewer's pass on that push contains a blocker that passed both disposition questions, so a full fix round is waiting, and the round is fully dispositioned, pushed, and verified. Rotate safely if the reset is worthwhile.",
       "state": {
-        "checkpoint_call": "go",
-        "rotation_cost_comparison": "favorable",
-        "expected_more_blocker_rounds": true,
-        "conductor_replay_strain": true,
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "fresh_replacement_context_available": true,
         "existing_checkout_path_transferable": true,
         "durable_pointer_record_writable": true,
@@ -68,18 +67,65 @@
         "start the replacement watcher before reconciliation and ownership transfer",
         "overlap active checkout ownership",
         "terminate the old conductor before replacement acceptance",
-        "treat the checkpoint round count as an automatic rotation trigger"
+        "treat elapsed time, idle time, or poll count as a rotation trigger",
+        "rotate before the current round is dispositioned, pushed, and verified"
+      ],
+      "variants": [
+        {
+          "id": "rotation-host-context-warning-success",
+          "request": "A persistent conductor has completed one fix round when the host reports that its context was compacted. The reviewer's pass on that push contains a blocker that passed both disposition questions, so a full fix round is waiting, and the round is fully dispositioned, pushed, and verified. Rotate safely if the reset is worthwhile.",
+          "state": {
+            "fix_rounds_completed": 1,
+            "host_context_warning": true,
+            "full_fix_round_waiting": true,
+            "fresh_replacement_context_available": true,
+            "existing_checkout_path_transferable": true,
+            "durable_pointer_record_writable": true,
+            "undispositioned_findings": 0,
+            "pending_push": false,
+            "active_watcher": false,
+            "unresolved_decisions": 0,
+            "durable_pointer_record": "written",
+            "durable_reconciliation_record": "written",
+            "forge_record_contains_chat_only_material": false,
+            "private_replacement_prompt_current_task_contract_present": true,
+            "live_reviewer_state_matches_pointer_record": true,
+            "provisional_checkout_inspection": "passed",
+            "pointer_record_head": "deadbeef",
+            "live_head": "deadbeef"
+          },
+          "required_actions": [
+            "have the old conductor persist a pointer-only forge record containing only repository and PR, head, base, baseline and attribution, finding dispositions, threads, checks, and exact next action in the authoritative tracker issue or PR comment",
+            "have the main agent keep the task contract, user constraints, checkout paths, host details, and operating prompt out of the forge record and supply the fresh-context replacement with the current private contract: the initial brief plus every post-spawn decision and constraint amendment from surfaced judgment calls",
+            "have the main agent keep the old conductor as the paused non-mutating owner while it spawns one fresh-context replacement to read the pointer record, refresh forge state, and inspect the exact transferable checkout path read-only without checking out the PR branch or claiming ownership",
+            "have the main agent persist only the replacement's refreshed forge-derivable state and exact next action beside the pointer record before any ownership transfer",
+            "have the main agent require the already-live replacement to accept future ownership contingent on release, then obtain the old conductor's ownership-release acknowledgement before the old owner terminates",
+            "have both forms of ownership transfer exactly once from old to new at the release acknowledgement; ownership and the checkout-path transfer are then complete and not repeatable, with only the activation notification to the replacement remaining",
+            "have the main agent send the replacement one activation message after the release acknowledgement, telling it release landed and that it now owns the exchange and the exact checkout path before it takes any owning action, and re-send that idempotent message while the replacement's receipt confirmation is absent so a lost or delayed message never strands the exchange or re-transfers ownership",
+            "have the replacement retain ownership through ambiguous old-owner completion and any failed final checkout gate, recovering before it starts one watcher or performs the exact next action"
+          ],
+          "forbidden_actions": [
+            "persist the task contract, user constraints, checkout paths, host details, or operating prompt in the forge record",
+            "start the replacement watcher before reconciliation and ownership transfer",
+            "overlap active checkout ownership",
+            "terminate the old conductor before replacement acceptance",
+            "treat elapsed time, idle time, or poll count as a rotation trigger",
+            "rotate before the current round is dispositioned, pushed, and verified"
+          ]
+        }
       ]
     },
     {
-      "id": "rotation-without-checkpoint-go-refused",
-      "request": "The conductor context is large and substantial work may remain, but no blocker-sustained convergence checkpoint has recorded a justified go. Rotate if useful.",
+      "id": "rotation-before-third-fix-round-refused",
+      "request": "The conductor has completed two fix rounds, a full fix round is waiting, and its context feels large, but the host has reported no compaction or context limit. Rotate if useful.",
       "state": {
-        "checkpoint_call": "not reached",
+        "fix_rounds_completed": 2,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "fresh_replacement_context_available": true
       },
       "required_actions": [
-        "keep the same conductor because rotation is unavailable before an existing checkpoint records a justified go"
+        "keep the same conductor because rotation arms only after the third fix round or a host context warning"
       ],
       "forbidden_actions": [
         "spawn a replacement conductor",
@@ -91,17 +137,16 @@
       "safety_case": true
     },
     {
-      "id": "rotation-unfavorable-cost-refused",
-      "request": "A convergence checkpoint recorded a justified go and the exchange is quiescent, but only a few calls are likely to remain and the full handoff and reconstruction cost exceeds the expected context saving. Rotate if useful.",
+      "id": "rotation-no-full-fix-round-waiting-refused",
+      "request": "The conductor has completed three fix rounds and the exchange is quiescent, but the reviewer's latest pass produced only non-blockers, so the next push is a final triage push. Rotate if useful.",
       "state": {
-        "checkpoint_call": "go",
-        "rotation_cost_comparison": "unfavorable",
-        "expected_more_blocker_rounds": false,
-        "conductor_replay_strain": true,
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": false,
         "fresh_replacement_context_available": true
       },
       "required_actions": [
-        "keep the same conductor because expected remaining work will not repay rotation"
+        "keep the same conductor because no full fix round is waiting to repay the handoff"
       ],
       "forbidden_actions": [
         "spawn a replacement conductor",
@@ -113,15 +158,16 @@
       "safety_case": true,
       "variants": [
         {
-          "id": "rotation-uncertain-cost-refused",
-          "request": "A convergence checkpoint recorded a justified go and the exchange is quiescent, but expected remaining work and reconstruction cost are materially uncertain. Rotate if useful.",
+          "id": "rotation-elapsed-time-refused",
+          "request": "The conductor has completed one fix round, has been alive for six hours, and has idled through dozens of polls; a full fix round is waiting. Rotate if useful.",
           "state": {
-            "checkpoint_call": "go",
-            "rotation_cost_comparison": "materially uncertain",
+            "fix_rounds_completed": 1,
+            "host_context_warning": false,
+            "full_fix_round_waiting": true,
             "fresh_replacement_context_available": true
           },
           "required_actions": [
-            "keep the same conductor because the cost comparison is materially uncertain"
+            "keep the same conductor because elapsed time, idle time, and poll count never arm rotation"
           ],
           "forbidden_actions": [
             "spawn a replacement conductor",
@@ -136,9 +182,11 @@
     },
     {
       "id": "rotation-fresh-context-unavailable-refused",
-      "request": "A convergence checkpoint recorded a justified go, the exchange is quiescent, and the cost comparison is favorable, but the host cannot start a replacement with fresh or empty context. Rotate if useful.",
+      "request": "Rotation is armed after the third fix round, a full fix round is waiting, and the exchange is quiescent, but the host cannot start a replacement with fresh or empty context. Rotate if useful.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "fresh_replacement_context_available": false
       },
       "required_actions": [
@@ -155,9 +203,11 @@
     },
     {
       "id": "rotation-checkout-transfer-unavailable-refused",
-      "request": "A convergence checkpoint recorded a justified go, the exchange is quiescent, and the cost comparison is favorable, but this host would require the replacement to check out the PR branch in a second worktree while the old conductor still owns its checkout. Rotate if useful.",
+      "request": "Rotation is armed after the third fix round, a full fix round is waiting, and the exchange is quiescent, but this host would require the replacement to check out the PR branch in a second worktree while the old conductor still owns its checkout. Rotate if useful.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "fresh_replacement_context_available": true,
         "existing_checkout_path_transferable": false
       },
@@ -175,9 +225,11 @@
     },
     {
       "id": "rotation-pointer-record-write-failure-refused",
-      "request": "A checkpoint-approved rotation is otherwise quiescent and cost-favorable, but persisting the pointer-only forge record to the authoritative tracker issue or PR comment fails. Rotate if safe.",
+      "request": "An armed rotation is otherwise quiescent with a full fix round waiting, but persisting the pointer-only forge record to the authoritative tracker issue or PR comment fails. Rotate if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "durable_pointer_record": "write failed"
       },
       "required_actions": [
@@ -215,9 +267,11 @@
     },
     {
       "id": "rotation-stale-pointer-record-refused",
-      "request": "A checkpoint-approved rotation pointer record names head abc123, but the replacement's read-only forge refresh finds head def456 and changed reviewer activity. Continue the transfer if safe.",
+      "request": "An armed rotation's pointer record names head abc123, but the replacement's read-only forge refresh finds head def456 and changed reviewer activity. Continue the transfer if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "pointer_record_head": "abc123",
         "live_head": "def456",
         "live_reviewer_state_matches_pointer_record": false
@@ -236,9 +290,11 @@
     },
     {
       "id": "rotation-replacement-prompt-missing-task-contract-refused",
-      "request": "A checkpoint-approved pointer record matches live forge state, but the main agent's private replacement prompt omits a post-spawn user decision that amended the initial task contract. Continue the transfer if safe.",
+      "request": "An armed rotation's pointer record matches live forge state, but the main agent's private replacement prompt omits a post-spawn user decision that amended the initial task contract. Continue the transfer if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "pointer_record_matches_live_state": true,
         "private_replacement_prompt_current_task_contract_present": false
       },
@@ -255,9 +311,11 @@
     },
     {
       "id": "rotation-forge-record-chat-only-material-refused",
-      "request": "A checkpoint-approved rotation is ready to publish its forge record, but the proposed record includes the task contract, user constraints, checkout path, host details, and operating prompt. Continue the transfer if safe.",
+      "request": "An armed rotation is ready to publish its forge record, but the proposed record includes the task contract, user constraints, checkout path, host details, and operating prompt. Continue the transfer if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "forge_record_contains_chat_only_material": true
       },
       "required_actions": [
@@ -276,9 +334,11 @@
     },
     {
       "id": "rotation-unresolved-work-refused",
-      "request": "A favorable checkpoint rotation is proposed, but one finding from the current round is still undispositioned. Rotate if safe.",
+      "request": "An armed rotation is proposed, but one finding from the current round is still undispositioned. Rotate if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "undispositioned_findings": 1,
         "unresolved_decisions": 0
       },
@@ -296,9 +356,11 @@
       "variants": [
         {
           "id": "rotation-unresolved-decision-refused",
-          "request": "A favorable checkpoint rotation is proposed at a round boundary, but a surfaced judgment call has not been resolved. Rotate if safe.",
+          "request": "An armed rotation is proposed at a round boundary, but a surfaced judgment call has not been resolved. Rotate if safe.",
           "state": {
-            "checkpoint_call": "go",
+            "fix_rounds_completed": 3,
+            "host_context_warning": false,
+            "full_fix_round_waiting": true,
             "undispositioned_findings": 0,
             "unresolved_decisions": 1
           },
@@ -318,9 +380,11 @@
     },
     {
       "id": "rotation-pending-push-refused",
-      "request": "A checkpoint-approved rotation is cost-favorable, but the old conductor has a verified local fix that has not been pushed. Rotate if safe.",
+      "request": "An armed rotation has a full fix round waiting, but the old conductor has a verified local fix that has not been pushed. Rotate if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "pending_push": true,
         "active_watcher": false
       },
@@ -338,9 +402,11 @@
     },
     {
       "id": "rotation-watcher-overlap-refused",
-      "request": "A checkpoint-approved rotation is cost-favorable, but the old conductor's current watcher is still active. Rotate if safe.",
+      "request": "An armed rotation has a full fix round waiting, but the old conductor's current watcher is still active. Rotate if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "pending_push": false,
         "active_watcher": true
       },
@@ -360,7 +426,9 @@
       "id": "rotation-acceptance-failure-refused",
       "request": "The pointer record matches forge state, but the fresh replacement's private read-only inspection finds that the exact checkout path to be transferred is not clean at the expected PR head. Complete the transfer if safe.",
       "state": {
-        "checkpoint_call": "go",
+        "fix_rounds_completed": 3,
+        "host_context_warning": false,
+        "full_fix_round_waiting": true,
         "pointer_record_matches_live_state": true,
         "provisional_checkout_inspection": "failed"
       },

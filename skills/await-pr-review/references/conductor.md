@@ -46,9 +46,9 @@ Give the conductor one compact, self-contained task with these facts:
 - Conductor-local wait or scheduled same-conductor wake mechanism
 - Checkout path and whether it is isolated or exclusively assigned
 - Project review-response, commit, verification, and handoff conventions
-- Paths to `SKILL.md`, this reference, `detection.md`, and
-  `review-response.md`
-- The operating contract below
+- The path to `references/conductor-brief.md`, the conductor's one startup
+  read, which carries the operating contract and points to the deeper
+  references on demand
 
 When reviewer identity or trigger facts are not recorded yet, say so in the
 brief and assign the conductor the step-2 discovery before it waits. Don't make
@@ -60,29 +60,13 @@ In this reference, `current task contract` means that initial contract plus
 every later decision and constraint amendment the user makes through a surfaced
 judgment call.
 
-Use this operating contract in the brief:
-
-```text
-Own steps 1 through 5 of the review exchange until a terminal disposition
-ledger. Stay awake for the whole exchange. Run watch-review.sh as a bounded
-foreground command when a shell and host CLI are available; otherwise use an
-equivalent bounded API or connector polling loop, with scheduled wakes that
-resume this same conductor when it cannot delay in-turn. Never release
-exchange ownership or emit terminal completion merely to wait. Fix, fold,
-push, verify, reply, resolve, advance the baseline, and re-watch under the
-skill's rising bar. Surface only judgment calls, no-go or materially uncertain
-convergence escalations, a checkpoint-approved context-rotation handoff or
-read-only reconciliation result for the main agent to coordinate, or the
-terminal ledger. Before any write, verify a clean checkout at the expected PR
-head. Keep the force-with-lease pinned to the newest remote head already
-contained in local history.
-```
-
-The conductor must be able to act from the brief plus those referenced files
-without parent conversation history. It reads the referenced project conventions
-itself. Keep its reports compact: finding ID, one-line disposition, final
-pushed SHA or issue, checks status, and only enough context to decide a
-surfaced call.
+The brief file carries the operating contract, so the spawn message need not
+repeat it. The conductor must be able to act from the spawn message plus that
+one file without parent conversation history; it opens `detection.md`,
+`review-response.md`, and this reference only where the brief points to them.
+It reads the referenced project conventions itself. Keep its reports compact:
+finding ID, one-line disposition, final pushed SHA or issue, checks status,
+and only enough context to decide a surfaced call.
 
 ## §probes
 
@@ -186,8 +170,8 @@ only for:
   state without reporting terminal completion
 - A judgment call that the main agent or user must decide
 - A no-go or materially uncertain convergence escalation
-- A checkpoint-approved context-rotation handoff or read-only reconciliation
-  result that the main agent must coordinate
+- An armed context-rotation handoff or read-only reconciliation result that
+  the main agent must coordinate
 - The terminal disposition ledger
 
 A scheduled wake resumes the conductor automatically. Resume the same conductor
@@ -348,21 +332,35 @@ completion, not a question to answer.
 
 ## §context-rotation
 
-Keep the same conductor through ordinary waits and review rounds. A long idle
-period, elapsed time, context size, or fixed round count is not a reason to
-replace it.
+Keep the same conductor through ordinary waits and review rounds. Elapsed
+time, idle time, and poll count are not reasons to replace it. Context size
+is, and because no host exposes it, the conductor's fix-round count stands in
+for it: on measured exchanges a fix round adds roughly 50k tokens, so three
+rounds from a typical start cross about 200k. `references/cost-model.md`
+records that calibration.
 
-Rotation is optional, and only when all of these hold:
+Rotation arms at the end of every third fix round since the conductor's
+spawn, or immediately when the host reports compaction or a context limit. It
+stays armed until a rotation completes; a replacement starts its own count.
+Once armed, rotate only when all of these hold:
 
-- An existing blocker-sustained convergence checkpoint has recorded a justified
-  go
-- The cost-model comparison says the expected remaining work is likely to repay
-  the full handoff and reconstruction cost
+- A full fix round is waiting: the pass on the latest push is dispositioned,
+  and at least one accepted finding earns another reviewer round rather than
+  a final triage push or a decline-only close
 - Fresh or empty replacement context is available
 - The host can transfer the existing checkout path to the replacement without
   creating a second checkout of the PR branch
 
-If any of those fails, keep the current conductor.
+If any of those fails, keep the current conductor and re-check at the next
+boundary. The count is a trigger, not a kill switch: the quiescence and
+exactly-once ownership gates below still decide when and whether the transfer
+completes.
+
+The full-fix-round condition is the cost gate from `references/cost-model.md`.
+On its calibration, a fix round of any size replays the old context often
+enough to repay one replacement startup and handshake, while a final triage
+push or a decline-only close does not. Do not estimate the pending round's
+size beyond that test; the earlier size-and-strain judgment never fired.
 
 Rotate only at a quiescent boundary between rounds. Require all of these before
 rotating:
@@ -386,8 +384,9 @@ amendment the user made through surfaced judgment calls. It also contains:
 - The automated reviewer login in every required API form, trigger, and progress
   and clean-pass signals
 - Pinned lease SHA
-- Fix-round and convergence-checkpoint counts, prior checkpoint calls and
-  evidence, and the next checkpoint cadence
+- Fix-round and convergence-checkpoint counts for the rising bar, prior
+  checkpoint calls and evidence, and the next checkpoint cadence; the
+  replacement's rotation count restarts at zero
 - The current taper or rising-bar phase and whether the one permitted final-triage
   push has already been used
 - Pending-push and active-watcher state
@@ -395,8 +394,7 @@ amendment the user made through surfaced judgment calls. It also contains:
   that will transfer that exact path to the replacement
 - Ownership state before rotation and the exact old-to-new transfer point
 - Project review-response, commit, verification, and handoff conventions
-- Paths to `SKILL.md`, this reference, `detection.md`, and
-  `review-response.md`
+- The path to `references/conductor-brief.md`
 - Plus the current operating contract, including every post-spawn amendment made
   through surfaced judgment calls
 

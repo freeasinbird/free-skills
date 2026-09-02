@@ -176,8 +176,8 @@ same-conductor wake fails the gate and uses the main-owned mechanism ladder.
 ## Conductor: Context Rotation
 
 Rotation is a mid-exchange optimization, not a routing or safety rule. Evaluate
-it only after an existing convergence checkpoint records a justified go and the
-exchange reaches the quiescent transfer boundary in `conductor.md`.
+it only once the fix-round count in `references/conductor.md` §context-rotation
+has armed it and the exchange reaches the quiescent transfer boundary there.
 
 The comparison uses these terms:
 
@@ -223,24 +223,33 @@ undercount:
   before remaining calls begin.
 
 Omitting any of those terms creates a false saving. When little work is likely to
-remain, or the estimate is materially uncertain, keep the existing conductor.
+remain, keep the existing conductor. On current hosts, little work means a
+final triage push or a decline-only close; the fix-round rule below applies
+exactly that test.
 
 On current hosts `K`, `C_old`, and `C_new` are not observable: no host exposes
-its own context size, the replacement's, or its remaining-call count. So apply
-the comparison through a qualitative proxy at the checkpoint. Rotate only when
-both of these hold; either one failing keeps the existing conductor:
+its own context size, the replacement's, or its remaining-call count. The
+earlier qualitative proxy, expected work plus felt replay strain, never fired
+across 51 measured conductors, one of which reached 719k tokens of context over
+365 turns. So the comparison is applied through the fix-round count in
+`references/conductor.md` §context-rotation, calibrated from those transcripts:
 
-- The checkpoint's evidence expects several more blocker-sustained fix rounds,
-  not a final triage push.
-- The conductor shows replay strain: re-reading or re-deriving its own earlier
-  output, host compaction or context-limit warnings, or repeated within-turn
-  state reconstruction.
+- A conductor starts near 70k tokens: its inherited prompt plus the brief.
+- A fix round adds roughly 45k to 80k tokens of reads, diffs, check output, and
+  replies; a poll-only round adds almost nothing.
+- Three fix rounds therefore land between 200k and 310k, and a replacement
+  costs about one startup, so the reset repays within its first fix round
+  whenever a full round follows.
+- Even a short fix round runs the checkout gate, the fix, the check suite, the
+  fold and push, the replies, and the re-watch: roughly twenty calls. At a
+  200k replay against a 70k one, that saves about 2.5M tokens, more than the
+  handoff's one-time replays in `H_old + S_main + R_new`. So a waiting full
+  fix round is enough evidence to rotate on; a final triage push or a
+  decline-only close is not, and the rule refuses those.
 
-The proxy stays advisory. It never turns either condition into a fixed threshold,
-and the two conjoined keep a single strained signal from forcing a handoff that
-little remaining work would not repay.
-
-This comparison is advisory at a checkpoint. It does not turn ten rounds, elapsed
-time, idle time, context size, or any other fixed threshold into an
-automatic kill switch. It never relaxes the quiescence or exactly-once
-ownership-transfer gates.
+The count arms rotation; it is not an automatic kill switch. Rotation still
+fires only at the quiescent boundary where a full fix round is waiting, and it
+never relaxes the quiescence or exactly-once ownership-transfer gates. Elapsed
+time, idle time, and poll count never enter the comparison. Recalibrate the
+count when a later audit shows fix rounds far from these sizes, or when a host
+exposes its context size.

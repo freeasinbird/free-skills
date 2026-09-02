@@ -117,8 +117,9 @@ context rebuild once and keeps round debris out of the main context.
 
 ## §rising-convergence-bar
 
-A fix round is a round that pushes code. Decline-only rounds do not advance the
-count, and they end the exchange, because unchanged code needs no new pass.
+A fix round is a round that pushes a change, whatever the file type.
+Decline-only rounds do not advance the count, and they end the exchange,
+because an unchanged branch needs no new pass.
 
 Raise the bar as fix rounds accumulate:
 
