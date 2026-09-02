@@ -96,7 +96,9 @@ only record (no separate config or metadata file).
    work-unit stages, and follow them. The conventional order in
    `references/project-sections.md` §section-order interleaves these sections
    with the managed ones, so collect this content, or decide on placeholders,
-   before writing.
+   before writing. Settle the forge record here too when a remote's host
+   isn't the forge's canonical host, so an accepted record enters the single
+   step-5 write. See "Forge Record" below.
 5. Settle `docs/agent-workflow.md`, then write AGENTS.md once and verify the
    write. Read `references/managed-blocks.md` §init-write and follow it.
 6. Create the scaffolding files listed in `references/managed-blocks.md`
@@ -106,7 +108,8 @@ only record (no separate config or metadata file).
    then report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
    Also check for an automated-reviewer record (see "Automated Reviewer
-   Record" below).
+   Record" below). The forge record was settled in step 4, so confirm only
+   that the step-5 write carries it.
 8. Check the settings in `references/audit.md` §repo-settings and
    `references/audit.md` §required-checks, and offer to align them. Report
    any that can't be checked or set (wrong permissions, non-GitHub forge).
@@ -124,9 +127,10 @@ only record (no separate config or metadata file).
 4. Discover the profile: look for the `Agent-setup profile:` line, then read
    `references/managed-blocks.md` §profile-discovery and follow it. Never
    switch a recorded profile without the user's explicit choice.
-5. Protect the reviewer record before refreshing. If an automated-reviewer
-   record appears inside a managed block, resolve its location first (see
-   "Automated Reviewer Record").
+5. Protect the reviewer and forge records before refreshing. If an
+   automated-reviewer record or a forge record appears inside a managed
+   block, resolve its location first (see "Automated Reviewer Record" and
+   "Forge Record").
 6. For each managed block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`, exclude the
@@ -137,14 +141,15 @@ only record (no separate config or metadata file).
      `docs/agent-workflow.md` `§slug` pointers depend on that file existing and
      matching, so settle it in the same decision (see step 9).
 7. Leave all unmarked (project-specific) content untouched, except for
-   owner-requested creation or modification of a coordination model or work-unit
-   stage record. Within either record, create or change only the requested
-   fields or stages; preserve every unrequested field or stage and all unrelated
-   unmarked content verbatim. The only structural exception is an owner-approved
-   legacy-stage migration described in `references/project-sections.md`
-   §stages; it may relocate an unrequested stage's existing lines without
-   altering them. See `references/project-sections.md` §work-contracts for the
-   coordination record.
+   owner-requested creation or modification of a forge record, a coordination
+   model, or a work-unit stage record. Within any of those, create or change
+   only the requested fields or stages; preserve every unrequested field or
+   stage and all unrelated unmarked content verbatim. The only structural
+   exception is an owner-approved legacy-stage migration described in
+   `references/project-sections.md` §stages; it may relocate an unrequested
+   stage's existing lines without altering them. See
+   `references/project-sections.md` §work-contracts for the coordination
+   record.
 8. If a canonical section is missing entirely, offer to insert it at its
    conventional position. A section carrying `docs/agent-workflow.md` `§slug`
    pointers settles that file in the same decision (see step 9). Under Standard,
@@ -159,10 +164,11 @@ only record (no separate config or metadata file).
    markers and may hold local customizations, so never overwrite silently;
    let the user decide per file.
 10. Audit standard project files (`references/audit.md` §standard-files) and
-    flag any newly missing. Also check the automated-reviewer record, any
-    coordination model, and any optional work-unit stage record (see
-    "Automated Reviewer Record", `references/project-sections.md`
-    §work-contracts, and `references/project-sections.md` §stages).
+    flag any newly missing. Also check the automated-reviewer record, the
+    forge record, any coordination model, and any optional work-unit stage
+    record (see "Automated Reviewer Record", "Forge Record",
+    `references/project-sections.md` §work-contracts, and
+    `references/project-sections.md` §stages).
 11. Check the settings in `references/audit.md` §repo-settings and
     `references/audit.md` §required-checks, and offer to align any that have
     drifted.
@@ -197,3 +203,16 @@ re-detecting. During init and update, check whether the project carries such
 a record: read `references/managed-blocks.md` §reviewer-record-audit and
 follow it. Treat this as **detect → report, never fabricate**. A managed-block
 sync must not delete or rewrite the record silently.
+
+## Forge Record
+
+A remote whose host is an SSH alias hides the forge host and `owner/name`
+slug that forge CLI calls need. An agent that guesses the owner sends every
+call to a repository that doesn't exist. During init and update, validate
+any existing forge record against the base repository's remote whatever its
+host, and offer a new one in an unmanaged section when that remote's host
+isn't the forge's canonical host. Read `references/audit.md` §forge-record
+and follow it. Derive the record from the remote, show it, and offer to add,
+correct, or remove it. Treat this as **detect → report → offer to write**,
+never a silent mutation, and never let a managed-block sync delete or move
+it.
