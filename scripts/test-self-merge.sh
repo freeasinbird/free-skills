@@ -1850,6 +1850,232 @@ run_sm "${CHECK[@]}"
 want_rc 0
 want_call 'pulls?state=open&head=forker:feat%232'
 
+# ---- SSH host alias cleanup ----
+# A local ~/.ssh/config Host alias (label bnw.github.invalid, HostName
+# github.invalid) names the forge's real endpoint. One ssh shim serves the
+# alias both for `ssh -G` identity resolution and for the git transport that
+# deletes over it, so the destructive path runs end to end. ALIAS_GHOST/GUSER/
+# GPORT perturb the resolved endpoint; ALIAS_SERVE is the verified bare repo.
+# When ALIAS_SERVE_ROGUE is set, an unpinned transport (HostName not pinned to
+# ALIAS_EXPECT_HOST) is routed there instead. The `-G` target is the last
+# argument; when it names a user (`user@host`) the shim can resolve differently
+# via ALIAS_GHOST_U/GUSER_U/GPORT_U, mirroring a user-dependent ssh config
+# (`Match user`, `%r`) so a case can prove the guard resolves the same user@host
+# Git connects through, not a bare host.
+install_ssh_shim() {
+  cat >"$SHIMD/ssh" <<'SSH'
+#!/usr/bin/env bash
+for a in "$@"; do
+  [ "$a" = -G ] && {
+    case "${!#}" in
+      *@*) printf 'hostname %s\nuser %s\nport %s\n' \
+             "${ALIAS_GHOST_U:-${ALIAS_GHOST:-github.invalid}}" \
+             "${ALIAS_GUSER_U:-${ALIAS_GUSER:-git}}" \
+             "${ALIAS_GPORT_U:-${ALIAS_GPORT:-22}}" ;;
+      *) printf 'hostname %s\nuser %s\nport %s\n' \
+           "${ALIAS_GHOST:-github.invalid}" \
+           "${ALIAS_GUSER:-git}" "${ALIAS_GPORT:-22}" ;;
+    esac
+    [ "${ALIAS_GFAIL_AFTER:-}" != 1 ] || exit 1
+    exit 0
+  }
+done
+host=""
+for a in "$@"; do
+  case "$a" in HostName=*) host="${a#HostName=}" ;; esac
+done
+serve="$ALIAS_SERVE"
+if [ -n "${ALIAS_SERVE_ROGUE:-}" ] \
+    && [ "$host" != "${ALIAS_EXPECT_HOST:-github.invalid}" ]; then
+  serve="$ALIAS_SERVE_ROGUE"
+fi
+[ -z "${ALIAS_TRANSPORT_LOG:-}" ] || printf '%s\n' "$*" >>"$ALIAS_TRANSPORT_LOG"
+cmd="${!#}"; verb="${cmd%% *}"
+exec "$verb" "$serve"
+SSH
+  chmod +x "$SHIMD/ssh"
+}
+install_ssh_shim
+alias_head_gone() { # assert BARE lost the head branch
+  if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+    bad "remote head survived the aliased delete"
+  else ok; fi
+}
+alias_head_kept() { # assert BARE still holds the head branch
+  if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+    ok
+  else bad "the aliased mismatch stop still deleted the remote head"; fi
+}
+
+scenario "explicit ssh host alias resolves to the forge and deletes"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE"
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE
+want_rc 0
+want_out '"remote_branch":"deleted"'
+alias_head_gone
+
+scenario "ssh host alias auto-resolves as the base and head remote"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE"
+run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
+unset ALIAS_SERVE
+want_rc 0
+want_out '"remote_branch":"deleted"'
+alias_head_gone
+
+scenario "ssh alias destructive transport pins the verified endpoint"
+std_setup; std_fixtures
+ROGUE="$SCEN/rogue.git"
+git clone -q --bare "$BARE" "$ROGUE"
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+ALIAS_TRANSPORT_LOG="$FIX/alias-transport.log"
+: >"$ALIAS_TRANSPORT_LOG"
+export ALIAS_SERVE="$BARE" ALIAS_SERVE_ROGUE="$ROGUE" ALIAS_TRANSPORT_LOG
+# Discriminate the pin: the same lease-protected delete without HostName
+# pinning routes to the rogue mirror and deletes its copy.
+if UNPINNED_OID=$(PATH="$SHIMD:$PATH" git -C "$WORK" ls-remote \
+    --exit-code --heads -- 'git@bnw.github.invalid:owner/name.git' \
+    "refs/heads/$HB" | awk '{print $1}') \
+    && [ "$UNPINNED_OID" = "$FEAT_OID" ] \
+    && PATH="$SHIMD:$PATH" git -C "$WORK" push --delete \
+      --force-with-lease="refs/heads/$HB:$FEAT_OID" -- \
+      'git@bnw.github.invalid:owner/name.git' "refs/heads/$HB" >/dev/null 2>&1; then
+  ok
+else
+  bad "the unpinned counter-run did not delete from the rogue repository"
+fi
+if git -C "$ROGUE" show-ref --verify --quiet "refs/heads/$HB"; then
+  bad "the unpinned counter-run left the rogue head in place"
+else ok; fi
+git -C "$BARE" push -q "$ROGUE" "refs/heads/$HB:refs/heads/$HB"
+: >"$ALIAS_TRANSPORT_LOG"
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_SERVE_ROGUE ALIAS_TRANSPORT_LOG
+want_rc 0
+want_out '"remote_branch":"deleted"'
+alias_head_gone
+if git -C "$ROGUE" show-ref --verify --quiet "refs/heads/$HB"; then
+  ok
+else bad "the pinned delete reached the rogue mirror"; fi
+if awk '
+    index($0, "HostName=github.invalid") && index($0, "User=git") &&
+    index($0, "Port=22") && index($0, "CanonicalizeHostname=no") &&
+    index($0, "bnw.github.invalid") { pinned++ }
+    END { exit !(pinned == 2) }
+  ' "$FIX/alias-transport.log"; then
+  ok
+else
+  bad "ls-remote and push did not both pin the endpoint through the alias: $(paste -sd ';' "$FIX/alias-transport.log")"
+fi
+
+scenario "ssh alias to a different repository still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/other.git'
+export ALIAS_SERVE="$BARE"
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+scenario "ssh alias on a non-default port still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GPORT=2222
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GPORT
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+scenario "ssh alias resolver failure after plausible output still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GFAIL_AFTER=1
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GFAIL_AFTER
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+scenario "ssh alias with an unsafe resolved user still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GUSER_U='git;rogue'
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GUSER_U
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+# A user-dependent ssh config: the bare host resolves to the forge, but the
+# user-qualified git@host Git actually connects through resolves elsewhere. The
+# guard must resolve the same user@host Git uses; resolving the bare host would
+# bless the forge yet delete via the other endpoint. Discriminating: neutering
+# the user pass (querying only the bare host) resolves the forge and deletes.
+scenario "ssh alias diverging by remote user still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GHOST_U=rogue.github.invalid
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GHOST_U
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+# Git honors an ssh-command override (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH)
+# for the transport, but the guard queries the plain ssh on PATH, so the offline
+# resolution need not reflect the endpoint Git reaches. The guard fails closed
+# whenever an override is active. Discriminating: without the fail-closed the
+# alias resolves to the forge (via the shim) and the branch is deleted through
+# the unverified endpoint.
+scenario "ssh alias under GIT_SSH_COMMAND override still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" GIT_SSH_COMMAND='ssh -F /dev/null'
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE GIT_SSH_COMMAND
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+scenario "ssh alias under core.sshCommand override still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+G "$WORK" config core.sshCommand 'ssh -F /dev/null'
+export ALIAS_SERVE="$BARE"
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+scenario "ssh alias under GIT_SSH override still stops"
+std_setup; std_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" GIT_SSH="$SHIMD/ssh"
+run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --head "$FEAT_OID"
+unset ALIAS_SERVE GIT_SSH
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+alias_head_kept
+
+rm -f "$SHIMD/ssh"
+
 fi
 
 note=""
