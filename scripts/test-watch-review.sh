@@ -52,6 +52,9 @@ t 2 "full-length lowercase head" $VALID --head 9c346ab0eeaba5e706345c12fabeb1ced
 t 2 "abbreviated head" $VALID --head 9c346ab
 t 2 "uppercase head normalized" $VALID --head 9C346AB
 t 2 "every reaction constant maps" $VALID --clean-content ROCKET --progress-content EYES
+# --request-comment reaches the host before the first poll, so against the
+# dead shim it exits 75 rather than sitting out the cap as a quiet round.
+t 75 "request comment against a dead gh" $VALID --request-comment '@codex review'
 
 # --help / -h: the usage block goes to stdout with exit 0, even after other flags,
 # so an agent learns the flags without reading the source (#201).
@@ -60,11 +63,14 @@ t 0 "short help flag" -h
 t 0 "help after other flags" $VALID --help
 HELP_OUT=$(PATH="$SHIM:$PATH" bash "$SCRIPT" --help 2>/dev/null)
 HELP_ERR=$(PATH="$SHIM:$PATH" bash "$SCRIPT" --help 2>&1 >/dev/null)
-if printf '%s' "$HELP_OUT" | grep -q '^# Exit codes:' && [ -z "$HELP_ERR" ]; then
+if printf '%s' "$HELP_OUT" | grep -q '^# Exit codes:' && \
+  printf '%s' "$HELP_OUT" | grep -q 'REQUEST_INCOMPLETE' && \
+  printf '%s' "$HELP_OUT" | grep -q -- '--request-artifacts' && \
+  [ -z "$HELP_ERR" ]; then
   pass=$((pass + 1))
 else
   fail=$((fail + 1))
-  echo "FAIL: --help must print the usage block (with exit codes) on stdout and nothing on stderr" >&2
+  echo "FAIL: --help must print reports, recovery flags, and exit codes on stdout only" >&2
 fi
 
 # Parser: options without values are usage errors, never set -u crashes.
@@ -72,6 +78,8 @@ t 64 "no arguments at all"
 t 64 "trailing bare --pr" --pr
 t 64 "trailing bare --baseline" --pr 46 --baseline
 t 64 "trailing bare --head" $VALID --head
+t 64 "trailing bare --request-comment" $VALID --request-comment
+t 64 "trailing bare --request-artifacts" $VALID --request-artifacts
 t 64 "unknown option" $VALID --bogus x
 
 # --pr: positive integer, no zero, no leading zeros, digits only.
@@ -106,6 +114,14 @@ t 64 "repo extra segment" --pr 46 $BASE --login some-bot --repo a/b/c
 t 64 "repo query injection" --pr 46 $BASE --login some-bot --repo 'a/b?x=1'
 t 64 "repo missing name" --pr 46 $BASE --login some-bot --repo a/
 
+# --request-comment: a blank request would post an empty comment and
+# request nothing.
+t 64 "empty request comment" $VALID --request-comment ''
+t 64 "whitespace request comment" $VALID --request-comment '  '
+t 64 "request artifacts without a request" $VALID --request-artifacts 'r=;c=;a='
+t 64 "malformed request artifacts" $VALID --request-comment '@codex review' \
+  --request-artifacts 'reviews=1'
+
 # --head: 7-40 hex chars.
 t 64 "head non-hex" $VALID --head xyz
 t 64 "head too short" $VALID --head abc123
@@ -137,7 +153,7 @@ write_gh_shim() {
     echo '#!/bin/bash'
     echo "FIX=\"$FIX\""
     cat <<'SHIMEOF'
-filter='.' target='' page=1 prev='' cursor=''
+filter='.' target='' page=1 prev='' cursor='' post=''
 for a in "$@"; do
   [ "$prev" = "--jq" ] && filter="$a"
   case "$a" in
@@ -145,10 +161,17 @@ for a in "$@"; do
     repos/*) target="$a" ;;
     c=*) cursor="${a#c=}" ;;   # the -f c=<cursor> thread-page variable
   esac
+  # A body field makes gh POST: the request comment is the watcher's one
+  # write, so the shim records it and serves the created comment.
+  [ "$prev" = "-f" ] && case "$a" in body=*) post=1 ;; esac
   prev="$a"
 done
+echo "$target" >> "$FIX/requests.log"
 if [ "$target" = graphql ]; then
   fixture="$FIX/graphql${cursor:+-$cursor}.json"
+elif [ -n "$post" ]; then
+  fixture="$FIX/posted-comment.json"
+  [ -f "$fixture" ] && touch "$FIX/posted"
 else
   # Anchor on the separator: an unanchored page=N would read per_page=100.
   [[ "$target" =~ [?\&]page=([0-9]+) ]] && page="${BASH_REMATCH[1]}"
@@ -156,9 +179,15 @@ else
     *pulls/*/comments*) fixture="$FIX/comments-$page.json" ;;
     *pulls/*/reviews*) fixture="$FIX/reviews-$page.json" ;;
     *issues/*/reactions*) fixture="$FIX/reactions-$page.json" ;;
+    *issues/*/comments*) fixture="$FIX/issue-comments-$page.json" ;;
     *) exit 1 ;;
   esac
 fi
+case "$fixture" in
+  "$FIX"/reviews-*.json|"$FIX"/comments-*.json|"$FIX"/reactions-*.json)
+    pre_fixture="$FIX/pre-${fixture##*/}"
+    [ ! -f "$FIX/posted" ] && [ -f "$pre_fixture" ] && fixture="$pre_fixture" ;;
+esac
 [ -f "$fixture" ] || {
   echo "gh: Not Found (HTTP 404) ${target}${cursor:+ after $cursor}" >&2
   echo "second line of the gh error, which the watcher must not repeat" >&2
@@ -172,7 +201,7 @@ SHIMEOF
 
 # scenario <name>: drop every fixture, so each case declares exactly the
 # pages its API is meant to serve and any other request reads as a failure.
-scenario() { SCENARIO="$1"; rm -f "$FIX"/*.json; }
+scenario() { SCENARIO="$1"; rm -f "$FIX"/*.json "$FIX/posted" "$FIX/requests.log"; }
 
 # The GraphQL count query, which sizes the backward page walks and carries
 # the first page of review threads. counts <reviews> <reactions>
@@ -201,17 +230,30 @@ page() {
   ep="$1"; n="$2"; shift 2
   ( IFS=,; echo "[$*]" ) > "$FIX/$ep-$n.json"
 }
+pre_page() {
+  ep="$1"; n="$2"; shift 2
+  ( IFS=,; echo "[$*]" ) > "$FIX/pre-$ep-$n.json"
+}
 review() {   # review <login> <submitted_at|null> [commit_id]
   rv_at="$2"; [ "$rv_at" = null ] || rv_at="\"$rv_at\""
-  printf '{"user":{"login":"%s"},"submitted_at":%s,"commit_id":"%s"}' \
-    "$1" "$rv_at" "${3:-deadbeefcafe1234567890abcdef1234567890ab}"
+  printf '{"id":%s,"user":{"login":"%s"},"submitted_at":%s,"commit_id":"%s"}' \
+    "${4:-101}" "$1" "$rv_at" "${3:-deadbeefcafe1234567890abcdef1234567890ab}"
 }
 comment() {  # comment <login> <created_at> [commit_id] [in_reply_to_id]
-  printf '{"user":{"login":"%s"},"created_at":"%s","commit_id":"%s","in_reply_to_id":%s}' \
-    "$1" "$2" "${3:-deadbeefcafe1234567890abcdef1234567890ab}" "${4:-null}"
+  printf '{"id":%s,"user":{"login":"%s"},"created_at":"%s","commit_id":"%s","in_reply_to_id":%s}' \
+    "${5:-201}" "$1" "$2" "${3:-deadbeefcafe1234567890abcdef1234567890ab}" "${4:-null}"
 }
 reaction() { # reaction <login> <content> <created_at>
-  printf '{"user":{"login":"%s"},"content":"%s","created_at":"%s"}' "$1" "$2" "$3"
+  printf '{"id":%s,"user":{"login":"%s"},"content":"%s","created_at":"%s"}' \
+    "${4:-301}" "$1" "$2" "$3"
+}
+# Issue comments carry the request text; jq escapes a body with quotes in it.
+issue_comment() { # issue_comment <login> <created_at> <body>
+  jq -cn --arg l "$1" --arg t "$2" --arg b "$3" \
+    '{user:{login:$l},created_at:$t,body:$b}'
+}
+posted_at() {    # posted_at <created_at>: what the host returns for the post
+  printf '{"created_at":"%s"}' "$1" > "$FIX/posted-comment.json"
 }
 
 # run_watch [args...]: capture exit code, stdout and stderr for assertion.
@@ -236,6 +278,21 @@ want_not_out() {
 }
 want_not_err() {
   case "$ERR" in *"$1"*) bad "stderr has '$1' (got: $ERR)" ;; *) ok ;; esac
+}
+want_posted() {
+  if [ -f "$FIX/posted" ]; then ok; else bad "no request comment was posted"; fi
+}
+want_not_posted() {
+  if [ -f "$FIX/posted" ]; then bad "a request comment was posted"; else ok; fi
+}
+want_request_url() {
+  if grep -q -- "$1" "$FIX/requests.log" 2>/dev/null; then ok
+  else bad "no request URL contains '$1'"; fi
+}
+want_no_request_read() {
+  if grep -q 'issues/46/comments' "$FIX/requests.log" 2>/dev/null; then
+    bad "issue comments were read without --request-comment"
+  else ok; fi
 }
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -484,6 +541,287 @@ want_out '"unresolved_threads":null'
 want_err 'count query failed; retrying
   count query: gh: Not Found (HTTP 404)'
 want_not_err 'second line'
+
+# --request-comment: the request is posted once and is the event the pass
+# answers, so its host creation time becomes the baseline. GitHub exposes
+# whole-second timestamps, so that creation second is inclusive. An identical
+# comment since the supplied baseline is a pending request: nothing is posted
+# and the supplied baseline stands.
+REQ='@codex review'
+REQUESTED=2026-07-02T08:00:00Z
+scenario "request posted when none is pending re-anchors the baseline"
+page issue-comments 1; posted_at "$REQUESTED"
+counts 1 0; page reviews 1 "$(review "$BOT" 2026-07-02T07:00:00Z)"
+page comments 1; page reactions 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 2
+want_posted
+want_out "\"baseline\":\"$REQUESTED\""
+want_out '"request_artifacts":"r=101;c=;a="'
+want_err "requested review; baseline re-anchored to $REQUESTED"
+
+scenario "a review after the request ends the wait"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1; pre_page reactions 1
+counts 1 0; page reviews 1 "$(review "$BOT" "$AFTER")"; page comments 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 0
+want_posted
+
+# Reviews, comments, and reactions can arrive in the request's whole second.
+# All three are inside the request window, and the scanners must not stop at
+# an equal page edge before reading the rest of that second.
+scenario "a review in the request second ends the wait"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1; pre_page reactions 1
+counts 1 0; page reviews 1 "$(review "$BOT" "$REQUESTED")"; page comments 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 0
+want_posted
+
+scenario "a comment in the request second ends the wait"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1; pre_page reactions 1
+counts 0 0; page reviews 1
+page comments 1 "$(comment "$OTHER" "$REQUESTED")" "$(comment "$OTHER" "$REQUESTED")"
+page comments 2 "$(comment "$BOT" "$REQUESTED")"
+run_watch $VALID --request-comment "$REQ"
+want_rc 0
+want_posted
+
+scenario "a clean reaction in the request second ends the wait"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1; pre_page reactions 1
+counts 0 1; page reviews 1; page comments 1
+page reactions 1 "$(reaction "$BOT" '+1' "$REQUESTED")"
+run_watch $VALID --request-comment "$REQ"
+want_rc 3
+want_posted
+
+# A previous round on the same head can leave artifacts in the request's
+# whole second. Their snapshotted IDs stay excluded, while a new artifact
+# with the same timestamp remains a valid response.
+scenario "a pre-request review in the request second stays excluded"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1 "$(review "$BOT" "$REQUESTED" '' 401)"
+pre_page comments 1; pre_page reactions 1
+counts 2 0
+page reviews 1 "$(review "$BOT" "$REQUESTED" '' 401)" \
+  "$(review "$BOT" "$REQUESTED" '' 402)"; page comments 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 0
+want_out '"new_reviews":1'
+
+scenario "a pre-request comment in the request second stays excluded"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1
+pre_page comments 1 "$(comment "$BOT" "$REQUESTED" '' null 501)"
+pre_page reactions 1
+counts 0 0; page reviews 1
+page comments 1 "$(comment "$BOT" "$REQUESTED" '' null 501)" \
+  "$(comment "$BOT" "$REQUESTED" '' null 502)"
+run_watch $VALID --request-comment "$REQ"
+want_rc 0
+want_out '"new_review_comments":1'
+
+scenario "a pre-request reaction in the request second stays excluded"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1
+pre_page reactions 1 "$(reaction "$BOT" '+1' "$REQUESTED" 601)"
+counts 0 1; page reviews 1; page comments 1
+page reactions 1 "$(reaction "$BOT" '+1' "$REQUESTED" 601)"
+run_watch $VALID --request-comment "$REQ"
+want_rc 2
+
+scenario "a replaced reaction in the request second keeps its new ID"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1
+pre_page reactions 1 "$(reaction "$BOT" '+1' "$REQUESTED" 601)"
+counts 0 1; page reviews 1; page comments 1
+page reactions 1 "$(reaction "$BOT" '+1' "$REQUESTED" 602)"
+run_watch $VALID --request-comment "$REQ"
+want_rc 3
+want_out '"clean_reactions":1'
+
+scenario "a pending review submitted after the request keeps its ID"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1 "$(review "$BOT" null '' 701)"
+pre_page comments 1; pre_page reactions 1
+counts 1 0
+page reviews 1 "$(review "$BOT" "$REQUESTED" '' 701)"; page comments 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 0
+want_out '"new_reviews":1'
+
+scenario "a failed pre-request snapshot exits before posting"
+page issue-comments 1; posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1
+counts 0 0; page reviews 1; page comments 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 75
+want_not_posted
+want_err 'could not snapshot pre-request reactions; nothing posted'
+
+scenario "a pending request posts nothing and keeps the baseline"
+page issue-comments 1 "$(issue_comment someone 2026-07-02T06:00:00Z "$REQ")"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 2
+want_not_posted
+want_out '"baseline":"2026-07-02T05:07:30Z"'
+want_err 'request already pending; baseline stays 2026-07-02T05:07:30Z'
+
+# A re-armed wake hands the re-anchored baseline back: that is the posted
+# request's own creation second, so an at-baseline comment is pending. The
+# host's since= filter is exclusive, so the query names an earlier instant.
+scenario "a request dated exactly at the baseline is pending"
+page issue-comments 1 "$(issue_comment someone 2026-07-02T05:07:30Z "$REQ")"
+posted_at "$REQUESTED"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --request-comment "$REQ" --request-artifacts 'r=;c=;a='
+want_rc 2
+want_not_posted
+want_request_url 'since=2026-07-02T05:07:30%2B00:01&'
+
+scenario "an exact-minute request baseline queries an earlier instant"
+page issue-comments 1 "$(issue_comment someone "$REQUESTED" "$REQ")"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch --pr 46 --baseline "$REQUESTED" --login some-bot --repo owner/name \
+  --interval 1 --cap-minutes 0 --request-comment "$REQ" \
+  --request-artifacts 'r=;c=;a='
+want_rc 2
+want_not_posted
+want_request_url 'since=2026-07-02T08:00:00%2B00:01&'
+
+scenario "a re-armed request sees a review from its creation second"
+page issue-comments 1 "$(issue_comment someone 2026-07-02T05:07:30Z "$REQ")"
+counts 1 0
+page reviews 1 "$(review "$BOT" 2026-07-02T05:07:30Z)"; page comments 1
+run_watch $VALID --request-comment "$REQ" --request-artifacts 'r=;c=;a='
+want_rc 0
+want_not_posted
+
+scenario "a re-armed request keeps its pre-request exclusions"
+page issue-comments 1 "$(issue_comment someone 2026-07-02T05:07:30Z "$REQ")"
+counts 2 0
+page reviews 1 "$(review "$BOT" 2026-07-02T05:07:30Z '' 401)" \
+  "$(review "$BOT" 2026-07-02T05:07:30Z '' 402)"; page comments 1
+run_watch $VALID --request-comment "$REQ" --request-artifacts 'r=401;c=;a='
+want_rc 0
+want_not_posted
+want_out '"new_reviews":1'
+
+scenario "an inclusive pending request without its snapshot is not watched"
+page issue-comments 1 "$(issue_comment someone 2026-07-02T05:07:30Z "$REQ")"
+counts 1 0
+page reviews 1 "$(review "$BOT" 2026-07-02T05:07:30Z)"; page comments 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 75
+want_not_posted
+want_err 'an inclusive pending request needs its earlier --request-artifacts token; nothing watched'
+
+scenario "a request before the baseline is an earlier round's, not pending"
+page issue-comments 1 "$(issue_comment someone "$BEFORE" "$REQ")"
+posted_at "$REQUESTED"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 2
+want_posted
+
+scenario "a comment with other text is not the pending request"
+page issue-comments 1 "$(issue_comment someone "$AFTER" 'looks good')"
+posted_at "$REQUESTED"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 2
+want_posted
+
+# The text is matched through the environment, never spliced into the jq
+# filter, so quotes in it compare literally instead of breaking the filter.
+scenario "request text with quotes is matched literally"
+QREQ='@codex review "the parser" now'
+page issue-comments 1 "$(issue_comment someone "$AFTER" "$QREQ")"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --request-comment "$QREQ"
+want_rc 2
+want_not_posted
+
+# Neither failure may fall through to a quiet cap: an unchecked request
+# could double-post, and an unposted one would never draw a pass.
+scenario "a failed pending check exits before any poll"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+posted_at "$REQUESTED"
+run_watch $VALID --request-comment "$REQ"
+want_rc 75
+want_not_posted
+want_not_out 'CAP_EXPIRED'
+want_err 'could not check for a pending request; nothing posted
+  pending request: gh: Not Found (HTTP 404)'
+
+scenario "a failed post exits before any poll"
+page issue-comments 1
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 75
+want_out 'REQUEST_INCOMPLETE {"request_artifacts":"r=;c=;a="}'
+want_not_out 'CAP_EXPIRED'
+want_err 'request comment failed or carried no creation time; nothing watched
+  request comment: gh: Not Found (HTTP 404)'
+
+# GitHub may create the request while the client loses its response. The first
+# attempt still reports the captured token. Passing that token lets a retry
+# either resume the pending request or safely repost when no request exists.
+scenario "a lost post response reports a resumable artifact token"
+page issue-comments 1
+pre_page reviews 1 "$(review "$BOT" 2026-07-02T05:07:30Z '' 801)"
+pre_page comments 1; pre_page reactions 1
+run_watch $VALID --request-comment "$REQ"
+want_rc 75
+want_out '"request_artifacts":"r=801;c=;a="'
+want_not_posted
+
+rm -f "$FIX"/pre-*.json
+page issue-comments 1 "$(issue_comment someone 2026-07-02T05:07:30Z "$REQ")"
+counts 2 0
+page reviews 1 "$(review "$BOT" 2026-07-02T05:07:30Z '' 801)" \
+  "$(review "$BOT" 2026-07-02T05:07:30Z '' 802)"; page comments 1
+run_watch $VALID --request-comment "$REQ" \
+  --request-artifacts 'r=801;c=;a='
+want_rc 0
+want_not_posted
+want_out '"new_reviews":1'
+
+scenario "a retry can repost with its earlier artifact token"
+page issue-comments 1; posted_at "$REQUESTED"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --request-comment "$REQ" \
+  --request-artifacts 'r=801;c=;a='
+want_rc 2
+want_posted
+want_out '"request_artifacts":"r=801;c=;a="'
+
+# The returned creation time is trusted as the baseline only in the exact
+# shape the filters compare as strings; anything else is not a baseline.
+for shape in '"2026-07-02T08:00:00.000Z"' '"2026-07-02T08:00:00+00:00"' null; do
+  scenario "a posted request with creation time $shape is not a baseline"
+  page issue-comments 1
+  printf '{"created_at":%s}' "$shape" > "$FIX/posted-comment.json"
+  counts 0 0; page reviews 1; page comments 1; page reactions 1
+  run_watch $VALID --request-comment "$REQ"
+  want_rc 75
+  want_posted
+  want_not_out 'CAP_EXPIRED'
+  want_err 'request comment failed or carried no creation time; nothing watched'
+done
+
+scenario "without the flag the watcher neither reads nor posts requests"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+posted_at "$REQUESTED"
+run_watch $VALID
+want_rc 2
+want_not_posted
+want_no_request_read
+want_out '"baseline":"2026-07-02T05:07:30Z"'
 
 # gh's error text is a passthrough, not a replacement for the notice: a gh
 # that fails without saying why still gets its exit status named.

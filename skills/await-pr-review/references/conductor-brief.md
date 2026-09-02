@@ -86,8 +86,8 @@ Run the watcher from the checkout as a bounded foreground command:
 `<skill-dir>` is the skill directory above this file's `references/` folder.
 Take `--repo` from the project's forge record and set `GH_HOST` when the
 recorded host differs from the CLI default. When the recorded trigger is a
-command, request the reviewer once before the first watch; a pending request
-is never repeated per poll. Without a shell or host CLI, run
+command, pass its text as `--request-comment`, or apply that flag's request
+rule by hand in the connector loop below. Without a shell or host CLI, run
 the equivalent bounded API or connector loop over the same frozen baseline and
 expected head, per `references/detection.md` §connector-or-api-polling. When
 that loop cannot delay in-turn, use the scheduled wake that resumes this same
@@ -102,13 +102,18 @@ Branch on every exit code:
 | 2    | `CAP_EXPIRED`     | Cap reached; `polls_ok:0` or `last_poll_ok:false` is incomplete coverage |
 | 64   | Usage on stderr   | Invalid invocation; fix it, do not retry                                 |
 | 69   | Note on stderr    | `gh` missing; the watch cannot run here                                  |
+| 75   | Recovery or note  | Request handling failed before any watch                                 |
+
+On `REQUEST_INCOMPLETE`, extract `request_artifacts` and pass it back with
+`--request-artifacts` on the retry. An exit 75 without that report has no
+artifact state to carry.
 
 Coverage fields and the optional login and reaction flags are in
 `references/detection.md` §watcher-invocation.
 
 Signals to read:
 
-- A round completes only on target-reviewer activity after the baseline: a
+- A round completes only on target-reviewer activity in the watched window: a
   submitted review, a new thread, a new comment on an existing thread, or the
   configured clean-pass reaction matched by `createdAt`.
 - An in-progress reaction or acknowledgement means keep waiting. Absence
@@ -123,13 +128,10 @@ Signals to read:
 - Keep one active watch per PR and reviewer, and replace it after each push
   rather than leaving two alive.
 
-When the spawn message says the reviewer is unrecorded, discover it first per
-`references/detection.md` §reviewer-identity-and-trigger, and record it in the
-project's conventions section. Pass the checkout gate before that edit, then
-commit and push the record as its own commit under the pinned lease, and
-re-watch from that push as in step 6. Treat a recorded reviewer as stale after
-two fully covered waits with no signal, and rerun that discovery before
-another wait.
+When the spawn message says the reviewer is unrecorded, discover and record
+it per `references/detection.md` §reviewer-identity-and-trigger, following
+its numbered list in full. Treat a recorded reviewer as stale after two fully
+covered waits with no signal, and rerun that discovery before another wait.
 
 ## Each Round
 
@@ -158,8 +160,8 @@ another wait.
 6. Re-watch from the push. Take the host push event time, or a host clock
    reading taken immediately before the push, as the new baseline per
    `references/detection.md` §event-anchored-baselines, and pass the pushed
-   SHA as `--head`. Request a command-triggered reviewer once per push, never
-   per poll. A decline-only round ends the exchange.
+   SHA as `--head`, with `--request-comment` again for a command-triggered
+   reviewer. A decline-only round ends the exchange.
 
 ## Rising Bar
 

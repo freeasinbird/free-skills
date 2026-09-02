@@ -191,18 +191,34 @@ activity reveals identity but not necessarily the trigger; establish whether it
 runs on PR events, a command, or a CI job before polling. If the trigger cannot
 be established, ask rather than burning the wait cap.
 
-When a reviewer or status signal is newly observed, record its name, login
-forms, trigger, and observed signals in the project's designated conventions
-section. Augment an existing record that lacks newly observed signals. Never
-record that no reviewer exists.
-
 For an unrecorded reviewer scan recent PRs with `gh pr list --state all
 --limit 20 --json number`, then page their reviews and reactions. An App bot's
 reaction login usually supplies the REST form with `[bot]`; strip the suffix for
 the GraphQL review form and record both. A machine-user reviewer keeps its plain
 login.
 
-Request a command-triggered reviewer once when no request is pending. An
+Record a newly observed reviewer or status signal in the project's designated
+conventions section as one procedure on the PR branch:
+
+1. Pass the checkout gate: the host PR head equals the checkout HEAD, the
+   worktree and index are clean, the PR branch is checked out, and the PR is
+   open.
+2. Edit the conventions record with the reviewer's name, login forms,
+   trigger, and observed signals. Augment an existing record that lacks a
+   newly observed signal. Never record that no reviewer exists.
+3. Commit the record as its own commit on the PR branch.
+4. Push it under the pinned lease,
+   `--force-with-lease=<branch>:<last-pushed-sha>`.
+5. Re-watch from that push: take its event time as the new baseline per
+   §event-anchored-baselines, pass the pushed SHA as `--head`, and pass
+   `--request-comment` again for a command-triggered reviewer.
+
+Request a command-triggered reviewer once per event, never per poll, and
+anchor the baseline to the request. Where the watcher runs, pass the recorded
+trigger text as `--request-comment` (§watcher-invocation). It posts the text
+only when no identical comment is dated at or after the baseline, and then
+re-anchors the baseline to the posted comment's host creation time. Without
+the watcher, apply the same rule by hand per §connector-or-api-polling. An
 acknowledgement or reaction on the trigger comment is not completion.
 
 Treat a recorded reviewer as stale after two consecutive fully covered waits, on
@@ -212,7 +228,7 @@ only when a replacement identity, trigger, or signal is actually observed.
 
 ## Signals and Login Forms
 
-A round completes only on target-reviewer activity after the baseline:
+A round completes only on target-reviewer activity in the watched window:
 
 - A submitted top-level review
 - A new review thread
@@ -265,6 +281,27 @@ Optional flags include `--rest-login`, `--clean-content`, `--progress-content`,
 `--rest-login`, retained for older callers. `--help` (or `-h`) prints the full
 flag summary and exit codes to stdout and exits 0.
 
+`--request-comment <text>` serves a command-triggered reviewer. When no PR
+comment with exactly that body is dated at or after `--baseline`, the watcher
+snapshots the existing reviewer review, comment, and reaction IDs. It then
+posts the request once and re-anchors the baseline to the host's creation time
+of the posted comment. GitHub exposes whole-second timestamps, so the watch
+includes that creation second but excludes IDs that predate the request. A new
+review, comment, or reaction emitted in the request second therefore remains
+visible without letting an earlier-round artifact finish the new round. The
+report carries these IDs as an opaque `request_artifacts` token. Pass it back
+with `--request-artifacts <token>` when re-arming the same inclusive request.
+
+The watcher reports the token even when the post response is lost, so a retry
+can resume a request that GitHub created or safely repost when none exists.
+
+When one does, the request is pending: the watcher posts nothing and keeps
+`--baseline`. Stderr names the baseline the watch ran from. Pass the flag on
+the first watch and again after each push. Exit 75 means the request could
+not be checked or posted and nothing was watched. An inclusive pending request
+without its prior token also exits 75 rather than misattribute an artifact. A
+retry is safe because a request that did post is found as pending.
+
 | Exit | Report            | Meaning                                             |
 | ---- | ----------------- | --------------------------------------------------- |
 | 0    | `REVIEW_ACTIVITY` | Review or review comment after the baseline         |
@@ -272,6 +309,11 @@ flag summary and exit codes to stdout and exits 0.
 | 2    | `CAP_EXPIRED`     | Cap reached; inspect coverage fields                |
 | 64   | usage on stderr   | Invalid invocation; fix it rather than retrying     |
 | 69   | note on stderr    | `gh` missing; this environment cannot run the watch |
+| 75   | recovery or note  | Request handling failed before any watch            |
+
+For `REQUEST_INCOMPLETE`, extract `request_artifacts` from stdout and pass it
+back with `--request-artifacts` on the retry. An exit 75 without that report
+has no artifact state to carry.
 
 Every report carries `unresolved_threads`: the PR's review threads whose
 `isResolved` is false on the latest poll that read them, or `null` when no
@@ -330,6 +372,16 @@ through the available API or repository connector. Use the exact baseline and
 expected head for every poll, both frozen at the event boundary: never replace
 them with the current time or latest head.
 
+For a command-triggered reviewer, apply the watcher's request rule by hand
+before the first poll and again after each push. List the PR's issue comments
+created at or after the baseline. When none carries exactly the recorded trigger
+text, snapshot the target reviewer's submitted review, review-comment, and
+reaction IDs. Post the request once and take the host's creation time of the
+posted comment as the baseline. Include signals from that whole creation second
+but exclude the snapshotted IDs. Retain those IDs across re-armed wakes. When a
+matching request exists, it is pending: post nothing and keep the baseline.
+Never re-request per poll.
+
 Each poll pages the three snapshot sources until it crosses the baseline:
 top-level reviews, review comments including the latest replies on existing
 threads, and configured PR-description reactions. Normalize the review and
@@ -363,6 +415,8 @@ when scheduling cannot target a subagent.
 A scheduled wake changes re-entry, not detection. Every wake executes the same
 detector contract, through the script or equivalent API/connector snapshots,
 with the exact frozen baseline and expected head. Never recompute either value.
+Carry the request-artifact token, or the equivalent connector ID set, across
+every wake for an inclusive pending request.
 
 On each wake:
 
@@ -375,8 +429,8 @@ On each wake:
   transport instead of treating the round as quiet.
 
 For the script these states are exits 0 or 3, exit 2 with its coverage fields,
-and exits 64 or 69. Size each script cap just under the wake gap; a connector
-wake normally takes one complete paged snapshot. At the overall deadline, run
+and exits 64, 69, or 75. Size each script cap just under the wake gap; a
+connector wake normally takes one complete paged snapshot. At the overall deadline, run
 one final `--cap-minutes 0` script poll or complete connector snapshot so the
 tail is scanned, then stop and report quiet, pending, or incomplete. The
 scheduler must be cancellable and must avoid overlapping runs.

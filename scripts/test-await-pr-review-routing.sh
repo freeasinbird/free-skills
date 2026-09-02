@@ -984,18 +984,34 @@ for required in \
   'Before the first write, and before any write after a wait or resume' \
   '--force-with-lease=<branch>:<last-pushed-sha>' \
   'unresolved_threads' \
-  'Pass the checkout gate before that edit' \
-  'commit and push the record as its own commit under the pinned lease' \
+  'its numbered list in full' \
   'Attribute each match to a round per `references/detection.md`' \
   'A fix round is a round that pushes a change, whatever the file type' \
   'escalate to the owner with the recurrence evidence' \
   'Rotation arms at the end of your third fix round' \
   'Elapsed time, idle time, and poll count never arm it' \
-  'request the reviewer once before the first watch' \
+  'pass its text as `--request-comment`' \
   'it needs only the ordinary severity call' \
   'Emit the terminal ledger only at quiescence'; do
   if ! grep -Fq -- "$required" "$brief"; then
     printf 'conductor-brief.md is missing: %s\n' "$required" >&2
+    exit 1
+  fi
+done
+# The record and request procedures live once in detection.md (#227): the
+# brief points at them instead of summarizing them, because each summary
+# dropped a step under review.
+for required in \
+  '1. Pass the checkout gate' \
+  '3. Commit the record as its own commit on the PR branch' \
+  '5. Re-watch from that push' \
+  'pass the recorded' \
+  'created at or after the baseline' \
+  'Retain those IDs across re-armed wakes' \
+  'Carry the request-artifact token' \
+  'apply the watcher'"'"'s request rule by hand'; do
+  if ! grep -Fq -- "$required" "$detection"; then
+    printf 'detection.md is missing: %s\n' "$required" >&2
     exit 1
   fi
 done
