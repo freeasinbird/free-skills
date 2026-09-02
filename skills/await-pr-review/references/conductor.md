@@ -7,7 +7,7 @@ point.
 ## Contents
 
 - [Spawn brief](#spawn-brief)
-- [Host mapping](#host-mapping)
+- [Probes](#probes)
 - [Turn discipline](#turn-discipline)
 - [Checkout gate](#checkout-gate)
 - [Pinned force-with-lease](#pinned-force-with-lease)
@@ -84,34 +84,98 @@ itself. Keep its reports compact: finding ID, one-line disposition, final
 pushed SHA or issue, checks status, and only enough context to decide a
 surfaced call.
 
-## §host-mapping
+## §probes
 
-Map any agent's actual tools to the four routing grants. These named surfaces
-are concrete examples that prevent repeated capability guesswork; they do not
-replace the generic gate.
+Map any agent's actual tools to the four routing grants through the probes
+below. Each probe names the evidence to look for, what that evidence looks
+like on Claude Code and on Codex, and the default when the evidence is absent
+or the probe cannot run. The defaults favor spawning. A wrongly spawned
+conductor reports a concrete gap in its first turn; a wrongly skipped one
+costs the whole exchange in main context.
 
-- **Codex app:** spawn the conductor with `fork_turns: "none"` so it inherits
-  no parent turns. Collaboration tools that expose spawn and completion
-  notification satisfy grants 1 and 3. Follow-up or resume, plus a
-  conductor-local foreground wait or scheduled same-conductor wake, satisfy
-  grant 2. If agents share the checkout, grant branch exclusivity by having
-  the main agent make no edit, commit, PR-branch fetch, rebase, or push until
-  the terminal ledger. If the main agent must keep changing that checkout,
-  grant 4 does not hold.
-- **Claude Code:** use one ordinary named background subagent, which starts
-  with fresh context, rather than a fork that inherits the parent
-  conversation. Give it explicit worktree isolation. Its blocking foreground
-  wait plus re-messaging the same agent satisfy grant 2; completion
-  notification satisfies grant 3.
-- **Any other agent:** inspect its delegation, conductor-local wait and
-  resume, completion, and checkout controls, then apply the same four-grant
-  gate. An API or connector that can only return instantaneous reads does not
-  satisfy grant 2 unless it can schedule the same conductor to resume without
-  ending the exchange. Request fresh or empty context when the host supports
-  it. When it cannot control inherited context, state that limit and continue
-  with the compact self-contained brief; this optimization gap is not a failed
-  conductor grant. Do not infer a failed gate from unfamiliar tool names; name
-  the concrete missing grant if one is absent.
+### Grant 1: Write-Capable Delegation
+
+- **Probe:** the session's tool list contains a spawn tool whose subagent can
+  edit files and run commands, and no rule in effect forbids using it for
+  this skill.
+- **Claude Code:** the `Agent` tool is listed with a general-purpose agent
+  type. Spawn an ordinary named background subagent, which starts with fresh
+  context, not a fork that inherits the parent conversation.
+- **Codex:** `spawn_agent` is listed. Spawn with `fork_turns: "none"` so the
+  conductor inherits no parent turns.
+- **Other hosts:** any listed tool that starts a separate agent with the
+  parent's edit and command tools.
+- **Default:** a listed spawn tool grants it; a missing one fails it. A
+  tool list you cannot observe grants it: attempt the spawn, and a failed
+  spawn is the concrete absence. A multi-agent rule that disables proactive delegation except when the user or
+  an applicable skill requests it does not fail this grant, because this
+  skill is that request. To fail it on a higher-priority instruction, explain
+  why the rule's exceptions exclude skill-mandated delegation. Then name the
+  rule by source, or give a non-sensitive paraphrase when disclosure is
+  restricted.
+
+### Grant 2: Wait-and-Resume Continuity
+
+- **Probe:** the subagent can delay in-turn with a bounded foreground
+  command, or the host can schedule a wake that resumes the same subagent.
+  The host can also message or resume that subagent after it surfaces a
+  pause.
+- **Claude Code:** a background subagent runs a bounded shell wait such as
+  `watch-review.sh` in the foreground. `SendMessage` re-enters the same
+  subagent after it pauses.
+- **Codex:** the spawned agent runs the same bounded shell wait. Whichever
+  listed tool continues an idle agent resumes it after a pause. Its name
+  varies by version (`send_input`, `resume_agent`, and `followup_task` have
+  all been reported), so match the listed tool, not a name.
+- **Other hosts:** a shell or a scheduled same-agent wake, plus any follow-up
+  or resume control that targets the same agent.
+- **Default:** a shell in the subagent grants it. It fails only on concrete
+  absence: the subagent has neither an in-turn bounded wait nor a scheduled
+  same-conductor wake, or the host cannot re-enter it after a pause. A
+  background process that re-enters only the main-agent layer does not satisfy
+  this grant.
+
+### Grant 3: Completion Notification
+
+- **Probe:** the host delivers a notification to the main agent when the
+  subagent ends, or exposes a blocking wait on the subagent's completion.
+- **Claude Code:** a background subagent's completion arrives as a task
+  notification.
+- **Codex:** `wait_agent` blocks until the agent reaches a final status, and
+  the host also sends a notification message carrying that status.
+- **Other hosts:** any completion callback or blocking wait a listed tool
+  describes.
+- **Default:** a listed spawn tool grants it. It fails only when a listed
+  tool's own description says completion is not surfaced.
+
+### Grant 4: Checkout Isolation or Exclusivity
+
+- **Probe:** `git worktree list` shows the PR branch checked out in a
+  worktree the conductor can own, or the spawn call can create one.
+  Otherwise the checkout is shared, and the main agent grants exclusivity by
+  making no edit, commit, PR-branch fetch, rebase, or push until the terminal
+  ledger.
+- **Claude Code:** the spawn call accepts `isolation: "worktree"`, and a
+  session already running in a dedicated worktree can hand that path to the
+  conductor.
+- **Codex:** subagents share the checkout. Grant exclusivity by leaving the
+  PR branch untouched in the main agent until the terminal ledger.
+- **Other hosts:** apply the same two options, then run the checkout gate
+  below before every write. Isolation and exclusivity satisfy the grant
+  equally.
+- **Default:** grant exclusivity. It fails only when the main agent must keep
+  changing that checkout during the exchange.
+
+### When a Probe Cannot Run
+
+A probe that cannot run, such as a tool list the host does not expose, is not
+a failed grant. Take the grant's default, record the unobserved evidence in
+the brief, and let the conductor report any concrete gap in its first turn.
+Do not infer a failed grant from an unfamiliar tool name; name the concrete
+missing grant when one is absent. Request fresh or empty context when the
+host supports it. When it cannot control inherited context, state that limit
+and continue with the compact self-contained brief; this optimization gap is
+not a failed grant.
 
 ## Turn Discipline
 
@@ -132,13 +196,14 @@ exclusivity during an ordinary pause. Context rotation is the only replacement
 path, and it hands the main agent the handoff between the conductor's quiescent
 checkpoint pauses.
 
-Prefer a blocking foreground poll inside the conductor: it is the cheapest
+Prefer a bounded foreground poll inside the conductor: it is the cheapest
 ownership-preserving path. Use the script where it can run. An API or connector
 loop that can't delay in-turn schedules a wake of this same conductor and
 preserves its exchange state across the pause.
 
-If neither a blocking wait nor a scheduled same-conductor wake exists, the
-ownership gate failed and the exchange belongs in the main agent. A background
+If the conductor has neither an in-turn bounded wait nor a scheduled
+same-conductor wake, grant 2 failed and the exchange belongs in the main
+agent. A background
 process that re-enters only the main-agent layer doesn't satisfy this contract:
 it can strand the exchange and send a misleading completion notice.
 

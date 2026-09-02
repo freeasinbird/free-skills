@@ -349,6 +349,11 @@ material, examples, and sub-prompts may live beside it.
     review.
   - **Finding signal:** A posted review. Codex posts one only when it finds a
     problem.
+  - **Completion signal:** An issue comment by the bot containing the HTML
+    marker `codex-pull-request-review-summary`. Its table lists each review
+    with status, short commit SHA, and trigger; a `Completed` row for the
+    expected head ends the round whether or not a review was posted. PRs
+    216, 218, and 219 showed it, the last two without any reaction.
   - **Consumer:** `await-pr-review` uses this record to choose the reviewer and
     detect the end of a round. Update the skill if the login, trigger, or
     signals change.

@@ -44,6 +44,66 @@ ids = [case.get("id") for case in cases]
 if any(not case_id for case_id in ids) or len(ids) != len(set(ids)):
     raise SystemExit("routing eval case IDs must be present and unique")
 
+# Probe evidence maps to grants with the defaults SKILL.md documents (issue
+# #208): only concrete absence fails a grant, and an unobserved probe takes
+# the grant's default. A missing spawn tool fails delegation and completion;
+# a spawn tool whose subagents cannot edit files or run commands fails
+# delegation alone; a subagent with no wait mechanism fails wait-and-resume;
+# a checkout the main agent must keep changing fails exclusivity.
+PROBE_VALUES = {
+    "spawn_tool_listed": {True, False, "unobserved"},
+    "spawn_write_capable": {True, False, "unobserved"},
+    "delegation_prohibition": {"none", "explicit", "unobserved"},
+    "subagent_wait": {"shell", "scheduled_wake", "none", "unobserved"},
+    "completion_signal": {
+        "notification", "blocking_wait", "documented_absent", "unobserved",
+    },
+    "checkout": {"isolated", "shared", "unobserved"},
+    "main_agent_must_change_checkout": {True, False},
+}
+PROBE_KEYS = tuple(PROBE_VALUES) + ("spawn_tool", "same_agent_resume")
+
+
+def validate_probes(case_id, probes):
+    if set(probes) != set(PROBE_KEYS):
+        raise SystemExit(f"{case_id}: probes must carry exactly {PROBE_KEYS}")
+    for key, allowed in PROBE_VALUES.items():
+        if probes[key] not in allowed or type(probes[key]) is int:
+            raise SystemExit(
+                f"{case_id}: probe {key}={probes[key]!r} must be one of "
+                f"{sorted(allowed, key=str)}"
+            )
+    if probes["spawn_tool"] is not None and not isinstance(probes["spawn_tool"], str):
+        raise SystemExit(f"{case_id}: probe spawn_tool must be a tool name or null")
+    # A tool name, "absent", or "unobserved"; only "absent" fails the grant.
+    if not isinstance(probes["same_agent_resume"], str) or not probes["same_agent_resume"]:
+        raise SystemExit(f"{case_id}: probe same_agent_resume must be a non-empty string")
+
+
+def derive_grants(probes):
+    spawn_tool_present = probes["spawn_tool_listed"] is not False
+    return {
+        "write_capable_delegation": bool(
+            spawn_tool_present
+            and probes["spawn_write_capable"] is not False
+            and probes["delegation_prohibition"] != "explicit"
+        ),
+        "wait_and_resume": bool(
+            probes["subagent_wait"] != "none"
+            and probes["same_agent_resume"] != "absent"
+        ),
+        "completion_notification": bool(
+            spawn_tool_present
+            and probes["completion_signal"] != "documented_absent"
+        ),
+        "checkout_isolation": probes["checkout"] == "isolated",
+        "checkout_exclusivity": bool(
+            probes["checkout"] != "isolated"
+            and not probes["main_agent_must_change_checkout"]
+        ),
+    }
+
+
 for case in cases:
     grants = case.get("grants")
     if not isinstance(grants, dict):
@@ -83,6 +143,16 @@ for case in cases:
             f"derived owner {derived_owner!r}"
         )
 
+    probes = case.get("probes")
+    if probes is not None:
+        validate_probes(case["id"], probes)
+        derived_grants = derive_grants(probes)
+        if derived_grants != grants:
+            raise SystemExit(
+                f"{case['id']}: declared grants {grants} disagree with "
+                f"grants derived from probes {derived_grants}"
+            )
+
     if expected == "main" and not (
         case.get("expected_fallback_gate") or case.get("allowed_exception")
     ):
@@ -110,6 +180,12 @@ if not any(
     for case in connector_only
 ):
     raise SystemExit("routing eval needs a connector-only main fallback without wait continuity")
+if not any(
+    case["expected_owner"] == "main"
+    and (case.get("probes") or {}).get("spawn_write_capable") is False
+    for case in cases
+):
+    raise SystemExit("routing eval needs a read-only delegation main fallback")
 
 skill_authorization = next(
     (
@@ -214,6 +290,45 @@ for case_id, expected_context in context_cases.items():
         raise SystemExit(f"{case_id}: context control must not change ownership")
     if case.get("initial_context") != expected_context:
         raise SystemExit(f"{case_id}: initial-context contract does not match")
+
+# The 2026-09-01 audit failure (issue #208): Codex lists spawn_agent, the
+# checkout is shared, resume continuity went unobserved, and the agent still
+# must spawn a conductor rather than fall back to a main-owned watch.
+codex_probed = by_id.get("codex-subagents-listed-routes-to-conductor")
+if codex_probed is None:
+    raise SystemExit("routing eval needs the Codex subagents-listed case")
+codex_probes = codex_probed.get("probes") or {}
+if (
+    codex_probed.get("surface") != "codex-app"
+    or codex_probes.get("spawn_tool") != "spawn_agent"
+    or codex_probes.get("checkout") != "shared"
+    or codex_probes.get("same_agent_resume") != "unobserved"
+    or codex_probed["expected_owner"] != "conductor"
+    or codex_probed.get("expected_first_action") != "spawn_conductor"
+    or not codex_probed.get("forbidden_skip_reasons")
+):
+    raise SystemExit(
+        "Codex subagents-listed case must probe spawn_agent on a shared "
+        "checkout with unobserved resume, spawn the conductor first, and "
+        "name the skip reasons it forbids"
+    )
+
+probed_owners = {
+    case["expected_owner"] for case in cases if case.get("probes") is not None
+}
+if probed_owners != {"conductor", "main"}:
+    raise SystemExit("routing eval needs probe-derived cases for both owners")
+
+# An unobserved probe takes the grant's default, so a case whose wait, resume,
+# completion, and checkout probes all went unobserved still spawns.
+unobserved = [
+    case for case in cases
+    if case.get("probes") is not None
+    and case["probes"]["subagent_wait"] == "unobserved"
+    and case["probes"]["checkout"] == "unobserved"
+]
+if not any(case["expected_owner"] == "conductor" for case in unobserved):
+    raise SystemExit("routing eval needs an unobserved-probes conductor case")
 
 print(f"routing eval fixture valid: {len(cases)} cases ({eligible} conductor, {fallback} main)")
 PY
@@ -702,31 +817,37 @@ print(
     "forbidden-action coverage, forge-record exclusion")
 PY
 
+# Match pinned phrases against the file with line wraps collapsed, so a
+# rewrap inside the 220-line budget does not break a pin.
+skill_flat=$(tr '\n' ' ' < "$skill" | tr -s ' ')
 for required in \
   'Default to one conductor subagent' \
   'fork_turns: "none"' \
   'ordinary named background subagent' \
-  'optimization gap is not a failed' \
-  'Apply one platform-neutral gate' \
-  'wait-and-resume continuity' \
-  'An applicable skill that explicitly requires delegation counts as' \
-  'Do not require a separate user request.' \
-  '“Higher-priority instruction” is not a valid failed grant by itself.' \
-  'identify the prohibiting rule by source when disclosure' \
-  'give a non-sensitive paraphrase of the binding constraint' \
-  'Codex app:' \
-  'Claude Code:' \
-  'Any other agent:' \
+  'optimization gap, not a failed grant' \
+  'Apply one platform-neutral gate through four probes' \
+  '**Write-capable delegation.** Evidence: a spawn tool is listed' \
+  '**Wait-and-resume continuity.** Evidence:' \
+  '**Completion notification.** Evidence:' \
+  '**Checkout isolation or exclusivity.** Evidence: `git worktree list`' \
+  'Claude Code `Agent`' \
+  '`spawn_agent` with `fork_turns: "none"`' \
+  'this skill supplies that request' \
+  '"Higher-priority instruction" alone never fails it' \
+  'name the rule by source' \
+  'give a non-sensitive paraphrase' \
+  'Default: grant exclusivity' \
+  'A probe you cannot run is not a failed grant' \
+  'failed grant from an unfamiliar tool name' \
   'Conductor skipped: <specific failed grant or allowed exception>.' \
   'Main-owned fallback only:' \
   'scheduled API or connector poll' \
   'bounded foreground API or connector polling' \
-  'isolated checkout or explicit shared-checkout' \
   'current task contract at spawn' \
   'task-specific user constraints' \
   'remaining work is likely to repay' \
   'fixed round count, elapsed time, idle time, or context size alone'; do
-  if ! grep -Fq "$required" "$skill"; then
+  if ! grep -Fq "$required" <<< "$skill_flat"; then
     printf 'SKILL.md is missing routing contract: %s\n' "$required" >&2
     exit 1
   fi
