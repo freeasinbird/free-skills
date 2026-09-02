@@ -71,7 +71,7 @@ resume this same conductor when it cannot delay in-turn. Never release
 exchange ownership or emit terminal completion merely to wait. Fix, fold,
 push, verify, reply, resolve, advance the baseline, and re-watch under the
 skill's rising bar. Surface only judgment calls, no-go or materially uncertain
-convergence escalations, a checkpoint-approved context-rotation handoff or
+convergence escalations, an armed context-rotation handoff or
 read-only reconciliation result for the main agent to coordinate, or the
 terminal ledger. Before any write, verify a clean checkout at the expected PR
 head. Keep the force-with-lease pinned to the newest remote head already
@@ -186,8 +186,8 @@ only for:
   state without reporting terminal completion
 - A judgment call that the main agent or user must decide
 - A no-go or materially uncertain convergence escalation
-- A checkpoint-approved context-rotation handoff or read-only reconciliation
-  result that the main agent must coordinate
+- An armed context-rotation handoff or read-only reconciliation result that
+  the main agent must coordinate
 - The terminal disposition ledger
 
 A scheduled wake resumes the conductor automatically. Resume the same conductor
@@ -348,21 +348,35 @@ completion, not a question to answer.
 
 ## §context-rotation
 
-Keep the same conductor through ordinary waits and review rounds. A long idle
-period, elapsed time, context size, or fixed round count is not a reason to
-replace it.
+Keep the same conductor through ordinary waits and review rounds. Elapsed
+time, idle time, and poll count are not reasons to replace it. Context size
+is, and because no host exposes it, the conductor's fix-round count stands in
+for it: on measured exchanges a fix round adds roughly 50k tokens, so three
+rounds from a typical start cross about 200k. `references/cost-model.md`
+records that calibration.
 
-Rotation is optional, and only when all of these hold:
+Rotation arms at the end of every third fix round since the conductor's
+spawn, or immediately when the host reports compaction or a context limit. It
+stays armed until a rotation completes; a replacement starts its own count.
+Once armed, rotate only when all of these hold:
 
-- An existing blocker-sustained convergence checkpoint has recorded a justified
-  go
-- The cost-model comparison says the expected remaining work is likely to repay
-  the full handoff and reconstruction cost
+- A full fix round is waiting: the pass on the latest push is dispositioned,
+  and at least one accepted finding earns another reviewer round rather than
+  a final triage push or a decline-only close
 - Fresh or empty replacement context is available
 - The host can transfer the existing checkout path to the replacement without
   creating a second checkout of the PR branch
 
-If any of those fails, keep the current conductor.
+If any of those fails, keep the current conductor and re-check at the next
+boundary. The count is a trigger, not a kill switch: the quiescence and
+exactly-once ownership gates below still decide when and whether the transfer
+completes.
+
+The full-fix-round condition is the cost gate from `references/cost-model.md`.
+On its calibration, a fix round of any size replays the old context often
+enough to repay one replacement startup and handshake, while a final triage
+push or a decline-only close does not. Do not estimate the pending round's
+size beyond that test; the earlier size-and-strain judgment never fired.
 
 Rotate only at a quiescent boundary between rounds. Require all of these before
 rotating:
@@ -386,8 +400,9 @@ amendment the user made through surfaced judgment calls. It also contains:
 - The automated reviewer login in every required API form, trigger, and progress
   and clean-pass signals
 - Pinned lease SHA
-- Fix-round and convergence-checkpoint counts, prior checkpoint calls and
-  evidence, and the next checkpoint cadence
+- Fix-round and convergence-checkpoint counts for the rising bar, prior
+  checkpoint calls and evidence, and the next checkpoint cadence; the
+  replacement's rotation count restarts at zero
 - The current taper or rising-bar phase and whether the one permitted final-triage
   push has already been used
 - Pending-push and active-watcher state

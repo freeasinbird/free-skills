@@ -353,10 +353,11 @@ if None in by_id or len(by_id) != len(presentations):
     raise SystemExit("convergence eval case and variant IDs must be present and unique")
 
 rotation_ids = {
-    "checkpoint-rotation-success",
-    "rotation-without-checkpoint-go-refused",
-    "rotation-unfavorable-cost-refused",
-    "rotation-uncertain-cost-refused",
+    "rotation-third-fix-round-success",
+    "rotation-host-context-warning-success",
+    "rotation-before-third-fix-round-refused",
+    "rotation-no-full-fix-round-waiting-refused",
+    "rotation-elapsed-time-refused",
     "rotation-fresh-context-unavailable-refused",
     "rotation-checkout-transfer-unavailable-refused",
     "rotation-pointer-record-write-failure-refused",
@@ -384,7 +385,7 @@ if missing:
 # refusal guarantee below).
 discovered_rotation_ids = {
     cid for cid in by_id
-    if cid == "checkpoint-rotation-success" or cid.startswith("rotation-")
+    if cid.startswith("rotation-")
 }
 if discovered_rotation_ids != rotation_ids:
     raise SystemExit(
@@ -400,8 +401,7 @@ if discovered_rotation_ids != rotation_ids:
 # required_success_keys derive from it, so a gate added here is enforced in
 # every place at once (the head-match pair is a cross-field check below).
 GATE_CHECKS = (
-    ("checkpoint_call", lambda v: v == "go"),
-    ("rotation_cost_comparison", lambda v: v == "favorable"),
+    ("full_fix_round_waiting", lambda v: v is True),
     ("fresh_replacement_context_available", lambda v: v is True),
     ("existing_checkout_path_transferable", lambda v: v is True),
     ("durable_pointer_record_writable", lambda v: v is True),
@@ -423,26 +423,34 @@ def gate_failures(state):
     if ("pointer_record_head" in state and "live_head" in state
             and state["pointer_record_head"] != state["live_head"]):
         fails.append("pointer_record_head")
+    # Arming is a cross-field gate: every third fix round since spawn, or a
+    # host compaction or context-limit warning, arms rotation. Elapsed time,
+    # idle time, and poll count are deliberately absent from the state, so a
+    # fixture cannot arm on them.
+    if ("fix_rounds_completed" in state and "host_context_warning" in state
+            and not (state["fix_rounds_completed"] >= 3
+                     or state["host_context_warning"] is True)):
+        fails.append("rotation_armed")
     return fails
 
 # The success fixture must model every rotation prerequisite; because
 # gate_failures ignores absent keys, deleting one would otherwise leave it
 # silently unasserted, so require the full key set before checking values.
 # Derived from GATE_CHECKS so a newly added gate is automatically required in
-# the success fixture; the head-match pair and the two cost-proxy fields are
-# not in GATE_CHECKS, so name them here.
+# the success fixture; the head-match pair and the two arming fields are
+# cross-field checks rather than GATE_CHECKS entries, so name them here.
 required_success_keys = {key for key, _ in GATE_CHECKS} | {
     "pointer_record_head", "live_head",
-    "expected_more_blocker_rounds", "conductor_replay_strain",
+    "fix_rounds_completed", "host_context_warning",
 }
 
 # Each refusal fixture must fail exactly the gate(s) its ID and expected
 # action name, so drift to a different gate is caught rather than passing on
 # "any gate fails". A new refusal without a mapping trips the classifier.
 REFUSAL_EXPECTED_FAILURES = {
-    "rotation-without-checkpoint-go-refused": {"checkpoint_call"},
-    "rotation-unfavorable-cost-refused": {"rotation_cost_comparison"},
-    "rotation-uncertain-cost-refused": {"rotation_cost_comparison"},
+    "rotation-before-third-fix-round-refused": {"rotation_armed"},
+    "rotation-no-full-fix-round-waiting-refused": {"full_fix_round_waiting"},
+    "rotation-elapsed-time-refused": {"rotation_armed"},
     "rotation-fresh-context-unavailable-refused":
         {"fresh_replacement_context_available"},
     "rotation-checkout-transfer-unavailable-refused":
@@ -465,15 +473,13 @@ REFUSAL_EXPECTED_FAILURES = {
 
 # Exact passing value for every success gate. The gate_failures predicates are
 # fail-open (e.g. `v is not True`, `v != "failed"`), so a success gate set to
-# JSON null would pass without asserting the prerequisite; the success fixture
+# JSON null would pass without asserting the prerequisite; each success fixture
 # must therefore match these exact values. Keys are asserted equal to
 # required_success_keys so a gate added to GATE_CHECKS without a passing value
-# here (or vice versa) trips.
-SUCCESS_GATE_VALUES = {
-    "checkpoint_call": "go",
-    "rotation_cost_comparison": "favorable",
-    "expected_more_blocker_rounds": True,
-    "conductor_replay_strain": True,
+# here (or vice versa) trips. The two success fixtures differ only in how
+# rotation armed: the third fix round, or a host context warning after one.
+COMMON_SUCCESS_GATE_VALUES = {
+    "full_fix_round_waiting": True,
     "fresh_replacement_context_available": True,
     "existing_checkout_path_transferable": True,
     "durable_pointer_record_writable": True,
@@ -490,10 +496,20 @@ SUCCESS_GATE_VALUES = {
     "pointer_record_head": "deadbeef",
     "live_head": "deadbeef",
 }
-if set(SUCCESS_GATE_VALUES) != required_success_keys:
-    raise SystemExit(
-        "SUCCESS_GATE_VALUES keys must equal required_success_keys; symmetric "
-        f"difference: {sorted(set(SUCCESS_GATE_VALUES) ^ required_success_keys)}")
+SUCCESS_GATE_VALUES = {
+    "rotation-third-fix-round-success": dict(
+        COMMON_SUCCESS_GATE_VALUES,
+        fix_rounds_completed=3, host_context_warning=False),
+    "rotation-host-context-warning-success": dict(
+        COMMON_SUCCESS_GATE_VALUES,
+        fix_rounds_completed=1, host_context_warning=True),
+}
+for success_id, values in SUCCESS_GATE_VALUES.items():
+    if set(values) != required_success_keys:
+        raise SystemExit(
+            f"{success_id}: SUCCESS_GATE_VALUES keys must equal "
+            "required_success_keys; symmetric difference: "
+            f"{sorted(set(values) ^ required_success_keys)}")
 
 post_transfer_ids = {
     "rotation-old-completion-ambiguous-new-owner",
@@ -512,7 +528,7 @@ activation_gap_ids = {
 for case_id in sorted(rotation_ids):
     fixture_state = by_id[case_id].get("state", {})
     fails = gate_failures(fixture_state)
-    if case_id == "checkpoint-rotation-success":
+    if case_id in SUCCESS_GATE_VALUES:
         missing_keys = required_success_keys - fixture_state.keys()
         if missing_keys:
             raise SystemExit(
@@ -523,7 +539,7 @@ for case_id in sorted(rotation_ids):
         # false/true) would silently satisfy its exact-value assertion.
         wrong = {
             key: fixture_state[key]
-            for key, want in SUCCESS_GATE_VALUES.items()
+            for key, want in SUCCESS_GATE_VALUES[case_id].items()
             if fixture_state[key] != want
             or type(fixture_state[key]) is not type(want)
         }
@@ -688,32 +704,35 @@ for case_id in sorted(rotation_ids):
                 f"{case_id}: required action persists chat-only material "
                 f"without an exclusion verb: {action}")
 
-success = by_id["checkpoint-rotation-success"]
-success_required = " ".join(success.get("required_actions", []))
-for fragment in (
-    "pointer-only forge record",
-    "supply the fresh-context replacement with the current private contract",
-    "every post-spawn decision and constraint amendment from surfaced judgment calls",
-    "authoritative tracker issue or PR comment",
-    "keep the task contract, user constraints, checkout paths, host details, and operating prompt out of the forge record",
-    "fresh-context replacement",
-    "exact transferable checkout path read-only",
-    "main agent",
-    "persist only the replacement's refreshed forge-derivable state and exact next action",
-    "already-live replacement",
-    "only the activation notification to the replacement remaining",
-    "transfer exactly once from old to new",
-    "send the replacement one activation message after the release acknowledgement",
-    "re-send that idempotent message while the replacement's receipt "
-    "confirmation is absent",
-    "retain ownership through ambiguous old-owner completion",
-):
-    if fragment not in success_required:
-        raise SystemExit(f"rotation success case is missing contract: {fragment}")
+for success_id in sorted(SUCCESS_GATE_VALUES):
+  success = by_id[success_id]
+  success_required = " ".join(success.get("required_actions", []))
+  for fragment in (
+      "pointer-only forge record",
+      "supply the fresh-context replacement with the current private contract",
+      "every post-spawn decision and constraint amendment from surfaced judgment calls",
+      "authoritative tracker issue or PR comment",
+      "keep the task contract, user constraints, checkout paths, host details, and operating prompt out of the forge record",
+      "fresh-context replacement",
+      "exact transferable checkout path read-only",
+      "main agent",
+      "persist only the replacement's refreshed forge-derivable state and exact next action",
+      "already-live replacement",
+      "only the activation notification to the replacement remaining",
+      "transfer exactly once from old to new",
+      "send the replacement one activation message after the release acknowledgement",
+      "re-send that idempotent message while the replacement's receipt "
+      "confirmation is absent",
+      "retain ownership through ambiguous old-owner completion",
+  ):
+      if fragment not in success_required:
+          raise SystemExit(
+              f"{success_id} is missing contract: {fragment}")
 
-success_forbidden = " ".join(success.get("forbidden_actions", []))
-if "persist the task contract, user constraints, checkout paths, host details, or operating prompt" not in success_forbidden:
-    raise SystemExit("rotation success case does not enforce the forge-record privacy boundary")
+  success_forbidden = " ".join(success.get("forbidden_actions", []))
+  if "persist the task contract, user constraints, checkout paths, host details, or operating prompt" not in success_forbidden:
+      raise SystemExit(
+          f"{success_id} does not enforce the forge-record privacy boundary")
 
 leak_case = by_id["rotation-forge-record-chat-only-material-refused"]
 leak_required = " ".join(leak_case.get("required_actions", []))
@@ -737,7 +756,7 @@ post_transfer_ids = {
 }
 refusal_case_ids = (
     rotation_ids
-    - {"checkpoint-rotation-success"}
+    - set(SUCCESS_GATE_VALUES)
     - post_transfer_ids
     - activation_gap_ids
 )
@@ -795,9 +814,9 @@ for case_id in activation_gap_ids:
             raise SystemExit(f"{case_id}: missing forbidden action {fragment}")
 
 pre_spawn_refusal_ids = {
-    "rotation-without-checkpoint-go-refused",
-    "rotation-unfavorable-cost-refused",
-    "rotation-uncertain-cost-refused",
+    "rotation-before-third-fix-round-refused",
+    "rotation-no-full-fix-round-waiting-refused",
+    "rotation-elapsed-time-refused",
     "rotation-fresh-context-unavailable-refused",
     "rotation-checkout-transfer-unavailable-refused",
     "rotation-pointer-record-write-failure-refused",
@@ -845,8 +864,8 @@ for required in \
   'bounded foreground API or connector polling' \
   'current task contract at spawn' \
   'task-specific user constraints' \
-  'remaining work is likely to repay' \
-  'fixed round count, elapsed time, idle time, or context size alone'; do
+  'Rotation arms after every third fix round' \
+  'time, idle time, or poll count alone never forces replacement'; do
   if ! grep -Fq "$required" <<< "$skill_flat"; then
     printf 'SKILL.md is missing routing contract: %s\n' "$required" >&2
     exit 1
@@ -945,8 +964,8 @@ for forbidden in (
 PY
 
 if ! grep -Fq \
-    'a checkpoint-approved context-rotation handoff or' "$conductor"; then
-  printf 'conductor operating contract cannot surface rotation handoff\n' >&2
+    'An armed context-rotation handoff or' "$conductor"; then
+  printf 'conductor turn discipline cannot surface rotation handoff\n' >&2
   exit 1
 fi
 

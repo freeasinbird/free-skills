@@ -42,8 +42,8 @@ permission gate that these safeguards already cover.
 Decide who owns the exchange before you read feedback, wait on CI, or start
 any watcher. **Default to one conductor subagent.** It owns steps 1 to 5 and
 wakes the main agent only for a judgment call, a no-go or uncertain
-convergence escalation, an approved rotation handshake, or its terminal
-ledger. Resolve only the event-boundary facts its brief needs, then spawn it
+convergence escalation, an armed rotation handoff at a quiescent boundary,
+or its terminal ledger. Resolve only the event-boundary facts its brief needs, then spawn it
 with the least inherited context the host exposes and the brief in
 `references/conductor.md` §spawn-brief. The brief opens with the
 current task contract at spawn: objective, acceptance criteria, scope,
@@ -200,12 +200,10 @@ read-only delegation exists. A second member that fails either question is a
 hardening-check signal, not a class to widen. Repeated prose-clause findings
 earn an owner escalation toward a tested check.
 
-Keep the same conductor through waits, surfaced pauses, and rounds; a
-fixed round count, elapsed time, idle time, or context size alone never
-forces replacement. Consider `references/conductor.md` §context-rotation
-only after a checkpoint records a go, at a quiescent boundary, and when the
-expected remaining work is likely to repay the handoff cost in
-`references/cost-model.md`.
+Keep the same conductor through waits, surfaced pauses, and rounds. Elapsed
+time, idle time, or poll count alone never forces replacement. Rotation arms
+after every third fix round and fires at the next quiescent boundary where a
+full fix round waits, per `references/conductor.md` §context-rotation.
 
 ## 6. Report the Ledger
 
