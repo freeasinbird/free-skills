@@ -49,51 +49,52 @@ with the least inherited context the host exposes and the brief in
 current task contract at spawn: objective, acceptance criteria, scope,
 dependencies and blockers, non-goals, and task-specific user constraints.
 
-**Apply one platform-neutral gate.** A conductor owns the exchange when all
-four grants hold:
+**Apply one platform-neutral gate through four probes.** A conductor owns the
+exchange when all four grants hold. Decide each grant from observable evidence,
+never interpretation. `references/conductor.md` §probes expands every probe.
 
-1. Write-capable delegation is available and permitted.
-2. The same subagent has wait-and-resume continuity: it stays active through
-   each bounded wait, or receives a scheduled wake, without ending exchange
-   ownership, and it resumes after surfaced pauses.
-3. Completion reliably notifies or re-enters the main agent.
-4. The PR branch has an isolated checkout or explicit shared-checkout
-   exclusivity until the terminal ledger.
+1. **Write-capable delegation.** Evidence: a spawn tool is listed in this
+   session (Claude Code `Agent` as an ordinary named background subagent; Codex
+   `spawn_agent` with `fork_turns: "none"`) and no rule forbids it. Default:
+   listed means granted. A rule disabling proactive delegation except on
+   request does not fail it; this skill supplies that request.
+   "Higher-priority instruction" alone never fails it. To fail it on a rule,
+   explain why the rule's exceptions exclude skill-mandated delegation, then
+   name the rule by source. When disclosure is restricted, give a non-sensitive
+   paraphrase instead.
+2. **Wait-and-resume continuity.** Evidence: the subagent can run a bounded
+   foreground shell command, or receives a scheduled wake, and the host can
+   re-enter that same agent after a pause (Claude Code `SendMessage`; Codex's
+   listed continuation tool). Default: a shell in the subagent grants it. It
+   fails only when the subagent has no bounded wait or same-agent wake, or the
+   host cannot re-enter it after a pause.
+3. **Completion notification.** Evidence: the host notifies the main agent when
+   a background subagent ends, or offers a blocking wait on it (Claude Code
+   task notification; Codex `wait_agent`). Default: a listed spawn tool grants
+   it. It fails only when a tool description says completion is not surfaced.
+4. **Checkout isolation or exclusivity.** Evidence: `git worktree list` shows
+   the PR branch in a worktree only the conductor will touch, or the spawn call
+   can create one (Claude Code `isolation: "worktree"`). Otherwise grant
+   exclusivity: the main agent makes no edit, commit, PR-branch fetch, rebase,
+   or push until the terminal ledger. Default: grant exclusivity. It fails only
+   when the main agent must keep changing that checkout during the exchange.
 
-A multi-agent rule may otherwise disable proactive delegation except when the
-user or an applicable skill requests it. This skill supplies that request.
-An applicable skill that explicitly requires delegation counts as
-authorization under this exception. Do not require a separate user request.
-Map any agent's actual tools to those grants. These examples prevent
-capability guesswork; `references/conductor.md` §host-mapping expands them:
+A probe you cannot run is not a failed grant. Take the default, note the gap in
+the brief, and let the conductor report it. Never infer a failed grant from an
+unfamiliar tool name; name the concrete missing grant. Uncontrolled inherited
+context is an optimization gap, not a failed grant.
 
-- **Codex app:** spawn with `fork_turns: "none"`. Spawn, completion
-  notification, and resume with a conductor-local wait or scheduled wake
-  satisfy grants 1 to 3. On a shared checkout, grant 4 holds only while the
-  main agent leaves the PR branch untouched.
-- **Claude Code:** use one ordinary named background subagent with explicit
-  worktree isolation, not a context-inheriting fork. Its blocking wait plus
-  re-messaging satisfy grant 2; completion notification satisfies grant 3.
-- **Any other agent:** map its controls to the same gate and name the
-  concrete missing grant, never a guess from unfamiliar tool names. Merely
-  uncontrolled inherited context is a stated limit; that
-  optimization gap is not a failed grant.
-
-Keep the exchange in the main agent only when a grant is concretely absent or
-forbidden, or when feedback is already in hand and needs at most a couple of
-trivial operations. A small main context, a background shell, or a predicted
-clean or one-shot review is not an exception. Under main ownership, watch
-only while a reviewer wait remains; address feedback already in hand without
-a watcher. Before any main-owned watch, state the fallback exactly so:
+Keep the exchange in the main agent only when a probe shows a grant concretely
+absent or forbidden, or when feedback is already in hand and needs at most a
+couple of trivial operations. A typo fix, a reply, or a thread resolution
+qualifies. A small main context, a background shell, or a predicted clean or
+one-shot review is not an exception. Under main ownership, watch only while a
+reviewer wait remains; address feedback already in hand without a watcher.
+Before any main-owned watch, state the fallback exactly so:
 
 ```text
 Conductor skipped: <specific failed grant or allowed exception>.
 ```
-
-“Higher-priority instruction” is not a valid failed grant by itself. To fail
-grant 1 on that basis, explain why none of the constraint's exceptions apply,
-then either identify the prohibiting rule by source when disclosure is
-permitted, or give a non-sensitive paraphrase of the binding constraint.
 
 ## 1. Resolve the PR and Anchor the Baseline
 

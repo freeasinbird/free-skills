@@ -702,31 +702,37 @@ print(
     "forbidden-action coverage, forge-record exclusion")
 PY
 
+# Match pinned phrases against the file with line wraps collapsed, so a
+# rewrap inside the 220-line budget does not break a pin.
+skill_flat=$(tr '\n' ' ' < "$skill" | tr -s ' ')
 for required in \
   'Default to one conductor subagent' \
   'fork_turns: "none"' \
   'ordinary named background subagent' \
-  'optimization gap is not a failed' \
-  'Apply one platform-neutral gate' \
-  'wait-and-resume continuity' \
-  'An applicable skill that explicitly requires delegation counts as' \
-  'Do not require a separate user request.' \
-  '“Higher-priority instruction” is not a valid failed grant by itself.' \
-  'identify the prohibiting rule by source when disclosure' \
-  'give a non-sensitive paraphrase of the binding constraint' \
-  'Codex app:' \
-  'Claude Code:' \
-  'Any other agent:' \
+  'optimization gap, not a failed grant' \
+  'Apply one platform-neutral gate through four probes' \
+  '**Write-capable delegation.** Evidence: a spawn tool is listed' \
+  '**Wait-and-resume continuity.** Evidence:' \
+  '**Completion notification.** Evidence:' \
+  '**Checkout isolation or exclusivity.** Evidence: `git worktree list`' \
+  'Claude Code `Agent`' \
+  '`spawn_agent` with `fork_turns: "none"`' \
+  'this skill supplies that request' \
+  '"Higher-priority instruction" alone never fails it' \
+  'name the rule by source' \
+  'give a non-sensitive paraphrase' \
+  'Default: grant exclusivity' \
+  'A probe you cannot run is not a failed grant' \
+  'failed grant from an unfamiliar tool name' \
   'Conductor skipped: <specific failed grant or allowed exception>.' \
   'Main-owned fallback only:' \
   'scheduled API or connector poll' \
   'bounded foreground API or connector polling' \
-  'isolated checkout or explicit shared-checkout' \
   'current task contract at spawn' \
   'task-specific user constraints' \
   'remaining work is likely to repay' \
   'fixed round count, elapsed time, idle time, or context size alone'; do
-  if ! grep -Fq "$required" "$skill"; then
+  if ! grep -Fq "$required" <<< "$skill_flat"; then
     printf 'SKILL.md is missing routing contract: %s\n' "$required" >&2
     exit 1
   fi
