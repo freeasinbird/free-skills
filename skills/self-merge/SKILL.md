@@ -105,6 +105,17 @@ defaults don't fit:
   set the spacing between `MERGED` polls and the total wait. Defaults are 10
   seconds and 15 minutes. Raise the cap for a slow merge queue.
 
+A base or head remote may use a local `~/.ssh/config` `Host` alias, such as
+`git@bnw.github.com:owner/name.git` where the alias sets `HostName github.com`.
+The script resolves the alias with `ssh -G` and accepts it only when the
+resolved host, user, and default port name the PR's forge endpoint. The
+destructive head delete then pins that resolved endpoint, so a later config
+change can't reroute it. The check stops `remote-repo-mismatch` when `ssh` is
+absent, an ssh-command override is active (`GIT_SSH_COMMAND`, `core.sshCommand`,
+or `GIT_SSH`), or the alias resolves elsewhere. To proceed then, add a remote
+whose URL names the forge host directly (`git@github.com:owner/name.git`) and
+pass it with `--base-remote` or `--head-remote`.
+
 ### 1. Run `check`
 
 Run `check` before reviewing the final guardrails. It verifies:

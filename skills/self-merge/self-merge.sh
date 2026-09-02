@@ -846,6 +846,128 @@ push_ids_match() { # push_ids_match <remote> <expected-id>
   [ "$count" -eq 1 ]
 }
 
+# Resolve an SSH host, possibly a local ~/.ssh/config Host alias, to the
+# concrete hostname, user, and port Git will actually connect to. The forge
+# identity guards below compare a remote against the forge's authoritative
+# clone endpoints; a local alias (HostName github.com behind the label
+# bnw.github.com) names that same endpoint, so it must resolve before the
+# comparison rather than read as a foreign host. `ssh -G` computes the
+# effective config offline without connecting, and the user's own ssh config
+# is the same trust domain as the git insteadOf rules the script already
+# honors. Resolve the exact user@host target Git will reach: ~/.ssh/config can
+# expand a different HostName/port per remote user (`Match user`, `%r` in
+# HostName), so resolving a bare host could bless a userless endpoint while the
+# delete routes through the user-qualified one. Fails closed (nonzero, empties
+# left) when ssh is absent or cannot resolve. SSH_ALIAS_HOST/USER/PORT are the
+# outputs.
+SSH_ALIAS_HOST="" SSH_ALIAS_USER="" SSH_ALIAS_PORT=""
+ssh_resolved_endpoint() { # ssh_resolved_endpoint <host> [user]
+  local host="$1" user="${2:-}" target key val resolved
+  SSH_ALIAS_HOST="" SSH_ALIAS_USER="" SSH_ALIAS_PORT=""
+  command -v ssh >/dev/null 2>&1 || return 1
+  # Git honors an ssh-command override (GIT_SSH_COMMAND, then core.sshCommand,
+  # else GIT_SSH) for the fetch/ls-remote/push that deletes the branch, but this
+  # guard queries the plain `ssh` on PATH. Under an override the offline `ssh -G`
+  # no longer reflects the endpoint Git reaches, so fail closed rather than bless
+  # a possibly-divergent host. The intersection that this stops (an alias that
+  # needs resolving while an override is active) is narrow and errs safe.
+  [ -n "${GIT_SSH_COMMAND:-}" ] && return 1
+  [ -n "${GIT_SSH:-}" ] && return 1
+  [ -n "$(git config --get core.sshCommand 2>/dev/null)" ] && return 1
+  # An option-shaped host or user could be read as an ssh flag even after --, so
+  # refuse it outright rather than trust a single guard.
+  case "$host" in ''|-*) return 1 ;; esac
+  # Query user@host when the URL names a user, matching Git's own connection; a
+  # bare host otherwise, matching Git applying the config's User.
+  target="$host"
+  case "$user" in
+    -*|*@*) return 1 ;;
+    ?*) target="$user@$host" ;;
+  esac
+  resolved=$(ssh -G -- "$target" 2>/dev/null) || return 1
+  while read -r key val; do
+    case "$key" in
+      hostname) [ -n "$SSH_ALIAS_HOST" ] || SSH_ALIAS_HOST="$val" ;;
+      user) [ -n "$SSH_ALIAS_USER" ] || SSH_ALIAS_USER="$val" ;;
+      port) [ -n "$SSH_ALIAS_PORT" ] || SSH_ALIAS_PORT="$val" ;;
+    esac
+  done <<< "$resolved"
+  [ -n "$SSH_ALIAS_HOST" ] || return 1
+  SSH_ALIAS_HOST=$(printf '%s' "$SSH_ALIAS_HOST" | tr 'A-Z' 'a-z')
+}
+
+# Rewrite an SSH remote URL whose host is a local alias into the concrete URL
+# form that names the real endpoint, so the forge identity comparison sees the
+# true host and user. Only ssh-family transports (scp-like host:path and the
+# ssh:// schemes) carry aliases; every other URL is left to its existing
+# mismatch. The rewrite substitutes the resolved hostname, fills in the
+# resolved user when the URL states none (an alias commonly carries `User
+# git`), and keeps the original transport form and path byte-for-byte. It
+# fails, leaving the caller on its mismatch, when ssh cannot resolve, when the
+# resolved port is not the default (a non-default port is a genuinely different
+# endpoint than the forge's default-port ssh_url and must not be blessed), or
+# when the host is unchanged (no alias in play). The rewritten URL feeds only
+# the identity check; fetch and push keep the original alias URL so its ssh
+# config still applies, while SSH_ALIAS_PIN_COMMAND pins the checked endpoint
+# for the destructive head transports.
+SSH_ALIAS_URL="" SSH_ALIAS_PIN_COMMAND=""
+ssh_alias_resolve() { # ssh_alias_resolve <url>
+  local raw="$1" scheme rest authority before after path="" host user="" newuser newauth
+  SSH_ALIAS_URL="" SSH_ALIAS_PIN_COMMAND=""
+  case "$raw" in
+    *://*)
+      scheme="${raw%%://*}"
+      case "$scheme" in ssh|git+ssh|ssh+git) ;; *) return 1 ;; esac
+      rest="${raw#*://}"
+      authority="${rest%%/*}"
+      case "$authority" in *@*) user="${authority%@*}"; host="${authority##*@}" ;;
+        *) host="$authority" ;; esac
+      [ "$rest" = "$authority" ] || path="${rest#*/}"
+      ;;
+    *:*)
+      case "${raw%%:*}" in */*) return 1 ;; esac
+      before="${raw%%:*}"; after="${raw#*:}"
+      case "$before" in *@*) user="${before%@*}"; host="${before##*@}" ;;
+        *) host="$before" ;; esac
+      ;;
+    *) return 1 ;;
+  esac
+  # A port or IPv6 literal in the host is not the simple alias this resolves.
+  case "$host" in ''|*:*|\[*) return 1 ;; esac
+  ssh_resolved_endpoint "$host" "$user" || return 1
+  # GIT_SSH_COMMAND is parsed as a shell command by Git. Only literal endpoint
+  # fields may enter it; quoting untrusted ssh -G output would be a weaker
+  # boundary because another shell parses the value later.
+  case "$SSH_ALIAS_HOST" in ''|*[!A-Za-z0-9.-]*) return 1 ;; esac
+  case "$SSH_ALIAS_USER" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  case "$SSH_ALIAS_PORT" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$SSH_ALIAS_PORT" = 22 ] || return 1
+  [ "$SSH_ALIAS_HOST" != "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" ] || return 1
+  newuser="$user"; [ -n "$newuser" ] || newuser="$SSH_ALIAS_USER"
+  case "$newuser" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  newauth="$SSH_ALIAS_HOST"; [ -z "$newuser" ] || newauth="$newuser@$SSH_ALIAS_HOST"
+  SSH_ALIAS_PIN_COMMAND="ssh -o HostName=$SSH_ALIAS_HOST -o User=$newuser -o Port=$SSH_ALIAS_PORT -o CanonicalizeHostname=no"
+  case "$raw" in
+    *://*) [ -n "$path" ] && SSH_ALIAS_URL="$scheme://$newauth/$path" \
+             || SSH_ALIAS_URL="$scheme://$newauth" ;;
+    *) SSH_ALIAS_URL="$newauth:$after" ;;
+  esac
+}
+
+# Run one Git transport with an optional command-scoped SSH endpoint pin. An
+# empty pin runs plain git (the pin variable must never be exported as an empty
+# GIT_SSH_COMMAND, which would break a non-alias SSH transport); a non-empty pin
+# forces HostName/User/Port for this invocation only, so a Match-exec change
+# after identity acceptance cannot redirect the destructive head transport.
+git_with_ssh_pin() { # git_with_ssh_pin <ssh-command-or-empty> <git args...>
+  local pin="$1"; shift
+  if [ -n "$pin" ]; then
+    GIT_SSH_COMMAND="$pin" git "$@"
+  else
+    git "$@"
+  fi
+}
+
 # Resolve which configured remote points at a repository, matching the
 # PR's forge host as well as the owner/name tail: a same-named repository
 # on another host (a GitLab mirror of a GitHub repo) shares the tail, and
@@ -856,17 +978,28 @@ push_ids_match() { # push_ids_match <remote> <expected-id>
 # auto-resolves; pass the override flag for such a layout. Overridable
 # because URL forms vary; unresolvable is a stop, not a guess.
 resolve_remote() { # resolve_remote <owner/name>: sets RESOLVED_REMOTE
-  local want r furl fid forge_id match=""
+  local want r furl fid raw_fid forge_id resolved match=""
   want=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
   RESOLVED_REMOTE=""
   while IFS= read -r r; do
     remote_urls_newline_free "$r" || continue
     out_exact furl git remote get-url -- "$r" || continue
-    fid=$(url_id "$furl")
+    fid=$(url_id "$furl"); raw_fid="$fid"
+    forge_id=$(url_forge_id "$furl") || forge_id=""
+    # A local SSH host alias hides the true forge identity; resolve it and
+    # retry the candidate match on the concrete endpoint when the raw URL
+    # fails. push_ids_match still compares against the raw fetch id because
+    # the configured push URLs carry the alias, not the resolved host.
+    if { [ "$fid" != "$REPO_CLONE_ID" ] && [ "$fid" != "$REPO_SSH_ID" ]; } \
+        || [ "$forge_id" != "$PR_HOST $want" ]; then
+      ssh_alias_resolve "$furl" || continue
+      resolved="$SSH_ALIAS_URL"
+      fid=$(url_id "$resolved")
+      forge_id=$(url_forge_id "$resolved") || continue
+    fi
     case "$fid" in "$REPO_CLONE_ID"|"$REPO_SSH_ID") ;; *) continue ;; esac
-    forge_id=$(url_forge_id "$furl") || continue
     [ "$forge_id" = "$PR_HOST $want" ] || continue
-    push_ids_match "$r" "$fid" || continue
+    push_ids_match "$r" "$raw_fid" || continue
     if [ -z "$match" ] || [ "$r" = origin ]; then match="$r"; fi
   done < <(git remote)
   RESOLVED_REMOTE="$match"
@@ -878,10 +1011,12 @@ resolve_remote() { # resolve_remote <owner/name>: sets RESOLVED_REMOTE
 # after checkout is pinned to that identity; a replacement hosted mapping can
 # instead be validated against the forge. CHECKED_REMOTE_ID exposes the
 # validated identity to that checkout boundary, and fetch/push identity is
-# still checked before a destructive head push.
-CHECKED_REMOTE_ID=""
+# still checked before a destructive head push. PINNED_SSH_COMMAND carries the
+# alias endpoint pin for the destructive head transports, empty otherwise.
+CHECKED_REMOTE_ID="" PINNED_SSH_COMMAND=""
 remote_repo_check() { # remote_repo_check <remote> <role>
-  local remote="$1" role="$2" configured u have_url=false furl endpoint_id
+  local remote="$1" role="$2" configured u have_url=false furl endpoint_id resolved_id
+  PINNED_SSH_COMMAND=""
   remote_urls_newline_free "$remote" \
     || stop remote-repo-mismatch "$role remote $remote has a newline-bearing URL whose forge identity cannot be compared faithfully"
   out_exact configured git config --get-all "remote.$remote.url" \
@@ -899,8 +1034,21 @@ remote_repo_check() { # remote_repo_check <remote> <role>
   case "$endpoint_id" in
     path\ *) return 0 ;;
     "$REPO_CLONE_ID"|"$REPO_SSH_ID") return 0 ;;
-    *) stop remote-repo-mismatch "$role remote $remote does not match PR repository $REPO's authoritative clone endpoints" ;;
   esac
+  # A local SSH host alias resolves to the forge's real endpoint; compare that
+  # resolved identity before refusing. CHECKED_REMOTE_ID stays the alias id so
+  # the post-checkout path-change guard still sees a hosted id (not a hostless
+  # path). Only a head alias earns the endpoint pin the destructive transports
+  # apply; the base fetch and resync route through the alias's own ssh config.
+  if ssh_alias_resolve "$furl" \
+      && out_exact resolved_id remote_url_id "$SSH_ALIAS_URL"; then
+    case "$resolved_id" in "$REPO_CLONE_ID"|"$REPO_SSH_ID")
+      [ "$role" != head ] || PINNED_SSH_COMMAND="$SSH_ALIAS_PIN_COMMAND"
+      return 0
+      ;;
+    esac
+  fi
+  stop remote-repo-mismatch "$role remote $remote does not match PR repository $REPO's authoritative clone endpoints"
 }
 
 # --- phases -----------------------------------------------------------------
@@ -1132,6 +1280,10 @@ phase_cleanup() {
       HEAD_REMOTE="$BASE_REMOTE"
     fi
     remote_repo_check "$HEAD_REMOTE" head
+    # Capture the alias endpoint pin (empty for a direct remote) now: the head
+    # ls-remote and the lease-protected delete both route through it so a
+    # Match-exec change after acceptance cannot redirect the destructive push.
+    local head_ssh_pin="$PINNED_SSH_COMMAND"
     case "$CHECKED_REMOTE_ID" in path\ *)
       [ "$CHECKED_REMOTE_ID" = "$initial_head_id" ] \
         || stop remote-config-changed "head remote $HEAD_REMOTE became a hostless path not trusted before checkout; preserve the branch and validate the new path manually" ;;
@@ -1147,7 +1299,8 @@ phase_cleanup() {
     push_ids_match "$HEAD_REMOTE" "$(url_id "$hr_furl")" \
       || stop pushurl-mismatch "$HEAD_REMOTE must have exactly one effective push destination matching its fetch URL; git broadcasts to every configured push URL"
     local ls_out ls_rc remote_oid="" line_oid line_ref exact=0 decoys=0
-    ls_out=$(git ls-remote --exit-code --heads -- "$HEAD_REMOTE" "refs/heads/$BRANCH" 2>/dev/null)
+    ls_out=$(git_with_ssh_pin "$head_ssh_pin" ls-remote --exit-code --heads \
+      -- "$HEAD_REMOTE" "refs/heads/$BRANCH" 2>/dev/null)
     ls_rc=$?
     if [ "$ls_rc" -eq 2 ]; then
       remote_deleted=already # a genuine absence: --exit-code separates it
@@ -1195,7 +1348,8 @@ phase_cleanup() {
           # the check above and this delete fails the delete instead of
           # losing the new work. A plain --delete or a forge-API delete
           # re-opens that race.
-          git push --delete --force-with-lease="refs/heads/$BRANCH:$HEAD_OID" \
+          git_with_ssh_pin "$head_ssh_pin" push --delete \
+            --force-with-lease="refs/heads/$BRANCH:$HEAD_OID" \
             -- "$HEAD_REMOTE" "refs/heads/$BRANCH" >/dev/null 2>&1 \
             || stop lease-failed "the lease-protected delete of $BRANCH on $HEAD_REMOTE was refused; the ref may have just moved"
           remote_deleted=deleted

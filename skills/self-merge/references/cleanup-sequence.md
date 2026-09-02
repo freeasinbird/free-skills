@@ -368,6 +368,24 @@ before checkout.
 Stop for a split identity, hosted mismatch, changed local destination,
 non-local file authority, or malformed hosted form.
 
+An SSH remote may use a local `~/.ssh/config` `Host` alias whose label differs
+from the forge host, such as `git@bnw.github.com:owner/name.git` mapping to
+`HostName github.com`. The alias names the same endpoint, so resolve it before
+refusing. Run `ssh -G` on the URL's user and host, since a per-user config can
+expand a different host. Rewrite the URL to the resolved host and user and
+compare that against the forge's clone identities. Accept only a resolved
+default port; a non-default port is a different endpoint. Feed the rewrite to
+the identity check alone. Keep the alias URL for fetch and push so its ssh
+config still applies.
+
+Fail closed when `ssh` is absent, when `ssh -G` errors or returns odd output,
+or when an ssh-command override is set (`GIT_SSH_COMMAND`, `core.sshCommand`, or
+`GIT_SSH`). Under an override the offline resolution need not name the endpoint
+Git reaches. On an accepted head alias, pin the resolved `HostName`, `User`, and
+`Port` on the head `ls-remote` and the lease-protected delete with command-scoped
+`ssh -o` options. A config change after acceptance then can't reroute the
+destructive push.
+
 ### Check Whether Auto-Delete Ran
 
 Run
