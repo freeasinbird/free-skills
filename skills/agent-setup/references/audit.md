@@ -177,7 +177,7 @@ exist, and the forge answers each one with a resolution error.
 
 During init and update, list the remotes with a userinfo-redacted `git remote
 -v`. Validate any forge record AGENTS.md already carries against the base
-repository's remote, whatever that remote's host. Both consumers prefer the
+repository's remote, whatever that remote's host. Every consumer prefers the
 record over the remote, so a transfer or a switch to a canonical URL can leave
 a stale record routing them. Offer a new record only when the base remote's
 host isn't the forge's canonical host: an entry in an unmanaged,
@@ -227,8 +227,9 @@ same project-specific conventions section:
     `bnw.github.com` is an SSH host alias for `github.com`. Pass
     `--repo owner/name` to `gh`; never derive the owner from a sibling
     project.
-  - **Consumers:** `await-pr-review` and `merge-cleanup` read this record
-    before inferring a repository from a remote.
+  - **Consumers:** `await-pr-review`, `merge-cleanup`, `self-merge`, and
+    `visual-evidence` read this record before inferring a repository from a
+    remote.
 ```
 
 The host records what the alias resolves to, so the `owner/name` slug is
