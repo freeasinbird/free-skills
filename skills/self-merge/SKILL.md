@@ -53,6 +53,11 @@ guardrail below holds.
 - Every PR-record call names the PR's repository. A bare number uses the
   CLI's default repository, which may be the fork or unset in a fork clone.
   An unpinned call can inspect or merge a different PR.
+- The `--repo` value comes from the project's forge record, an AGENTS.md
+  entry naming the forge host and `owner/name` slug, before inferring them
+  from a remote: a remote on an SSH host alias hides both. Never take them
+  from a sibling project. Pass the slug as `--repo owner/name` and set
+  `GH_HOST` to the recorded host when the CLI's default differs.
 - The diff has a final self-review in the PR files view. Check for stray
   hunks, debug code, scope creep, and changes the editor view hid.
 - Required review artifacts are attached. This includes forge-hosted
@@ -81,7 +86,8 @@ local branch for separate, verified cleanup. The regression matrix in
 Invoke the script by path from the checkout that cleanup will rewrite. That
 checkout holds, or will hold, the base branch. Here, `<skill-dir>` is the
 directory that contains this file. Always pass `--repo` for the fork-clone
-reason in Guardrails.
+reason in Guardrails, with the slug and `GH_HOST` set there. The script takes
+`owner/name` alone and resolves it against the CLI's default host.
 
 ```sh
 <skill-dir>/self-merge.sh check   --pr <n> --repo <owner/name>
