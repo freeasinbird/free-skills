@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "purpose": "Measure whether await-pr-review selects a conductor whenever the four conductor grants hold, and names the exact failed grant otherwise.",
+  "purpose": "Measure whether await-pr-review selects a conductor whenever the four conductor grants hold, derives each grant from observable probe evidence with the documented defaults, and names the exact failed grant otherwise.",
   "scoring": {
     "eligible_case_pass": "The first ownership decision is conductor, its compact brief preserves the durable task contract and user constraints, and no main-owned watcher, CI wait, or feedback handling starts before the spawn.",
     "fallback_case_pass": "The exchange remains main-owned and emits `Conductor skipped: <specific failed grant or allowed exception>.` before starting a watcher.",
@@ -20,6 +20,42 @@
       },
       "review_already_in_hand": false,
       "expected_owner": "conductor",
+      "initial_context": {
+        "control_available": true,
+        "mechanism": "fork_turns: \"none\"",
+        "expected_mode": "fresh or empty"
+      }
+    },
+    {
+      "id": "codex-subagents-listed-routes-to-conductor",
+      "surface": "codex-app",
+      "request": "The PR is open and Codex is reviewing it. Watch for the review and handle the feedback.",
+      "probes": {
+        "spawn_tool_listed": true,
+        "spawn_tool": "spawn_agent",
+        "spawn_write_capable": true,
+        "delegation_prohibition": "none",
+        "subagent_wait": "shell",
+        "same_agent_resume": "unobserved",
+        "completion_signal": "blocking_wait",
+        "checkout": "shared",
+        "main_agent_must_change_checkout": false
+      },
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": false,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor",
+      "expected_first_action": "spawn_conductor",
+      "forbidden_skip_reasons": [
+        "isolated conductor not available",
+        "subagent wait-and-resume continuity is uncertain",
+        "the checkout is shared"
+      ],
       "initial_context": {
         "control_available": true,
         "mechanism": "fork_turns: \"none\"",
@@ -71,6 +107,17 @@
         "mechanism": "ordinary named background subagent",
         "expected_mode": "fresh",
         "experimental_fork": false
+      },
+      "probes": {
+        "spawn_tool_listed": true,
+        "spawn_tool": "Agent",
+        "spawn_write_capable": true,
+        "delegation_prohibition": "none",
+        "subagent_wait": "shell",
+        "same_agent_resume": "SendMessage",
+        "completion_signal": "notification",
+        "checkout": "isolated",
+        "main_agent_must_change_checkout": false
       }
     },
     {
@@ -107,6 +154,33 @@
         "expected_notice": "inheritance could not be controlled; continue with the compact self-contained brief",
         "optimization_gap_not_gate_failure": true
       }
+    },
+    {
+      "id": "generic-probes-unobserved-routes-to-conductor",
+      "surface": "generic-agent",
+      "request": "Watch the bot review and handle it. The host lists a delegate tool but documents nothing about how subagents wait, resume, finish, or share the checkout.",
+      "probes": {
+        "spawn_tool_listed": true,
+        "spawn_tool": "delegate",
+        "spawn_write_capable": "unobserved",
+        "delegation_prohibition": "none",
+        "subagent_wait": "unobserved",
+        "same_agent_resume": "unobserved",
+        "completion_signal": "unobserved",
+        "checkout": "unobserved",
+        "main_agent_must_change_checkout": false
+      },
+      "grants": {
+        "write_capable_delegation": true,
+        "wait_and_resume": true,
+        "completion_notification": true,
+        "checkout_isolation": false,
+        "checkout_exclusivity": true
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "conductor",
+      "expected_first_action": "spawn_conductor",
+      "expected_brief_notice": "wait, resume, completion, and checkout evidence unobserved; defaults taken; report any concrete gap in the first turn"
     },
     {
       "id": "unrecorded-reviewer-discovered-by-conductor",
@@ -190,9 +264,46 @@
       "grants": {
         "write_capable_delegation": false,
         "wait_and_resume": true,
+        "completion_notification": false,
+        "checkout_isolation": true,
+        "checkout_exclusivity": false
+      },
+      "review_already_in_hand": false,
+      "expected_owner": "main",
+      "expected_fallback_gate": "write-capable delegation is unavailable",
+      "probes": {
+        "spawn_tool_listed": false,
+        "spawn_tool": null,
+        "spawn_write_capable": "unobserved",
+        "delegation_prohibition": "none",
+        "subagent_wait": "shell",
+        "same_agent_resume": "unobserved",
+        "completion_signal": "unobserved",
+        "checkout": "isolated",
+        "main_agent_must_change_checkout": false
+      }
+    },
+    {
+      "id": "read-only-delegation-routes-to-main",
+      "surface": "generic-agent",
+      "request": "Watch the bot review and handle it. The host lists a research delegate that can read files but cannot edit them or run commands.",
+      "probes": {
+        "spawn_tool_listed": true,
+        "spawn_tool": "research_delegate",
+        "spawn_write_capable": false,
+        "delegation_prohibition": "none",
+        "subagent_wait": "unobserved",
+        "same_agent_resume": "unobserved",
+        "completion_signal": "unobserved",
+        "checkout": "isolated",
+        "main_agent_must_change_checkout": false
+      },
+      "grants": {
+        "write_capable_delegation": false,
+        "wait_and_resume": true,
         "completion_notification": true,
         "checkout_isolation": true,
-        "checkout_exclusivity": true
+        "checkout_exclusivity": false
       },
       "review_already_in_hand": false,
       "expected_owner": "main",
@@ -224,13 +335,24 @@
         "wait_and_resume": false,
         "completion_notification": true,
         "checkout_isolation": true,
-        "checkout_exclusivity": true
+        "checkout_exclusivity": false
       },
       "host_access": "connector",
       "shell_available": false,
       "review_already_in_hand": false,
       "expected_owner": "main",
-      "expected_fallback_gate": "the conductor has neither a local bounded wait nor a scheduled same-conductor wake"
+      "expected_fallback_gate": "the conductor has neither a local bounded wait nor a scheduled same-conductor wake",
+      "probes": {
+        "spawn_tool_listed": true,
+        "spawn_tool": "delegate",
+        "spawn_write_capable": "unobserved",
+        "delegation_prohibition": "none",
+        "subagent_wait": "none",
+        "same_agent_resume": "unobserved",
+        "completion_signal": "notification",
+        "checkout": "isolated",
+        "main_agent_must_change_checkout": false
+      }
     },
     {
       "id": "completion-notification-unavailable",
@@ -241,11 +363,22 @@
         "wait_and_resume": true,
         "completion_notification": false,
         "checkout_isolation": true,
-        "checkout_exclusivity": true
+        "checkout_exclusivity": false
       },
       "review_already_in_hand": false,
       "expected_owner": "main",
-      "expected_fallback_gate": "subagent completion cannot reliably notify or re-enter the main agent"
+      "expected_fallback_gate": "subagent completion cannot reliably notify or re-enter the main agent",
+      "probes": {
+        "spawn_tool_listed": true,
+        "spawn_tool": "delegate",
+        "spawn_write_capable": "unobserved",
+        "delegation_prohibition": "none",
+        "subagent_wait": "shell",
+        "same_agent_resume": "unobserved",
+        "completion_signal": "documented_absent",
+        "checkout": "isolated",
+        "main_agent_must_change_checkout": false
+      }
     },
     {
       "id": "checkout-not-isolated-or-exclusive",
@@ -260,7 +393,18 @@
       },
       "review_already_in_hand": false,
       "expected_owner": "main",
-      "expected_fallback_gate": "the PR branch has neither checkout isolation nor shared-checkout exclusivity"
+      "expected_fallback_gate": "the PR branch has neither checkout isolation nor shared-checkout exclusivity",
+      "probes": {
+        "spawn_tool_listed": true,
+        "spawn_tool": "delegate",
+        "spawn_write_capable": "unobserved",
+        "delegation_prohibition": "none",
+        "subagent_wait": "shell",
+        "same_agent_resume": "unobserved",
+        "completion_signal": "notification",
+        "checkout": "shared",
+        "main_agent_must_change_checkout": true
+      }
     },
     {
       "id": "known-trivial-feedback-already-in-hand",
