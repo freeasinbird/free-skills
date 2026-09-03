@@ -115,7 +115,9 @@ Signals to read:
 
 - A round completes only on target-reviewer activity in the watched window: a
   submitted review, a new thread, a new comment on an existing thread, or the
-  configured clean-pass reaction matched by `createdAt`.
+  configured clean-pass reaction matched by `createdAt`. A reviewer summary
+  comment counts too, when its `Completed` row names the expected head and a
+  completion time after the baseline.
 - An in-progress reaction or acknowledgement means keep waiting. Absence
   proves nothing, and incomplete coverage is incomplete, not quiet.
 - `unresolved_threads` above zero means the round is not clean, whatever the

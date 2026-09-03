@@ -1007,7 +1007,7 @@ for required in \
   '5. Re-watch from that push' \
   'pass the recorded' \
   'created at or after the baseline' \
-  'Retain those IDs across re-armed wakes' \
+  'Retain the snapshot across re-armed wakes' \
   'Carry the request-artifact token' \
   'apply the watcher'"'"'s request rule by hand'; do
   if ! grep -Fq -- "$required" "$detection"; then
