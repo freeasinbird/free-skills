@@ -169,6 +169,14 @@ done
 echo "$target" >> "$FIX/requests.log"
 if [ "$target" = graphql ]; then
   fixture="$FIX/graphql${cursor:+-$cursor}.json"
+  # The recount runs after the comment scan; serve it a later first-page
+  # thread state when the case supplies one, so the poll-start read and the
+  # recount can differ. This graphql line is already logged, so key on the
+  # comment request that only the recount follows.
+  if [ -z "$cursor" ] && [ -f "$FIX/graphql-after-comments.json" ] &&
+     grep -q 'pulls/[0-9]*/comments' "$FIX/requests.log"; then
+    fixture="$FIX/graphql-after-comments.json"
+  fi
 elif [ -n "$post" ]; then
   fixture="$FIX/posted-comment.json"
   [ -f "$fixture" ] && touch "$FIX/posted"
@@ -224,6 +232,14 @@ counts() {
 threads_page() {
   printf '{"data":{"repository":{"pullRequest":{"reviewThreads":%s}}}}' \
     "$(threads_json "$2" "${3:-0}" "${4:-}")" > "$FIX/graphql-$1.json"
+}
+# The first-page count the recount reads, once the comment scan has run. The
+# shim serves it in place of graphql.json to a graphql request that follows a
+# comments request. counts_after_comments <reviews> <reactions> <unresolved>
+# [resolved]; a single page, since the recount cases need no later page.
+counts_after_comments() {
+  printf '{"data":{"repository":{"pullRequest":{"reviews":{"totalCount":%s},"reactions":{"totalCount":%s},"reviewThreads":%s}}}}' \
+    "$1" "$2" "$(threads_json "${3:-0}" "${4:-0}")" > "$FIX/graphql-after-comments.json"
 }
 # page <endpoint> <n> [item...]: an empty page is a real, valid response.
 page() {
@@ -466,6 +482,28 @@ counts 1 0 2 1; page reviews 1 "$(review "$BOT" "$AFTER")"; page comments 1
 run_watch $VALID
 want_rc 0
 want_out '"unresolved_threads":2}'
+
+# A thread opened between the poll-start count and the comment scan rides on
+# the report: the recount runs after the scans, so REVIEW_ACTIVITY shows the
+# later count, not the zero the poll started from.
+scenario "review activity recounts threads after the comment scan"
+counts 0 0 0; page comments 1 "$(comment "$BOT" "$AFTER")"; page comments 2
+page reviews 1; page issue-comments 1
+counts_after_comments 0 0 1
+run_watch $VALID
+want_rc 0
+want_out 'REVIEW_ACTIVITY {"new_reviews":0,"new_review_comments":1,"unresolved_threads":1}'
+
+# A recount that fails reports the count as unknown rather than the stale
+# poll-start value: unresolved_threads is null and stderr names the recount.
+scenario "a failed recount reports unresolved_threads as null"
+counts 0 0 0; page comments 1 "$(comment "$BOT" "$AFTER")"; page comments 2
+page reviews 1; page issue-comments 1
+echo '{}' > "$FIX/graphql-after-comments.json"
+run_watch $VALID
+want_rc 0
+want_out '"unresolved_threads":null}'
+want_err 'thread recount failed (count query)'
 
 scenario "clean pass reports threads still open"
 counts 0 1 1 0; page reviews 1; page comments 1; page issue-comments 1
