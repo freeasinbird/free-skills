@@ -44,7 +44,12 @@
 #     [--clean-content THUMBS_UP]         # clean-pass reaction constant
 #     [--progress-content EYES]           # in-progress reaction constant
 #     [--interval 75]                     # seconds between checks
-#     [--cap-minutes 25]                  # total wait before giving up
+#     [--cap-minutes 9]                   # total wait before giving up; one
+#                                         # run must fit the host's foreground
+#                                         # command limit (10 min on Claude
+#                                         # Code), so re-run with the same
+#                                         # baseline and head until the
+#                                         # 20-30 min exchange cap.
 #     [--head <sha>]                      # expected head (7-40 hex): only
 #                                         # count reviews of this commit and
 #                                         # comments anchored to it (replies
@@ -125,7 +130,7 @@ BASELINE_INCLUSIVE=""
 PREEXISTING_REVIEWS="" PREEXISTING_COMMENTS="" PREEXISTING_REACTIONS=""
 PREEXISTING_SUMMARY=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
-INTERVAL=75 CAP_MINUTES=25
+INTERVAL=75 CAP_MINUTES=9
 
 # The header comment above is the usage text: print it on request to
 # stdout (exit 0) and on a bad invocation to stderr (exit 64).

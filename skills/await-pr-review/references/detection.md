@@ -278,8 +278,14 @@ Run the script by path from the PR checkout:
 ```sh
 <skill-dir>/watch-review.sh --pr 46 --baseline 2026-07-02T05:07:30Z \
   --login chatgpt-codex-connector --head 9c346ab \
-  --interval 75 --cap-minutes 25
+  --interval 75 --cap-minutes 9
 ```
+
+Each foreground run is bounded by the host's command timeout, so the default
+`--cap-minutes` is 9, under the 10-minute limit Claude Code puts on one shell
+command. Re-run the watcher with the same baseline, head, and
+`--request-artifacts` token until the 20-30 minute exchange cap; the wait is
+one logical watch spread over several bounded runs, not one long command.
 
 Pass `--repo owner/name` whenever the working directory is not the PR's
 checkout, and whenever the project's forge record names the slug. That record
@@ -476,5 +482,8 @@ check should use roughly 4–5 minutes. These are separate layers: a scheduled
 cap.
 
 Bound the whole wait at roughly 20–30 minutes. A clean-pass signal usually ends
-earlier. See `cost-model.md` only when auditing the cache-cadence tradeoff or
+earlier. A single foreground run stays under the host's command limit (9
+minutes by default, below Claude Code's 10), so the 20–30 minute wait is
+several bounded runs re-armed on the same baseline and head, not one command.
+See `cost-model.md` only when auditing the cache-cadence tradeoff or
 re-deriving these numbers.
