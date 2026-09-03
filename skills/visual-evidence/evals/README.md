@@ -24,7 +24,7 @@ belong in a session workspace outside the repo.
 - `trigger-evals.json`: 20 user-approved queries (10 should-trigger,
   10 should-not-trigger) for the description-optimization loop
   (skill-creator's `scripts.run_loop`). The negatives are deliberate
-  near-misses: attach-an-already-taken image (gh-imgup's trigger),
+  near-misses: attach-an-already-taken image (upload alone, no capture),
   backend or perf fixes, docs changes, desktop screenshots, UI test
   authoring.
 
