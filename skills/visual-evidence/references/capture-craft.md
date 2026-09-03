@@ -38,10 +38,13 @@ Choose the layout from each saved file's pixel width.
   600px wide or less. Each cell gets about half of the 830px PR body.
 
   ```markdown
-  | Before                | After               |
-  | --------------------- | ------------------- |
-  | ![Before](before-url) | ![After](after-url) |
+  | Before                  | After                 |
+  | ----------------------- | --------------------- |
+  | ![Before](./before.png) | ![After](./after.png) |
   ```
+
+  On the `gh --attach` path, write the local path as shown and gh rewrites
+  it. On the gh-imgup path, paste the URL the CLI printed instead.
 
 - **Stack wide images:** Put a bold **Before** caption above the first image and
   **After** above the second. Stacking prevents unreadable shrinkage.
@@ -65,8 +68,8 @@ A list's rows are cramped because their vertical padding is too small.
 6. Confirm the width matches. The height should grow by the added padding.
 7. If both themes apply, repeat as `before-dark.png` and `after-dark.png`.
 8. Apply the full review under Compose and Attach to every image.
-9. Use gh-imgup upload-only. Put a labeled pair for each palette in the PR
-   description.
+9. Upload by the Compose and Attach decision order. Put a labeled pair for
+   each palette in the PR description.
 
 ### A Net-New Component (Single _after_ Shot)
 
@@ -76,5 +79,5 @@ A new empty-state card has no meaningful before state.
 2. Capture the card with a little padding as `after.png`.
 3. Add a dark variant when relevant.
 4. Apply the full review under Compose and Attach.
-5. Upload through gh-imgup.
+5. Upload by the Compose and Attach decision order.
 6. Put one shot captioned "Empty state" in the PR description.

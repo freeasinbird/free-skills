@@ -8,11 +8,12 @@ description: >-
   "show the change", "add a screenshot", or "before/after". Reach for it early
   and proactively: the *before* state is perishable and is often destroyed once
   the fix lands. This skill owns capture craft and workflow timing (deciding to
-  capture, getting a clean deterministic pair, framing/cropping tight); it hands
-  the finished images to the gh-imgup skill to upload and attach. Review each
-  image for sensitive data before uploading; that mandatory step is gh-imgup's,
-  and it is written out in full here so it survives when that skill isn't
-  loaded. Not for non-visual work (logic, backend, or docs with no output).
+  capture, getting a clean deterministic pair, framing/cropping tight), then
+  uploads the finished images with `gh --attach`, falling back to an installed
+  gh-imgup. Review each image for sensitive data before uploading; that step is
+  mandatory here, and its checklist matches gh-imgup's bar. Not for non-visual
+  work (logic, backend, or docs with no output), or for attaching an image
+  that already exists.
 ---
 
 # Visual Evidence
@@ -22,8 +23,8 @@ the diff. Start early because the _before_ state usually disappears when the
 fix lands.
 
 This skill owns capture timing and craft. It produces clean, tightly framed
-evidence. **gh-imgup** is the skill or CLI that reviews and uploads the finished
-image files.
+evidence, then uploads it with `gh --attach`, or with an installed gh-imgup
+where gh can't upload. Without either, it stops at local files and says so.
 
 Follow this procedure:
 
@@ -34,7 +35,7 @@ Follow this procedure:
 5. Make the capture deterministic.
 6. Open and check every shot.
 7. Review every image for secrets and private data.
-8. Use gh-imgup to upload and place the evidence.
+8. Upload and place the evidence.
 9. Verify the rendered result.
 
 ## When to Use It
@@ -53,8 +54,8 @@ may be impossible later.
 - **Non-visual work:** Skip logic, backend, data, build, or configuration
   changes that have no rendered output.
 - Docs or comments that don't change anything a user sees rendered.
-- **Images already captured:** Use gh-imgup directly when you only need to
-  attach existing images.
+- **Images already captured:** Run `gh pr comment --attach` or gh-imgup
+  directly when you only need to attach existing images.
 
 ## Capture the Before/After
 
@@ -134,7 +135,8 @@ Apply the change. Drive the app to the same screen and state, then capture
 - **Limit full-page capture:** Reserve it for page-level changes. Even then,
   prefer the relevant section over the full page.
 - **Balance resolution and size:** Use enough resolution or DPR for legibility.
-  Respect GitHub's limits and gh-imgup's `--max-size` cap.
+  Keep each image under 10 MB, and never export SVG; see the limits under
+  Compose and Attach.
 
 The named tools are examples, not requirements. Use any available capture
 method that preserves tight framing, identical conditions, and deterministic
@@ -240,39 +242,19 @@ Open every captured image. Don't publish evidence you haven't checked.
 
 ## Compose and Attach
 
-Hand the files to the **gh-imgup skill** when it is loaded. It uploads them
-and returns Markdown. Don't reimplement upload or invent another host.
-
-Without the skill, run the `@freeasinbird/gh-imgup` CLI. Try these paths in
-order and stop at the first one that works:
-
-1. The `gh-imgup` binary already on `PATH`. Check with `command -v gh-imgup`,
-   or `Get-Command gh-imgup` in PowerShell.
-2. A package already installed locally: `npx --no-install @freeasinbird/gh-imgup`.
-3. A pinned download as the last resort: `npx -y @freeasinbird/gh-imgup@0.1.3`.
-
-Never run an unpinned `npx -y` download; an approval reviewer blocks it as an
-unknown package with credential access. The pinned version is `0.1.3`. Bump it
-here when gh-imgup releases.
-
-Apply the full pre-upload review below to every image before running any of
-these. Images are positional arguments. Upload-only means omitting `--pr` and
-`--issue`.
-
-```sh
-# GITHUB_TOKEN set; add --repo when the forge record names the slug
-gh-imgup before.png after.png
-```
+Apply the review below to every image before running any upload command.
+Then take the first upload path whose gate passes. Don't reimplement upload or
+invent another host.
 
 - **Authorization:** Invoking this skill authorizes the upload once every image
-  passes the review below. Don't ask the user for permission to run gh-imgup
-  or to upload a reviewed image. Two things still override this: a request to
-  keep the images local, which ends the work at the files, and an image the
-  review flags. Stop and ask about a flagged image only.
-- **Review each image before uploading, and not only for "secrets."** This is
-  gh-imgup's mandatory step. It comes before upload because there is no
-  un-publish. Keep this full copy for paths without the gh-imgup skill or its
-  `--help`. **This is the checklist to apply.** Don't substitute a softer or
+  passes the review below. Don't ask the user for permission to run the upload
+  command or to upload a reviewed image. Two things still override this: a
+  request to keep the images local, which ends the work at the files, and an
+  image the review flags. Stop and ask about a flagged image only.
+- **Review each image before uploading, and not only for "secrets."** This
+  review is mandatory here, on every upload path. Its checklist is held at
+  gh-imgup's own bar. The review comes before upload because there is no
+  un-publish. **This is the checklist to apply.** Don't substitute a softer or
   narrower review. Open each image and check it for:
   - API keys, tokens, passwords, session cookies, `.env` contents
   - Internal hostnames, IPs, private URLs, infrastructure details
@@ -284,35 +266,99 @@ gh-imgup before.png after.png
   exactly what you found and where, and ask them to crop, redact, or pick a
   different image. When in doubt, ask before uploading.
 
-The `-y` flag skips npx's interactive first-run prompt on the pinned download.
-The CLI needs Node 22+.
+### Choose the Upload Path
+
+Take the first path whose gate passes. GitHub Enterprise Server is a stop on
+every path: keep the evidence local.
+
+1. **`gh --attach`**, when all three hold: `gh --version` reports 2.99.0 or
+   newer; `gh auth status` shows a user token, with a `gho_`, `ghp_`, or
+   `github_pat_` prefix; the host is GitHub.com or GitHub Enterprise Cloud.
+   In GitHub Actions, the default `GITHUB_TOKEN` isn't a user token, so skip
+   to path 2 unless the workflow supplies a PAT. gh names a failed gate
+   itself. On any of these errors, go to path 2:
+   - `unsupported authentication type`
+   - `attaching files requires write access to the repository`
+   - `attaching files is not supported on GitHub Enterprise Server`
+2. **gh-imgup, when it's already installed.** Check `command -v gh-imgup`, or
+   `Get-Command gh-imgup` in PowerShell, then
+   `npx --no-install @freeasinbird/gh-imgup`. It's recommended, not required.
+   This is the path under the Actions `GITHUB_TOKEN`, where it's the only
+   option that needs no extra secret, and on gh older than 2.99.0. It uploads
+   only to `github.com`, so on GitHub Enterprise Cloud go to path 3 instead.
+   Never download it with `npx -y`; an approval reviewer blocks an unknown
+   package with credential access.
+3. **Stop at local files.** Say so at handoff and name the fix: upgrade gh for
+   interactive use; in CI, install gh-imgup or supply a PAT secret.
+
+Pass `-R owner/repo` to gh, or `--repo owner/repo` to gh-imgup, when the
+checkout's remote doesn't resolve to the target repository.
+
+### Upload With `gh --attach`
+
+Write the body first. Reference each file by its local path with Markdown
+image syntax, then attach the same files:
+
+```sh
+cat > pr-body.md <<'EOF'
+## Screenshots
+
+![Before: cramped rows, light theme](./before.png)
+
+![After: fixed padding, light theme](./after.png)
+EOF
+gh pr create --title "Fix card list padding" --body-file pr-body.md \
+  --attach ./before.png --attach ./after.png
+```
+
+gh uploads each file and rewrites its reference to the hosted URL. Read
+`references/gh-attach.md` §body-rewrite before composing anything more
+elaborate than this.
+
+- **Pick the command by target:** Use `gh pr create --attach` for a new PR,
+  `gh pr edit --attach` for an open PR's description, and
+  `gh pr comment --attach` or `gh issue comment --attach` for a later
+  addition. See `references/gh-attach.md` §commands.
+- **Use Markdown image syntax only:** Write `![label](./file.png)`. gh rewrites
+  Markdown image and link nodes. A raw `<img src="./file.png">` is left as
+  written and the file is appended at the end instead.
+- **Put labels in the body references:** The `#alt` suffix, as in
+  `--attach './after.png#After: empty state'`, applies only to a file the body
+  doesn't reference. An in-body reference keeps its own alt text.
+- **Attach each file once:** Every run uploads every `--attach` file again. A
+  second `gh pr edit --attach` with the same file appends a duplicate.
+- **Respect gh's limits:** Images up to 10 MB (`png`, `jpg`, `jpeg`, `gif`,
+  `webp`), video up to 100 MB, 50 files per command, validated by extension
+  only. Never attach SVG: gh accepts it, but it can carry scripts, and
+  gh-imgup refuses it for that reason. Video is described in
+  `references/gh-attach.md` §video and is outside this skill's procedure.
+- **Pre-authorize on platforms with a command allowlist:** An operator can
+  allow `gh pr create`, `gh pr edit`, `gh pr comment`, and `gh issue comment`
+  for this path, and `gh-imgup` for the fallback. In Claude Code,
+  `Bash(gh pr create *)` is one such rule; each platform has its own syntax.
+
+### Upload With gh-imgup
+
+Images are positional arguments. Upload-only means omitting `--pr` and
+`--issue`.
+
+```sh
+# GITHUB_TOKEN set; add --repo owner/repo when the remote doesn't resolve
+gh-imgup before.png after.png
+```
 
 It prints one Markdown image line per file to stdout, in argument order.
-Progress goes to stderr, so captured stdout contains only the links.
+Progress goes to stderr, so captured stdout contains only the links. Compose
+those lines into the body. Use `--pr <n>` or `--issue <n>` only to post a
+follow-up comment. The CLI needs Node 22+. `--help` lists all options and
+carries the same review.
 
-Pass `--repo <owner>/<repo>` outside the target repository, and whenever the
-project's forge record names the slug. That record is an AGENTS.md entry
-naming the forge host and `owner/name` slug, written because a remote on an
-SSH host alias can leave gh-imgup unable to infer them. Take the slug from
-that record before any remote, never from a sibling project.
-
-Without a record, gh-imgup infers `--repo` from a `github.com` origin remote
-and rejects any other host, so pass the remote path's slug only when its host
-is an SSH alias for `github.com`.
-
-gh-imgup uploads only to `github.com`, so a recorded or remote host that
-doesn't canonicalize to `github.com`, GitHub Enterprise included, is a stop:
-keep the evidence local.
-
-Use `--pr <n>` or `--issue <n>` only to post a follow-up comment.
-
-`--help` lists all options and carries the same review. gh-imgup owns upload;
-this skill only produces the files.
+### Place and Verify
 
 - **Place evidence in the PR description:** It is most visible there. Use a
   comment for later additions or issues.
-- **Prefer upload-only:** Compose the returned Markdown into the body instead
-  of leaving the evidence in a trailing comment.
+- **Compose into the body:** On either path, put the evidence in the
+  description instead of leaving it in a trailing comment.
 - **Label every image:** Use **Before** and **After**, plus the state shown,
   such as "Empty state, dark mode."
 - **Show both palettes:** Include light and dark when both appearances change.
@@ -320,7 +366,7 @@ this skill only produces the files.
   `references/capture-craft.md` §display-layout for side-by-side and stacked
   layouts.
 - **Verify the rendered result:** Do this only after every image passes the
-  review and gh-imgup uploads it.
+  review and the upload succeeds.
 - **Check the rendered body:** Both images must load. Each label must sit with
   its image, and the pair must read from Before to After.
 - **Trust the rendered view:** Correct raw Markdown can still produce a broken
