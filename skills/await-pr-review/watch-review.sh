@@ -99,11 +99,15 @@
 # The report is compact by design (the caller's context holds it for the
 # rest of the session); the main agent refetches bodies and threads itself.
 # Every report carries one PR-state field:
-#   unresolved_threads  review threads whose isResolved is false, counted
-#                 on the latest poll that read them (null when none did).
-#                 Threads open since before the baseline count too, so a
-#                 round with unresolved_threads above 0 is not clean,
-#                 whatever the exit code.
+#   unresolved_threads  review threads whose isResolved is false. A
+#                 REVIEW_ACTIVITY count is read after the review and comment
+#                 scans that produced its report, so it matches the activity
+#                 it ships beside; CLEAN_PASS and CAP_EXPIRED report the
+#                 count from the poll's first read. null means no read
+#                 succeeded after the reported activity. Threads open since
+#                 before the baseline count too, so a round with
+#                 unresolved_threads above 0 is not clean, whatever the exit
+#                 code.
 # Persistent API failure surfaces as CAP_EXPIRED too: the cap is the
 # backstop. Read the coverage fields in that payload before reporting the
 # result; each failing poll also names its failure on stderr, followed by
@@ -572,6 +576,35 @@ scan_summary() {
   echo "$ssum_total $ssum_status"
 }
 
+# Read the thread state: the count query, then every later thread page.
+# Sets n_reviews, n_reactions, and n_open on success. On failure returns
+# non-zero and sets read_fail to the query that failed ("count query" or
+# "thread page"); the caller prints the notice, because a poll-start read
+# retries while a recount before the positive exit does not.
+read_counts() {
+  read_fail=''
+  read -r n_reviews n_reactions n_open more cursor <<< "$(gh_q "count query" api graphql \
+    -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}' \
+    -F o="$OWNER" -F r="$NAME" -F n="$PR" --jq "$JQ_COUNTS")"
+  case "${n_reviews:-x}${n_reactions:-x}${n_open:-x}" in *[!0-9]*)
+    read_fail="count query"; return 1 ;;
+  esac
+  # Threads past the first page are read the same way. A page that fails
+  # leaves the count short, and a short count would let the caller call a
+  # round clean over threads it never saw, so it fails the read rather than
+  # reporting a low number.
+  while [ "$more" = true ]; do
+    read -r t_open more cursor <<< "$(gh_q "thread page" api graphql \
+      -f query='query($o:String!,$r:String!,$n:Int!,$c:String!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100,after:$c){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}' \
+      -F o="$OWNER" -F r="$NAME" -F n="$PR" -f c="$cursor" --jq "$JQ_THREADS")"
+    case "${t_open:-x}" in *[!0-9]*)
+      read_fail="thread page"; return 1 ;;
+    esac
+    n_open=$((n_open + t_open))
+  done
+  return 0
+}
+
 seen_progress=false
 polls_ok=0
 last_poll_ok=false
@@ -584,31 +617,17 @@ while :; do
   # leaves the tail of the wait unobserved, while a mid-run blip followed by
   # a success costs nothing. Reset per poll and report both.
   last_poll_ok=false
-  read -r n_reviews n_reactions n_open more cursor <<< "$(gh_q "count query" api graphql \
-    -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviews{totalCount} reactions{totalCount} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}' \
-    -F o="$OWNER" -F r="$NAME" -F n="$PR" --jq "$JQ_COUNTS")"
-  case "${n_reviews:-x}${n_reactions:-x}${n_open:-x}" in *[!0-9]*)
-    # Count query failed; retry next poll. The cap is the backstop. Say so
-    # on stderr: this failure skips every scan below, so a run that fails
-    # here on every poll would otherwise reach the cap in total silence and
-    # read as "no review arrived" when nothing was ever observed.
-    retrying "count query failed"
-    n_reviews='' ;;
-  esac
-  # Threads past the first page are read the same way. A page that fails
-  # leaves the count short, and a short count would let the caller call a
-  # round clean over threads it never saw, so it fails the poll as the
-  # count query does rather than reporting a low number.
-  while [ -n "$n_reviews" ] && [ "$more" = true ]; do
-    read -r t_open more cursor <<< "$(gh_q "thread page" api graphql \
-      -f query='query($o:String!,$r:String!,$n:Int!,$c:String!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100,after:$c){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}' \
-      -F o="$OWNER" -F r="$NAME" -F n="$PR" -f c="$cursor" --jq "$JQ_THREADS")"
-    case "${t_open:-x}" in *[!0-9]*)
-      retrying "thread page query failed"
-      n_reviews=''; break ;;
+  if ! read_counts; then
+    # The read failed; retry next poll. The cap is the backstop. Say so on
+    # stderr: this failure skips every scan below, so a run that fails here
+    # on every poll would otherwise reach the cap in total silence and read
+    # as "no review arrived" when nothing was ever observed.
+    case "$read_fail" in
+      "count query") retrying "count query failed" ;;
+      *) retrying "thread page query failed" ;;
     esac
-    n_open=$((n_open + t_open))
-  done
+    n_reviews=''
+  fi
   if [ -n "$n_reviews" ]; then
     unresolved=$n_open
     # Read the summary source first, before the review and comment scans. A
@@ -629,6 +648,18 @@ while :; do
       # summary source only gates CLEAN_PASS and its status is immaterial here.
       [ "$c_status" = ok ] && [ "$v_status" = ok ] ||
         notice "scan failed part-way (comments=$c_status reviews=$v_status); positive evidence stands"
+      # Recount the threads after the scans that produced this evidence. The
+      # poll-start count was read before the comment scan, so a thread opened
+      # between the two would go unreported beside the comment that opened it.
+      # A recount here matches unresolved_threads to the activity it ships
+      # beside. On failure report null and name the query: the watcher exits
+      # next, so this is a notice, not a retrying poll.
+      if read_counts; then
+        unresolved=$n_open
+      else
+        unresolved=null
+        notice "thread recount failed ($read_fail); unresolved_threads is null"
+      fi
       echo "REVIEW_ACTIVITY {\"new_reviews\":$revs,\"new_review_comments\":$replies,\"unresolved_threads\":$unresolved$REQUEST_ARTIFACTS_REPORT}"
       exit 0
     fi

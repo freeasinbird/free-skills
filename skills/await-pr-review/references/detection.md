@@ -342,14 +342,18 @@ back with `--request-artifacts` on the retry. An exit 75 without that report
 has no artifact state to carry.
 
 Every report carries `unresolved_threads`: the PR's review threads whose
-`isResolved` is false on the latest poll that read them, or `null` when no
-poll did. The watch reports activity after the baseline, but this count
-includes threads open since before it. A round is not clean while the count
-is above zero, whatever the exit code; disposition each open thread before
-calling it clean. A failed query prints a notice on stderr followed by the
-first line of `gh`'s own error, labelled by query; a positive exit still
-prints the notice for a scan that failed part-way. Read stderr for the cause
-instead of guessing at the token, scope, rate limit, or repository.
+`isResolved` is false. A `REVIEW_ACTIVITY` count is read after the review and
+comment scans it reports, so it matches that activity; `CLEAN_PASS` and
+`CAP_EXPIRED` report the poll's first read. `null` means no read succeeded
+after the reported activity, a failed recount included. The watch reports
+activity after the baseline, but this count includes threads open since
+before it. A round is not clean while the count is above zero, whatever the
+exit code; disposition each open thread before calling it clean.
+
+A failed query prints a notice on stderr followed by the first line of `gh`'s
+own error, labelled by query; a positive exit still prints the notice for a
+scan that failed part-way. Read stderr for the cause instead of guessing at
+the token, scope, rate limit, or repository.
 
 A `CLEAN_PASS` carries `clean_reactions` and `summary_completed`: the first
 counts clean-pass reactions in the window, the second counts summary
