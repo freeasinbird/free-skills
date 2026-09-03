@@ -121,26 +121,26 @@ poll. An unrecorded reviewer never delays the spawn; the conductor discovers it.
 ## 3. Wait for New Activity
 
 **Conductor-owned exchange.** Run `watch-review.sh` as a bounded foreground
-command inside the conductor when a shell and host CLI exist. Otherwise run
-an equivalent bounded foreground API or connector polling loop over the same
-frozen baseline, expected head, sources, and completion signals
+command inside the conductor when a shell and host CLI exist. Each run is
+bounded by the host's command timeout, so re-run it on the same baseline,
+head, and request token until the exchange cap. Otherwise run an equivalent
+bounded foreground API or connector polling loop over the same frozen
+baseline, expected head, sources, and completion signals
 (`references/detection.md` §connector-or-api-polling). When that loop cannot
 delay in-turn, use the scheduled same-conductor wake from grant 2. Either
 keeps conductor ownership and never emits terminal completion merely to wait;
 a completion notice that still reports waiting is stranded
 (`references/conductor.md` §stranded-conductor-recovery).
 
-**Main-owned fallback only:** after emitting the `Conductor skipped` line,
-choose the cheapest mechanism in `references/detection.md`
-§main-owned-mechanisms that reliably re-enters the main agent. That ladder
-is a background no-model script run, a read-only watcher subagent, a
-cancellable scheduled API or connector poll, a bounded foreground detector,
-or handing back the baseline while naming the missing capability.
+**Main-owned fallback only:** after emitting the `Conductor skipped` line, pick
+the cheapest mechanism in `references/detection.md` §main-owned-mechanisms that
+re-enters the main agent. The ladder: a background script run, a watcher
+subagent, a scheduled API or connector poll, a foreground detector, or a handoff.
 
-Under either owner, keep one active watch per PR and reviewer, invoked and
-ended per `references/detection.md` §watcher-invocation; an in-progress
-reaction is not completion, and incomplete coverage is incomplete, not quiet.
-Every report carries `unresolved_threads`; above zero, the round is not clean.
+Under either owner, keep one active watch per PR and reviewer per
+`references/detection.md` §watcher-invocation. An in-progress reaction is not
+completion, incomplete coverage is not quiet, and `unresolved_threads` above
+zero means the round is not clean.
 
 ## 4. Address Feedback
 

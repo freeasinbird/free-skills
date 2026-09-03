@@ -252,6 +252,19 @@ issue_comment() { # issue_comment <login> <created_at> <body>
   jq -cn --arg l "$1" --arg t "$2" --arg b "$3" \
     '{user:{login:$l},created_at:$t,body:$b}'
 }
+# The reviewer's review-summary comment: the marker plus the table's Completed
+# row, whose fractional datetime and backticked short commit are what the
+# watcher matches. created_at is deliberately old, since Codex edits this one
+# comment in place each round and the row, not the creation time, is the gate.
+summary_comment() { # summary_comment <login> <completed_at> <sha> [id]
+  jq -cn --arg l "$1" --arg id "${4:-901}" --arg body \
+"<!-- codex-pull-request-review-summary -->
+
+| Reviewer | Status | Commit | Trigger |
+| --- | --- | --- | --- |
+| 📝 **Code Review** | ✅ **Completed** <relative-time datetime=\"$2\">$2</relative-time> | \`$3\` | New commits |
+" '{id:($id|tonumber),user:{login:$l},created_at:"2026-01-01T00:00:00Z",updated_at:"2026-09-02T03:47:28Z",body:$body}'
+}
 posted_at() {    # posted_at <created_at>: what the host returns for the post
   printf '{"created_at":"%s"}' "$1" > "$FIX/posted-comment.json"
 }
@@ -288,11 +301,6 @@ want_not_posted() {
 want_request_url() {
   if grep -q -- "$1" "$FIX/requests.log" 2>/dev/null; then ok
   else bad "no request URL contains '$1'"; fi
-}
-want_no_request_read() {
-  if grep -q 'issues/46/comments' "$FIX/requests.log" 2>/dev/null; then
-    bad "issue comments were read without --request-comment"
-  else ok; fi
 }
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -364,11 +372,11 @@ want_rc 2
 want_out '"in_progress_seen":true'
 
 scenario "clean-pass reaction past the baseline ends the wait"
-counts 0 1; page reviews 1; page comments 1
+counts 0 1; page reviews 1; page comments 1; page issue-comments 1
 page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
 run_watch $VALID
 want_rc 3
-want_out 'CLEAN_PASS {"clean_reactions":1,"unresolved_threads":0}'
+want_out 'CLEAN_PASS {"clean_reactions":1,"summary_completed":0,"unresolved_threads":0}'
 
 scenario "stale clean-pass reaction is not this round's pass"
 counts 0 1; page reviews 1; page comments 1
@@ -437,13 +445,13 @@ run_watch $VALID
 want_rc 0
 
 scenario "over-counted reactions still find the page-1 clean pass"
-counts 0 101; page reviews 1; page comments 1
+counts 0 101; page reviews 1; page comments 1; page issue-comments 1
 page reactions 2; page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
 run_watch $VALID
 want_rc 3
 
 scenario "empty collections cap out rather than erroring"
-counts 0 0; page reviews 1; page comments 1; page reactions 1
+counts 0 0; page reviews 1; page comments 1; page reactions 1; page issue-comments 1
 run_watch $VALID
 want_rc 2
 want_out '"polls_ok":1'
@@ -460,11 +468,11 @@ want_rc 0
 want_out '"unresolved_threads":2}'
 
 scenario "clean pass reports threads still open"
-counts 0 1 1 0; page reviews 1; page comments 1
+counts 0 1 1 0; page reviews 1; page comments 1; page issue-comments 1
 page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
 run_watch $VALID
 want_rc 3
-want_out 'CLEAN_PASS {"clean_reactions":1,"unresolved_threads":1}'
+want_out 'CLEAN_PASS {"clean_reactions":1,"summary_completed":0,"unresolved_threads":1}'
 
 scenario "cap expiry reports threads still open"
 counts 0 0 3 2; page reviews 1; page comments 1; page reactions 1
@@ -477,7 +485,7 @@ want_out '"unresolved_threads":3}'
 # reporting a low count as if it were complete.
 scenario "thread count pages past the first page"
 counts 0 0 1 0 p2; threads_page p2 2 1 p3; threads_page p3 1 0
-page reviews 1; page comments 1; page reactions 1
+page reviews 1; page comments 1; page reactions 1; page issue-comments 1
 run_watch $VALID
 want_rc 2
 want_out '"polls_ok":1'
@@ -493,6 +501,100 @@ want_out '"unresolved_threads":null'
 want_err 'thread page query failed; retrying'
 want_err '  thread page: gh: Not Found (HTTP 404)'
 
+# The reviewer's review-summary comment is the fourth source. Codex edits one
+# comment in place each round, so the watcher matches the table's Completed
+# row by its own commit and datetime, never the comment's creation time. The
+# row's datetime is truncated to whole seconds before the baseline compare.
+scenario "a Completed row for the expected head ends the round on its own"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+page issue-comments 1 "$(summary_comment "$BOT" 2026-07-02T09:00:00.500000Z 9c346ab)"
+run_watch $VALID --head 9c346ab
+want_rc 3
+want_out 'CLEAN_PASS {"clean_reactions":0,"summary_completed":1'
+
+scenario "a Completed row for another head does not end the round"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+page issue-comments 1 "$(summary_comment "$BOT" 2026-07-02T09:00:00.500000Z beefbee)"
+run_watch $VALID --head 9c346ab
+want_rc 2
+want_out '"last_poll_ok":true'
+
+scenario "a Completed row dated before the baseline is an earlier round's"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+page issue-comments 1 "$(summary_comment "$BOT" 2026-07-01T09:00:00.500000Z 9c346ab)"
+run_watch $VALID --head 9c346ab
+want_rc 2
+want_out '"last_poll_ok":true'
+
+scenario "a summary comment by another login is not the reviewer's"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+page issue-comments 1 "$(summary_comment "$OTHER" 2026-07-02T09:00:00.500000Z 9c346ab)"
+run_watch $VALID --head 9c346ab
+want_rc 2
+want_out '"last_poll_ok":true'
+
+# A review or review comment in the same window wins: the summary is read
+# first precisely so the later review scan still catches a findings review.
+scenario "a review in the same window wins over the Completed row"
+counts 1 0; page reviews 1 "$(review "$BOT" "$AFTER")"; page comments 1
+page issue-comments 1 "$(summary_comment "$BOT" 2026-07-02T09:00:00.500000Z 9c346ab)"
+run_watch $VALID
+want_rc 0
+want_out 'REVIEW_ACTIVITY'
+
+# A failed read of the summary source is not a clean round: the poll is
+# incomplete, exactly as a failed reactions read is.
+scenario "a failed summary read leaves the poll incomplete"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID
+want_rc 2
+want_out '"polls_ok":0'
+want_out '"last_poll_ok":false'
+want_not_out 'CLEAN_PASS'
+want_err 'summary scan failed; retrying
+  summary comments: gh: Not Found (HTTP 404)'
+
+# A summary Completed row can land in the inclusive request second: with a
+# pending request at the baseline (which makes the boundary inclusive) and its
+# artifact token, a row whose fractional datetime truncates to the baseline
+# second still ends the round. Without the whole-second truncation the
+# fractional value would sort before the baseline and be lost.
+scenario "a Completed row in the inclusive request second ends the round"
+page issue-comments 1 \
+  "$(issue_comment someone 2026-07-02T05:07:30Z '@codex review')" \
+  "$(summary_comment "$BOT" 2026-07-02T05:07:30.900000Z 9c346ab)"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --head 9c346ab --request-comment '@codex review' \
+  --request-artifacts 'r=;c=;a='
+want_rc 3
+want_not_posted
+want_out '"summary_completed":1'
+
+# The summary walk pages forward until a short page: a full first page of
+# non-matching comments must not hide a Completed row on page 2.
+scenario "the summary walk pages past a full first page"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+jq -cn '[range(100) | {id:(1000+.),user:{login:"nobody[bot]"},created_at:"2026-01-01T00:00:00Z",body:"noise"}]' \
+  > "$FIX/issue-comments-1.json"
+page issue-comments 2 "$(summary_comment "$BOT" 2026-07-02T09:00:00.500000Z 9c346ab)"
+run_watch $VALID --head 9c346ab
+want_rc 3
+want_out '"summary_completed":1'
+
+# The reviews walk sizes itself from the once-per-poll count. When that count
+# is an exact page multiple and a findings review lands after it, the review
+# sits on the next page the bare ceiling would skip. The summary source could
+# then end the round as clean before the next poll's refreshed count sees the
+# review, so the walk probes one page above the last full page.
+scenario "a review past an exact-page-multiple count wins over the summary"
+counts 100 0; page reviews 1
+page reviews 2 "$(review "$BOT" 2026-07-02T09:00:00Z 9c346ab)"
+page comments 1; page reactions 1
+page issue-comments 1 "$(summary_comment "$BOT" 2026-07-02T09:00:00.500000Z 9c346ab)"
+run_watch $VALID --head 9c346ab
+want_rc 0
+want_out '"new_reviews":1'
+
 # Failure must never masquerade as a completed observation: an absence-based
 # verdict needs a scan that finished, and a run that observed nothing at all
 # must say so rather than reporting a quiet reviewer. Coverage rests on the
@@ -501,7 +603,7 @@ want_err '  thread page: gh: Not Found (HTTP 404)'
 # that failed, labelled by source, so the cause is on stderr rather than a
 # list of guesses.
 scenario "failed comment scan suppresses the clean-pass verdict"
-counts 0 1; page reviews 1
+counts 0 1; page reviews 1; page issue-comments 1
 page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
 run_watch $VALID
 want_rc 2
@@ -514,7 +616,7 @@ want_not_err 'second line'
 # A positive exit does not throw the failure away: the caller re-reads the
 # PR anyway, but gh's cause would otherwise vanish with the temp file.
 scenario "a part-way scan failure still names its cause on a positive exit"
-counts 1 0; page reviews 1 "$(review "$BOT" "$AFTER")"
+counts 1 0; page reviews 1 "$(review "$BOT" "$AFTER")"; page issue-comments 1
 run_watch $VALID
 want_rc 0
 want_out 'REVIEW_ACTIVITY {"new_reviews":1'
@@ -524,7 +626,7 @@ want_not_err 'retrying'
 want_not_err 'second line'
 
 scenario "unreadable reactions do not count as a completed poll"
-counts 0 1; page reviews 1; page comments 1
+counts 0 1; page reviews 1; page comments 1; page issue-comments 1
 run_watch $VALID
 want_rc 2
 want_out '"polls_ok":0'
@@ -557,7 +659,7 @@ run_watch $VALID --request-comment "$REQ"
 want_rc 2
 want_posted
 want_out "\"baseline\":\"$REQUESTED\""
-want_out '"request_artifacts":"r=101;c=;a="'
+want_out '"request_artifacts":"r=101;c=;a=;s="'
 want_err "requested review; baseline re-anchored to $REQUESTED"
 
 scenario "a review after the request ends the wait"
@@ -642,6 +744,42 @@ page reactions 1 "$(reaction "$BOT" '+1' "$REQUESTED" 602)"
 run_watch $VALID --request-comment "$REQ"
 want_rc 3
 want_out '"clean_reactions":1'
+
+# The summary comment is edited in place, so a prior round's Completed row can
+# share the inclusive request second yet carries no fresh ID to exclude. Its
+# snapshotted datetime keeps it out of the new round; a fresh row stamped one
+# second later, not in the snapshot, still ends the round.
+scenario "a pre-request Completed row in the request second stays excluded"
+page issue-comments 1 \
+  "$(issue_comment someone 2026-07-02T05:07:30Z '@codex review')" \
+  "$(summary_comment "$BOT" 2026-07-02T05:07:30.900000Z 9c346ab)"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --head 9c346ab --request-comment '@codex review' \
+  --request-artifacts 'r=;c=;a=;s=2026-07-02T05:07:30Z'
+want_rc 2
+want_not_out '"summary_completed":1'
+
+scenario "the round's own Completed row survives a stale snapshot"
+page issue-comments 1 \
+  "$(issue_comment someone 2026-07-02T05:07:30Z '@codex review')" \
+  "$(summary_comment "$BOT" 2026-07-02T05:07:31.100000Z 9c346ab)"
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --head 9c346ab --request-comment '@codex review' \
+  --request-artifacts 'r=;c=;a=;s=2026-07-02T05:07:30Z'
+want_rc 3
+want_out '"summary_completed":1'
+
+# A fresh post snapshots the summary row's floored datetime into the token,
+# just as it snapshots the other three sources' IDs.
+scenario "a posted request snapshots the summary row datetime"
+page issue-comments 1 "$(summary_comment "$BOT" 2026-07-02T05:07:30.900000Z 9c346ab)"
+posted_at "$REQUESTED"
+pre_page reviews 1; pre_page comments 1; pre_page reactions 1
+counts 0 0; page reviews 1; page comments 1; page reactions 1
+run_watch $VALID --head 9c346ab --request-comment "$REQ"
+want_rc 2
+want_posted
+want_out '"request_artifacts":"r=;c=;a=;s=2026-07-02T05:07:30Z"'
 
 scenario "a pending review submitted after the request keeps its ID"
 page issue-comments 1; posted_at "$REQUESTED"
@@ -763,7 +901,7 @@ page issue-comments 1
 counts 0 0; page reviews 1; page comments 1; page reactions 1
 run_watch $VALID --request-comment "$REQ"
 want_rc 75
-want_out 'REQUEST_INCOMPLETE {"request_artifacts":"r=;c=;a="}'
+want_out 'REQUEST_INCOMPLETE {"request_artifacts":"r=;c=;a=;s="}'
 want_not_out 'CAP_EXPIRED'
 want_err 'request comment failed or carried no creation time; nothing watched
   request comment: gh: Not Found (HTTP 404)'
@@ -777,7 +915,7 @@ pre_page reviews 1 "$(review "$BOT" 2026-07-02T05:07:30Z '' 801)"
 pre_page comments 1; pre_page reactions 1
 run_watch $VALID --request-comment "$REQ"
 want_rc 75
-want_out '"request_artifacts":"r=801;c=;a="'
+want_out '"request_artifacts":"r=801;c=;a=;s="'
 want_not_posted
 
 rm -f "$FIX"/pre-*.json
@@ -814,13 +952,15 @@ for shape in '"2026-07-02T08:00:00.000Z"' '"2026-07-02T08:00:00+00:00"' null; do
   want_err 'request comment failed or carried no creation time; nothing watched'
 done
 
-scenario "without the flag the watcher neither reads nor posts requests"
-counts 0 0; page reviews 1; page comments 1; page reactions 1
+# Every poll now reads the PR's issue comments for the summary source, so the
+# watcher is no longer silent on that endpoint without --request-comment. What
+# still holds is that it posts nothing: only --request-comment writes.
+scenario "without the flag the watcher posts nothing"
+counts 0 0; page reviews 1; page comments 1; page reactions 1; page issue-comments 1
 posted_at "$REQUESTED"
 run_watch $VALID
 want_rc 2
 want_not_posted
-want_no_request_read
 want_out '"baseline":"2026-07-02T05:07:30Z"'
 
 # gh's error text is a passthrough, not a replacement for the notice: a gh
@@ -837,7 +977,7 @@ want_err 'count query: gh exited 1 with no message'
 # single-poll branches of the same flag).
 if [ "${WATCH_REVIEW_SLOW:-0}" = 1 ]; then
   scenario "an early success does not cover a failing tail"
-  counts 0 0; page reviews 1; page comments 1; page reactions 1
+  counts 0 0; page reviews 1; page comments 1; page reactions 1; page issue-comments 1
   # Let the first polls succeed, then pull the fixtures out from under the
   # watcher so every later poll fails through to the cap.
   PATH="$SHIMD:$PATH" bash "$SCRIPT" --pr 46 $BASE --login some-bot \

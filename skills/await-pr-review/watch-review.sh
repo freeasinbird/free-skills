@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 # watch-review.sh: poll a GitHub PR for automated-reviewer activity past a
 # baseline, at zero model cost. The backgrounded no-model watcher from the
-# await-pr-review skill (step 3). All three signal sources — submitted
-# reviews, review comments (replies included, regardless of thread age),
-# and PR-description reactions — are paged **until the baseline is
-# crossed**, never to a fixed page ceiling: review comments walk a
-# newest-first feed forward, and the ascending reviews/reactions endpoints
-# walk backward from their last page (located via the connections'
-# totalCounts). This watcher reads REST only, where reviews, review
-# comments, and reactions all carry their author under user.login in the
-# same name[bot] form, so one login matches all three sources; every signal
-# counts only when dated after the baseline, except that a command request's
-# whole-second creation boundary is inclusive. Artifacts present before a
-# command request are snapshotted by ID, so an earlier same-second artifact
-# cannot satisfy the new request. Its one write is the optional
-# --request-comment, which asks a command-triggered reviewer for a pass.
+# await-pr-review skill (step 3). Four signal sources are scanned each poll:
+# submitted reviews, review comments (replies included, regardless of thread
+# age), PR-description reactions, and the reviewer's issue-comment review
+# summary. The first three are paged **until the baseline is crossed**, never
+# to a fixed page ceiling: review comments walk a newest-first feed forward,
+# and the ascending reviews/reactions endpoints walk backward from their last
+# page (located via the connections' totalCounts). The summary source pages
+# the issue comments forward from a since= filter until a short page, then
+# matches the reviewer's summary comment on the Completed row's own commit and
+# timestamp, not the comment's creation time (the comment is edited in place,
+# so its creation time predates every round after the first). This watcher
+# reads REST only, where reviews, review comments, reactions, and issue
+# comments all carry their author under user.login in the same name[bot] form,
+# so one login matches every source; every signal counts only when dated after
+# the baseline, except that a command request's whole-second creation boundary
+# is inclusive. Artifacts present before a command request are snapshotted by
+# ID, so an earlier same-second artifact cannot satisfy the new request. Its
+# one write is the optional --request-comment, which asks a command-triggered
+# reviewer for a pass.
 #
 # Usage:
 #   watch-review.sh --help | -h                 # print this block, exit 0
@@ -29,7 +34,7 @@
 #                                         # default resolves that repo's
 #                                         # PR N instead, or no repo at all.
 #     [--rest-login 'name[bot]']          # the REST login form matched
-#                                         # against ALL three sources;
+#                                         # against ALL four sources;
 #                                         # default '<plain login>[bot]'.
 #                                         # Set it to the plain login for a
 #                                         # machine-user reviewer, which
@@ -39,7 +44,12 @@
 #     [--clean-content THUMBS_UP]         # clean-pass reaction constant
 #     [--progress-content EYES]           # in-progress reaction constant
 #     [--interval 75]                     # seconds between checks
-#     [--cap-minutes 25]                  # total wait before giving up
+#     [--cap-minutes 9]                   # total wait before giving up; one
+#                                         # run must fit the host's foreground
+#                                         # command limit (10 min on Claude
+#                                         # Code), so re-run with the same
+#                                         # baseline and head until the
+#                                         # 20-30 min exchange cap.
 #     [--head <sha>]                      # expected head (7-40 hex): only
 #                                         # count reviews of this commit and
 #                                         # comments anchored to it (replies
@@ -79,7 +89,10 @@
 #
 # Successful watches print one report line on exit, tagged for the caller:
 #   REVIEW_ACTIVITY <json>  reviewer review or comment in the watch window
-#   CLEAN_PASS <json>       clean reaction in the window, nothing else
+#   CLEAN_PASS <json>       clean reaction or review-summary Completed row in
+#                           the window, nothing else. Its clean_reactions and
+#                           summary_completed counts say which fired; either
+#                           above 0 ends the round.
 #   CAP_EXPIRED <json>      no reviewer activity within the cap
 # A request whose post result is unknown prints the captured recovery state:
 #   REQUEST_INCOMPLETE <json>  retry with its request_artifacts token
@@ -95,12 +108,12 @@
 # backstop. Read the coverage fields in that payload before reporting the
 # result; each failing poll also names its failure on stderr, followed by
 # the first line of gh's own error for every query that failed.
-#   last_poll_ok  the final poll scanned all three sources. Every poll
+#   last_poll_ok  the final poll scanned all four sources. Every poll
 #                 rescans from the baseline, so that one scan covers the
 #                 whole wait: true means "no review arrived" is sound, and
 #                 false means coverage stops at some earlier poll and the
 #                 tail of the wait is unobserved, whatever polls_ok says.
-#   polls_ok      how many polls scanned all three sources. Only 0 is a
+#   polls_ok      how many polls scanned all four sources. Only 0 is a
 #                 verdict on its own: no poll ever observed the PR, so the
 #                 honest report is "could not watch this PR".
 #
@@ -115,8 +128,9 @@ REQUEST_COMMENT="" REQUEST_GIVEN=""
 REQUEST_ARTIFACTS="" REQUEST_ARTIFACTS_GIVEN=""
 BASELINE_INCLUSIVE=""
 PREEXISTING_REVIEWS="" PREEXISTING_COMMENTS="" PREEXISTING_REACTIONS=""
+PREEXISTING_SUMMARY=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
-INTERVAL=75 CAP_MINUTES=25
+INTERVAL=75 CAP_MINUTES=9
 
 # The header comment above is the usage text: print it on request to
 # stdout (exit 0) and on a bad invocation to stderr (exit 64).
@@ -215,12 +229,19 @@ if [ -n "$REQUEST_ARTIFACTS_GIVEN" ]; then
     echo "watch-review.sh: --request-artifacts requires --request-comment" >&2
     usage
   }
-  if [[ "$REQUEST_ARTIFACTS" =~ ^r=([0-9]+(,[0-9]+)*)?\;c=([0-9]+(,[0-9]+)*)?\;a=([0-9]+(,[0-9]+)*)?$ ]]; then
+  # The summary field carries whole-second row datetimes, not IDs, because the
+  # reviewer edits one summary comment in place: a stale Completed row shares
+  # its comment ID with the round's future row, so only the row's own datetime
+  # distinguishes them. The field is optional so an earlier-format token still
+  # parses; the producer always emits it.
+  _s_ts='[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z'
+  if [[ "$REQUEST_ARTIFACTS" =~ ^r=([0-9]+(,[0-9]+)*)?\;c=([0-9]+(,[0-9]+)*)?\;a=([0-9]+(,[0-9]+)*)?(\;s=(${_s_ts}(,${_s_ts})*)?)?$ ]]; then
     PREEXISTING_REVIEWS="${BASH_REMATCH[1]//,/$'\n'}"
     PREEXISTING_COMMENTS="${BASH_REMATCH[3]//,/$'\n'}"
     PREEXISTING_REACTIONS="${BASH_REMATCH[5]//,/$'\n'}"
+    PREEXISTING_SUMMARY="${BASH_REMATCH[8]//,/$'\n'}"
   else
-    echo "watch-review.sh: --request-artifacts must use r=ID,...;c=ID,...;a=ID,..." >&2
+    echo "watch-review.sh: --request-artifacts must use r=ID,...;c=ID,...;a=ID,...[;s=TS,...]" >&2
     usage
   fi
 fi
@@ -369,7 +390,17 @@ if [ -n "$REQUEST_GIVEN" ]; then
         notice "could not snapshot pre-request reactions; nothing posted"
         exit 75
       }
-      REQUEST_ARTIFACTS="r=$(printf '%s' "$PREEXISTING_REVIEWS" | tr '\n' ',');c=$(printf '%s' "$PREEXISTING_COMMENTS" | tr '\n' ',');a=$(printf '%s' "$PREEXISTING_REACTIONS" | tr '\n' ',')"
+      # Snapshot each Completed row already present at or after the baseline,
+      # keyed by its floored datetime (the same key the poll match reads). The
+      # row is edited in place, so this stale value is excluded while the
+      # round's future row, stamped later, still matches.
+      PREEXISTING_SUMMARY=$(gh_q "pre-request summary rows" api --paginate \
+        "repos/$OWNER/$NAME/issues/$PR/comments?per_page=100" \
+        --jq '.[] | select(.user.login == $ENV.WATCH_REST_LOGIN and (.body | contains("codex-pull-request-review-summary"))) | .body | split("\n")[] | select(contains("**Completed**") and test("datetime=\"[^\"]*\"") and test("`[0-9a-f]{7,40}`")) | (capture("datetime=\"(?<ts>[^\"]+)\"").ts | .[0:19] + "Z") | select(. >= $ENV.WATCH_SNAPSHOT_BASELINE)') || {
+        notice "could not snapshot pre-request summary rows; nothing posted"
+        exit 75
+      }
+      REQUEST_ARTIFACTS="r=$(printf '%s' "$PREEXISTING_REVIEWS" | tr '\n' ',');c=$(printf '%s' "$PREEXISTING_COMMENTS" | tr '\n' ',');a=$(printf '%s' "$PREEXISTING_REACTIONS" | tr '\n' ',');s=$(printf '%s' "$PREEXISTING_SUMMARY" | tr '\n' ',')"
     fi
     requested=$(gh_q "request comment" api "repos/$OWNER/$NAME/issues/$PR/comments" \
       -f body="$REQUEST_COMMENT" --jq .created_at)
@@ -390,6 +421,7 @@ fi
 export WATCH_PREEXISTING_REVIEWS="$PREEXISTING_REVIEWS"
 export WATCH_PREEXISTING_COMMENTS="$PREEXISTING_COMMENTS"
 export WATCH_PREEXISTING_REACTIONS="$PREEXISTING_REACTIONS"
+export WATCH_PREEXISTING_SUMMARY="$PREEXISTING_SUMMARY"
 REQUEST_ARTIFACTS_REPORT=""
 [ -n "$REQUEST_ARTIFACTS" ] && REQUEST_ARTIFACTS_REPORT=",\"request_artifacts\":\"$REQUEST_ARTIFACTS\""
 
@@ -416,11 +448,16 @@ DEADLINE=$(( SECONDS + CAP_MINUTES * 60 ))
 # lets callers pass an abbreviated SHA.
 HEAD_REVIEWS=""
 HEAD_COMMENTS=""
+# The summary row carries a short (7-char) commit, and --head may be longer,
+# so each is allowed to be a prefix of the other. Without --head, any Completed
+# row for the reviewer counts, as an untagged review does.
+SUMMARY_HEAD="true"
 BASELINE_OPERATOR=">"
 [ -n "$BASELINE_INCLUSIVE" ] && BASELINE_OPERATOR=">="
 if [ -n "$HEAD" ]; then
   HEAD_REVIEWS=" and ((.commit_id // \"\") | startswith(\"$HEAD\"))"
   HEAD_COMMENTS=" and (((.commit_id // \"\") | startswith(\"$HEAD\")) or .in_reply_to_id != null)"
+  SUMMARY_HEAD="(\$sha | startswith(\"$HEAD\")) or (\"$HEAD\" | startswith(\$sha))"
 fi
 JQ_COMMENTS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .created_at $BASELINE_OPERATOR \"$BASELINE\"$HEAD_COMMENTS and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_COMMENTS | split(\"\\n\") | index(\$id)) == null))] | length) 0 \(if length == 0 then \"none\" else .[-1].created_at end)\""
 JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at // \"\") $BASELINE_OPERATOR \"$BASELINE\"$HEAD_REVIEWS and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_REVIEWS | split(\"\\n\") | index(\$id)) == null))] | length) 0 \(([.[] | .submitted_at // empty] | first) // \"none\")\""
@@ -430,6 +467,25 @@ JQ_REVIEWS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.submitted_at 
 JQ_COUNTS='.data.repository.pullRequest | "\(.reviews.totalCount) \(.reactions.totalCount) \([.reviewThreads.nodes[] | select(.isResolved == false)] | length) \(.reviewThreads.pageInfo.hasNextPage) \(.reviewThreads.pageInfo.endCursor // "none")"'
 JQ_THREADS='.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved == false)] | length) \(.pageInfo.hasNextPage) \(.pageInfo.endCursor // "none")"'
 JQ_REACTIONS="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$CLEAN_REST\" and .created_at $BASELINE_OPERATOR \"$BASELINE\" and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_REACTIONS | split(\"\\n\") | index(\$id)) == null))] | length) \([.[] | select(.user.login == \"$REST_LOGIN\" and .content == \"$PROGRESS_REST\" and .created_at $BASELINE_OPERATOR \"$BASELINE\" and ((.id | tostring) as \$id | (\$ENV.WATCH_PREEXISTING_REACTIONS | split(\"\\n\") | index(\$id)) == null))] | length) \(if length == 0 then \"none\" else .[0].created_at end)\""
+# The summary source keeps the reviewer's own comment that carries the marker
+# codex-pull-request-review-summary, then scans its body lines for the table's
+# Completed row: a line holding "**Completed**", a datetime="..." attribute,
+# and a backticked 7-40 hex commit. The row's datetime is truncated to whole
+# seconds (a fractional value sorts before the whole-second baseline under an
+# inclusive request, and would lose an equal-second match) and compared with
+# the baseline operator; the commit must prefix-match --head when it is set.
+# The comment is edited in place each round, so its own created_at predates
+# later rounds and must never be the gate. A row whose floored datetime was
+# snapshotted before the request (WATCH_PREEXISTING_SUMMARY) is an earlier
+# round's stale row sharing the request second, so it is excluded like the
+# preexisting IDs of the other three sources. Per-page line is "<matched> <items
+# on page>": matched rows to sum, and the raw page length to page forward.
+JQ_SUMMARY="\"\([.[] | select(.user.login == \"$REST_LOGIN\" and (.body | contains(\"codex-pull-request-review-summary\")) and (.body | split(\"\\n\") | any(.[]; contains(\"**Completed**\") and test(\"datetime=\\\"[^\\\"]*\\\"\") and test(\"\`[0-9a-f]{7,40}\`\") and ((capture(\"datetime=\\\"(?<ts>[^\\\"]+)\\\"\").ts | .[0:19] + \"Z\") as \$ts | (capture(\"\`(?<sha>[0-9a-f]{7,40})\`\").sha) as \$sha | (\$ts $BASELINE_OPERATOR \"$BASELINE\") and ($SUMMARY_HEAD) and ((\$ENV.WATCH_PREEXISTING_SUMMARY | split(\"\\n\") | index(\$ts)) == null)))))] | length) \(length)\""
+# The host since= filter is exclusive and compares updated_at, which an edited
+# summary comment changes. Name an instant one minute before the baseline (the
+# same offset the pending-request check uses) so no updated comment is missed;
+# the row filter above enforces the precise boundary.
+SUMMARY_SINCE="${BASELINE%Z}%2B00:01"
 
 # Both scanners report "t1 t2 status". A malformed page (transient API
 # error, rate limit, missing scope) yields status=err: an error is not
@@ -466,13 +522,18 @@ scan_desc() {
 # Backward walk for ascending endpoints (reviews, reactions expose no sort
 # parameter): locate the last page from the connection's totalCount, then
 # walk toward page 1, stopping once a page's first (oldest) item crosses the
-# baseline. The count is refreshed every poll, so an item that
-# slips past the computed last page is caught on the next check.
+# baseline. Start one page above the last full page (total/100 + 1, not the
+# bare ceiling): the count is read once per poll, so an item that lands after
+# it and crosses a page boundary sits on a page the ceiling omits. Walking the
+# extra page catches it in this poll, which the summary source needs because it
+# can end the round on a Completed row before the next poll refreshes the
+# count. The empty extra page is the over-count case below and just decrements.
+# A count stale by more than one page cannot happen: at most a few items land
+# per sub-second poll gap.
 scan_asc_tail() {
   st_url="$1"; st_jq="$2"; st_total="$3"; st_label="$4"
   st_a='' st_b='' st_edge='' st_t1=0 st_t2=0 st_status=ok
-  st_p=$(( (st_total + 99) / 100 ))
-  [ "$st_p" -ge 1 ] || st_p=1
+  st_p=$(( st_total / 100 + 1 ))
   while [ "$st_p" -ge 1 ]; do
     read -r st_a st_b st_edge <<< "$(gh_q "$st_label" api "${st_url}per_page=100&page=${st_p}" --jq "$st_jq")"
     case "${st_a}${st_b}" in ''|*[!0-9]*) st_status=err; break ;; esac
@@ -491,6 +552,24 @@ scan_asc_tail() {
     st_p=$((st_p - 1))
   done
   echo "$st_t1 $st_t2 $st_status"
+}
+
+# Forward walk over the PR's issue comments, filtered by since= on updated_at.
+# The host returns every comment updated inside the window, so there is no
+# baseline edge to cross: page forward from 1 until a short or empty page. The
+# per-page line is "<matched> <items>"; sum the matches and stop once a page
+# holds fewer than 100 items. Returns "total status".
+scan_summary() {
+  ssum_url="$1"; ssum_jq="$2"
+  ssum_m='' ssum_n='' ssum_total=0 ssum_status=ok ssum_p=1
+  while :; do
+    read -r ssum_m ssum_n <<< "$(gh_q "summary comments" api "${ssum_url}page=${ssum_p}" --jq "$ssum_jq")"
+    case "${ssum_m}${ssum_n}" in ''|*[!0-9]*) ssum_status=err; break ;; esac
+    ssum_total=$((ssum_total + ssum_m))
+    [ "$ssum_n" -lt 100 ] && break
+    ssum_p=$((ssum_p + 1))
+  done
+  echo "$ssum_total $ssum_status"
 }
 
 seen_progress=false
@@ -532,6 +611,13 @@ while :; do
   done
   if [ -n "$n_reviews" ]; then
     unresolved=$n_open
+    # Read the summary source first, before the review and comment scans. A
+    # findings review lands a few seconds before the reviewer edits the
+    # Completed row, so reading the row first guarantees the later review scan
+    # sees that review: a findings round then reports REVIEW_ACTIVITY and wins
+    # over the row, instead of a race that reports the row while the review is
+    # still unread.
+    read -r summary s_status <<< "$(scan_summary "repos/$OWNER/$NAME/issues/$PR/comments?since=${SUMMARY_SINCE}&per_page=100&" "$JQ_SUMMARY")"
     read -r replies _ c_status <<< "$(scan_desc "repos/$OWNER/$NAME/pulls/$PR/comments?" "$JQ_COMMENTS")"
     read -r revs _ v_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/pulls/$PR/reviews?" "$JQ_REVIEWS" "$n_reviews" reviews)"
     if [ $((replies + revs)) -gt 0 ]; then
@@ -539,6 +625,8 @@ while :; do
       # the failure still reaches stderr with gh's cause: exiting here
       # would otherwise leave it unread when the EXIT trap deletes the
       # file, and the caller cannot tell a complete scan from a partial one.
+      # The verdict rests on the comment and review scans, so name those; the
+      # summary source only gates CLEAN_PASS and its status is immaterial here.
       [ "$c_status" = ok ] && [ "$v_status" = ok ] ||
         notice "scan failed part-way (comments=$c_status reviews=$v_status); positive evidence stands"
       echo "REVIEW_ACTIVITY {\"new_reviews\":$revs,\"new_review_comments\":$replies,\"unresolved_threads\":$unresolved$REQUEST_ARTIFACTS_REPORT}"
@@ -550,17 +638,19 @@ while :; do
     # persistent failure.
     if [ "$c_status" = ok ] && [ "$v_status" = ok ]; then
       read -r clean eyes r_status <<< "$(scan_asc_tail "repos/$OWNER/$NAME/issues/$PR/reactions?" "$JQ_REACTIONS" "$n_reactions" reactions)"
-      if [ "$r_status" != ok ]; then
+      if [ "$s_status" != ok ]; then
+        retrying "summary scan failed"
+      elif [ "$r_status" != ok ]; then
         retrying "reactions scan failed"
       else
-        # Only now has this poll observed all three sources. Counting it
-        # after the review and comment scans alone would call a run "watched"
-        # while the clean-pass signal, which for some reviewers is the only
-        # artifact of a clean round, was never read.
+        # Only now has this poll observed all four sources. Counting it after
+        # the review and comment scans alone would call a run "watched" while
+        # the clean-pass reaction or the summary Completed row, either of which
+        # can be the only artifact of a clean round, was never read.
         polls_ok=$((polls_ok + 1))
         last_poll_ok=true
-        if [ "$clean" -gt 0 ]; then
-          echo "CLEAN_PASS {\"clean_reactions\":$clean,\"unresolved_threads\":$unresolved$REQUEST_ARTIFACTS_REPORT}"
+        if [ "$clean" -gt 0 ] || [ "$summary" -gt 0 ]; then
+          echo "CLEAN_PASS {\"clean_reactions\":$clean,\"summary_completed\":$summary,\"unresolved_threads\":$unresolved$REQUEST_ARTIFACTS_REPORT}"
           exit 3
         fi
       fi

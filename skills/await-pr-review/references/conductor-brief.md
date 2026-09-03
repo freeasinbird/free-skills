@@ -80,8 +80,13 @@ Run the watcher from the checkout as a bounded foreground command:
 ```sh
 <skill-dir>/watch-review.sh --pr <N> --baseline <event-time> \
   --login <reviewer> --head <expected-head> --repo <owner/name> \
-  --interval 75 --cap-minutes 25
+  --interval 75 --cap-minutes 9
 ```
+
+Each foreground run is bounded by the host's command timeout, so keep
+`--cap-minutes` under it (9 by default, below Claude Code's 10-minute limit)
+and re-run with the same baseline, head, and `--request-artifacts` token until
+the 20-30 minute exchange cap.
 
 `<skill-dir>` is the skill directory above this file's `references/` folder.
 Take `--repo` from the project's forge record and set `GH_HOST` when the
@@ -115,7 +120,9 @@ Signals to read:
 
 - A round completes only on target-reviewer activity in the watched window: a
   submitted review, a new thread, a new comment on an existing thread, or the
-  configured clean-pass reaction matched by `createdAt`.
+  configured clean-pass reaction matched by `createdAt`. A reviewer summary
+  comment counts too, when its `Completed` row names the expected head and a
+  completion time after the baseline.
 - An in-progress reaction or acknowledgement means keep waiting. Absence
   proves nothing, and incomplete coverage is incomplete, not quiet.
 - `unresolved_threads` above zero means the round is not clean, whatever the

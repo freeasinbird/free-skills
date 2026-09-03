@@ -34,8 +34,8 @@ the event that should produce the pass, not to watcher startup:
 
 - An open- or push-triggered wait uses the host's PR open/ready or push event
   timestamp.
-- A manual no-push recheck uses the request timestamp and snapshots reviews
-  already present when the request is made.
+- A manual no-push recheck uses the request timestamp and snapshots the
+  reviewer artifacts already present when the request is made.
 - A commit's authored or committed time is not a push time.
 - A local or host clock reading taken after `git push` returns is later than the
   event and can silently bank a review that arrived in the gap.
@@ -106,11 +106,13 @@ final freshness guard.
 
 ## Snapshot Sources and Paging
 
-Capture three independent sources:
+Capture four independent sources:
 
 1. Top-level reviews, including state and body.
 2. Review comments/threads, including replies on existing threads.
 3. PR-description reactions used as progress or clean-pass signals.
+4. The reviewer's issue-comment review summary, matched on its `Completed`
+   row.
 
 An illustrative GraphQL snapshot is:
 
@@ -135,6 +137,15 @@ through REST. When hand-rolling, use the matching paged endpoints:
 - `pulls/PR/reviews`
 - `pulls/PR/comments`
 - `issues/PR/reactions`
+- `issues/PR/comments` for the review summary
+
+Read the summary from `issues/PR/comments` with a `since` filter set one
+minute before the baseline (the host filter is exclusive and compares
+`updated_at`, which an edited comment changes), paging forward until a short
+page. Match the reviewer's summary comment on its `Completed` row's own commit
+and completion time, not the comment's creation time: the reviewer edits one
+comment in place each round, so its creation time predates every round after
+the first.
 
 For terminal readiness, page the full `reviewThreads` connection to exhaustion
 even when the visible page is resolved; an unresolved thread past the first page
@@ -234,10 +245,14 @@ A round completes only on target-reviewer activity in the watched window:
 - A new review thread
 - A new comment on an existing review thread
 - A configured clean-pass reaction on the PR description
+- A reviewer summary comment whose `Completed` row names the expected head and
+  a completion time after the baseline
 
 An in-progress signal or acknowledgement means keep waiting; absence proves
 nothing. Match reactions by `createdAt`, never bare presence, because a leftover
-reaction from an earlier round can remain on the PR.
+reaction from an earlier round can remain on the PR. The summary comment is
+edited in place each round, so match its `Completed` row's own commit and
+completion time, never the comment's creation time.
 
 Read the latest review's state and body before declaring a pass clean. A
 `CHANGES_REQUESTED`, or a `COMMENTED` review with a substantive summary, can
@@ -263,8 +278,14 @@ Run the script by path from the PR checkout:
 ```sh
 <skill-dir>/watch-review.sh --pr 46 --baseline 2026-07-02T05:07:30Z \
   --login chatgpt-codex-connector --head 9c346ab \
-  --interval 75 --cap-minutes 25
+  --interval 75 --cap-minutes 9
 ```
+
+Each foreground run is bounded by the host's command timeout, so the default
+`--cap-minutes` is 9, under the 10-minute limit Claude Code puts on one shell
+command. Re-run the watcher with the same baseline, head, and
+`--request-artifacts` token until the 20-30 minute exchange cap; the wait is
+one logical watch spread over several bounded runs, not one long command.
 
 Pass `--repo owner/name` whenever the working directory is not the PR's
 checkout, and whenever the project's forge record names the slug. That record
@@ -283,13 +304,18 @@ flag summary and exit codes to stdout and exits 0.
 
 `--request-comment <text>` serves a command-triggered reviewer. When no PR
 comment with exactly that body is dated at or after `--baseline`, the watcher
-snapshots the existing reviewer review, comment, and reaction IDs. It then
+snapshots the existing reviewer review, comment, and reaction IDs, plus the
+datetimes of any Completed rows already in the summary comment. It then
 posts the request once and re-anchors the baseline to the host's creation time
 of the posted comment. GitHub exposes whole-second timestamps, so the watch
-includes that creation second but excludes IDs that predate the request. A new
-review, comment, or reaction emitted in the request second therefore remains
-visible without letting an earlier-round artifact finish the new round. The
-report carries these IDs as an opaque `request_artifacts` token. Pass it back
+includes that creation second but excludes artifacts that predate the request.
+A new review, comment, reaction, or Completed row emitted in the request second
+therefore remains visible without letting an earlier-round artifact finish the
+new round.
+
+The summary comment is edited in place, so its stale row is keyed by its own
+datetime rather than by a comment ID it shares with the round's row. The report
+carries these artifacts as an opaque `request_artifacts` token. Pass it back
 with `--request-artifacts <token>` when re-arming the same inclusive request.
 
 The watcher reports the token even when the post response is lost, so a retry
@@ -324,6 +350,10 @@ calling it clean. A failed query prints a notice on stderr followed by the
 first line of `gh`'s own error, labelled by query; a positive exit still
 prints the notice for a scan that failed part-way. Read stderr for the cause
 instead of guessing at the token, scope, rate limit, or repository.
+
+A `CLEAN_PASS` carries `clean_reactions` and `summary_completed`: the first
+counts clean-pass reactions in the window, the second counts summary
+`Completed` rows for the expected head. Either above zero ends the round.
 
 For exit 2, `polls_ok:0` means no poll ever observed the PR. Otherwise the last
 poll decides coverage because each poll rescans every source from the frozen
@@ -376,18 +406,27 @@ For a command-triggered reviewer, apply the watcher's request rule by hand
 before the first poll and again after each push. List the PR's issue comments
 created at or after the baseline. When none carries exactly the recorded trigger
 text, snapshot the target reviewer's submitted review, review-comment, and
-reaction IDs. Post the request once and take the host's creation time of the
-posted comment as the baseline. Include signals from that whole creation second
-but exclude the snapshotted IDs. Retain those IDs across re-armed wakes. When a
-matching request exists, it is pending: post nothing and keep the baseline.
-Never re-request per poll.
+reaction IDs, and the floored datetimes of any `Completed` rows already in its
+summary comment.
 
-Each poll pages the three snapshot sources until it crosses the baseline:
-top-level reviews, review comments including the latest replies on existing
-threads, and configured PR-description reactions. Normalize the review and
-reaction login forms, apply the completion rules above, and confirm round
-attribution before accepting a match. A progress reaction keeps the loop active;
-it is not completion.
+Post the request once and take the host's creation time of the
+posted comment as the baseline. Include signals from that whole creation second
+but exclude the snapshotted IDs and row datetimes. The summary comment is edited
+in place, so a stale row is keyed by its datetime, not by a comment ID it shares
+with the round's row. Retain the snapshot across re-armed wakes.
+
+When a matching request exists, it is pending: post nothing and keep the
+baseline. Never re-request per poll.
+
+Each poll reads the four snapshot sources. Page the first three until the scan
+crosses the baseline: top-level reviews, review comments including the latest
+replies on existing threads, and configured PR-description reactions. Page the
+issue comments forward from a `since` filter for the reviewer's review summary.
+End the round when its `Completed` row names the expected head and a completion
+time after the baseline, matching the row rather than the comment's creation
+time. Normalize the review and reaction login forms, apply the
+completion rules above, and confirm round attribution before accepting a match.
+A progress reaction keeps the loop active; it is not completion.
 
 Keep the loop bounded to the same 20–30 minute overall cap and roughly 60–90
 second cadence when the connector can wait without waking the model. If each
@@ -443,5 +482,8 @@ check should use roughly 4–5 minutes. These are separate layers: a scheduled
 cap.
 
 Bound the whole wait at roughly 20–30 minutes. A clean-pass signal usually ends
-earlier. See `cost-model.md` only when auditing the cache-cadence tradeoff or
+earlier. A single foreground run stays under the host's command limit (9
+minutes by default, below Claude Code's 10), so the 20–30 minute wait is
+several bounded runs re-armed on the same baseline and head, not one command.
+See `cost-model.md` only when auditing the cache-cadence tradeoff or
 re-deriving these numbers.
