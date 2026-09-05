@@ -70,6 +70,7 @@ jobs:
           - test-merge-cleanup-landing.sh
           - test-merge-cleanup-reconciliation.sh
           - test-merge-cleanup.sh
+          - test-prompt-verification.sh
           - test-self-merge.sh
           - test-watch-review.sh
     steps:
