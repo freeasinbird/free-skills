@@ -40,7 +40,9 @@ unclear, stop there and ask.
 4. Run `merge` with the head OID returned by `check`.
 5. Run `cleanup` with the same head OID.
 6. Stop any review watch that became stale when the PR merged.
-7. Report what merged, what cleanup changed, and what remains.
+7. Follow Project Duties for applicable post-merge work, including after a
+   cleanup STOP when its independent prerequisites hold.
+8. Report what merged, what cleanup changed, and each duty's outcome or blocker.
 
 ## Guardrails
 
@@ -242,8 +244,67 @@ If the platform can't stop the watch, don't invent a mechanism. Say that it
 will end after activity or its time cap. A later empty wake-up is expected
 noise, not a failure.
 
+## Project Duties
+
+After a verified merge, read the governing project instructions and their
+named post-merge procedures from one freshly resolved, immutable base commit.
+Use the PR host or a fresh fetch, even if cleanup stopped before resync.
+Don't discover policy from the feature checkout, stale refs, or issue comments.
+
+- **Readable absence:** Continue to the ordinary summary without new
+  mutations, tracker machinery, or a required companion skill.
+- **Unreadable or ambiguous policy:** Make no dependent project mutation.
+  Report the exact source or rule that prevents determining the duties.
+- **Applicable duties:** Name them before acting. Perform only work already
+  authorized by the task or governing project policy; reuse prior authority
+  without asking again. A self-merge request, issue reference, or successful
+  merge alone doesn't authorize issue closure or tracker writes.
+
+Reuse an available project procedure or the relevant non-Git sections of an
+available skill. Preserve that procedure's authorization, freshness, input
+rereads, verification, ledger, and reporting requirements. Don't require a new
+obligation schema or an installed skill when the project supplies its own
+procedure.
+
+For applicable duties, resolve the current base tip immediately before each
+project mutation and before the final duty report. Use the procedure's
+equivalent or stricter checks when supplied; don't duplicate them. If the tip
+differs from the policy revision or can't be verified, stop pending writes.
+Retain observed completed or unknown results and every mechanical guard.
+Report that current policy must be rediscovered before further work or a
+claim that all project duties are complete.
+
+When using merge-cleanup, read its Verify Issue Closure through Reconcile
+Project Obligations sections and Summarize, including the referenced
+`project-obligations.md` procedure. Its merge-cleanup-request authority doesn't
+come from a self-merge request. Reuse only those non-Git stages; never run
+`merge-cleanup.sh` to obtain duty results or import its fork, local-branch,
+or stacked-PR cleanup policy.
+
+When an applicable project duty requires issue-close verification, read the
+merged PR body and `closingIssuesReferences` with the forge host and repository
+pinned. Check each close-keyword target in its own repository, including those the
+forge didn't recognize. Self-merge's result has no `closing_refs`; obtain
+this evidence from the forge. Plain `Refs #N` is non-closing. Report still-open
+issues; close one only with separate applicable authority.
+
+A mechanical STOP preserves completed Git results and every outstanding
+guard. Carry out only safe, independent duties whose own merge, authority,
+and evidence prerequisites hold. This handoff never clears a worktree STOP,
+changes `kept_manual`, or deletes a retained fork branch.
+
+If a required procedure, tool, authority, or verification is unavailable,
+report the affected duty and concrete blocker. Name the next action needed
+to obtain current inputs and complete it safely; don't invent an executor or
+hand off an edit computed from stale inputs.
+
 ## Summarize
 
 Report what merged, what was deleted and resynced, and whether a watch stopped
 or will expire. Name any guard that still needs the user, such as a dirty tree,
 worktree conflict, OID mismatch, or diverged base.
+
+Account for each applicable project duty separately: verified changes or
+no-ops, skipped work with its reason, and blocked or unknown outcomes with
+the required next action. An unreadable policy is a named gap, not proof of
+no duties. Git cleanup success alone never proves project duties complete.
