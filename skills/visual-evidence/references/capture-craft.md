@@ -1,5 +1,33 @@
 # Capture Craft
 
+## §capture-recipe
+
+Before capturing, write `capture-recipe.md` beside the local screenshots.
+Complete the actual values for each capture so another session can reproduce
+it without hidden browser state:
+
+- **Source:** Revision and any applied patch, identified by path and digest
+  or an equivalent reproducible reference.
+- **Target:** Route and synthetic fixture identity or seed. Use a route
+  template when the real route is private; omit private URLs and customer data.
+- **Method:** Chosen capture tool and the capability that reaches this state.
+- **Display:** Viewport, DPR, zoom, and theme.
+- **Frame:** Crop element and padding, or the fixed rectangle's coordinates
+  and dimensions.
+- **Setup:** Ordered actions from a fresh session, including navigation,
+  fixture selection, clicks, and readiness checks. For login, name an approved
+  test-account setup by reference, never its credentials or session data.
+
+Replay the same setup before both shots. Record each source revision and
+patch separately; explain any element-size change caused by the fix.
+If setup can't be replayed with the available tools, record the gap.
+
+Keep credentials, cookies, storage dumps, private URLs, and customer data out
+of the recipe. Keep it local: don't commit or post it, or attach, link, or copy
+it into published evidence. `evidence.md` contains only image references and
+publication-safe captions. Image review and upload authorization still follow Compose and
+Attach in `SKILL.md`.
+
 ## §crop-tools
 
 Use one crop rectangle for both images. Identical coordinates matter more than

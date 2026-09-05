@@ -28,7 +28,8 @@ where gh can't upload. Without either, it stops at local files and says so.
 
 Follow this procedure:
 
-1. Decide whether the change needs a pair or one _after_ shot.
+1. Decide whether the change needs a pair or one _after_ shot, and choose a
+   capture method that can reach the required state.
 2. Capture the _before_ state before changing it.
 3. Capture the _after_ state under identical conditions.
 4. Frame both shots tightly and consistently.
@@ -66,6 +67,19 @@ may be impossible later.
 - **Single _after_ shot:** Use one for net-new UI with no meaningful before
   state.
 - **Skip** entirely for non-visual changes (see When NOT to use it).
+
+Before the first screenshot, including the _before_ shot, choose the method:
+
+- **Fresh URL load reaches the state:** Use `capture.mjs` when appropriate.
+- **State needs setup:** For clicks, login, or prior navigation, use an
+  available stateful browser or application test setup that can establish and
+  capture the state. Tool availability alone doesn't prove it can reach it.
+- **No usable method:** Name the missing capability and uncaptured state.
+  Don't present a closed menu, login page, or blank shot as the requested state.
+
+Record the method and reproducible setup in local `capture-recipe.md` using
+`references/capture-craft.md` §capture-recipe. Replay that setup before each
+capture. Keep the recipe separate from publication text.
 
 ### 2. Capture the _before_ First
 
@@ -144,8 +158,10 @@ state.
 
 ### Reference Capture Script
 
-Use `capture.mjs` with headless Chrome and Node 22+. It makes steps 3 through 5
-executable in one command.
+Use `capture.mjs` with headless Chrome and Node 22+ when a fresh URL load
+reaches the requested state. It starts a fresh browser profile; it doesn't
+restore sessions or perform clicks. Waiting for a visible selector doesn't
+establish interactive state. For state setup, follow the method decision above.
 
 The script controls readiness waits, animations, color scheme, viewports, DPR,
 element clipping, retries, and a total timeout budget.
