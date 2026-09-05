@@ -154,8 +154,26 @@ command proves only that the PR was enqueued, so the wait is required.
 ### 4. Run `cleanup`
 
 If a separate linked worktree still holds the head branch, `cleanup` stops
-before changing either branch. Make that checkout idle, remove it as a
-deliberate step, and rerun `cleanup`.
+before changing either branch. Report its path and STOP reason for owner
+removal or explicit task-specific cleanup authorization. Self-merge permission
+alone doesn't authorize removing it.
+
+Honor applicable cleanup authority already granted in the task without asking
+again. Removal remains a separate step outside `self-merge.sh`:
+
+- Stop concurrent users, then refresh all linked-worktree checks through
+  read-only inspection outside `cleanup`. Confirm the unique worktree path and
+  that both its branch and `HEAD` still match the pinned merged head. Recheck
+  ownership, operation state, and the full file inventory, including hidden
+  files and index flags. Authorization, clean status, or an idle assertion
+  doesn't waive these checks.
+- Keep the worktree and report failed or unresolved checks. Removal authority
+  alone doesn't authorize moving, changing, or deleting its contents to clear
+  a STOP.
+- Remove it only when separately authorized and all checks pass. Never remove
+  the worktree in which the shell is running.
+
+Rerun `cleanup` only after the separately authorized step has cleared the stop.
 
 Otherwise, `cleanup` runs this order:
 
@@ -186,12 +204,15 @@ the exit code rather than parsing prose:
 | 64   | usage on stderr        | bad or missing flags: fix the call                                    |
 | 69   | note on stderr         | `gh` missing: stop unless an equivalent authenticated host CLI exists |
 
-- Treat every `STOP` as a decision for the user. It marks a state where
-  continuing could destroy work or break this skill's cleanup promises.
+- Report every `STOP`. It marks a state where continuing could destroy work
+  or break this skill's cleanup promises. Leave the decision to the user
+  unless applicable task-specific worktree cleanup authority already covers
+  the separate step described in "4. Run `cleanup`".
 - Examples include uncommitted changes, dependent PRs, a squash merge queue,
   hidden worktree edits, and unmerged local commits.
-- Never bypass a guard with force, reset, or manual deletion. Report the guard
-  and let the user decide.
+- Never bypass a guard with force, reset, or unauthorized manual deletion.
+  Separately authorized worktree cleanup must satisfy the preservation and
+  ownership checks; authorization alone doesn't clear the stop.
 - `LOOKUP_FAILED` means a listing or fetch did not complete. Retry or
   investigate. Never treat an empty result as proof that nothing depends on
   the branch.

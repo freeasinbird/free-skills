@@ -465,7 +465,7 @@ worktree_preservation_preflight() { # worktree_preservation_preflight <dir>
   inv=$(git -C "$d" status -uall --porcelain --ignored 2>/dev/null) \
     || lookup_failed worktree-inventory "could not inventory $d"
   [ -z "$inv" ] \
-    || stop worktree-dirty "the worktree at $d holds untracked or ignored files; move them before it is removed"
+    || stop worktree-dirty "the worktree at $d holds untracked or ignored files; preserve it and report this stop; removal authority alone does not authorize moving, changing, or deleting its contents to clear the stop"
   # A flagged row is hidden state unless something explains its absence.
   # Sparse checkout marks every excluded path skip-worktree (`S`) and leaves
   # it absent, which is the one benign absence: an absent assume-unchanged
@@ -1174,7 +1174,7 @@ phase_cleanup() {
   worktree_scan "refs/heads/$BRANCH"
   if [ -n "$WT_MATCH" ] && ! [ "$WT_MATCH" -ef "$CWD_CDUP" ]; then
     worktree_preservation_preflight "$WT_MATCH"
-    stop head-worktree-present "the clean head worktree at $WT_MATCH remains; stop concurrent users, remove it separately, then rerun cleanup"
+    stop head-worktree-present "the clean head worktree at $WT_MATCH remains; report it for owner removal or separately authorized cleanup; honor existing task-specific authority, retain preservation and ownership checks, and rerun cleanup only after the stop is cleared"
   fi
 
   # Base remote first: the resync depends on it whatever happens to the

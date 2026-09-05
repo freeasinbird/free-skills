@@ -231,10 +231,30 @@ Git has no portable atomic operation that verifies a worktree's detached
 enforces the checked-out guard. A concurrent reset can move a clean detached
 `HEAD` after the check. Removal can then drop its only ref and reflog.
 
-Stop concurrent users. Remove that worktree as a separate, deliberate step,
-then rerun cleanup. This stop doesn't apply when cleanup starts inside the
-clean head checkout. The later base switch releases that same worktree from
-the head. No head match also proceeds normally.
+Report the worktree's path and STOP reason for owner removal or explicit
+task-specific cleanup authorization. Self-merge permission alone doesn't
+authorize removal. Honor applicable authority already granted in the task
+without asking again; removal remains a separate step outside this sequence.
+
+Authorization, clean status, or an idle assertion doesn't waive preservation
+and ownership checks:
+
+- Stop concurrent users, then refresh all linked-worktree checks above through
+  read-only inspection outside cleanup. Confirm the unique worktree path and
+  that both its branch and `HEAD` still match the pinned merged head. Recheck
+  ownership, operation state, and the full file inventory, including hidden
+  files and index flags.
+- Keep the worktree and report failed or unresolved checks. Removal authority
+  alone doesn't authorize moving, changing, or deleting its contents to clear
+  a STOP.
+- Remove it only when separately authorized and all checks pass, from outside
+  that worktree. Never bypass a guard with force or reset.
+
+Rerun cleanup only after the separately authorized step has cleared the stop.
+
+This stop doesn't apply when cleanup starts inside the clean head checkout.
+The later base switch releases that same worktree from the head. No head
+match also proceeds normally.
 
 ## 4. Land on the Base Branch
 
