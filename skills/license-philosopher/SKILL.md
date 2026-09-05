@@ -16,9 +16,9 @@ description: >-
 
 Apply the Free as in Bird licensing philosophy to a repository. The
 philosophy matches the license to the type of work: knowledge stays
-free, and what you build with it is yours. This skill adds three things:
+free, and what you build with it is yours. This skill produces:
 
-1. A `LICENSE` file with the full text of the appropriate license
+1. Full license text in new files, or the existing files kept unchanged
 2. A `LICENSING-PHILOSOPHY.md` explaining why this license was chosen
 3. A license section in the README linking to both
 
@@ -29,7 +29,7 @@ Follow six steps:
 
 1. Check for an existing license.
 2. Suggest a license and ask the user to choose.
-3. Write the `LICENSE` file.
+3. Write new license files, or retain existing ones.
 4. Add `LICENSING-PHILOSOPHY.md`.
 5. Update the README.
 6. Report what changed.
@@ -39,18 +39,23 @@ Follow six steps:
 Analyze the repository to understand what type of work it is. The
 license follows from the project type:
 
-| Project type                 | License      | SPDX identifier | Signals                                                                                                             |
-| ---------------------------- | ------------ | --------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Knowledge artifacts          | CC BY-SA 4.0 | `cc-by-sa-4.0`  | Mostly markdown, prompts, documentation, patterns, agent skills, templates, educational content                     |
-| Libraries (dynamic-link)     | LGPL-3.0     | `lgpl-3.0`      | Imported as a dependency in a dynamic-link or import-based ecosystem (Python, JVM, C/C++); relinking is satisfiable |
-| Libraries (static-link)      | MPL-2.0      | `mpl-2.0`       | Imported as a dependency where static linking or bundling is the norm (Rust, Go, bundled JavaScript, mobile SDKs)   |
-| Local applications and tools | GPL-3.0      | `gpl-3.0`       | CLI entry point, desktop app, local tool; users download and run it on their machine                                |
-| Network services             | AGPL-3.0     | `agpl-3.0`      | Server entry point, HTTP routes, WebSocket handlers, deployed and accessed over a network                           |
+| Project type                 | License      | Fetch key      | Signals                                                                                                             |
+| ---------------------------- | ------------ | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Knowledge artifacts          | CC BY-SA 4.0 | `cc-by-sa-4.0` | Mostly markdown, prompts, documentation, patterns, agent skills, templates, educational content                     |
+| Libraries (dynamic-link)     | LGPL-3.0     | `lgpl-3.0`     | Imported as a dependency in a dynamic-link or import-based ecosystem (Python, JVM, C/C++); relinking is satisfiable |
+| Libraries (static-link)      | MPL-2.0      | `mpl-2.0`      | Imported as a dependency where static linking or bundling is the norm (Rust, Go, bundled JavaScript, mobile SDKs)   |
+| Local applications and tools | GPL-3.0      | `gpl-3.0`      | CLI entry point, desktop app, local tool; users download and run it on their machine                                |
+| Network services             | AGPL-3.0     | `agpl-3.0`     | Server entry point, HTTP routes, WebSocket handlers, deployed and accessed over a network                           |
 
-For libraries, use the strongest weak-copyleft license the target ecosystem
-can honor. Default to LGPL-3.0. Use MPL-2.0 only where static linking or
-bundling is the norm (Rust, Go, bundled JavaScript, mobile SDKs), because an
-unenforceable copyleft protects nothing.
+Fetch keys identify canonical texts, not exact project declarations. Both
+`-only` and `-or-later` belong to the supported GNU v3 families. For example,
+`GPL-3.0-only` is supported even though its fetch key is `gpl-3.0`.
+
+For libraries, default to LGPL-3.0. Use MPL-2.0 where static linking or
+bundling is the norm (Rust, Go, bundled JavaScript, mobile SDKs) and makes
+relinking burdensome. Static linking can comply with LGPL; distributing
+materials for relinking adds work. This preference concerns compliance
+burden, not enforceability.
 
 When classifying, look at:
 
@@ -65,9 +70,15 @@ When classifying, look at:
 ### 1. Check for Existing License
 
 Look for existing license files: `LICENSE`, `LICENSE.md`, `LICENSE.txt`,
-`COPYING`, or similar. If any exist, note what's there; this context
-informs the suggestion in the next step and tells you whether you'll need
-the user's permission to replace.
+`COPYING`, or similar, including LGPL companion files. Read project license
+notices, README declarations, and package metadata to identify the exact
+expression, including GNU version policy. Canonical text alone doesn't choose
+between `-only` and `-or-later`.
+
+Record the expression, its supporting evidence, and each file's actual path
+and role. For LGPL, distinguish the GPL base text from the LGPL permissions.
+Carry this record and the user's keep-or-replace choice through the remaining
+steps.
 
 ### 2. Suggest a License
 
@@ -91,34 +102,45 @@ network service wrapper.
 Accept their choice without pushback. Confirm before replacing an existing
 license file.
 
+For a new GNU license, use an explicit user choice or stated project policy
+for the version suffix. If evidence is missing or conflicting, ask which
+version policy applies before writing an exact declaration. Apply the same
+rule when a retained license's declaration is unclear; don't infer a suffix
+from the canonical text's example notice.
+
 #### Short-circuit
 
 - **Unsupported license kept:** Stop if the existing license isn't one of the
   five and the user keeps it. Explain that the philosophy file would conflict
   with the actual license.
-- **Supported license kept:** Skip the `LICENSE` write if the existing license
-  is one of the five and the user keeps it. Continue with the philosophy file
-  and README section.
+- **Supported license kept:** Skip all license fetching and rewriting. Preserve
+  the exact expression, license files, companion files, and notices. If a
+  retained LGPL bundle lacks the GPL base text, ask before adding it. Continue
+  with the philosophy file and README section using the recorded paths.
 
-### 3. Write the LICENSE File
+### 3. Write New License Files
 
 #### Fetch Order
 
-Fetch the license text using this priority order:
+For a new or confirmed replacement license, fetch each required text using
+this priority order. Retained licenses skip this step.
 
 1. **GitHub API** (preferred: canonical and current):
 
    ```sh
-   gh api /licenses/<spdx-id> --jq .body
+   gh api /licenses/<fetch-key> --jq .body
    ```
 
-   where `<spdx-id>` is one of: `cc-by-sa-4.0`, `lgpl-3.0`, `mpl-2.0`,
+   where `<fetch-key>` is one of: `cc-by-sa-4.0`, `lgpl-3.0`, `mpl-2.0`,
    `gpl-3.0`, `agpl-3.0`
 
-2. **Bundled fallback**: Read from `references/licenses/<spdx-id>.txt`
+2. **Bundled fallback**: Read from `references/licenses/<fetch-key>.txt`
    in this skill's directory
 
-Write the result to `LICENSE` in the project root.
+For LGPL, fetch `gpl-3.0` for `LICENSE` and `lgpl-3.0` for
+`LICENSE.LESSER`. Apply API-first, bundled-fallback order separately to each
+text. Verify both files contain their respective texts before reporting a
+complete bundle. For the other licenses, write the selected text to `LICENSE`.
 
 #### License Files and Notices
 
@@ -130,9 +152,12 @@ Write the result to `LICENSE` in the project root.
 | GPL-3.0      | `LICENSE`                                                                  | Point the user to the copyright/program notice recommended at the end of the license text                                               |
 | AGPL-3.0     | `LICENSE`                                                                  | Point the user to the copyright/program notice recommended at the end of the license text                                               |
 
-- The `LICENSE` file is the canonical license text. Never modify it.
+- Keep fetched or bundled license text verbatim. Don't edit canonical text
+  to express the project's version policy.
 - For GPL-3.0, LGPL-3.0, and AGPL-3.0, point the user to the recommended
-  copyright/program notice for source files.
+  copyright/program notice for source files. When the project declares an
+  `-only` suffix, tell the user to drop that notice's "or (at your option) any
+  later version" clause so the source headers match the declaration.
 - LGPL-3.0 adds permissions to GPL-3.0, so a project needs both texts.
 - MPL-2.0 is self-contained file-level copyleft, so it needs no companion
   file.
@@ -171,24 +196,33 @@ See [LICENSING-PHILOSOPHY.md](./LICENSING-PHILOSOPHY.md) for why we chose
 this license.
 ```
 
-Where `LICENSE_NAME` and `LICENSE_PATH` are:
+Use the selected exact expression for `LICENSE_NAME` and the actual file
+path for `LICENSE_PATH`. For retained licenses, preserve existing notices
+when updating the section; don't replace their version policy with a default.
+For example, retained `GPL-3.0-only` in `LICENSE.md` becomes
+`[GPL-3.0-only](./LICENSE.md)`.
 
-- `CC BY-SA 4.0` → `./LICENSE`
-- `MPL-2.0` → `./LICENSE`
-- `GPL-3.0-or-later` → `./LICENSE`
-- `AGPL-3.0-or-later` → `./LICENSE`
-
-For LGPL-3.0, link to both files since they form the complete license:
+For LGPL, link the exact expression to the LGPL permissions and add a link
+to the GPL base text. A new bundle with an explicit `LGPL-3.0-or-later`
+choice uses:
 
 ```markdown
 This work is licensed under
-[LGPL-3.0-or-later](./LICENSE.LESSER) ([GPL-3.0](./LICENSE)).
+[LGPL-3.0-or-later](./LICENSE.LESSER) ([GPL base text](./LICENSE)).
 ```
+
+A retained `LGPL-3.0-only` bundle in `COPYING` and `COPYING.LESSER` instead
+links `[LGPL-3.0-only](./COPYING.LESSER)` and `[GPL base text](./COPYING)`.
+Check that every license link resolves to the correct file.
 
 ### 6. Report
 
 Summarize what was done:
 
 - The classification and reasoning
-- Files created or modified
+- The exact license expression and files created, modified, or retained
 - Any remaining manual steps (e.g., adding per-file copyright notices)
+
+## Evaluation
+
+See `evals/README.md` for fixture setup, fresh-context runs, and grading.

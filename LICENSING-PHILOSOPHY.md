@@ -25,10 +25,11 @@ Attribution keeps the chain of origin visible.
 Library source code is knowledge. You can build whatever you want with it,
 but modifications to the library itself return to the commons.
 
-Use the strongest weak-copyleft license the target ecosystem can honor. Use
-LGPL-3.0 where relinking can be honored cleanly. Use MPL-2.0 where static
-linking or bundling would make LGPL unworkable. An unenforceable license
-protects nothing, so choose the tightest copyleft that holds.
+Default to LGPL-3.0 where relinking can be honored cleanly. Use MPL-2.0 where
+static linking or bundling makes relinking burdensome. LGPL permits static
+linking when its conditions are met, including providing materials for
+relinking. The choice reflects distribution and compliance burden, not a
+limit on enforceability.
 
 Standalone applications and tools that run locally use GPL-3.0. Modifications
 must be shared when the modified software is distributed.
