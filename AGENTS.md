@@ -670,6 +670,8 @@ and lint and formatting are clean.
   (`./scripts/test-check-commit-messages.sh`)
 - Skill-structure matrix green when the structure check changed
   (`./scripts/test-check-skill-structure.sh`)
+- Prompt-verification matrix green when the documented snippets or their
+  regression script changed (`./scripts/test-prompt-verification.sh`)
 - Layer-check matrix green when the check or its table changed
   (`./scripts/test-check-review-convergence-layers.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
