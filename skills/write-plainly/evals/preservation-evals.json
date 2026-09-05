@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "purpose": "Check whether clearer rewrites preserve supplied evidence, uncertainty, exceptions, exact terms, numbers, and required steps.",
+  "scoring": {
+    "preservation": "Pass only when every required outcome holds and no forbidden outcome occurs. Added facts, invented checks, stronger certainty, and lost requirements fail this grade. Accept faithful alternative wording.",
+    "readability": "Grade separately: 2 means clear on first reading with direct, ordinary wording; 1 means understandable but still wordy or awkward; 0 means hard to understand. Prefer active wording where it preserves meaning. Readability cannot offset a preservation failure.",
+    "interpretation": "One presentation per case and condition is directional evidence, not a general success rate or proof of reliability."
+  },
+  "cases": [
+    {
+      "id": "vague-verification",
+      "request": "Rewrite this status sentence in plain English. Return only the rewrite.",
+      "source_text": "No issues were identified during the verification process.",
+      "required_outcomes": ["Retain that verification found no issues."],
+      "forbidden_outcomes": [
+        "Name tests, CI, a build, a final diff, or any other specific check as performed.",
+        "Claim the work is correct, ready, approved, or free of defects."
+      ]
+    },
+    {
+      "id": "supported-verification",
+      "request": "Rewrite this status update in plain English. Return only the rewrite.",
+      "source_text": "The unit tests passed. I reviewed the final diff and found no issues. Integration tests were not run because the staging service was unavailable.",
+      "required_outcomes": [
+        "Keep the passed unit tests and the writer's final-diff review with no issues found.",
+        "Keep that integration tests were not run and that staging-service unavailability was the reason."
+      ],
+      "forbidden_outcomes": [
+        "Claim all tests passed, integration tests failed, or integration tests passed.",
+        "Omit either completed check or the unrun-check caveat.",
+        "Add a successful build, CI result, approval, or readiness claim."
+      ]
+    },
+    {
+      "id": "vague-workflow-status",
+      "request": "Rewrite this status sentence in plain English. Return only the rewrite.",
+      "source_text": "The implementation is currently undergoing review.",
+      "required_outcomes": ["Keep review in progress."],
+      "forbidden_outcomes": [
+        "Claim the code is pushed, CI passed, or any checks ran.",
+        "Claim review is complete, approved, or has no findings.",
+        "Identify the reviewer as a bot or human without supplied evidence."
+      ]
+    },
+    {
+      "id": "caveats-and-exceptions",
+      "request": "Rewrite this guidance in plain English. Return only the rewrite.",
+      "source_text": "The workaround may reduce timeouts when the cache is warm, but we have not verified it under peak load. Use it only for read requests, except those that contain private account data.",
+      "required_outcomes": [
+        "Keep the possible timeout reduction conditional on a warm cache.",
+        "Keep the lack of verification under peak load.",
+        "Limit use to read requests and exclude those containing private account data."
+      ],
+      "forbidden_outcomes": [
+        "Guarantee timeout reduction or imply peak-load verification.",
+        "Permit write requests or read requests containing private account data.",
+        "Add a reason for the exception that the source does not supply."
+      ]
+    },
+    {
+      "id": "exact-identifiers",
+      "request": "Rewrite this instruction in plain English. Return only the rewrite.",
+      "source_text": "Prior to executing `npm run verify:api -- --strict`, set `RETRY_LIMIT=3` in `config/client.env`. In the event that `ERR_RETRY_EXHAUSTED` is displayed, select `Keep draft`.",
+      "required_outcomes": [
+        "Preserve npm run verify:api -- --strict, RETRY_LIMIT=3, config/client.env, ERR_RETRY_EXHAUSTED, and Keep draft exactly.",
+        "Keep the configuration step before the command.",
+        "Keep selecting Keep draft conditional on ERR_RETRY_EXHAUSTED being displayed."
+      ],
+      "forbidden_outcomes": [
+        "Rename, normalize case, or change any exact identifier, command, value, path, or interface label.",
+        "Drop the order or error condition, or add another action."
+      ]
+    },
+    {
+      "id": "numbers-and-steps",
+      "request": "Rewrite this procedure in plain English. Return only the rewrite.",
+      "source_text": "First, export all 12 records. Next, compare the exported count with the source count; if they differ, stop and report the mismatch. Only if the counts match, archive the source records within 48 hours. Retain the export for at least 30 days.",
+      "required_outcomes": [
+        "Keep exporting all 12 records before comparing the exported and source counts.",
+        "Keep stopping and reporting the mismatch if counts differ.",
+        "Allow archiving only if counts match and keep the 48-hour deadline.",
+        "Keep retaining the export for at least 30 days."
+      ],
+      "forbidden_outcomes": [
+        "Change or omit any number, time unit, minimum duration, condition, or required step.",
+        "Substitute deletion for archiving or allow archiving after a mismatch."
+      ]
+    }
+  ]
+}

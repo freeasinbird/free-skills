@@ -50,6 +50,25 @@
         "The composed markdown labels Before and After, with Before preceding After",
         "Nothing was uploaded or attached anywhere; evidence stops at local files"
       ]
+    },
+    {
+      "id": 4,
+      "eval_name": "interactive-menu-pair",
+      "prompt": "You are working in the static-site git repo at <fixture-repo>. The Fixture actions menu has cramped rows. Apply the supplied spacing patch at <patch-path>; it is the only permitted fixture source change. Produce local before/after evidence showing the open menu in light theme, plus a reproducible capture recipe. Serve the site with python3 -m http.server from the repo root (pick a free port). IMPORTANT: do NOT upload or attach images anywhere (no gh-imgup, GitHub, image host, PR, or issue). Save local images and evidence.md with relative image paths in <outputs-dir>. Save the recipe separately as <outputs-dir>/capture-recipe.md; do not link or copy it into evidence.md.",
+      "expected_output": "An open-menu before/after pair showing Sample workspace and all three action labels, comparable display and framing, a separate local capture recipe, and no uploads.",
+      "files": [],
+      "expectations": [
+        "The harness-exported transcript.txt shows capture-method selection before the first screenshot, with no initial capture.mjs attempt on the unreachable open-menu state",
+        "The fixture starts closed on fresh loads before and after the patch; transcript.txt shows a UI interaction opening the menu before each capture, without injected attributes, CSS, or state that forces it open",
+        "The final tracked fixture diff matches only the supplied spacing patch; the original revision and patch digest are recorded",
+        "Before and after images show the open menu with Sample workspace, Rename sample, Duplicate sample, and Archive sample visible",
+        "The pair uses identical fixture data, viewport, DPR, zoom, light theme, and framing; fixed-rectangle dimensions match, or the element height delta equals the three rows padding change (48 CSS pixels, scaled by DPR)",
+        "Images are cropped to the menu with useful context, are non-blank, and each axis is between 100 and 2000 pixels",
+        "capture-recipe.md records each source revision and applied patch, route, fixture identity, method, viewport, DPR, zoom, theme, crop, and ordered state setup without credentials, session data, private URLs, or customer data",
+        "Replaying the recipe in a fresh browser session reproduces the expected open state and dimensions for both revisions",
+        "evidence.md labels Before then After and contains only local image references and publication-safe captions, with no recipe text or reference",
+        "The harness-exported transcript.txt shows that nothing was uploaded or attached anywhere; all evidence remains local"
+      ]
     }
   ]
 }

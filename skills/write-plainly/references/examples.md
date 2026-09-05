@@ -6,16 +6,21 @@ someone else's text.
 
 ## Common Rewrites
 
-| Avoid                                                                                                                     | Prefer                                                                                       | Why                                                 |
-| ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| "Understood, and thank you for the correction. The implementation plan has already been produced, so I will now proceed." | "The plan already exists, so I'll implement it."                                             | Accept the correction and state what changes.       |
-| "At a high level, the system facilitates the persistence of handoff context across session boundaries."                   | "Put the decision in the issue so the next agent can find it."                               | Name the actor, action, and reason.                 |
-| "The implementation is currently in a review-convergent state."                                                           | "The code is pushed. CI passed. I'm still waiting for review."                               | Report observable facts instead of workflow jargon. |
-| "Integration evidence is valid only for the selected base commit."                                                        | "The checks only count for the base commit you tested. If the base changes, run them again." | Turn an abstract rule into actions and conditions.  |
-| "There are several considerations that should be taken into account before a determination can be made."                  | "I need two facts before I can decide."                                                      | Remove throat-clearing and say what is missing.     |
-| "It may potentially be advisable to consider separating these concerns."                                                  | "These concerns change independently. Split them."                                           | State the recommendation and its reason.            |
-| "No issues were identified during the verification process."                                                              | "The tests passed, and I found no issues in the final diff."                                 | Name what was actually checked.                     |
-| "I would be happy to provide additional detail if that would be helpful."                                                 | Omit it.                                                                                     | A generic offer adds no information.                |
+Specific wording needs evidence. A rewrite can clarify supplied facts, but
+can't add checks, results, reasons, or certainty. For the review-status row
+below, the supplied context is: the code is pushed, CI passed, and the bot
+review is still running. The other rows need no additional context.
+
+| Avoid                                                                                                                     | Prefer                                                             | Why                                                  |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| "Understood, and thank you for the correction. The implementation plan has already been produced, so I will now proceed." | "The implementation plan exists, so I'll proceed."                 | Keep the stated next step without expanding it.      |
+| "At a high level, the system facilitates the persistence of handoff context across session boundaries."                   | "The system helps keep handoff context available across sessions." | Describe the same supporting role in ordinary words. |
+| "The implementation is currently in a review-convergent state."                                                           | "The code is pushed. CI passed. The bot review is still running."  | Use the supplied context to explain the status.      |
+| "Integration evidence is valid only for the selected base commit."                                                        | "Integration evidence only applies to the selected base commit."   | Keep the evidence's limit without adding a step.     |
+| "There are several considerations that should be taken into account before a determination can be made."                  | "Several factors need consideration before a decision."            | Keep the prerequisite without inventing a count.     |
+| "It may potentially be advisable to consider separating these concerns."                                                  | "Consider whether separating these concerns would help."           | Keep the advice tentative without adding a reason.   |
+| "No issues were identified during the verification process."                                                              | "Verification found no issues."                                    | Don't invent which checks ran or what they proved.   |
+| "I would be happy to provide additional detail if that would be helpful."                                                 | Omit it.                                                           | A generic offer adds no information.                 |
 
 ## Examples by Situation
 
