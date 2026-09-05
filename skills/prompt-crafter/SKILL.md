@@ -27,10 +27,10 @@ cross-cutting edit that spans several per-tool variants without breaking
 their alignment, and reviewing or auditing existing payloads for the defect
 classes that erode adherence.
 
-Out of scope: repo process (branches, PRs, decision logs), which belongs to the
-host project's own conventions; and API-level prompt engineering (tool
-schemas, system-prompt design inside applications), which is a different
-craft with different constraints.
+The host project defines repo process (branches, PRs, decision logs);
+authorized edits follow those conventions. API-level prompt engineering (tool
+schemas, system-prompt design inside applications) is a different craft and
+is out of scope.
 
 ## Core Model
 
@@ -59,6 +59,16 @@ The working knowledge lives in three references, loaded on demand:
 
 ## Workflow: Review or Audit an Existing Prompt Set
 
+Match the finish line to the requested operation. An audit or assessment alone
+returns findings and draft wording. It does not edit payloads or mutate Git or
+forge state, such as creating a branch, committing, pushing, or opening a PR.
+Loading this skill or a host's default PR workflow does not authorize edits.
+
+Taxonomy fixes describe draft wording during an audit. A cross-cutting finding
+does not authorize switching to the editing workflow. An explicit editing
+request authorizes scoped fixes without another general permission round;
+the judgment and prior-decision boundaries below still apply.
+
 1. **Load the prior decisions relevant to the payloads being reviewed.**
    Read the host project's authoring conventions, then any decision
    notes the current issue or PR links to or that name the payloads under
@@ -76,7 +86,8 @@ The working knowledge lives in three references, loaded on demand:
    supports delegation.** If you can spawn a subagent (and session policy
    permits it), give it only the payloads, the authoring constraints, the
    prior-decision list, and the taxonomy as evaluation prompts; instruct
-   it to critique adversarially and propose draft wording. Same-context
+   it to critique adversarially and propose draft wording. Pass the requested
+   operation and its editing limits too. Same-context
    self-review shares the blind spots that wrote the prompt; in practice
    this step has found the highest-severity defects. Where delegation is
    unavailable or needs permission you don't have, skip it and lean on an
@@ -92,9 +103,17 @@ The working knowledge lives in three references, loaded on demand:
    recommendation. Found in practice: delete inert rules versus keep them as
    notes-to-self versus move them to human-facing docs; which optional
    coverage additions earn inclusion. Do not silently make debatable
-   changes.
-7. **Apply, run the verification battery** (`references/verification.md`),
-   and ship per the host project's process.
+   changes. For authorized edits, complete independent clear fixes while
+   unresolved choices await the user.
+7. **Finish the requested operation.** For an audit, return findings with
+   severity, location, the problem, and draft wording for every affected
+   variant in scope. For authorized editing, apply the scoped fixes, run the
+   verification battery (`references/verification.md`), and ship per the host
+   project's process.
+
+   Audit checks use non-mutating modes only, including host formatters and
+   linters from the verification reference. If a check has no such mode,
+   report it as not run. Never use a write mode to complete an audit check.
 
 ## Workflow: Cross-Cutting Edit
 
@@ -129,8 +148,9 @@ The working knowledge lives in three references, loaded on demand:
   evidence, not a prohibition: never silently overturn one. If a
   finding conflicts with it, identify the prior decision, state which
   assumption or condition changed, and surface the proposed revision
-  to the user instead of shipping it; the wording or formatting of a
-  decided rule may be improved freely.
+  to the user instead of shipping it. Within an authorized editing scope,
+  wording or formatting improvements that preserve the decision need no
+  further permission.
 - **Don't confuse repo config with payload.** The conventions governing
   work on the prompt repo are not part of any payload, and payload rules
   don't govern the repo.
@@ -142,8 +162,9 @@ The working knowledge lives in three references, loaded on demand:
   same session; CLI capabilities drift fast.
 - **Don't grow capped prompts.** At-budget files change by swap only: every
   addition names the trim that funds it.
-- **Don't ship a half-sweep.** A defect class found once is grepped for
-  everywhere (all payloads, all variants) and fixed as a class.
+- **Don't ship a half-sweep.** Search every payload and variant in scope for
+  a defect class found once. Audits report all instances with draft wording;
+  authorized edits fix the class within the requested editing scope.
 - **Read conventions from the host project, never embed them.** The
   prior-decision list, reviewer records, and shipping process differ
   per repo; this skill carries the craft, the host project carries its own
