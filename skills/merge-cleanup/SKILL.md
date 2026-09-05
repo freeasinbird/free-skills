@@ -5,7 +5,9 @@ description: >-
   clean up", "PR #N is merged", "just merged it, tidy up", or "the PR landed".
   Safely tidies branches and refs, verifies issue closure, performs documented
   project reconciliation, and stops review watches. Not for merging a PR or
-  cleaning up one that remains open.
+  cleaning up one that remains open. The bundled executor requires a
+  shell-capable environment with Bash, Git, required utilities, and
+  authenticated GitHub CLI for GitHub or a compatible GitHub Enterprise host.
 ---
 
 # Merge Cleanup
@@ -13,11 +15,40 @@ description: >-
 Clean up after a merged PR: resync the base, delete and prune the merged
 branch, verify that close-keyword issues closed, reconcile documented project
 obligations, and stop any review watch. A bundled script handles the Git and
-forge mechanics. This skill keeps issue-close verification, project-specific
+GitHub mechanics. This skill keeps issue-close verification, project-specific
 reconciliation, watcher shutdown, and the final owner-facing judgment.
 
-Use it when the user reports a merge (see the description above). The
-procedure:
+## Check Prerequisites
+
+Use this skill on any agent platform that can run the required bundle. Before
+cleanup, establish support through read-only project records and tool checks:
+
+- **Supported forge:** GitHub or a compatible GitHub Enterprise host, accessed
+  through authenticated `gh`. Resolve the host and slug as Resolve the Work
+  Unit requires. Keep the actual forge host explicit, not the SSH alias or
+  ambient `GH_HOST`. A custom hostname alone does not mean unsupported.
+  Confirm access with a read-only `gh` lookup pinned to that host.
+- **Required runtime:** A shell-capable environment with Bash, Git, `gh`,
+  `env`, `sed`, `tr`, `mktemp`, `mkdir`, `rm`, `readlink`, `tail`, `grep`, and
+  `find`. Check availability with `command -v`. Git must support the bundle's
+  worktree, ref, and transport operations; the landing helper checks
+  `git switch` when the branch name requires it. No numeric minimum versions
+  are specified. Standalone `jq` and `rg` are not cleanup requirements.
+- **Executable bundle:** Check that `merge-cleanup.sh` and its adjacent
+  `base-landing-plan.sh` are present and executable. SSH transport also needs
+  its configured SSH tooling. The executor uses `ssh -G` to validate aliases
+  against the pinned forge host.
+- **Stop on missing support:** Report a non-GitHub forge as unsupported, name
+  unavailable mandatory tooling or an unusable bundle, and report unknown
+  host identity or failed authentication/API evidence as a lookup gap. Stop
+  before any fetch, switch, retarget, delete, or prune. Do not substitute
+  another forge CLI or reconstruct the destructive sequence from prose.
+
+These requirements apply to the cleanup executor. The separate reconciliation
+checker also needs `awk`; its manual fallback is described in Reconcile Project
+Obligations and does not replace the executor.
+
+Once prerequisites pass, follow this procedure:
 
 1. Resolve the work unit: the repository, PR number, worktree, and remote
    roles.
@@ -32,7 +63,7 @@ procedure:
 ## Resolve the Work Unit
 
 Resolve the merged PR from the conversation first. Otherwise identify it with
-the forge CLI, but never select an ambiguous candidate.
+`gh` against the explicit host, but never select an ambiguous candidate.
 
 Establish each of these before invoking the script:
 
@@ -122,7 +153,7 @@ or `-h`, for diagnosis only.
 
 ### Interpret the Result Ledger
 
-The last stdout line is always one of these:
+When the script emits a result ledger, its last stdout line is one of these:
 
 - `OK cleanup <json>` at exit 0: every mechanical step completed or was
   already absent.
@@ -131,8 +162,12 @@ The last stdout line is always one of these:
 - `LOOKUP_FAILED <what> <json>` at exit 4: required evidence could not be
   established, so the next action did not run.
 
-Exit 64 means the invocation is invalid. Exit 69 means a required local
-executable or bundled helper is unavailable.
+Exit 64 means the invocation is invalid. Exit 69 covers explicit runtime
+checks, including missing Git, `gh`, or the executable landing helper, and
+can occur without a JSON ledger. Other missing utilities need not return 69
+or produce a ledger. For example, missing `find` causes `LOOKUP_FAILED` at
+exit 4 when the landing helper inspects the refs tree. Authentication or API
+evidence failures are lookup failures, not proof of an unsupported forge.
 
 Every JSON payload carries the same fields: `repo`, `pr`, `merge`,
 `head_branch`, `base_branch`, `head_repo`, `checkout`, `worktree`, `consumers`,
@@ -150,8 +185,8 @@ Git process that recreates the ref. Do not summarize them as config removal.
 A result is retryable after its stated guard is resolved. Re-run the whole
 script with the same pinned PR and checkout; its already-absent dispositions
 make completed deletion steps idempotent. Do not extract and run the remaining
-Git command by hand. If exit 69 prevents the executable from running, stop and
-surface the gap rather than reconstructing the destructive sequence from prose.
+Git command by hand. If the executable cannot run, stop and report the runtime
+gap as Check Prerequisites requires.
 
 For guard rationale or maintenance, read only the relevant section. Normal
 cleanup does not require loading this reference.
