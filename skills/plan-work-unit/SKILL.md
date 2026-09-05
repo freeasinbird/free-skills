@@ -28,8 +28,8 @@ user explicitly authorizes planning writes.
 Follow this procedure:
 
 1. Verify preconditions from project instructions and the forge.
-2. Read the whole issue, inspect the repository, and record the grounding
-   revision.
+2. Read the whole issue, resolve the grounding revision, then inspect that
+   exact repository tree.
 3. Retire and verify any stale plan before changing the contract.
 4. Complete the authoritative work-contract record, written plainly.
 5. Post one current plan, written plainly.
@@ -99,14 +99,16 @@ It is the partial unsafe state covered under Replan.
 After preconditions pass:
 
 1. Read the whole issue, including plan comments and linked decisions.
-2. Inspect the relevant code, interfaces, tests, documentation, dependencies,
-   and verification commands. Do not infer an implementation from the title or
-   write a repository-agnostic outline.
-3. Record a re-checkable grounding revision, such as a commit identifier or
-   platform equivalent. Resolve it from the declared planning base or the
-   repository host's authoritative default-branch reference. This revision is
-   provenance for later staleness checks, not a mutable local branch or working
-   snapshot.
+2. Resolve and record an immutable grounding revision from the declared
+   planning base or the repository host's authoritative default-branch
+   reference. Use a commit identifier or platform equivalent before inspecting
+   source content. A mutable local branch or working snapshot is not provenance.
+3. Inspect that exact tree's relevant code, interfaces, tests, documentation,
+   dependencies, and verification commands. Use revision-specific file reads,
+   a read-only isolated snapshot, or the forge's source view, according to
+   available capabilities. Ground every source-based claim in those reads;
+   distinguish proposed paths and interfaces from ones that already exist.
+   Do not infer an implementation from the title or write a generic outline.
 4. Select the project-designated contract record. If none exists, select the
    issue body. Keep that selection explicit and fixed through the run.
 5. Discover the coordination model from project instructions, records, code
@@ -116,6 +118,16 @@ After preconditions pass:
 6. Confirm the operation, repository, issue state, write capability,
    dependencies, and authorization blockers. Do not claim the issue, create an
    implementation branch, edit implementation files, or open a pull request.
+
+Current forge records supply issue state, authorization, and coordination
+evidence. Source-based claims about those boundaries still come from the
+selected tree. An unchecked mutable checkout cannot stand in for that tree.
+
+If no available route can read the selected tree, report planning blocked and
+name the missing source access as a grounding gap. Do not substitute another
+checkout or publish an unsupported contract or replacement plan. Apply Blocked
+Replan when a prior plan needs invalidation. This is not a write-precondition
+error.
 
 ## Write the Contract and Plan Plainly
 
