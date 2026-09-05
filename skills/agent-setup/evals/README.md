@@ -6,8 +6,10 @@ workspace outside the repo.
 
 ## Files
 
-- `evals.json`: forty-eight task evals for optional work-unit stages, progressive
-  coordination discovery, and explicit coordination reassessment.
+- `trigger-eval.json`: eighteen description-only queries, twelve positive and
+  six negative, for setup, devlog, sync, reassessment, and standalone scaffolds.
+- `evals.json`: fifty-six task evals for scope routing, factual intake, profiles,
+  optional work-unit stages, coordination discovery, and reassessment.
   1. `single-stage-init`: initializes a plain project and expects the normal
      single implementation workflow with no stage record.
   2. `planning-implementation-handoff`: initializes a project with separate
@@ -107,8 +109,38 @@ workspace outside the repo.
       mechanics value for a shape-2 record without inventing a work contract.
   48. `blank-rich-shape-mechanics-still-blocks`: retains the local-document gate
       when a composed shape includes a richer capability.
+  49. `standalone-pr-template-absent-agents`: exits the loaded skill before Init.
+  50. `standalone-pr-template-managed-agents`: exits before Update and preserves
+      AGENTS.md verbatim.
+  51. `standalone-contributing-absent-agents`: exits before Init without importing
+      setup policy into CONTRIBUTING.md.
+  52. `standalone-contributing-managed-agents`: exits before Update without
+      redirecting to the scaffolding reference.
+  53. `populated-repository-evidence-first`: uses agreeing repository facts
+      without asking the owner to repeat them or running builds for intake.
+  54. `missing-and-conflicting-intake`: reuses settled facts and asks only
+      about a missing run command and a concrete runtime conflict.
+  55. `explicit-devlog-default`: retains Decision-log for a devlog request.
+  56. `explicit-devlog-mandatory-classes`: retains High-assurance when the owner
+      supplies mandatory note classes.
 
 ## Re-Running
+
+These are behavioral specifications, not an automatic runner. Keep separate
+fixture copies and fresh agent contexts for the old and revised skill. Save
+the exact revisions, model, supplied prompt, tool transcript, questions, file
+diff, and outcome for each expectation. Missing model runs are verification
+gaps; parsing JSON or matching phrases is not behavioral evidence.
+
+### Description Selection
+
+Present each query with only the skill's name and description, without forcing
+the skill to load. Record whether the agent selects agent-setup and compare
+that selection with `should_trigger`. Repeat against the old description in a
+fresh context. Keep this separate from loaded-skill task runs below: selection
+alone cannot prove that an explicitly loaded skill exits before choosing a mode.
+
+### Existing Stage and Coordination Fixtures
 
 1. Create one scratch git repository per eval with a README that documents
    simple build, test, lint, and format commands. For eval 1, omit AGENTS.md.
@@ -222,6 +254,100 @@ workspace outside the repo.
     Detailed mechanics field and no external work contract.
 48. For eval 48, add one record combining shapes 2 and 3 with a present but blank
     Detailed mechanics field.
-49. Replace `<fixture-repo>` in each prompt with its per-run path. Run each task
-    with and without the revised skill, grade the outputs against the listed
-    expectations, and keep every generated artifact outside this repository.
+
+### Scope and Intake Fixtures
+
+For cases 49–52, use the populated fixture below and omit the requested
+artifact. Omit AGENTS.md for 49 and 51. For 50 and 52, add valid Standard
+managed blocks, the required workflow reference, and an unmanaged sentinel:
+`Local instruction: preserve this sentence verbatim.` Save its original bytes.
+
+Explicitly load the tested skill revision for these four cases. Grade whether
+it enters either setup mode, offers setup scaffolds, reads or redirects to its
+scaffolding reference, or imports setup policy into the artifact request.
+Compare AGENTS.md bytes and the complete file diff. The ordinary requested
+artifact may be produced after the skill exits; setup-driven changes fail.
+
+For case 53, create the following populated fixture with no AGENTS.md. For
+cases 55 and 56, use the same fixture; their prompts supply the profile intent.
+All paths below are relative to the scratch fixture root.
+
+- `package.json`:
+
+  ```json
+  {
+    "name": "intake-fixture",
+    "private": true,
+    "type": "module",
+    "scripts": {
+      "build": "node scripts/build.mjs",
+      "test": "node scripts/test.mjs",
+      "start": "node src/main.mjs",
+      "lint": "node scripts/lint.mjs",
+      "format": "node scripts/format.mjs"
+    }
+  }
+  ```
+
+- `.nvmrc`: `22`, followed by a newline.
+- `src/main.mjs`: `export const answer = 42;`, followed by a newline.
+- `scripts/build.mjs`, `scripts/test.mjs`, `scripts/lint.mjs`, and
+  `scripts/format.mjs`: use this content, replacing `ACTION` with the filename
+  stem. These executable fixture stubs record invocation without dependencies.
+
+  ```js
+  import { appendFileSync } from "node:fs";
+  import { strict as assert } from "node:assert";
+  import { answer } from "../src/main.mjs";
+  appendFileSync(".eval-executions", "ACTION\n");
+  assert.equal(answer, 42);
+  ```
+
+- `.github/workflows/ci.yml`:
+
+  ```yaml
+  name: checks
+  on: [push]
+  jobs:
+    check:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/setup-node@v4
+          with:
+            node-version-file: .nvmrc
+        - run: npm run build
+        - run: npm test
+        - run: npm run lint
+        - run: npm run format
+  ```
+
+- `README.md`: describe a Node 22 project with no external dependencies.
+  Document `npm run build`, `npm test`, `npm start`, `npm run lint`, and
+  `npm run format`, each alongside its script path from the manifest. State
+  that `src/main.mjs` is the entry point, CI lives in
+  `.github/workflows/ci.yml`, and no external dependencies may be added.
+
+For case 54, copy case 53's fixture and remove `start` from the manifest and
+the run-command sentence from README. Keep the entry point documented. Replace
+CI's `node-version-file: .nvmrc` with `node-version: 20`; keep `.nvmrc` at 22.
+
+Grade intake against source facts, questions, and tool calls. Inspect
+`.eval-executions` alongside the transcript to distinguish builds or tests run
+for intake from any later verification. A source-verified command definition
+is not evidence that the command ran successfully. In case 54, require the
+runtime question to name both conflicting sources and the other question to
+ask for the missing run command; settled facts need no confirmation.
+
+### Task Runs and Regression Coverage
+
+Replace `<fixture-repo>` in each prompt with its per-run path. Run new task
+cases against both skill revisions, grade each expectation, and retain the
+scratch artifacts. Rerun cases 1, 5, 7, 14, 17, and 21 for Standard init,
+empty-project placeholders, adoption preservation, sync, and reassessment.
+Cases 55 and 56 cover the note-keeping profile defaults.
+
+Parse both JSON files before behavioral runs. Check task IDs and names for
+uniqueness, the existing task fields for presence, and trigger values for
+Boolean type. Verify the counts above from parsed data and preserve all 48
+existing task definitions and expectations unchanged.

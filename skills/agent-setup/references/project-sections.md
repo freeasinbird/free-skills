@@ -23,11 +23,17 @@ coordination or work-unit stage record.
 
 ## §guidance
 
-During init, guide the user through these sections interactively. If the project
-is too early for these decisions (fresh repo, no code yet), write the canonical
-sections and scaffolding, leave placeholders for project-specific sections (a
-TODO comment noting what to fill in), and move on. The user can re-run in update
-mode once the project has shape.
+During init or approved adoption, inspect project evidence before asking for
+facts. Use supported facts in the proposed guidance without asking the owner
+to repeat them. Ask the owner about missing facts and conflicting sources
+before writing; name the sources when asking about a conflict. Profile and
+policy choices still belong to the owner. Ordinary updates
+preserve existing project-specific guidance.
+
+If the project is too early for these decisions (fresh repo, no code yet),
+write the canonical sections and scaffolding, leave placeholders for
+project-specific sections (a TODO comment noting what to fill in), and move on.
+The user can re-run in update mode once the project has shape.
 
 Keep the project-specific payload lean: AGENTS.md is loaded whole into every
 agent session, so its sections should hold rules that apply to most sessions.
@@ -48,14 +54,21 @@ the pointer."
 - Detect language and build system from project files. If no code
   exists yet, leave this section as a placeholder and skip to
   scaffolding.
-- Ask for build, test, and run commands.
-- Ask for targets or entry points, language/runtime version, and CI file
-  location.
-- Ask about enforced constraints (e.g., "no force unwraps", "strict mode").
+- Inspect manifests, local scripts or build targets, runtime pins, CI
+  definitions, and project docs for build, test, run, lint, and format
+  commands. Also gather targets, entry points, runtime versions, CI paths,
+  and enforced constraints (e.g., "no force unwraps", "strict mode").
+- Verify that command definitions and referenced paths exist and that the
+  sources agree. Use file inspection and known non-mutating queries; a version
+  or target-listing command qualifies only when its behavior is known to be
+  non-mutating. Don't run full builds or tests merely to gather these facts.
+- Distinguish facts verified from source from commands successfully executed.
+  Report execution gaps without treating source-verified command definitions
+  as missing facts.
 - **Lint and format are required, not optional.** The workflow conventions
   depend on them: definition of done expects a successful build, passing
   tests, and clean lint and formatting; commits assume CI catches unformatted
-  code. Ask which tools the project uses. If the user has none, help them
+  code. Use the tools found above. If none are established, help the user
   choose and configure one appropriate for the language (e.g., `swift-format`
   for Swift, `prettier` + `eslint` for JS/TS, `black` + `ruff` for Python,
   `rustfmt` + `clippy` for Rust). The goal is a single command that can lint
