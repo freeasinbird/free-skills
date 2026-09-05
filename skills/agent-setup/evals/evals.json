@@ -731,6 +731,116 @@
         "The missing required local mechanics document stops reassessment",
         "AGENTS.md remains unchanged"
       ]
+    },
+    {
+      "id": 49,
+      "eval_name": "standalone-pr-template-absent-agents",
+      "prompt": "You are working at <fixture-repo>, which has no AGENTS.md. The agent-setup skill has been explicitly loaded. Add a PR template to this repository. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "Agent-setup exits before mode selection and returns to the requested task without expanding its scope.",
+      "files": [],
+      "expectations": [
+        "The skill enters neither Init nor Update and does not offer adoption or profile selection",
+        "The exit does not direct scaffold execution, offer setup scaffolds, redirect to references/scaffolding.md, or import setup policy into the task",
+        "No setup-driven files or unrelated project settings are changed; any work after the skill exits stays within the requested artifact",
+        "Existing AGENTS.md is preserved byte-for-byte, or remains absent when none existed"
+      ]
+    },
+    {
+      "id": 50,
+      "eval_name": "standalone-pr-template-managed-agents",
+      "prompt": "You are working at <fixture-repo>, which has a managed AGENTS.md. The agent-setup skill has been explicitly loaded. Add a PR template to this repository. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "Agent-setup exits before mode selection and returns to the requested task without expanding its scope.",
+      "files": [],
+      "expectations": [
+        "The skill enters neither Init nor Update and does not offer adoption or profile selection",
+        "The exit does not direct scaffold execution, offer setup scaffolds, redirect to references/scaffolding.md, or import setup policy into the task",
+        "No setup-driven files or unrelated project settings are changed; any work after the skill exits stays within the requested artifact",
+        "Existing AGENTS.md is preserved byte-for-byte, or remains absent when none existed"
+      ]
+    },
+    {
+      "id": 51,
+      "eval_name": "standalone-contributing-absent-agents",
+      "prompt": "You are working at <fixture-repo>, which has no AGENTS.md. The agent-setup skill has been explicitly loaded. Add CONTRIBUTING.md to this repository. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "Agent-setup exits before mode selection and returns to the requested task without expanding its scope.",
+      "files": [],
+      "expectations": [
+        "The skill enters neither Init nor Update and does not offer adoption or profile selection",
+        "The exit does not direct scaffold execution, offer setup scaffolds, redirect to references/scaffolding.md, or import setup policy into the task",
+        "No setup-driven files or unrelated project settings are changed; any work after the skill exits stays within the requested artifact",
+        "Existing AGENTS.md is preserved byte-for-byte, or remains absent when none existed"
+      ]
+    },
+    {
+      "id": 52,
+      "eval_name": "standalone-contributing-managed-agents",
+      "prompt": "You are working at <fixture-repo>, which has a managed AGENTS.md. The agent-setup skill has been explicitly loaded. Add CONTRIBUTING.md to this repository. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "Agent-setup exits before mode selection and returns to the requested task without expanding its scope.",
+      "files": [],
+      "expectations": [
+        "The skill enters neither Init nor Update and does not offer adoption or profile selection",
+        "The exit does not direct scaffold execution, offer setup scaffolds, redirect to references/scaffolding.md, or import setup policy into the task",
+        "No setup-driven files or unrelated project settings are changed; any work after the skill exits stays within the requested artifact",
+        "Existing AGENTS.md is preserved byte-for-byte, or remains absent when none existed"
+      ]
+    },
+    {
+      "id": 53,
+      "eval_name": "populated-repository-evidence-first",
+      "prompt": "Initialize agent setup at <fixture-repo>. The repository has working local scripts, a manifest, a runtime pin, CI, and project documentation. The owner chooses Standard, a single implementation workflow, serial work, tracker issues for persistent work contracts, and explicit user assignment with no self-selection. No extra architecture or convention policy is requested. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A Standard setup that uses the agreeing repository evidence for project guidance and asks no redundant factual intake questions.",
+      "files": [],
+      "expectations": [
+        "The agent inspects the manifest, scripts, runtime pin, CI definition, README, and referenced paths before asking factual intake questions",
+        "Settled build, test, lint, and format commands, target paths, and constraints are reused without asking the owner to repeat them",
+        "Intake uses source inspection and only queries known to be non-mutating; full builds and tests are not run merely to discover facts",
+        "The response distinguishes source-verified command definitions from successful command execution and states any verification gaps",
+        "The supplied profile and policy choices are preserved, with no invented stages or coordination record",
+        "AGENTS.md records the discovered build, test, run, lint, and format commands, Node 22, src/main.mjs, .github/workflows/ci.yml, and the no-external-dependencies constraint"
+      ]
+    },
+    {
+      "id": 54,
+      "eval_name": "missing-and-conflicting-intake",
+      "prompt": "Initialize agent setup at <fixture-repo>. The repository has local scripts, a manifest, a runtime pin, CI, and docs. The owner chooses Standard, a single implementation workflow, serial work, tracker issues for persistent work contracts, and explicit user assignment with no self-selection. No extra architecture or convention policy is requested. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A Standard setup that reuses settled facts and asks only about the missing run command and the conflicting runtime versions.",
+      "files": [],
+      "expectations": [
+        "The agent inspects the manifest, scripts, runtime pin, CI definition, README, and referenced paths before asking factual intake questions",
+        "Settled build, test, lint, and format commands, target paths, and constraints are reused without asking the owner to repeat them",
+        "Intake uses source inspection and only queries known to be non-mutating; full builds and tests are not run merely to discover facts",
+        "The response distinguishes source-verified command definitions from successful command execution and states any verification gaps",
+        "The supplied profile and policy choices are preserved, with no invented stages or coordination record",
+        "The agent names .nvmrc (Node 22) and .github/workflows/ci.yml (Node 20) when asking which runtime to record",
+        "The agent asks for the missing run command instead of silently inventing one from src/main.mjs",
+        "No unresolved command or runtime choice is presented as settled fact"
+      ]
+    },
+    {
+      "id": 55,
+      "eval_name": "explicit-devlog-default",
+      "prompt": "You are working at <fixture-repo>, which has no AGENTS.md. Use agent-setup. Add a devlog to this project. The owner uses one implementation workflow, serial work, tracker issues for persistent contracts, and explicit user assignment with no self-selection. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "Init remains reachable for the explicit note-keeping request and uses Decision-log.",
+      "files": [],
+      "expectations": [
+        "The skill enters Init and records the Decision-log profile",
+        "AGENTS.md includes the managed devlog block and devlog/README.md is scaffolded",
+        "The mandatory-note list contains exactly the requested classes when supplied, and no mandatory classes are invented otherwise",
+        "The standalone scaffold exit does not suppress explicit devlog or decision-record setup"
+      ]
+    },
+    {
+      "id": 56,
+      "eval_name": "explicit-devlog-mandatory-classes",
+      "prompt": "You are working at <fixture-repo>, which has no AGENTS.md. Use agent-setup. Add decision records to this project, with mandatory notes for schema migrations and public API changes. The owner uses one implementation workflow, serial work, tracker issues for persistent contracts, and explicit user assignment with no self-selection. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "Init remains reachable for the explicit note-keeping request and uses High-assurance.",
+      "files": [],
+      "expectations": [
+        "The skill enters Init and records the High-assurance profile",
+        "AGENTS.md includes the managed devlog block and devlog/README.md is scaffolded",
+        "The mandatory-note list contains exactly the requested classes when supplied, and no mandatory classes are invented otherwise",
+        "The standalone scaffold exit does not suppress explicit devlog or decision-record setup"
+      ]
     }
   ]
 }

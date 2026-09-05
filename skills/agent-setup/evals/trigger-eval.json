@@ -1,0 +1,74 @@
+[
+  {
+    "query": "Add a PR template to this repository",
+    "should_trigger": false
+  },
+  {
+    "query": "Create CONTRIBUTING.md for this project",
+    "should_trigger": false
+  },
+  {
+    "query": "There is no AGENTS.md here. Add a PR template",
+    "should_trigger": false
+  },
+  {
+    "query": "AGENTS.md is absent. Write CONTRIBUTING.md",
+    "should_trigger": false
+  },
+  {
+    "query": "This repo already has managed AGENTS.md. Add only a PR template",
+    "should_trigger": false
+  },
+  {
+    "query": "We already use AGENTS.md. Add CONTRIBUTING.md",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up this project for agents, including a PR template",
+    "should_trigger": true
+  },
+  {
+    "query": "Make this project agent-ready and add CONTRIBUTING.md",
+    "should_trigger": true
+  },
+  {
+    "query": "Create AGENTS.md for this repository",
+    "should_trigger": true
+  },
+  {
+    "query": "Update AGENTS.md using our shared workflow conventions",
+    "should_trigger": true
+  },
+  {
+    "query": "Bootstrap devlog",
+    "should_trigger": true
+  },
+  {
+    "query": "Add decision records to this repository",
+    "should_trigger": true
+  },
+  {
+    "query": "Add a devlog with mandatory notes for schema migrations",
+    "should_trigger": true
+  },
+  {
+    "query": "Sync the managed workflow sections",
+    "should_trigger": true
+  },
+  {
+    "query": "Check agent setup",
+    "should_trigger": true
+  },
+  {
+    "query": "Reassess whether our coordination model still fits",
+    "should_trigger": true
+  },
+  {
+    "query": "Check the parallel-work setup and simplify obsolete lanes",
+    "should_trigger": true
+  },
+  {
+    "query": "Initialize AGENTS.md and reassess our coordination model",
+    "should_trigger": true
+  }
+]

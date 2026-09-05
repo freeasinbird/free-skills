@@ -9,11 +9,13 @@ description: >-
   audit standard files and repo settings. Use when the user asks to "set
   up this project for agents", "initialize AGENTS.md", "create AGENTS.md",
   "update AGENTS.md", "sync workflow sections", "check agent setup",
-  "bootstrap devlog", "make this project agent-ready", asks to add a devlog,
-  decision records, PR template, or CONTRIBUTING.md to a repo, or discusses
+  "bootstrap devlog", "make this project agent-ready", asks to add a devlog
+  or decision records to a repo, or discusses
   managing shared development conventions across projects. Also use when the
   user asks to reassess coordination, check the parallel-work setup, or
-  simplify obsolete lanes.
+  simplify obsolete lanes. A standalone PR-template or CONTRIBUTING.md
+  request is outside this skill, even when AGENTS.md is absent; those files
+  remain outputs of explicit agent setup.
 ---
 
 # Agent Setup
@@ -30,7 +32,14 @@ left untouched during updates.
 
 ## Detecting Mode
 
-Check the request before the file state, then pick a mode from this table:
+Check scope before selecting a mode. A request only for a PR template or
+CONTRIBUTING.md does not enter Init or Update, even if this skill was explicitly
+loaded. End agent-setup and return to the requested task; leave existing
+AGENTS.md unchanged. Do not direct scaffold execution, refer the task to this
+skill's scaffolding reference, or carry setup policy into it.
+
+For setup, devlog, managed-sync, or explicit reassessment requests, check the
+request before the file state, then pick a mode from this table:
 
 | Situation (check top to bottom)                            | Mode                             |
 | ---------------------------------------------------------- | -------------------------------- |
@@ -89,8 +98,10 @@ only record (no separate config or metadata file).
 3. Choose a profile with the user (see "Profiles"). Present the three
    explicitly and recommend Standard. Apply the Profiles defaults when the run
    is noninteractive or the user has already stated a preference.
-4. Gather the project-specific sections interactively. Read
-   `references/project-sections.md` §guidance for the per-section questions,
+4. Gather the project-specific sections from repository evidence first, and
+   ask the owner only about facts that evidence leaves missing or in conflict,
+   naming the disagreeing sources. Read
+   `references/project-sections.md` §guidance for intake and verification,
    `references/project-sections.md` §work-contracts for coordination
    discovery, and `references/project-sections.md` §stages for optional
    work-unit stages, and follow them. The conventional order in
