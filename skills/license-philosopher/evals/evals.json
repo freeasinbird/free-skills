@@ -1,0 +1,220 @@
+{
+  "skill_name": "license-philosopher",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "retain-gpl-only",
+      "prompt": "Apply the licensing philosophy. Keep the existing license.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA local command-line tool.\n"
+        },
+        {
+          "path": "LICENSE.md",
+          "bundled": "gpl-3.0"
+        },
+        {
+          "path": "NOTICE",
+          "text": "Copyright 2026 Example authors.\nThis project is licensed under GPL-3.0-only.\n"
+        }
+      ],
+      "expected_expression": "GPL-3.0-only",
+      "license_files": {
+        "LICENSE.md": "gpl-3.0"
+      },
+      "fetch_mode": "none",
+      "ask_version": false
+    },
+    {
+      "id": 2,
+      "eval_name": "retain-gpl-later",
+      "prompt": "Apply the licensing philosophy. Keep the existing license.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA local command-line tool.\n"
+        },
+        {
+          "path": "COPYING",
+          "bundled": "gpl-3.0"
+        },
+        {
+          "path": "NOTICE",
+          "text": "Copyright 2026 Example authors.\nThis project is licensed under GPL-3.0-or-later.\n"
+        }
+      ],
+      "expected_expression": "GPL-3.0-or-later",
+      "license_files": {
+        "COPYING": "gpl-3.0"
+      },
+      "fetch_mode": "none",
+      "ask_version": false
+    },
+    {
+      "id": 3,
+      "eval_name": "retain-lgpl-companions",
+      "prompt": "Apply the licensing philosophy. Keep the existing license.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA Python library.\n"
+        },
+        {
+          "path": "COPYING",
+          "bundled": "gpl-3.0"
+        },
+        {
+          "path": "COPYING.LESSER",
+          "bundled": "lgpl-3.0"
+        },
+        {
+          "path": "NOTICE",
+          "text": "Copyright 2026 Example authors.\nThis project is licensed under LGPL-3.0-only.\n"
+        }
+      ],
+      "expected_expression": "LGPL-3.0-only",
+      "license_files": {
+        "COPYING": "gpl-3.0",
+        "COPYING.LESSER": "lgpl-3.0"
+      },
+      "fetch_mode": "none",
+      "ask_version": false
+    },
+    {
+      "id": 4,
+      "eval_name": "new-lgpl-only-api",
+      "prompt": "Apply the licensing philosophy. I choose LGPL-3.0-only.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA Python library.\n"
+        }
+      ],
+      "expected_expression": "LGPL-3.0-only",
+      "license_files": {
+        "LICENSE": "gpl-3.0",
+        "LICENSE.LESSER": "lgpl-3.0"
+      },
+      "fetch_mode": "api",
+      "ask_version": false
+    },
+    {
+      "id": 5,
+      "eval_name": "new-lgpl-only-fallback",
+      "prompt": "Apply the licensing philosophy. I choose LGPL-3.0-only.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA Python library.\n"
+        }
+      ],
+      "expected_expression": "LGPL-3.0-only",
+      "license_files": {
+        "LICENSE": "gpl-3.0",
+        "LICENSE.LESSER": "lgpl-3.0"
+      },
+      "fetch_mode": "fallback",
+      "ask_version": false
+    },
+    {
+      "id": 6,
+      "eval_name": "new-lgpl-or-later-api",
+      "prompt": "Apply the licensing philosophy. I choose LGPL-3.0-or-later.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA Python library.\n"
+        }
+      ],
+      "expected_expression": "LGPL-3.0-or-later",
+      "license_files": {
+        "LICENSE": "gpl-3.0",
+        "LICENSE.LESSER": "lgpl-3.0"
+      },
+      "fetch_mode": "api",
+      "ask_version": false
+    },
+    {
+      "id": 7,
+      "eval_name": "new-lgpl-or-later-fallback",
+      "prompt": "Apply the licensing philosophy. I choose LGPL-3.0-or-later.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA Python library.\n"
+        }
+      ],
+      "expected_expression": "LGPL-3.0-or-later",
+      "license_files": {
+        "LICENSE": "gpl-3.0",
+        "LICENSE.LESSER": "lgpl-3.0"
+      },
+      "fetch_mode": "fallback",
+      "ask_version": false
+    },
+    {
+      "id": 8,
+      "eval_name": "new-gpl-project-policy",
+      "prompt": "Apply the licensing philosophy. I choose GPL version 3.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA local command-line tool.\n"
+        },
+        {
+          "path": "POLICY.md",
+          "text": "# Licensing Policy\n\nFor GNU licenses, use the named version only.\n"
+        }
+      ],
+      "expected_expression": "GPL-3.0-only",
+      "license_files": {
+        "LICENSE": "gpl-3.0"
+      },
+      "fetch_mode": "api",
+      "ask_version": false
+    },
+    {
+      "id": 9,
+      "eval_name": "new-gpl-missing-policy",
+      "prompt": "Apply the licensing philosophy. I choose GPL version 3.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA local command-line tool.\n"
+        }
+      ],
+      "expected_expression": null,
+      "license_files": {},
+      "fetch_mode": "none",
+      "ask_version": true
+    },
+    {
+      "id": 10,
+      "eval_name": "retain-gpl-conflicting-policy",
+      "prompt": "Apply the licensing philosophy. Keep the existing license.",
+      "files": [
+        {
+          "path": "README.md",
+          "text": "# Example\n\nA local command-line tool.\n"
+        },
+        {
+          "path": "LICENSE.md",
+          "bundled": "gpl-3.0"
+        },
+        {
+          "path": "NOTICE",
+          "text": "This project is licensed under GPL-3.0-only.\n"
+        },
+        {
+          "path": "POLICY.md",
+          "text": "This project is licensed under GPL-3.0-or-later.\n"
+        }
+      ],
+      "expected_expression": null,
+      "license_files": {},
+      "fetch_mode": "none",
+      "ask_version": true
+    }
+  ]
+}
