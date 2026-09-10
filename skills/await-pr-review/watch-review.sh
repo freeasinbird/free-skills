@@ -44,7 +44,7 @@
 #     [--clean-content THUMBS_UP]         # clean-pass reaction constant
 #     [--progress-content EYES]           # in-progress reaction constant
 #     [--interval 75]                     # seconds between checks
-#     [--cap-minutes 9]                   # total wait before giving up; one
+#     [--cap-minutes 4]                   # total wait before giving up; one
 #                                         # run must fit the host's foreground
 #                                         # command limit (10 min on Claude
 #                                         # Code), so re-run with the same
@@ -134,7 +134,12 @@ BASELINE_INCLUSIVE=""
 PREEXISTING_REVIEWS="" PREEXISTING_COMMENTS="" PREEXISTING_REACTIONS=""
 PREEXISTING_SUMMARY=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
-INTERVAL=75 CAP_MINUTES=9
+# CAP_MINUTES stays under the prompt cache a Claude Code subagent gets (about
+# 5 minutes), so a re-run on the same baseline lands on a warm cache instead
+# of rewriting the conductor's whole context. The minute of margin covers
+# preflight and the final poll, a few REST reads each. The host's 10-minute
+# limit on one command is the outer bound.
+INTERVAL=75 CAP_MINUTES=4
 
 # The header comment above is the usage text: print it on request to
 # stdout (exit 0) and on a bad invocation to stderr (exit 64).
