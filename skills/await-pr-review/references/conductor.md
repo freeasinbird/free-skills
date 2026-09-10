@@ -53,8 +53,15 @@ Give the conductor one compact, self-contained task with these facts:
 When reviewer identity or trigger facts are not recorded yet, say so in the
 brief and assign the conductor the step-2 discovery before it waits. Don't make
 the main agent scan history just to complete the brief. Grant checkout
-isolation or exclusivity explicitly, and run the conductor on a model capable
-of editing and review judgment, not the cheapest watcher tier.
+isolation or exclusivity explicitly.
+
+Run the conductor on the session model where the spawn call can select or
+inherit it. Where the host fixes the subagent model, use that model if it can
+edit and judge a review; don't choose a cheaper tier for cost. The conductor
+triages findings and decides fix or decline, which needs main-thread judgment.
+A cheaper tier does not make it cheaper, because its cost is context, not
+reasoning: on 51 Fable runs against 65 Opus runs, the median run cost was
+$2.58 against $2.51.
 
 In this reference, `current task contract` means that initial contract plus
 every later decision and constraint amendment the user makes through a surfaced
