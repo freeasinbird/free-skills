@@ -32,6 +32,10 @@ Requirements:
 - Exactly one record, with each of its four fields exactly once. A repeated
   record or repeated field is incomplete, because no source defines which
   value wins.
+- Match the heading and the four field labels case-insensitively. A project
+  whose heading style is title case carries the same record under
+  `### Post-Merge Obligations` with `**Containing Trackers:**` and the rest;
+  recognize it the same as the lower-case form shown here.
 - Keep the record in unmanaged, project-specific instruction content.
 - Treat stable absence as the safe default: ordinary cleanup, with no
   project-obligation discovery, mutation, or summary text after the closing

@@ -190,6 +190,10 @@ Record rules:
   external work contract is not an editable mechanics target.
 - **Never fill a field with a placeholder** graph, lane list, ownership map, or
   claim rule.
+- **Match the heading and field labels case-insensitively.** A project whose
+  heading style is title case carries the same record under
+  `### Coordination Model` with `**Current Shape:**` and the rest; detect it
+  the same as the lower-case form shown here.
 
 In update mode, detect the record and report whether all four fields are
 present. Preserve it and all other unmanaged content verbatim, unless the owner
