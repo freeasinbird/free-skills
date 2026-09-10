@@ -33,13 +33,35 @@ cached-read discount behind a short cache TTL, and a short expected wait.
 
 Then each wake at the cache-keepalive cadence costs the cached-read fraction of a
 cold read. Keepalive wins while the wake count times the cached-read price stays
-under one cold read. At typical pricing that is roughly ten cache-cadence wakes, so
-waits up to ~45 minutes. With a small context, a long wait, or no cached-read
-discount, the single cold wake wins.
+under one cold read. The break-even depends on the tier's multipliers, so state
+them:
 
-This break-even assumes current typical pricing multipliers (cached read on the
-order of 0.1x a cold read). Re-derive the ten-wake figure if those multipliers
-shift.
+- Opus-tier multipliers (cache write at 1.25x a cold read, cached read at 0.1x):
+  about 12 keepalive wakes per avoided rewrite. The earlier ten-wake figure came
+  from here.
+- Claude Fable subagent (5-minute cache write at 1.25x input, $12.50 per MTok;
+  cached read at 0.025x, $0.25): about 50 wakes.
+- Claude Fable main thread (1-hour cache write at 2x, $20): about 80 wakes.
+
+At a four-minute cadence, 50 wakes is more than three hours of waiting, so on the
+Claude conductor path keepalive wins for any realistic exchange. With a small
+context or no cached-read discount, the single cold wake still wins.
+
+Observed on 51 Fable conductor runs in one month: 82 percent of spend was cache
+writes, 15 percent cached reads, and 3 percent output. A third of the cache-write
+tokens came from full rewrites after waits of 5 to 10 minutes under the old
+9-minute cap. The worst run rewrote a 290k-token context ten times in 109
+minutes, and those ten calls were 90 percent of its cost. The watcher's one-line
+output is not what grows the conductor's context; fix rounds are.
+
+Codex behaves differently. Its cache decays gradually: the cached share stays at
+99 percent median under 10 minutes idle, then 31 percent of calls come back cold
+at 10 to 30 minutes and 66 percent past an hour. One cold read after a long
+`wait_agent` still costs less than the ticks it would replace, so the Codex
+payload's wait-once rule stands and no cap applies there.
+
+The multipliers above are list prices as of 2026-09. Re-derive the wake counts
+when they change.
 
 ## Detection Inside a Timer Wake (Step 3)
 
