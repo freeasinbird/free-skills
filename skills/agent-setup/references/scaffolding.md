@@ -407,8 +407,13 @@ another review round is required.
 
 ## pre-push-review
 
-For non-trivial work, or any repository without an external bot reviewer, seek
-fresh eyes before pushing.
+Seek fresh eyes before pushing risky work, or any work in a repository without
+an external bot reviewer. Risky work touches a destructive path, a
+credential-leak surface, or a returned-object trust boundary, changes a
+contract or public interface, or changes behavior without tests. A large
+mechanical change (a rename, move, format, or generated update) that does
+none of those relies on CI and the recorded bot reviewer, however many files
+it touches.
 
 - When the platform supports delegation and session policy permits it, ask a
   reviewer in a fresh session to look for reasons the change may be wrong. Give
@@ -417,7 +422,7 @@ fresh eyes before pushing.
 - When delegation is unavailable or needs permission you don't have, skip it
   and rely on the external bot or human. You may ask the user first.
 - A same-model delegate is only partly independent and costs tokens. Match the
-  review effort to risk, and skip this step for trivial or mechanical work.
+  review effort to risk.
 
 Never write a step that assumes the running platform can delegate.
 
