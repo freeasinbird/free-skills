@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "purpose": "Check whether clearer rewrites preserve supplied evidence, uncertainty, exceptions, exact terms, numbers, and required steps.",
+  "purpose": "Check whether clearer rewrites preserve evidence, uncertainty, exceptions, exact terms, numbers, steps, connected meaning, scope, perspective, and supported significance while keeping everyday replies concise.",
   "scoring": {
-    "preservation": "Pass only when every required outcome holds and no forbidden outcome occurs. Added facts, invented checks, stronger certainty, and lost requirements fail this grade. Accept faithful alternative wording.",
-    "readability": "Grade separately: 2 means clear on first reading with direct, ordinary wording; 1 means understandable but still wordy or awkward; 0 means hard to understand. Prefer active wording where it preserves meaning. Readability cannot offset a preservation failure.",
+    "preservation": "Pass only when every required outcome holds and no forbidden outcome occurs. Added facts, invented significance, stronger certainty, lost requirements, and changed relationships fail this grade. Accept faithful alternatives, including unchanged acceptable prose.",
+    "readability": "Grade readability and naturalness separately from preservation: 2 means clear on first reading; 1 means understandable but wordy or awkward; 0 means hard to understand. Look for intelligible connections, useful parallelism, and wording that fits the setting. For useful-parallelism, grade ease of comparison here. For short-reply-control, a 2 also requires a concise, direct reply without calibration questions, a revision process, headings, or commentary about writing choices. Style or format alone cannot fail preservation. Do not reward length or variation by itself. Readability cannot offset a preservation failure.",
     "interpretation": "One presentation per case and condition is directional evidence, not a general success rate or proof of reliability."
   },
   "cases": [
@@ -84,6 +84,83 @@
       "forbidden_outcomes": [
         "Change or omit any number, time unit, minimum duration, condition, or required step.",
         "Substitute deletion for archiving or allow archiving after a mismatch."
+      ]
+    },
+    {
+      "id": "connected-cause",
+      "request": "Make this explanation easier to follow without changing its meaning. Return only the revised text.",
+      "source_text": "The overnight frost made the road unsafe, which is why the bus took a longer route; although it left on time, it arrived late.",
+      "required_outcomes": [
+        "Keep the frost causing unsafe road conditions and those conditions causing the longer route.",
+        "Keep the late arrival despite departure on time and connect it to the longer route. One or several sentences are acceptable if the relationships stay clear."
+      ],
+      "forbidden_outcomes": [
+        "Turn the causal chain into unrelated facts or attribute lateness to a late departure.",
+        "Invent an accident, road closure, blame, or passengers' feelings."
+      ]
+    },
+    {
+      "id": "scope-and-perspective",
+      "request": "Rewrite this explanation plainly. Return only the rewrite.",
+      "source_text": "Readiness here includes having time and having permission; both are needed. Jo thinks the team has time, but she does not know whether it has permission. Her confidence about time does not establish that the team is ready.",
+      "required_outcomes": [
+        "Keep readiness dependent on both time and permission, not just one of them.",
+        "Keep the time assessment as Jo's belief and the permission uncertainty as Jo's lack of knowledge.",
+        "Keep that Jo's confidence about time does not establish readiness."
+      ],
+      "forbidden_outcomes": [
+        "Assert that the team has time, lacks permission, or is ready as an established fact.",
+        "Attribute Jo's belief or uncertainty to the team, or invent a motive or feeling."
+      ]
+    },
+    {
+      "id": "useful-parallelism",
+      "request": "Edit these definitions only if doing so makes them clearer. If they already work, return them unchanged. Return only the definitions.",
+      "source_text": "A loan is money you must repay. A grant is money you do not have to repay.",
+      "required_outcomes": [
+        "Keep both definitions and their repayment distinction; unchanged text is a correct outcome.",
+        "Keep the shared money category and the obligation to repay a loan versus no obligation to repay a grant."
+      ],
+      "forbidden_outcomes": [
+        "Add interest, eligibility, tax treatment, or a claim that one option is better.",
+        "Change the shared category or repayment distinction."
+      ]
+    },
+    {
+      "id": "supported-consequence",
+      "request": "Rewrite the notice to explain what the change means for visitors. Use this supplied context: the old lift could reach only floors 1 and 2; the repaired lift also reaches floor 3, where the reading room is. Visitors who cannot use stairs depend on the lift to reach upper floors. Return only the notice.",
+      "source_text": "The lift repair improves access to the reading room.",
+      "required_outcomes": [
+        "Explain that the repaired lift now reaches the third-floor reading room.",
+        "Connect that change to access for visitors who cannot use stairs."
+      ],
+      "forbidden_outcomes": [
+        "Invent opening hours, attendance changes, safety certification, or visitors' emotions.",
+        "Replace the supported consequence with a generic improvement claim that drops who benefits or how."
+      ]
+    },
+    {
+      "id": "unsupported-consequence",
+      "request": "Rewrite this notice plainly so visitors understand the change. Return only the notice.",
+      "source_text": "The lift repair may improve access to the reading room; its effect has not yet been assessed.",
+      "required_outcomes": [
+        "Keep the possible access improvement and the lack of assessment.",
+        "Stay within the supplied context, which gives no floor numbers, affected visitor group, or mechanism."
+      ],
+      "forbidden_outcomes": [
+        "Assert that access has improved or that the repair enables a particular route or group to reach the room.",
+        "Invent visitor feelings, attendance effects, opening hours, or assessment results."
+      ]
+    },
+    {
+      "id": "short-reply-control",
+      "request": "A colleague asks whether the meeting moved. Turn this note into a short reply. Return only the reply.",
+      "source_text": "Yes. The meeting moved from Tuesday to Wednesday. The time is still 10 a.m.",
+      "required_outcomes": [
+        "Confirm the meeting moved from Tuesday to Wednesday and preserve the unchanged 10 a.m. time; unchanged text is acceptable."
+      ],
+      "forbidden_outcomes": [
+        "Invent a reason, location, timezone, attendee reaction, or further action."
       ]
     }
   ]

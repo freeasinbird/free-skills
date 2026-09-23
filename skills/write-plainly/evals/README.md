@@ -13,9 +13,11 @@ outputs and grading artifacts in a session workspace outside the repository.
   edits with no prose, imitating a named author's voice, creative forms,
   translation, and the neighboring skills that own AGENTS.md scaffolding,
   prompt audits, and licensing.
-- `preservation-evals.json`: Six source-to-rewrite cases covering vague
+- `preservation-evals.json`: Twelve source-to-rewrite cases covering vague
   verification, supported checks, vague workflow status, caveats and
-  exceptions, exact identifiers, and numbers with required steps.
+  exceptions, exact identifiers, numbers with required steps, connected cause,
+  scope and perspective, useful parallelism, supported consequence,
+  unsupported consequence, and a short everyday reply.
 
 ## Re-Running Trigger Cases
 
@@ -32,15 +34,24 @@ Each case has a unique `id`, a `request`, a `source_text`, and nonempty
 `source_text` are model inputs; the other fields belong to the grader.
 
 Grade factual preservation as pass or fail against the source and both
-outcome lists. Invented evidence, stronger certainty, or a lost requirement
-fails preservation. The supported-verification control also fails when a
-rewrite removes checks that the source actually supplies.
+outcome lists. Invented evidence or significance, stronger certainty, a lost
+requirement, or a changed relationship fails preservation. Check scope,
+causality, qualifications, and whose perspective the text describes. The
+supported-verification control also fails when a rewrite removes checks that
+the source actually supplies.
 
-Grade readability separately: 2 for clear on first reading, 1 for
-understandable but wordy or awkward, and 0 for hard to understand. Look for
-direct, ordinary wording and active verbs where the meaning permits them.
-Accept faithful alternatives, not just one reference sentence. A readable
-rewrite can't compensate for a preservation failure.
+Grade readability and naturalness separately from preservation: 2 for clear
+on first reading, 1 for understandable but wordy or awkward, and 0 for hard
+to understand. Look for
+direct wording, intelligible connections, useful parallelism, and active
+verbs where the meaning permits them. Accept faithful alternatives, including
+unchanged acceptable prose. Don't reward length or variation by itself. A
+readable rewrite can't compensate for a preservation failure.
+
+Grade ease of comparison for `useful-parallelism` under readability. For
+`short-reply-control`, a 2 also requires a concise, direct reply without
+calibration questions, a revision process, headings, or commentary about
+writing choices. Style or format alone cannot fail preservation.
 
 ## Validate Preservation Fixtures
 
@@ -50,7 +61,7 @@ From the repository root, check JSON syntax:
 python3 -m json.tool skills/write-plainly/evals/preservation-evals.json > /dev/null
 ```
 
-Check the declared structure and six-case coverage with the standard library:
+Check the declared structure and twelve-case coverage with the standard library:
 
 ```sh
 python3 - <<'PY'
@@ -65,6 +76,8 @@ for key in ("preservation", "readability", "interpretation"):
 expected = {
     "vague-verification", "supported-verification", "vague-workflow-status",
     "caveats-and-exceptions", "exact-identifiers", "numbers-and-steps",
+    "connected-cause", "scope-and-perspective", "useful-parallelism",
+    "supported-consequence", "unsupported-consequence", "short-reply-control",
 }
 cases = fixture["cases"]
 assert len(cases) == len(expected)
@@ -75,7 +88,7 @@ for case in cases:
     for key in ("required_outcomes", "forbidden_outcomes"):
         assert isinstance(case[key], list) and case[key]
         assert all(isinstance(item, str) and item.strip() for item in case[key])
-print("Preservation fixture structure: passed (six unique cases)")
+print("Preservation fixture structure: passed (twelve unique cases)")
 PY
 ```
 
@@ -86,7 +99,7 @@ These checks validate fixture syntax and structure, not model behavior.
 1. Record the tested commit and any uncommitted prompt or fixture changes.
    Save exact input copies outside the repository. Use the same model and
    settings for both conditions and record their names and values.
-2. Run each case once per condition, sequentially by default, for 12 outputs.
+2. Run each case once per condition, sequentially by default, for 24 outputs.
    Give every presentation a fresh context through a supported runner or
    permitted delegation. Don't reuse a conversation between cases.
 3. Build the baseline input from the case's `request`, followed by a

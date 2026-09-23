@@ -6,10 +6,15 @@ Use this shape when the project requires no plan-comment format of its own. A
 project format wins; keep the required plan content inside it. This file fixes
 the shape, not the content. Post One Current Plan in `SKILL.md` lists what each
 part must contain, and it governs; the placeholders below prompt for those
-elements rather than replace them. Fill each heading with plain sentences: lead
-with the point, put one thought in each sentence, use ordinary words, and name
-real paths. Keep the headings and their order so a later task can find each
-part. Replace the angle-bracket text.
+elements rather than replace them.
+
+Fill each heading with plain sentences: lead with the point, keep necessary
+causes and qualifications connected, use
+ordinary words, and name real paths. Preserve scope, perspective, and useful
+parallel wording; explain consequences only from supplied context. Follow
+Write the Contract and Plan Plainly in `SKILL.md` for the full writing rules.
+Keep the headings and their order so a later task can find each part. Replace
+the angle-bracket text.
 
 ```markdown
 Plan for #<N>. The contract lives in <the authoritative record, such as "the
