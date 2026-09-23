@@ -31,6 +31,24 @@ The originating manuscript's terminology and story facts remain example
 context. They aren't instructions for other authors. Punctuation preferences
 and word-count targets weren't promoted into universal revision rules.
 
+## Preserve Judgment, Not Only Safeguards
+
+Reviewing the full author exchange and comparing the original and final
+sections exposed a gap: the first skill captured meaning preservation better
+than the craft of explanation. Fluent intermediate revisions still failed
+because they skipped a human connection or left the significance flat.
+
+Keep actual rejected attempts beside accepted revisions, rather than replacing
+subtle failures with easier invented errors. Use section examples to teach
+placement, paragraph progression, supported inference, and returns that develop
+an idea. The entry point carries the decisions; the reference carries the
+richer calibration, avoiding a growing list of mandatory sentence patterns.
+
+A full-section trial can expose problems sentence samples miss, but it does
+not create another approval gate. Evaluate connected explanation as well as
+preservation. Before-and-after differences remain evidence for judgment, not
+authority to make similar substantive changes in another document.
+
 ## Assessment of Write-Plainly
 
 Keep its broad trigger and low-cost everyday use. Its existing requirements

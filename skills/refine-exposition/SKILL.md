@@ -12,8 +12,9 @@ description: >-
 
 Make the reader's path through the thought feel natural. A good revision
 preserves what the author means, makes the relationships easier to follow,
-and helps the reader understand why the point matters. Fewer words and fewer
-recognizable writing tics are possible results, not the objective.
+and helps the reader feel its significance where that is the purpose. Fewer
+words and fewer recognizable writing tics are possible results, not the
+objective.
 
 Use this skill for editorial judgment and revision workflow. Ordinary plain
 language guidance can help with individual sentences, but brevity rules
@@ -27,7 +28,8 @@ They illustrate decisions, not sentence patterns to imitate.
 
 Read the surrounding paragraphs and the relevant definitions or examples.
 Before changing a passage, identify its claim, its role in the explanation,
-and what the reader should understand or feel afterward.
+and what the reader should understand or feel afterward. State the underlying
+thought plainly before choosing its wording.
 
 Preserve these relationships as carefully as facts and terminology:
 
@@ -39,7 +41,9 @@ Preserve these relationships as carefully as facts and terminology:
 If the meaning is unclear, check the available source or ask a focused
 question when the ambiguity blocks a faithful revision. Don't resolve a
 disputed concept by choosing the interpretation that makes the smoothest
-sentence. Flag a substantive correction separately from a prose edit.
+sentence. Flag a substantive correction separately from a prose edit, including
+a change to how strongly a claim is made. Softer wording is not automatically
+more accurate.
 
 Match the operation the user requested. An assessment returns findings and
 suggested wording; a rewrite changes the requested text. A prose pass does
@@ -47,32 +51,63 @@ not itself authorize rebuilding, publishing, or changing adjacent documents.
 
 ## Revise for the Reader
 
+- **Let ordinary grammar carry technical ideas.** Preserve precise terms
+  without forcing them into every sentence or making them awkward nouns.
+  Choose verbs that name the actual act and wording that fits the author's
+  register, rather than merely sounding compact or polished.
 - **Keep the thought connected.** Cause, contrast, qualification, and
   consequence may belong in one sentence. Keep ordinary connective words
   when they help readers follow the relationship without reconstructing it.
+  When joining clauses, check that a qualifier has not spread to a different
+  claim.
 - **Make significance specific.** Replace abstract claims about an effect
   with the situation that gives it force. Explain what changes, for whom,
   and why it matters, using only what the text or supplied context supports.
+  Expressive language can make a distinction more precise; natural prose
+  need not be flat or wholly literal.
 - **Keep the right subject.** A character's love, the reader's attachment,
   and a writer's intention are different things. More generally, distinguish
   what happened from what someone believes about it.
 - **Keep distinctions intact.** A smoother example must not narrow a
-  general concept to that example. Wanting less is different from ceasing to
-  want; changing the meaning of success is different from rejecting success.
+  general concept to that example or force overlapping categories apart.
+  Wanting less is different from ceasing to want; changing the meaning of
+  success is different from rejecting success.
 - **Use repetition purposefully.** Keep parallel definitions, stable terms,
   and teaching returns that make comparison or learning easier. Vary wording
-  when sameness obstructs the reading, not merely because it recurs.
+  when sameness obstructs the reading, not merely because it recurs. Improve
+  awkward wording across a parallel sequence while retaining its useful form.
 - **Remove empty work.** Before polishing a sentence, ask whether it adds
   information, reasoning, emphasis that is needed here, or a useful transition.
-  Delete it if the passage loses nothing without it.
+  Delete it if the passage loses nothing without it. Keep background details
+  for their explanatory role, not merely because they are true.
 - **Leave acceptable prose alone.** Don't replace an ordinary sentence with
   an aphorism, add emotional language to manufacture force, or rewrite every
   sentence to make the intervention visible.
 
-Read the revised paragraph continuously, including its neighbors. Listen for
-an awkward handoff, a missing premise, a string of abrupt sentences, or a
-conclusion that sounds impressive but says little. Then compare it with the
-original for meaning. Fluency cannot compensate for a lost distinction.
+## Develop the Explanation Across Paragraphs
+
+- **Give a distinction something to explain.** Where an abstract opening
+  feels unmotivated, start with a concrete situation that makes the distinction
+  useful, then introduce the terms. Check that the opening leads into what
+  follows, rather than merely sounding stronger alone.
+- **Put information where it does its work.** Move a fact beside the response
+  it explains. Use paragraph breaks when the explanation changes its job,
+  such as from describing a situation to interpreting it. Don't impose a
+  fixed claim-example-conclusion pattern.
+- **Make the supported inference available.** Presenting the details may not
+  explain their significance. Show what they mean for the people involved
+  before returning to the concept; don't invent consequences to fill the gap.
+- **Let transitions and returns advance the thought.** Replace announcements
+  of explaining or naming with the explanation when possible; keep useful
+  navigation. Return to an established idea through a consequence,
+  complication, application, or reminder the reader needs here.
+
+Set the original aside and read the revised passage continuously, including
+its neighbors. Could a capable person explaining this in the author's
+register plausibly say it? Notice where a reader would stumble, reconstruct
+an unstated connection, or understand the words without feeling their point.
+Then compare with the original for meaning. Judge naturalness and fidelity
+separately; satisfying either test does not establish the other.
 
 ## Learn From the Author's Corrections
 
@@ -87,8 +122,10 @@ as a third column. Include enough context to judge meaning; don't silently
 shorten the original.
 
 For each useful correction, record the original problem, the accepted
-wording or intent, and the reason the correction works. Separate a general
-principle from a document-specific convention or a fact about one example.
+wording or intent, and why it works. Retain a few plausible but rejected
+intermediate revisions: they teach where fluent wording still falls short.
+Separate a general principle from a document-specific convention or a fact
+about one example.
 The author approving a sentence doesn't make its structure a universal rule.
 
 Keep this record compact. A handful of accepted examples with reasons and
@@ -97,6 +134,11 @@ Use the project's existing editorial notes when appropriate; otherwise keep
 working notes outside the deliverable.
 
 ## Carry Calibration Through a Long Draft
+
+When sentence samples leave uncertainty about sustained explanation, test the
+calibration on a complete section. Look for openings, transitions, and example
+choices that isolated sentences cannot test. Within an authorized whole-draft
+pass, use this as a working check, not another approval requirement.
 
 When the user authorizes a whole-draft pass, work section by section without
 requiring approval after each section. Read each section as a connected
@@ -124,7 +166,9 @@ that overrides the author or a reason to keep polishing indefinitely.
 
 Review the whole diff for altered claims, lost steps, invented motives, and
 changes outside the requested scope. For a structured draft, also check the
-headings, tables, references, and protected text relevant to the edit.
+headings, tables, references, and protected text relevant to the edit. Check
+that summaries, questions, and answers teach the clarified distinction rather
+than reverting to shorthand that obscures it.
 
 Report what improved and any unresolved meaning questions. Use a few
 representative comparisons when useful. Mechanical checks can verify

@@ -3,6 +3,8 @@
 These examples show editorial decisions in explanatory writing. The supplied
 context belongs to each example; it isn't a general theory the skill asks
 other documents to adopt. A different author may choose different wording.
+The excerpts below retain actual revision attempts and author corrections;
+section comparisons also show changes inferred from the final draft.
 
 ## Keep the Relationship in the Sentence
 
@@ -29,9 +31,14 @@ necessary.
 Supplied context: a healer's acts of mercy put her in danger. The explanation
 needs to connect showing her mercy with the reader's response to that danger.
 
-Weak summary:
+Original fragment:
 
-> Stating her mercy does not earn the attachment needed for the later threat.
+> ...the reader has no want to feel the threat with.
+
+Fluent but incomplete revision:
+
+> Calling her merciful tells the reader what she is like. It doesn't make
+> them fear for her when her mercy puts her in danger.
 
 Revised:
 
@@ -39,7 +46,8 @@ Revised:
 > them care for her, and if they don't care they won't feel fear or irony when
 > her mercy is what puts her in danger.
 
-The longer sentence lets us follow the full relationship: knowing a trait,
+The intermediate revision sounds ordinary but skips caring. The longer
+sentence lets us follow the full relationship: knowing a trait,
 caring about the person, and fearing the danger that trait brings. Splitting
 at every clause could obscure that relationship. “Help the reader feel its
 significance” means making this connection available, not adding adjectives
@@ -50,21 +58,24 @@ such as “heartbreaking.”
 Supplied context: readers care about Ned and his children before his death.
 His death demonstrates that even a central character can be killed.
 
-Weak summary:
+Incomplete revision:
 
-> Ned's death transfers his charge to his children.
+> Ned's death would still teach readers that anyone can die. But unless they
+> already cared about his children, knowing that the children could die too
+> wouldn't give them a reason to keep reading.
 
 Revised:
 
-> Ned's death proves that nobody is safe, but it also takes away one of our
-> strongest attachments. If he were the only person we cared about, we might
-> stop reading. Instead, we already care about his children, and now we know
-> we could lose them too.
+> Ned's death proves that nobody is safe, but it also takes away one of the
+> people we care about most. If he were the only one, we might stop reading.
+> But we already care about his children, and now we know we could lose them
+> too. That hard-won belief makes our attachment to them stronger.
 
-This keeps both sides of the event and the condition that makes it work.
+The intermediate revision explains why the story might fail; it omits why
+this story succeeds. The accepted revision keeps both sides of the event.
 Readers already care about the children; the death doesn't create that
-attachment from nothing. The last sentence lets us feel the effect without
-merely naming it.
+attachment from nothing. The revision makes the children's vulnerability felt
+and connects it explicitly to the stronger attachment.
 
 ## Keep Whose Feeling It Is Clear
 
@@ -85,23 +96,30 @@ Revised:
 sister's love from the reader's developing attachment and explains the link.
 It doesn't assume those feelings are identical or automatic.
 
-## Keep a Changed Want Possible
+## Improve More Than Correctness
 
 Supplied context: readers learn that a victory they want will have a cost.
 
-Weak revision:
+First revision:
 
-> Once they know the cost, they can no longer want the victory.
+> If they learn what a victory will cost, they can no longer want it in quite
+> the same way. They may still want it, but they want it knowing the cost.
 
-Revised:
+More specific, but still flat:
+
+> When they learn what a victory will cost, they may want it less. They may
+> still want it, but they want it knowing the cost.
+
+With the author's further correction:
 
 > When they learn what a victory will cost, they may want it less. They may
 > still want it, but the want is no longer innocent.
 
-Learning can complicate a want without extinguishing it. The second sentence
-gives that complication force while preserving the possibility of still
-wanting the outcome. Its phrasing suits this argument; it isn't a reusable
-ending to append to unrelated explanations.
+All three versions allow continued desire. The first leaves the change vague;
+the second names a possible reduction but ends by repeating the information.
+The final sentence helps us feel what knowing the cost does to the desire.
+“Innocent” is expressive and precise here. Preserve that possibility without
+turning the phrase into a reusable ending or forcing moral language elsewhere.
 
 ## Protect Scope and Facts
 
@@ -114,8 +132,8 @@ Two corrections concern what a sentence means, not how it sounds:
   around place narrows its scope.
 
 Likewise, saying a hunted character recognizes the pursuer as part of himself
-differs from saying he discovers an enemy's name. Check what the example
-actually establishes before smoothing its wording. A fact correction should
+differs from merely saying he gives the shadow his own name. Check what the
+example actually establishes before smoothing its wording. A fact correction should
 be identified as such, even when it also improves the prose.
 
 ## Keep Useful Parallelism
@@ -127,20 +145,124 @@ These are parallel definitions meant to be compared:
 > When it meets a belief that the book hasn't settled which way things will go,
 > it is suspense.
 
-The repetition makes the changing condition easy to see. A revision that
-gives each definition a different shape might sound more varied while making
-the distinctions harder to learn.
+Accepted revision of the whole sequence:
 
-## Delete an Unnecessary Summary
+> When readers want something to happen but believe it probably won't, their
+> anticipation is dread. When readers want something to happen and believe it
+> still can, their anticipation is hope. When readers want something to happen
+> but don't know whether it will, their anticipation is suspense.
 
-Supplied context: a paragraph has already explained that pleasure in the
-prose makes readers care about a boy and his companion. The ending draws on
-that affection when the companion freely chooses to return to the boy.
+Keep the comparison, not the awkward wording. The revised sequence preserves
+the repeated frame while replacing “its outcome is likely lost” with ordinary
+English. Improving only the dread sentence would disrupt that frame.
 
-Proposed closing sentence:
+## Delete Before Polishing
 
-> The beauty of the writing has helped give us something to lose.
+The surrounding passage already establishes that Louis is a vampire warning
+someone against becoming one. The original pauses to define “turned” and
+“the dark gift.” A proposed revision read:
 
-Omit it. The causal connection is already explained, and the sentence
-recasts an example of choosing affection as an example of loss. Polishing it
-would preserve a sentence the paragraph doesn't need.
+> To be “turned” is to be made a vampire. Anyone who asks for the “dark gift”
+> is asking for that life.
+
+The author asked whether the sentence was needed at all. It wasn't: context
+already supplied the meaning. Making an interruption fluent doesn't give it
+a reason to remain.
+
+## Give Definitions a Purpose
+
+A proposed section opening was grammatically clear but weak:
+
+> When a book has taken hold of us, we say we're invested. But to understand
+> what will move a reader, you need to know what they care about and what
+> they've come to believe.
+
+The accepted opening made the distinction useful before naming it:
+
+> A reader can love a character and believe she won't survive the story. The
+> love makes her death matter; the belief makes the time she has left feel
+> precious.
+
+The next paragraphs identify that love as attachment and the conviction as
+belief, then broaden each definition beyond this example. Judge the opening
+with those paragraphs: the concrete situation leads into the terms rather
+than delaying them with a claim that they matter.
+
+A related example originally contrasted a romance's genre promise with a
+particular detective's promise to solve a murder. But the latter is also a
+genre expectation. The accepted version uses a romance and an old betrayal
+between its lovers: the genre sets an expectation, and this book makes it
+more specific. Examples should support a distinction without forcing an
+exclusive classification where the categories overlap.
+
+## Choose the Decisive Word and Its Place
+
+In the Lear example, “declare how much they love him” identifies the act more
+precisely than “say.” Adding “but falsely” to the daughters' lavish praise
+supplies the fact the argument needs. “Writers make the same mistake” states
+the comparison directly where “a related mistake” only announces a connection.
+
+In the Dune example, “The novel ends with his victory over the enemies of
+his house” originally ended the plot summary. Moving it beside the readers'
+response lets it explain their feeling:
+
+> Yet the novel ends with Paul victorious over the enemies of his house, and
+> many readers finished it feeling triumphant as they shared in that victory.
+
+The explanatory unit is longer, but “feeling” and “shared in” restore the
+experience and its cause. Place information where it earns its space.
+
+Precision also depends on register. This author preferred “don't need to”
+over “needn't.” Preserve that voice without banning the shorter expression
+for other authors.
+
+## Build the Inference Across Paragraphs
+
+Before revision, a Hunger Games passage lists sponsors, performances, and a
+gift of broth, then concludes that readers see the Games are staged for an
+audience. The revision keeps those details and adds:
+
+> The audience's approval can become food. These children have to perform for
+> people who may help keep them alive.
+
+These sentences explain what the details mean for the children. They earn
+the later claim that readers feel the force of the belief, rather than just
+know that the Games are televised.
+
+Across the section, paragraph breaks separate the Games' rules, the acts that
+build attachments, and what those acts establish. The running example also
+splits into paragraphs for the healer, the threshold, and the hunter's belief
+and its challenge. Each break gives a change in the explanation room.
+This is a placement decision, not a fixed paragraph recipe.
+
+Cuts fund these additions. The revision removes the narration's person and
+tense where they do not serve this explanation, but keeps the lottery and
+survival rule. Elsewhere, “The guide has a verb for the second way” gives way
+to the definition itself. Keep helpful navigation; remove announcements or
+background that the argument doesn't need.
+
+## Make Returns and Exercises Advance the Thought
+
+The original transition into Kim reviews the lesson so far:
+
+> So far you have seen what stating fails to do. Earning's advantage shows
+> over time: what you earn lasts.
+
+The revision introduces a complication:
+
+> What a book earns can also last long after its readers have stopped
+> agreeing with it.
+
+Likewise, the two lists of attachments and beliefs return with a new purpose:
+they show how what readers believe can threaten what they care about.
+A return can remind the reader, but it need not re-teach the definition.
+
+The Dune exercise changes from asking whether the coming war is “installed,
+earned, or both” to asking what has been installed and what has not been
+earned. Its answer names belief in the coming war and concern for its victims.
+The exercise now tests the distinction rather than hiding it behind labels.
+
+Do not treat every before-and-after difference as a neutral prose improvement.
+The Kim revision also replaces “Earned material survives almost anything”
+with a narrower claim about surviving disagreement. That changes the claim's
+strength and needs substantive review, not a rule to soften every assertion.

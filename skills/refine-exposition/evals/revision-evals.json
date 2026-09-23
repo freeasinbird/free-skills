@@ -58,6 +58,54 @@
         "Invents financial need or a hostile new team.",
         "Copies the calibration example's distinctive final phrase as a template."
       ]
+    },
+    {
+      "id": "connected-explanation",
+      "request": "Revise this short section for natural, effective explanation. Keep its definitions and facts, including the exercise, but improve its progression where needed.",
+      "source_text": "There are two ideas to distinguish in the following account, and the account needs some background before their importance can be understood. Permission is being allowed to use a resource. Availability is being able to obtain it when needed. These are the two ideas.\n\nA town library lends sewing machines. The lending scheme began on a Tuesday. Mara has a valid library card, and the library rules allow every cardholder to borrow a machine. She needs one to finish a costume by Friday. Every machine is already on loan until Monday. A card is permission, and the machines being on loan is a fact about availability. The two categories affect Mara differently.\n\nThe example shows why both ideas are needed. Having permission is one matter; having availability is another matter. Mara is entitled to borrow a machine but cannot get one from the library before the deadline.\n\nBefore reading on: Does Mara have permission or availability?\nAnswer: Permission.",
+      "required_outcomes": [
+        "Preserves permission as being allowed and availability as being able to obtain the resource when needed.",
+        "Preserves Mara's eligibility, Friday deadline, and all library machines being on loan until Monday.",
+        "Makes the consequence of those dates clear where it explains why permission is insufficient.",
+        "Gives the paragraphs a coherent progression; definitions and example illuminate each other without requiring one fixed order.",
+        "Removes empty announcements or repeated classification, while retaining needed explanation.",
+        "Makes the exercise and answer distinguish permission from availability before the deadline, rather than treating them as mutually exclusive categories."
+      ],
+      "forbidden_outcomes": [
+        "Claims Mara cannot finish the costume by any means, or invents another source of machines.",
+        "Changes the library rules, deadline, or return date.",
+        "Erases a definition or the exercise in pursuit of brevity.",
+        "Explains the consequences only in grading commentary instead of in the revised passage."
+      ]
+    },
+    {
+      "id": "fluent-but-flat",
+      "request": "Improve the explanation of why this choice is difficult. The facts and the possibility of accepting the offer are correct; the prose feels flat.",
+      "source_text": "She has long wanted a job with more time for her own projects. The new offer gives her that time, but requires moving away from the sister she sees every evening. She may still accept it. She now knows that accepting the job would change her situation, and that knowledge affects how she thinks about the offer.",
+      "required_outcomes": [
+        "Preserves the benefit, the evening visits, the required move, and the possibility of acceptance.",
+        "Replaces the vague closing with the supported tension between time for her projects and evenings with her sister.",
+        "Makes the choice's significance available through the relationship between those facts, not just smoother wording for change."
+      ],
+      "forbidden_outcomes": [
+        "Decides whether she accepts or refuses.",
+        "Invents guilt, dependency, financial need, or a permanent end to contact with her sister.",
+        "Copies \"the want is no longer innocent\" or imposes a moral judgment absent from this case."
+      ]
+    },
+    {
+      "id": "revise-parallel-sequence",
+      "request": "Make this explanation read naturally while preserving the comparison.",
+      "source_text": "If a request has no signature, its processing goes into a state of not proceeding. If a request has a signature from an unknown signer, its processing goes into a state of waiting for review. If a request has a valid signature from an approved signer, its processing goes into a state of proceeding.",
+      "required_outcomes": [
+        "Preserves the three conditions and their distinct outcomes: stop, await review, proceed.",
+        "Improves the awkward repeated wording across the sequence while retaining useful parallel structure."
+      ],
+      "forbidden_outcomes": [
+        "Leaves the entire awkward sequence unchanged merely because repetition is useful.",
+        "Treats an unknown signer as an approved signer or a missing signature as awaiting review.",
+        "Invents an outcome for a condition the source does not discuss."
+      ]
     }
   ]
 }
