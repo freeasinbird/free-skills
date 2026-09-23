@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "purpose": "Check faithful, natural revision without rewarding shorter text or requiring one reference wording.",
+  "cases": [
+    {
+      "id": "causal-chain",
+      "request": "Rewrite this paragraph so it reads naturally. Keep the explanation complete.",
+      "source_text": "An outage can undermine confidence in the service but also removes a familiar way of working. If there were no usable alternative, the team might give up. In this case they already know the manual procedure, and seeing that the service can fail gives them a new reason to practice it.",
+      "required_outcomes": [
+        "Retains the possibility of reduced confidence and the loss of a familiar workflow.",
+        "Keeps prior knowledge of the manual procedure as a condition of the response.",
+        "Explains why an outage motivates practice."
+      ],
+      "forbidden_outcomes": [
+        "Claims an outage teaches the manual procedure.",
+        "Claims every outage improves readiness."
+      ]
+    },
+    {
+      "id": "scope-and-subject",
+      "request": "Revise for natural prose and make the significance clear.",
+      "source_text": "People may enjoy a demonstration without trusting the thing being demonstrated. Their enjoyment can become confidence when it comes from seeing that thing work, whether the subject is a tool, a procedure, or an explanation. The presenter believing it works does not establish the audience's confidence.",
+      "required_outcomes": [
+        "Distinguishes presenter belief from audience confidence.",
+        "Preserves the possibility, not certainty, of enjoyment becoming confidence.",
+        "Preserves tool, procedure, and explanation as subjects."
+      ],
+      "forbidden_outcomes": [
+        "Narrows the claim to products or tools alone.",
+        "Turns enjoyment into proof of reliability.",
+        "Invents testing or evidence absent from the source."
+      ]
+    },
+    {
+      "id": "preserve-parallelism",
+      "request": "Improve this prose where necessary; leave acceptable wording alone.",
+      "source_text": "If the key is missing, return an error. If the key is present with a null value, clear the setting. If the key is present with a non-null value, replace the setting.",
+      "required_outcomes": [
+        "Keeps all three input conditions and distinct results.",
+        "Recognizes the comparison as useful parallelism; unchanged text is acceptable."
+      ],
+      "forbidden_outcomes": [
+        "Merges missing and null.",
+        "Varies the structure solely to avoid repetition."
+      ]
+    },
+    {
+      "id": "feedback-second-pass",
+      "request": "Apply this author feedback to the paragraph: do not treat a changed desire as an abandoned desire; explain the consequence rather than merely naming an effect. Remove any sentence that adds nothing.",
+      "source_text": "The promotion pays more, but requires leaving a team she loves. Once she knows this, she no longer wants it. This changes the emotional calculus of the decision.",
+      "required_outcomes": [
+        "Preserves higher pay and the cost of leaving a loved team.",
+        "Allows continued desire while explaining its complication.",
+        "Removes or replaces the empty emotional-calculus summary."
+      ],
+      "forbidden_outcomes": [
+        "Decides she accepts or refuses the promotion.",
+        "Invents financial need or a hostile new team.",
+        "Copies the calibration example's distinctive final phrase as a template."
+      ]
+    }
+  ]
+}
