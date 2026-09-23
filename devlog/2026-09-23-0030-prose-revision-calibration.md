@@ -1,6 +1,6 @@
 # Separate Prose Revision From Everyday Plain Writing
 
-Chose a dedicated `revise-for-naturalness` skill over putting the full workflow in
+Chose a dedicated `refine-exposition` skill over putting the full workflow in
 `write-plainly`. The owner requested a reusable skill after an extended
 manuscript revision and asked whether parts should also enter `write-plainly`.
 
@@ -8,6 +8,12 @@ The useful process involved comparing revisions, learning from the author's
 corrections, applying that calibration section by section, and making a
 second pass for the same kinds of failure. Ordinary replies shouldn't load
 that workflow or begin a calibration interview.
+
+The owner chose `refine-exposition` after considering names centered on
+naturalness and explanations. Exposition names how an existing body of
+thought is presented and developed in prose. Naturalness is one sign of
+success; the larger aim is faithful, coherent explanation whose significance
+reaches the reader.
 
 ## What Carries Across Documents
 

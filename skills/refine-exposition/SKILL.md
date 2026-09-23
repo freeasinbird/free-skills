@@ -1,5 +1,5 @@
 ---
-name: revise-for-naturalness
+name: refine-exposition
 description: >-
   Revise explanatory or argumentative prose for natural reading while
   preserving its meaning, voice, and useful repetition. Use for substantial
@@ -8,7 +8,7 @@ description: >-
   proofreading alone, fiction, and poetry do not need this workflow.
 ---
 
-# Revise for Naturalness
+# Refine Exposition
 
 Make the reader's path through the thought feel natural. A good revision
 preserves what the author means, makes the relationships easier to follow,
