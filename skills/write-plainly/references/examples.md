@@ -116,3 +116,43 @@ After:
 
 Every requirement survives: the three checks, the base-commit scope, and the
 repeat condition. Only the abstraction is gone.
+
+### Keeping a Cause Connected
+
+Before:
+
+> Because the bridge is closed to vehicles but open to people on foot, buses
+> stop at the west bank while pedestrians can still cross.
+
+This sentence can stay unchanged. The cause explains both routes, and the
+contrast keeps the bridge closure's scope clear. Splitting every clause would
+make the reader reconnect them without making the explanation easier.
+
+### Keeping Useful Parallel Definitions
+
+> A draft is a version you can change. A snapshot is a version you can read
+> but cannot change.
+
+Keep this parallel wording. Repeating "is a version you can" makes the shared
+category and the difference easy to compare. Replacing each repeated word
+with a synonym would add variation without helping the reader.
+
+### Explaining a Supported Consequence
+
+Supplied context: the clinic's last bus leaves at 5 p.m. Appointments used to
+end at 5:30 p.m.; they now end at 4:30 p.m. The notice is for patients who
+rely on that bus.
+
+Before:
+
+> The revised appointment schedule improves transport access.
+
+After:
+
+> Appointments now end at 4:30 p.m., before the last bus leaves at 5 p.m., so
+> patients who rely on it can catch it after their visit.
+
+The supplied times explain what changes and for whom. They don't establish
+that patients feel relieved or will attend more often. Without that context,
+keep the claim limited: "The new appointment schedule makes transport easier
+to access." Don't invent a timetable to make the claim concrete.
