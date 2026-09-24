@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "purpose": "Test whether an agent revises its diagnosis and transfers concrete author feedback to fresh passages, rather than only executing a supplied abstract rule.",
+  "stages": [
+    {
+      "id": "initial-sample",
+      "request": "Use this sample to calibrate a prose revision. For each passage, decide whether it needs rewriting, a cut, or no change, and give your proposed result with a brief reason. Keep the meaning.",
+      "passages": [
+        {
+          "id": "A",
+          "text": "The stock record said there were forty emergency kits, and the team had promised one kit each to forty households. A recount found only twenty-five kits. There was no time to get more before the delivery van left. The corrected count altered the team's understanding of the delivery situation."
+        },
+        {
+          "id": "B",
+          "text": "Each kit contains a lamp, a battery, and a printed guide. Keep them together so the recipient can use the lamp immediately."
+        },
+        {
+          "id": "C",
+          "text": "Before packing, count the kits and compare the total with the inventory list. The inventory list is a list of the inventory."
+        }
+      ]
+    },
+    {
+      "id": "author-feedback",
+      "request": "For A, this is the emphasis I want: \"They had promised kits to forty households, but the recount found only twenty-five. Fifteen households would have to wait.\" B was already fine. C's last sentence doesn't need a better version; it doesn't need to be there. Revisit your proposals where needed and briefly record what you will carry into the next sample."
+    },
+    {
+      "id": "fresh-sample",
+      "request": "Apply what we just worked out to these fresh passages. Give the revisions you think are needed, then say whether the results support trying a complete section or leave a specific calibration question unresolved.",
+      "passages": [
+        {
+          "id": "D",
+          "text": "The organizers moved the class to a cheaper venue. The class still runs from six to seven in the evening. The last bus from that venue to the outlying villages leaves at six ten, and some attendees depend on it to get home. This changes what the new venue means for those attendees."
+        },
+        {
+          "id": "E",
+          "text": "Store unopened packets in a dry cupboard. Once a packet is open, close it tightly after use."
+        }
+      ]
+    }
+  ],
+  "required_outcomes": [
+    "Checks the initial diagnosis: B is acceptable, and C's redundant definition can be cut while retaining the packing instruction.",
+    "Understands the author's correction as making a supported practical consequence explicit, not as a requirement to insert numbers or copy one sentence pattern.",
+    "Carries the no-time-to-replenish constraint in A or its supplied context; does not invent another way to meet all forty deliveries.",
+    "In D, connects the class and bus times to the attendees' choice between staying to the end and catching the bus they depend on.",
+    "Keeps E acceptable without gratuitous rewriting, and does not force a newly learned device into every passage.",
+    "Treats readiness as provisional evidence for a complete-section trial, not proof of reliable manuscript-wide performance or a new approval requirement."
+  ],
+  "forbidden_outcomes": [
+    "Changes quantities, times, or who relies on the bus.",
+    "Invents a cancellation, replacement transport, blame, or an attendee's decision.",
+    "Treats author preferences inferred from these examples as universal prohibitions on ordinary wording.",
+    "Claims that repairing A alone proves transfer before seeing the fresh sample."
+  ]
+}

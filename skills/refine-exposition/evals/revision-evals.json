@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "purpose": "Check faithful, natural revision without rewarding shorter text or requiring one reference wording.",
+  "cases": [
+    {
+      "id": "causal-chain",
+      "request": "Rewrite this paragraph so it reads naturally. Keep the explanation complete.",
+      "source_text": "An outage can undermine confidence in the service but also removes a familiar way of working. If there were no usable alternative, the team might give up. In this case they already know the manual procedure, and seeing that the service can fail gives them a new reason to practice it.",
+      "required_outcomes": [
+        "Retains the possibility of reduced confidence and the loss of a familiar workflow.",
+        "Keeps prior knowledge of the manual procedure as a condition of the response.",
+        "Explains why an outage motivates practice."
+      ],
+      "forbidden_outcomes": [
+        "Claims an outage teaches the manual procedure.",
+        "Claims every outage improves readiness."
+      ]
+    },
+    {
+      "id": "scope-and-subject",
+      "request": "Revise for natural prose and make the significance clear.",
+      "source_text": "People may enjoy a demonstration without trusting the thing being demonstrated. Their enjoyment can become confidence when it comes from seeing that thing work, whether the subject is a tool, a procedure, or an explanation. The presenter believing it works does not establish the audience's confidence.",
+      "required_outcomes": [
+        "Distinguishes presenter belief from audience confidence.",
+        "Preserves the possibility, not certainty, of enjoyment becoming confidence.",
+        "Preserves tool, procedure, and explanation as subjects."
+      ],
+      "forbidden_outcomes": [
+        "Narrows the claim to products or tools alone.",
+        "Turns enjoyment into proof of reliability.",
+        "Invents testing or evidence absent from the source."
+      ]
+    },
+    {
+      "id": "preserve-parallelism",
+      "request": "Improve this prose where necessary; leave acceptable wording alone.",
+      "source_text": "If the key is missing, return an error. If the key is present with a null value, clear the setting. If the key is present with a non-null value, replace the setting.",
+      "required_outcomes": [
+        "Keeps all three input conditions and distinct results.",
+        "Recognizes the comparison as useful parallelism; unchanged text is acceptable."
+      ],
+      "forbidden_outcomes": [
+        "Merges missing and null.",
+        "Varies the structure solely to avoid repetition."
+      ]
+    },
+    {
+      "id": "feedback-second-pass",
+      "request": "Apply this author feedback to the paragraph: do not treat a changed desire as an abandoned desire; explain the consequence rather than merely naming an effect. Remove any sentence that adds nothing.",
+      "source_text": "The promotion pays more, but requires leaving a team she loves. Once she knows this, she no longer wants it. This changes the emotional calculus of the decision.",
+      "required_outcomes": [
+        "Preserves higher pay and the cost of leaving a loved team.",
+        "Allows continued desire while explaining its complication.",
+        "Removes or replaces the empty emotional-calculus summary."
+      ],
+      "forbidden_outcomes": [
+        "Decides she accepts or refuses the promotion.",
+        "Invents financial need or a hostile new team.",
+        "Copies the calibration example's distinctive final phrase as a template."
+      ]
+    },
+    {
+      "id": "connected-explanation",
+      "request": "Revise this short section for natural, effective explanation. Keep its definitions and facts, including the exercise, but improve its progression where needed.",
+      "source_text": "There are two ideas to distinguish in the following account, and the account needs some background before their importance can be understood. Permission is being allowed to use a resource. Availability is being able to obtain it when needed. These are the two ideas.\n\nA town library lends sewing machines. The lending scheme began on a Tuesday. Mara has a valid library card, and the library rules allow every cardholder to borrow a machine. She needs one to finish a costume by Friday. Every machine is already on loan until Monday. A card is permission, and the machines being on loan is a fact about availability. The two categories affect Mara differently.\n\nThe example shows why both ideas are needed. Having permission is one matter; having availability is another matter. Mara is entitled to borrow a machine but cannot get one from the library before the deadline.\n\nBefore reading on: Does Mara have permission or availability?\nAnswer: Permission.",
+      "required_outcomes": [
+        "Preserves permission as being allowed and availability as being able to obtain the resource when needed.",
+        "Preserves Mara's eligibility, Friday deadline, and all library machines being on loan until Monday.",
+        "Makes the consequence of those dates clear where it explains why permission is insufficient.",
+        "Gives the paragraphs a coherent progression; definitions and example illuminate each other without requiring one fixed order.",
+        "Removes empty announcements or repeated classification, while retaining needed explanation.",
+        "Makes the exercise and answer distinguish permission from availability before the deadline, rather than treating them as mutually exclusive categories."
+      ],
+      "forbidden_outcomes": [
+        "Claims Mara cannot finish the costume by any means, or invents another source of machines.",
+        "Changes the library rules, deadline, or return date.",
+        "Erases a definition or the exercise in pursuit of brevity.",
+        "Explains the consequences only in grading commentary instead of in the revised passage."
+      ]
+    },
+    {
+      "id": "fluent-but-flat",
+      "request": "Improve the explanation of why this choice is difficult. The facts and the possibility of accepting the offer are correct; the prose feels flat.",
+      "source_text": "She has long wanted a job with more time for her own projects. The new offer gives her that time, but requires moving away from the sister she sees every evening. She may still accept it. She now knows that accepting the job would change her situation, and that knowledge affects how she thinks about the offer.",
+      "required_outcomes": [
+        "Preserves the benefit, the evening visits, the required move, and the possibility of acceptance.",
+        "Replaces the vague closing with the supported tension between time for her projects and evenings with her sister.",
+        "Makes the choice's significance available through the relationship between those facts, not just smoother wording for change."
+      ],
+      "forbidden_outcomes": [
+        "Decides whether she accepts or refuses.",
+        "Invents guilt, dependency, financial need, or a permanent end to contact with her sister.",
+        "Copies \"the want is no longer innocent\" or imposes a moral judgment absent from this case."
+      ]
+    },
+    {
+      "id": "revise-parallel-sequence",
+      "request": "Make this explanation read naturally while preserving the comparison.",
+      "source_text": "If a request has no signature, its processing goes into a state of not proceeding. If a request has a signature from an unknown signer, its processing goes into a state of waiting for review. If a request has a valid signature from an approved signer, its processing goes into a state of proceeding.",
+      "required_outcomes": [
+        "Preserves the three conditions and their distinct outcomes: stop, await review, proceed.",
+        "Improves the awkward repeated wording across the sequence while retaining useful parallel structure."
+      ],
+      "forbidden_outcomes": [
+        "Leaves the entire awkward sequence unchanged merely because repetition is useful.",
+        "Treats an unknown signer as an approved signer or a missing signature as awaiting review.",
+        "Invents an outcome for a condition the source does not discuss."
+      ]
+    },
+    {
+      "id": "express-realization",
+      "request": "Revise this paragraph so the explanation reads naturally and its significance comes through. Preserve the facts and avoid inventing anyone's reaction.",
+      "source_text": "The volunteers had celebrated the new delivery routes because vans reached the villages faster. A later report showed that the shorter journeys came from dropping the most remote homes from those routes. Families at those homes no longer received deliveries. Now the volunteers understood what the improvement in speed had meant.",
+      "required_outcomes": [
+        "Preserves the volunteers' earlier approval, faster journeys, the omitted homes, and the resulting loss of deliveries.",
+        "Makes the connection between the speed they celebrated and the families excluded explicit in the revised paragraph, rather than merely announcing understanding.",
+        "Avoids redundantly explaining a connection already made clearly by the revised surrounding sentences; restructuring or cutting the last sentence can succeed."
+      ],
+      "forbidden_outcomes": [
+        "Invents deliberate deception, remorse, malicious intent, or a decision to change the routes.",
+        "Claims every family stopped receiving deliveries.",
+        "Copies the Ender example's distinctive wording or merely substitutes another vague phrase for understanding."
+      ]
+    }
+  ]
+}
