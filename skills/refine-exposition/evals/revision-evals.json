@@ -106,6 +106,21 @@
         "Treats an unknown signer as an approved signer or a missing signature as awaiting review.",
         "Invents an outcome for a condition the source does not discuss."
       ]
+    },
+    {
+      "id": "express-realization",
+      "request": "Revise this paragraph so the explanation reads naturally and its significance comes through. Preserve the facts and avoid inventing anyone's reaction.",
+      "source_text": "The volunteers had celebrated the new delivery routes because vans reached the villages faster. A later report showed that the shorter journeys came from dropping the most remote homes from those routes. Families at those homes no longer received deliveries. Now the volunteers understood what the improvement in speed had meant.",
+      "required_outcomes": [
+        "Preserves the volunteers' earlier approval, faster journeys, the omitted homes, and the resulting loss of deliveries.",
+        "Makes the connection between the speed they celebrated and the families excluded explicit in the revised paragraph, rather than merely announcing understanding.",
+        "Avoids redundantly explaining a connection already made clearly by the revised surrounding sentences; restructuring or cutting the last sentence can succeed."
+      ],
+      "forbidden_outcomes": [
+        "Invents deliberate deception, remorse, malicious intent, or a decision to change the routes.",
+        "Claims every family stopped receiving deliveries.",
+        "Copies the Ender example's distinctive wording or merely substitutes another vague phrase for understanding."
+      ]
     }
   ]
 }

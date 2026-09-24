@@ -121,6 +121,25 @@ The final sentence helps us feel what knowing the cost does to the desire.
 “Innocent” is expressive and precise here. Preserve that possibility without
 turning the phrase into a reusable ending or forcing moral language elsewhere.
 
+## Express the Realization
+
+Supplied context: readers wanted Ender to win what they thought were games.
+The battles on the simulator turn out to have been real, ending in the
+destruction of a species. A fresh revision reports the reader's realization:
+
+> Now they know what winning has meant.
+
+The existing revision expresses it:
+
+> Now we know that the victory we cheered was the destruction of a species.
+
+The second sentence connects the revealed cost to the reader's earlier desire.
+The facts were already present; putting that relationship into words makes
+its significance available. This is more than replacing an abstract noun
+with a concrete one. If the neighboring sentences already make the connection
+fully, a short reference back may suffice. “What it meant” is not a banned
+phrase, and neither is this sentence a template for other revelations.
+
 ## Protect Scope and Facts
 
 Two corrections concern what a sentence means, not how it sounds:
@@ -266,3 +285,23 @@ Do not treat every before-and-after difference as a neutral prose improvement.
 The Kim revision also replaces “Earned material survives almost anything”
 with a narrower claim about surviving disagreement. That changes the claim's
 strength and needs substantive review, not a rule to soften every assertion.
+
+## Test the Calibration Beyond the Repaired Sample
+
+In the originating revision, the author first challenged which passages needed
+attention, then challenged the suggested improvements. A vampire definition
+needed deletion, while the dread, hope, and suspense sequence needed its
+parallel structure preserved. Both were corrections to the diagnosis as well
+as to the wording.
+
+After repairing examples together, the reviser tried new samples. The author
+accepted some, found others vague or bland, and corrected lost meaning. Those
+responses refined the next attempt. Rewriting one section then exposed
+placement and transition problems that sentence samples had not tested.
+
+The useful evidence was whether new passages improved, not whether the
+reviser could repeat the lesson or polish the same example. Once samples were
+acceptable, the author authorized section-by-section work without further
+approvals. The later second pass tested the draft against recurring corrections.
+This sequence illustrates calibration; it does not require every author to
+participate or every draft to repeat the same number of rounds.

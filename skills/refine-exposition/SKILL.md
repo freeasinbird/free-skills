@@ -95,8 +95,11 @@ not itself authorize rebuilding, publishing, or changing adjacent documents.
   such as from describing a situation to interpreting it. Don't impose a
   fixed claim-example-conclusion pattern.
 - **Make the supported inference available.** Presenting the details may not
-  explain their significance. Show what they mean for the people involved
-  before returning to the concept; don't invent consequences to fill the gap.
+  explain their significance. When the point is a realization, express what
+  has become clear and connect it to the earlier belief, desire, expectation,
+  or choice that gives it force. Don't merely announce understanding or invent
+  consequences. Check the surrounding passage before repeating a connection
+  it already makes.
 - **Let transitions and returns advance the thought.** Replace announcements
   of explaining or naming with the explanation when possible; keep useful
   navigation. Return to an established idea through a consequence,
@@ -109,29 +112,44 @@ an unstated connection, or understand the words without feeling their point.
 Then compare with the original for meaning. Judge naturalness and fidelity
 separately; satisfying either test does not establish the other.
 
-## Learn From the Author's Corrections
+## Tune the Diagnosis and the Revision
 
-Use feedback already present in the conversation or project before asking
-for new calibration. When a sample would materially help and the user wants
-one, choose passages with different problems rather than many instances of
-the same sentence shape.
+Use feedback already present in the conversation or project. When calibration
+is uncertain, work through a small, varied sample before scaling the revision:
 
-For sample comparisons, show original and revised wording side by side.
-If the user is comparing iterations, retain the first suggested revision
-as a third column. Include enough context to judge meaning; don't silently
-shorten the original.
+1. **Check what needs attention.** Is the selected passage unnatural,
+   conceptually unclear, unnecessary, or already acceptable? Test the diagnosis
+   in context before trying to improve its wording.
+2. **Compare a proposed revision with the original.** Show sample comparisons
+   side by side when presenting them to the user. When comparing iterations,
+   retain the earlier revision too. Include enough context to judge meaning.
+3. **Critique and improve the proposal.** Use the author's corrections and
+   accepted examples to test fidelity, naturalness, and significance. A fluent
+   first attempt may still need work; leaving or deleting the original may
+   be the better decision.
+4. **Record why the correction works.** Keep the original problem, accepted
+   wording or intent, and a few plausible but rejected attempts. Separate a
+   general principle from a local preference or fact; approval of a sentence
+   doesn't make its structure a universal rule.
+5. **Test on fresh passages.** Apply the lesson beyond the examples just
+   repaired. Check both selection and revision again: improving the same
+   sample doesn't establish that the judgment transfers.
 
-For each useful correction, record the original problem, the accepted
-wording or intent, and why it works. Retain a few plausible but rejected
-intermediate revisions: they teach where fluent wording still falls short.
-Separate a general principle from a document-specific convention or a fact
-about one example.
-The author approving a sentence doesn't make its structure a universal rule.
+Continue within the requested scope until fresh samples are consistently
+acceptable and remaining corrections concern local wording rather than
+recurring misunderstandings. Then test a complete section. Don't keep sampling
+to chase preferred wording; surface unresolved meaning questions instead of
+repeatedly rewriting around them.
 
-Keep this record compact. A handful of accepted examples with reasons and
-known failure modes is more useful than a growing list of banned patterns.
-Use the project's existing editorial notes when appropriate; otherwise keep
-working notes outside the deliverable.
+This loop does not require a calibration interview or approval at every step.
+Use author feedback when provided. For autonomous work, a permitted independent
+reader can challenge diagnoses and revisions; otherwise do those reads
+separately yourself. Neither supplies new author preferences: keep uncertain
+taste judgments distinct from established choices.
+
+Keep the calibration record compact, using the project's editorial notes when
+appropriate or working notes outside the deliverable. Reuse established
+calibration rather than restarting the loop for every section.
 
 ## Carry Calibration Through a Long Draft
 

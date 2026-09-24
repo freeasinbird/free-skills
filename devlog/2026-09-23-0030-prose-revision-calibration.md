@@ -49,6 +49,21 @@ not create another approval gate. Evaluate connected explanation as well as
 preservation. Before-and-after differences remain evidence for judgment, not
 authority to make similar substantive changes in another document.
 
+## Calibrate Decisions Through Fresh Samples
+
+Whole-section trials showed uneven application despite adequate rule coverage.
+A revision could announce a realization while leaving the reader to supply
+its significance. Refine the supported-inference check to express what has
+become clear and connect it to the earlier desire, belief, or choice.
+
+The author also identified the tuning loop as essential: challenge which
+passages need work, critique proposed revisions, repair examples, and test the
+lesson on new passages. Recording corrections alone doesn't test transfer.
+Make that loop explicit, with acceptable fresh samples as the reason to scale,
+without requiring an author interview or repeated approvals. Add a staged
+evaluation because a one-shot request containing the abstract rule cannot
+exercise this learning process.
+
 ## Assessment of Write-Plainly
 
 Keep its broad trigger and low-cost everyday use. Its existing requirements
