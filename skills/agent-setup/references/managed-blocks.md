@@ -134,6 +134,10 @@ Init step 6 creates these scaffolding files:
 - `docs/agent-workflow.md`: content in `references/scaffolding.md`
   §agent-workflow (the step-local procedure the managed blocks point at by
   `§slug`; without it those pointers dangle)
+- `docs/tracker-format.md`: content per `references/scaffolding.md`
+  §tracker-format, only when the project uses tracker issues (the one shape
+  for wave, feature, and backlog trackers; the project's coordination text
+  and post-merge obligations cite it)
 
 For any that already exist, don't recreate them. Compare against the template
 and, on drift, show the diff and offer to refresh; never overwrite silently.

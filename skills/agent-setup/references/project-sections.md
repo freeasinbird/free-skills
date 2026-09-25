@@ -103,6 +103,10 @@ and neither an issue nor a claim authorizes work.
 During init or adoption:
 
 - Ask where persistent work contracts live on the project's forge.
+- Note whether those contracts include tracker issues that list work units.
+  If so, init step 6 scaffolds `docs/tracker-format.md`
+  (`references/scaffolding.md` §tracker-format), and the project's tracker
+  text cites it.
 - Ask whether the project separates planning, implementation, review, or
   integration into distinct stages with handoffs. Default to the single
   implementation workflow; record stages only when those handoffs are
