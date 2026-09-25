@@ -275,6 +275,16 @@ tool.
    replan. Do not reinspect and republish here.
 5. State that planning is finished and implementation was not started or
    authorized.
+6. End the report with the kickoff prompt for a fresh implementation task,
+   with the real issue number in place of `N`:
+
+   ```text
+   Handle #N, implementation plan in comments.
+   ```
+
+   This prompt is for the user to send; sending it is the separate
+   implementation assignment. If an implementation blocker remains, say the
+   prompt applies once that blocker clears.
 
 ### Blocked
 
@@ -283,6 +293,7 @@ tool.
 3. If the prior plan remains actionable, report its location as an unsafe
    state.
 4. Never hand off an incomplete authoritative record.
+5. Omit the implementation kickoff prompt.
 
 Precondition errors never reach this section. After a finished or blocked
 handoff, do not continue into implementation in the same operation.
