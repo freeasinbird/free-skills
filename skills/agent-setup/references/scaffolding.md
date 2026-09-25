@@ -510,3 +510,21 @@ A diff can only suggest equivalence; the comparison test measures it. Do not
 run this extra pass for a docs typo or a refactor outside the listed risk
 classes.
 ````
+
+---
+
+## §tracker-format
+
+Target: `docs/tracker-format.md` (only for a project that uses tracker
+issues: a wave, feature, or backlog tracker that lists work units)
+
+Content: `references/tracker-format.md`, copied whole. It is not inlined here
+because its body template nests a Mermaid fence inside a Markdown fence.
+
+The copy is verbatim, not a pointer back to this skill, for the same reason
+`docs/agent-workflow.md` is. The agents that plan waves and work units and run
+merge cleanup in that project read the format from the repository, on any
+platform, without this skill installed. Wherever the project's AGENTS.md
+describes tracker issues, cite `docs/tracker-format.md` for their shape rather
+than restating it, and cite the same file from the project's post-merge
+obligations record as the mechanics for tracker refresh.

@@ -114,7 +114,9 @@ only record (no separate config or metadata file).
    write. Read `references/managed-blocks.md` §init-write and follow it.
 6. Create the scaffolding files listed in `references/managed-blocks.md`
    §scaffold-files. For any that already exist, apply that section's drift
-   rules; never overwrite silently.
+   rules; never overwrite silently. `docs/tracker-format.md` is conditional:
+   create it when the intake in step 4 found that the project uses tracker
+   issues.
 7. Audit standard project files: read `references/audit.md` §standard-files,
    then report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
@@ -166,8 +168,12 @@ only record (no separate config or metadata file).
    pointers settles that file in the same decision (see step 9). Under Standard,
    `devlog` is not such a gap (see Profiles).
 9. Check scaffolding files: CLAUDE.md, CONTRIBUTING.md, PR template,
-   docs/agent-workflow.md, and, under a note-keeping profile, devlog/README.md.
-   Offer to create any that are missing. For any that exist, compare against
+   docs/agent-workflow.md, devlog/README.md under a note-keeping profile, and
+   docs/tracker-format.md when the project uses tracker issues.
+   Offer to create any that are missing. When offering
+   docs/tracker-format.md, offer in the same decision the one-line citation
+   in the project's tracker text, since step 7 otherwise leaves that
+   unmanaged content alone. For any that exist, compare against
    the templates in `references/scaffolding.md` and, on drift, show the diff
    and offer to refresh. Before offering, read
    `references/managed-blocks.md` §scaffold-files and apply its drift rules,

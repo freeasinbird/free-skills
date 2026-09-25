@@ -88,8 +88,10 @@ that fully represents the project, not the highest label it could claim.
   - **Intentional stacking:** one branch deliberately bases on another open
     branch or PR.
   - **Mutual exclusion:** units may not be active at the same time.
-- **Document** the definitions, authority, examples, and tracker notation in a
-  project document.
+- **Document** the definitions, authority, and examples in a project
+  document. The tracker notation is the scaffolded `docs/tracker-format.md`
+  (`references/scaffolding.md` §tracker-format); cite it rather than defining
+  a local notation.
 - **Serialize** any unknown or materially ambiguous relation until an owner or
   designated integrator resolves it.
 - **Reassess when:** the relations repeatedly cluster into stable work

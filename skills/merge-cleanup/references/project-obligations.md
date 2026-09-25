@@ -302,9 +302,16 @@ refresh only the fields listed by **Refresh**.
 
 Preserve the project's relation types:
 
-- When it distinguishes start order from merge order, recompute and report
-  them separately; do not collapse **Startable now** into **Mergeable next**
-  or the reverse.
+- Refresh only the fields the mechanics list. A project on the shared tracker
+  format (its `docs/tracker-format.md`, scaffolded by agent-setup) lists
+  exactly its refresh step. Apply that step as the format's refresh section
+  states it, without restating its conditions here: tick the unit's line,
+  update its diagram node and the `startable` class, and rewrite
+  **Startable now**. The diagram's edges never change at merge, and a closed
+  tracker is never edited.
+- When the mechanics also keep a merge-order field, recompute it separately;
+  do not collapse start order into merge order or the reverse. Do not add a
+  merge-order field the mechanics do not define.
 - Report newly unblocked units, but do not claim or start them.
 - Report integration evidence invalidated by the base advance when **Report**
   requires it.
@@ -371,8 +378,9 @@ cleanup, not a warning on an otherwise complete result.
 Freeside is calibration, not a template. Its project record can identify the
 tracker issues linked from a merged unit's closing issue as containing
 trackers, then require the unit to be checked off in each one. Its mechanics
-keep **Startable now** and **Mergeable next** separate, because start order and
-merge order are different relations; they report newly unblocked units without
-claiming them, and identify integration evidence invalidated by the merge.
-Copy none of those names or relations unless the other project's own record and
-mechanics document define them.
+can name the refresh step of the shared tracker format, which carries start
+order only, or keep a merge-order field beside **Startable now** because start
+order and merge order are different relations. They report newly unblocked
+units without claiming them, and identify integration evidence invalidated by
+the merge. Copy none of those names or relations unless the other project's own
+record and mechanics document define them.
