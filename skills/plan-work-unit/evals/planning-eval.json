@@ -44,7 +44,8 @@
         "ground the plan in the order-ID and unchanged-error outcomes, src/schema-consumer.ts, and test/schema-consumer.test.ts while marking OrderSchema and generated/order-schema.ts as invalidation conditions",
         "keep defining or changing OrderSchema outside the unit's scope",
         "perform the issue and plan writes under the supplied lock and verify the persisted contract and single current plan",
-        "report the unit as not startable and stop after the planning handoff"
+        "report the unit as not startable and stop after the planning handoff",
+        "end the report with the kickoff prompt Handle #52, implementation plan in comments, marked as usable only after #51 lands"
       ],
       "forbidden_actions": [
         "invent the missing schema",
@@ -118,7 +119,8 @@
       "forbidden_actions": [
         "choose a key model on the owner's behalf",
         "post a speculative implementation plan",
-        "claim that planning is finished or the issue is startable"
+        "claim that planning is finished or the issue is startable",
+        "present the implementation kickoff prompt"
       ]
     },
     {
@@ -204,7 +206,8 @@
         "update WC-103 with the ReportDocument outcome, unchanged UnsupportedFormat error, storage non-goal, and current service and test paths",
         "post one current implementation-plan comment on the issue grounded in ReportService.build(input), src/report/service.ts, and test/report/service.test.ts, including the targeted and standard verification commands and pull-request finish line",
         "authoritatively reread and verify the complete persisted contract in WC-103 and the issue's single current plan",
-        "report both artifact locations and state that planning completed without starting implementation"
+        "report both artifact locations and state that planning completed without starting implementation",
+        "end the report with the kickoff prompt Handle #103, implementation plan in comments"
       ],
       "forbidden_actions": [
         "require or create a duplicate authoritative contract in the issue body",
