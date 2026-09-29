@@ -138,6 +138,11 @@ costs the whole exchange in main context.
   describes.
 - **Default:** a listed spawn tool grants it. It fails only when a listed
   tool's own description says completion is not surfaced.
+- **After the spawn:** the exchange is not done. End the main agent's turn
+  only where this signal re-enters it when the conductor finishes, and say in
+  one line that the conductor owns the exchange. In a headless or single-turn
+  run, block on the conductor (Codex `wait_agent`, or the host's blocking
+  wait) instead of yielding, because yielding ends the session.
 
 ### Grant 4: Checkout Isolation or Exclusivity
 
