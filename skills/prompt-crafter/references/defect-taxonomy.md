@@ -8,16 +8,25 @@ provides the test that detects the class, an example from that audit
 ## 1. Inert Instructions
 
 Rules the agent cannot act on because they name user-side controls: slash
-commands the user invokes (conversation-clearing or compaction commands),
-configuration the user owns (reasoning effort, model choice), decisions the
-user makes (opening a new thread). These are advice to the human wearing an
-instruction's clothing; the agent reads them, can do nothing, and at worst
-wastes a turn apologizing.
+commands the user invokes (clearing or compaction), configuration the user
+owns (reasoning effort, model choice), decisions the user makes (opening a
+new thread). These are advice to the human wearing an instruction's
+clothing; the agent reads them, can do nothing, and at worst wastes a turn
+apologizing.
+
+On a platform with an effort setting, the same class covers rules that stand
+in for thinking ("think carefully before answering"), because that setting,
+not a prompt line, controls how much the model thinks.
+
+It also covers requests to reproduce hidden reasoning, which Claude can
+refuse (`reasoning_extraction` in the Opus 5.5 guide). Asking for an
+explanation is an ordinary output instruction.
 
 - **Test:** Can the agent, mid-session, execute this with its own tools?
 - **Fix:** Delete, reword to the behavior the agent does control ("suggest
-  the user clear the conversation" instead of naming the command as if the
-  agent could run it), or move to human-facing docs.
+  the user clear the conversation" instead of naming the command; "check the
+  edge cases before answering" instead of "think carefully"), or move to
+  human-facing docs.
 - **Caution:** Verify the capability claim against current vendor docs
   before cutting; capabilities shift between CLI versions.
 
@@ -78,8 +87,13 @@ as a length rule, losing the register rule it existed for.
 
 Absence is only a defect when the missing rule is (a) tool-neutral, (b) one
 or two lines, and (c) a genuine gate or high-frequency failure mode, not
-process. The two that survived this bar in practice: secrets and credential
-hygiene, and new-dependency-addition as a surfaced decision.
+process. Three survived this bar in practice: secrets and credential hygiene,
+new-dependency-addition as a surfaced decision, and a turn-ending rule for
+tasks the agent owns end to end. That rule names the early stops to avoid and
+the stops that are wanted. The early stops to name: announcing the next step,
+offering to continue, listing non-blocking decisions, and stopping at a
+milestone. The wanted stops to keep: a user decision, a blocker, and the end
+of a declared stage or approval gate.
 
 - **Test:** Apply all three criteria; reject gap proposals that smuggle in
   repo-specific process.
