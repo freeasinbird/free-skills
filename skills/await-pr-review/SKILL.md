@@ -74,6 +74,8 @@ never interpretation. `references/conductor.md` §probes expands every probe.
    a background subagent ends, or offers a blocking wait on it (Claude Code
    task notification; Codex `wait_agent`). Default: a listed spawn tool grants
    it. It fails only when a tool description says completion is not surfaced.
+   After the spawn, end your turn only where that signal re-enters you; in a
+   headless run, block on the conductor, since yielding ends the session.
 4. **Checkout isolation or exclusivity.** Evidence: `git worktree list` shows
    the PR branch in a worktree only the conductor will touch, or the spawn call
    can create one (Claude Code `isolation: "worktree"`). Otherwise grant
@@ -101,12 +103,10 @@ Conductor skipped: <specific failed grant or allowed exception>.
 ## 1. Resolve the PR and Anchor the Baseline
 
 Anchor the baseline to the host event that should produce the next pass: the
-open, ready, or push event time, or a manual recheck's request time. Never use
-a commit time or a clock read after the event. Record the expected head, base
-branch, and base tip from the host; take `--repo` from the project's forge
-record before any remote. The main agent captures these at the event boundary
-even when a conductor owns the rest. Mechanics: `references/detection.md`
-§event-anchored-baselines.
+open, ready, or push event time, or a manual recheck's request time, never a
+commit time or a later clock read. Record the expected head, base branch, and
+base tip from the host; take `--repo` from the project's forge record, not a
+remote. Mechanics: `references/detection.md` §event-anchored-baselines.
 
 ## 2. Identify and, If Needed, Request the Reviewer
 
