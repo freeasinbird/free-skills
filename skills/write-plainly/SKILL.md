@@ -71,8 +71,10 @@ routine status updates don't need it.
    caveat beside the conclusion, not several paragraphs later.
 3. **Support in descending importance.** Give the strongest reason first. Stop
    when more detail no longer changes the result.
-4. **End with the real next step.** Name it only when there is one. Don't add
-   a generic offer to help.
+4. **End with the real next step.** Name it only when there is one, and only
+   when someone else owns it or it's blocked. When you're the one acting and
+   the step is yours and unblocked, do it in the same message instead of
+   announcing it. Don't add a generic offer to help.
 
 Three shapes cover most messages:
 
