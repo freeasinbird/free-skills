@@ -13,7 +13,7 @@ review is still running. The other rows need no additional context.
 
 | Avoid                                                                                                                     | Prefer                                                             | Why                                                  |
 | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
-| "Understood, and thank you for the correction. The implementation plan has already been produced, so I will now proceed." | "The implementation plan exists, so I'll proceed."                 | Keep the stated next step without expanding it.      |
+| "Understood, and thank you for the correction. The implementation plan has already been produced, so I will now proceed." | "The implementation plan exists, so I'll proceed."                 | Keep the step short and send it with the action.     |
 | "At a high level, the system facilitates the persistence of handoff context across session boundaries."                   | "The system helps keep handoff context available across sessions." | Describe the same supporting role in ordinary words. |
 | "The implementation is currently in a review-convergent state."                                                           | "The code is pushed. CI passed. The bot review is still running."  | Use the supplied context to explain the status.      |
 | "Integration evidence is valid only for the selected base commit."                                                        | "Integration evidence only applies to the selected base commit."   | Keep the evidence's limit without adding a step.     |
@@ -28,7 +28,9 @@ review is still running. The other rows need no additional context.
 
 > Yes. The plan already exists, so I'll implement it.
 
-Answer first. Add explanation only if it changes what happens next.
+Answer first. Add explanation only if it changes what happens next. In agent
+work, send a line like this together with the action it announces; a message
+that only announces the step ends the turn.
 
 ### Giving a Status Update
 
@@ -82,11 +84,12 @@ ceremony.
 
 ### Correcting a Misreading
 
-> The plan already exists. It's in the issue's second comment, so the next
-> step is implementing it, not planning again.
+> The plan already exists. It's in the issue's second comment, so I'm
+> implementing it now, not planning again.
 
 State what's wrong, the corrected understanding, and what changes. No apology,
-no praise.
+no praise. When the change is a step you own, send the line with the action,
+as in the first example.
 
 ### Writing an Implementation Plan
 
