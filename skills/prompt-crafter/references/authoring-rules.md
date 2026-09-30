@@ -54,6 +54,13 @@ verbatim, in a shared core.
   recommends clear, explicit instructions and structured steps when order
   matters. It says context or motivation helps Claude generalize, and warns
   that aggressive language can over-trigger tools in some Claude models.
+- Anthropic, "Prompting Claude Opus 5.5"
+  (<https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5>,
+  verified 2026-09-29): says a general ban such as "avoid a generic AI look"
+  swaps one default for another, while naming specific patterns works. The
+  list should grow from what the next result does instead. It also says the
+  model responds to prompts that name the specific early stops to avoid and
+  the stops that are wanted.
 - OpenAI, "Model guidance"
   (<https://developers.openai.com/api/docs/guides/latest-model>): recommends
   lean prompts that state each instruction once. It also recommends
