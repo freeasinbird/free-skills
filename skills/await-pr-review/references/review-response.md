@@ -161,9 +161,9 @@ returned-object trust-boundary changes in the final triage push unless they are
 blockers that earn a fully verified round. A blocking item never becomes a
 follow-up merely to end the loop.
 
-Under main ownership, a final triage push may hand off without paying another
-main-context wait, with the pending review noted. Under conductor ownership, the
-foreground wait is cheap, so the conductor waits to quiescence.
+The final triage push gets the same watch as any other push. Wait for the
+review it triggers, or for the bounded watch timeout, before reporting the PR
+ready. This holds under main and conductor ownership alike.
 
 Past the final triage push, a new blocker reopens fix rounds. Further
 non-blockers receive terminal deferrals or declines without another push.
@@ -261,6 +261,5 @@ At termination every finding has exactly one state:
 
 Also record any no-blocker call that ended the exchange, the latest
 hardening-check result and any removal candidates, a watch timeout or coverage
-gap, thread state, checks state, and whether a review remains pending after a
-main-owned final push. “Stop” means the automated exchange ended, not
-that human review is unnecessary.
+gap, thread state, and checks state. “Stop” means the automated exchange
+ended, not that human review is unnecessary.

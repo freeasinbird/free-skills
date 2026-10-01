@@ -214,7 +214,6 @@ deferred (linked issue), or explicitly outstanding for the human, with the rest
 of `references/review-response.md` §disposition-ledger. Before calling the PR
 ready, the exchange owner takes the fresh live-state snapshot and clears the
 readiness bars in `references/conductor.md` §quiescence-and-reporting, which
-bind under both ownerships; only a main-owned final-triage push may hand off
-with its re-review pending. Review completion is not CI completion: wait for
+bind under both ownerships. Review completion is not CI completion: wait for
 every required check, fix any known-red result, then leave the PR open for
 human merge unless the project explicitly opts into self-merge.
