@@ -210,10 +210,10 @@ follow this full sequence:
    Address findings that belong to this PR, or record the bounded timeout or
    no-review result with its baseline.
 
-   One exception applies when §review-convergence allows one last push for
-   locally verified non-blockers. Do not wait for the re-review that push
-   triggers. Record that push as the new baseline and say the human should
-   check the final pass before merge.
+   The same wait applies after the one last push §review-convergence allows.
+   Wait for the review that push triggers, or for the bounded timeout, before
+   step 7. A blocker in that review reopens fix rounds. If it has none, defer
+   or decline its findings and do not push again.
 
 7. **Stop and summarize.** State that the PR is open and green. Name anything
    the reviewer should inspect closely. Leave merging, branch cleanup, and

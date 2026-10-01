@@ -323,8 +323,7 @@ Don't declare the PR ready while any of these holds:
 - Any blocker or thread is unresolved
 - A push is pending
 - Reviewer activity after the handled boundary is undispositioned
-- The reviewer is known to be in progress, outside the main-owned
-  final-triage exception in `review-response.md`
+- The reviewer is known to be in progress
 - Review or snapshot coverage is incomplete or broken
 - A required check is failed or incomplete
 - The base is stale
