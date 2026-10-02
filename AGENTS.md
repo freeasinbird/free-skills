@@ -363,9 +363,7 @@ material, examples, and sub-prompts may live beside it.
   has the following forge record:
 
   - **Host:** `github.com`.
-  - **Slug:** `freeasinbird/free-skills`.
-  - **Remote:** `origin` is `git@bnw.github.com:freeasinbird/free-skills.git`;
-    `bnw.github.com` is an SSH host alias for `github.com`. Pass
+  - **Slug:** `freeasinbird/free-skills`. Pass
     `--repo freeasinbird/free-skills` to `gh`; never derive the owner from a
     sibling project.
   - **Consumers:** `await-pr-review`, `merge-cleanup`, `self-merge`, and

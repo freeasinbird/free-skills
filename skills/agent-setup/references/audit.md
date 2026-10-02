@@ -173,15 +173,39 @@ such as `github.com`. A remote whose host is an SSH alias hides them, for
 example `git@bnw.github.com:owner/name.git` or `git@github-work:owner/name.git`.
 An agent that reads that URL sees an unfamiliar host. One that guesses the
 owner from a sibling project sends every call to a repository that doesn't
-exist, and the forge answers each one with a resolution error.
+exist, and the forge answers each one with a resolution error. A committed
+record states both once, for every clone.
 
 During init and update, list the remotes with a userinfo-redacted `git remote
 -v`. Validate any forge record AGENTS.md already carries against the base
 repository's remote, whatever that remote's host. Every consumer prefers the
 record over the remote, so a transfer or a switch to a canonical URL can leave
-a stale record routing them. Offer a new record only when the base remote's
-host isn't the forge's canonical host: an entry in an unmanaged,
-project-specific section that states the forge host and the `owner/name` slug.
+a stale record routing them.
+
+Validation compares only the record's host and slug with the host and slug
+derived from the base remote. A clone's remote may use a different remote
+name, protocol, or local SSH host alias, which changes neither, so none of
+those is a disagreement. Two contributors whose clones use different remote
+URLs get the same result. The local remote is input only: read it to derive
+and validate the record, and never record its URL, name, or alias, because
+those differ per clone.
+
+When `gh` cannot resolve a clone's alias and a record already exists, compare
+the slug alone and keep the recorded host. Report that host as unverified in
+this clone, never as validated, and don't ask the user about it. The question
+to the user below is for deriving a new record's host.
+
+Offer a new record whenever AGENTS.md carries none and a remote names the
+base repository on a forge `gh` serves: `github.com` or a GitHub Enterprise
+host. The record is an entry in an unmanaged, project-specific section that
+states the forge host and the `owner/name` slug. Both are facts about the
+repository, while an alias is a fact about one clone, so the offer never
+depends on how this clone spells its remote.
+
+On any other forge, such as GitLab or Bitbucket, offer no new record and
+report that none is offered. The host confirmation and the template below
+both call `gh`, so the audit can't derive or write a usable record there.
+
 Treat the audit as **detect → report → offer to write**, never a silent
 mutation:
 
@@ -208,11 +232,14 @@ mutation:
   other, so a failed resolution is expected for other aliases, not evidence
   against the record. Ask the user when `gh` cannot resolve the alias or
   answers for another repository.
-- Offer to add the record, to correct one that disagrees with the base
-  repository's remote, or to remove one whose repository that remote no
-  longer names. Identify that remote first, and record any other remote by
-  its role only, so a fork's head remote never rewrites the base slug. Show
-  the exact text first; this is unmanaged project content.
+- Offer to add the record, to correct one whose host or slug disagrees with
+  the base repository's remote, or to remove one whose repository that
+  remote no longer names. Also offer to remove a per-clone line from an
+  existing record: a Remote field, or any line naming a remote URL, a remote
+  name, or an SSH alias. Keep any `--repo` guidance that line held on the
+  Slug line. Identify the base remote first, so a fork's head remote never
+  rewrites the base slug. Show the exact text first; this is unmanaged
+  project content.
 
 Write the record following the reviewer-record pattern, as a bullet in the
 same project-specific conventions section:
@@ -222,19 +249,18 @@ same project-specific conventions section:
   following forge record:
 
   - **Host:** `github.com`.
-  - **Slug:** `owner/name`.
-  - **Remote:** `origin` is `git@bnw.github.com:owner/name.git`;
-    `bnw.github.com` is an SSH host alias for `github.com`. Pass
-    `--repo owner/name` to `gh`; never derive the owner from a sibling
-    project.
+  - **Slug:** `owner/name`. Pass `--repo owner/name` to `gh`; never derive
+    the owner from a sibling project.
   - **Consumers:** `await-pr-review`, `merge-cleanup`, `self-merge`, and
     `visual-evidence` read this record before inferring a repository from a
     remote.
 ```
 
-The host records what the alias resolves to, so the `owner/name` slug is
-correct only for a CLI whose default host is that host. A canonical-host
-remote needs no new record, so report nothing beyond validating one that
-already exists. A fork layout records the base repository's slug and names
-the head remote's role beside it. Never move the record inside a managed
-block, and never delete or rewrite one during a sync.
+The host is the forge's canonical host, never an alias. The `owner/name`
+slug is correct only for a CLI whose default host is that host. A
+canonical-host remote gets the same offer as an aliased one. A project with
+no remote gets no record, because nothing names its repository yet. A
+project on a forge `gh` doesn't serve gets no new record either. A fork
+layout records only the base repository's host and slug. Never move the
+record inside a managed block, and never delete or rewrite one during a
+sync.
