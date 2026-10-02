@@ -228,8 +228,10 @@ slug that forge CLI calls need. An agent that guesses the owner sends every
 call to a repository that doesn't exist. During init and update, validate
 any existing forge record against the base repository's remote whatever its
 host, and offer a new one in an unmanaged section when that remote's host
-isn't the forge's canonical host. Read `references/audit.md` §forge-record
-and follow it. Derive the record from the remote, show it, and offer to add,
-correct, or remove it. Treat this as **detect → report → offer to write**,
-never a silent mutation, and never let a managed-block sync delete or move
-it.
+isn't the forge's canonical host.
+
+Read `references/audit.md` §forge-record and follow it. Derive the record
+from the remote, show it, and offer to add, correct, or remove it. The
+record holds the host and slug only, never the clone's remote URL, name, or
+alias. Treat this as **detect → report → offer to write**, never a silent
+mutation, and never let a managed-block sync delete or move it.
