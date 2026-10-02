@@ -1,9 +1,11 @@
 # Keeping the forge record clone-independent
 
 Issue #282 removes the **Remote** field from the forge record. The record now
-holds the forge host and the `owner/name` slug only. This revises one decision
-in `devlog/2026-09-02-0751-forge-record.md`, which wrote the remote's name,
-URL, and SSH alias into the record.
+holds the forge host and the `owner/name` slug only, and the audit offers one
+to every project on a forge `gh` serves. This revises two decisions in
+`devlog/2026-09-02-0751-forge-record.md`. That note wrote the remote's name,
+URL, and SSH alias into the record, and it offered a new record only for an
+aliased remote.
 
 ## Decisions
 
@@ -28,13 +30,27 @@ URL, and SSH alias into the record.
   silently.** This follows the section's detect, report, offer-to-write rule.
   Downstream records keep the field until their next update run, which is
   harmless because no consumer reads it.
+- **Chose to offer a record to every project on a forge `gh` serves over
+  offering one only for an aliased remote.** That means `github.com` or a
+  GitHub Enterprise host. On any other forge the audit reports that no
+  record is offered, because the host confirmation and the template both
+  call `gh`; other forges stay a non-goal. The owner decided this while
+  reviewing the PR, against a non-goal in #282. Whether a remote is aliased is a fact about one clone, so
+  it can't decide whether a shared file carries a record. Under the old
+  trigger, a project got one only if the contributor who ran agent-setup
+  happened to use an alias. The cost is a second copy of the slug in every
+  project, which the audit already validates on each run.
 
 ## Rejected
 
 - **Keeping the Remote line as documentation.** It is false in every other
   clone, and it can make one contributor's audit "correct" another's record.
-- **Offering a record for every project.** A canonical remote URL already
-  states the host and slug, so the trigger stays an aliased base remote.
+- **Keeping the aliased-remote trigger.** A canonical remote URL does state
+  the host and slug, but only in that clone. The agent first rejected the
+  wider offer on that ground; the reasoning looked at one clone's remote.
+- **Dropping the committed record and solving aliasing per clone.** `gh`
+  cannot resolve every alias, and the sessions behind #209 guessed the owner
+  where they could have derived it. A stated slug stops that in every clone.
 
 ## Refute-First Findings
 
@@ -61,7 +77,8 @@ A fresh-context reviewer tried to disprove each claim against the diff.
   validated.
 - **Confirmed and deferred: a fork-only clone has no base remote.** The audit
   derives the fork's slug and can offer to rewrite the record to it. This
-  predates the change and sits outside #282's contract.
+  predates the change and sits outside #282's contract. The wider offer
+  extends it: such a clone with no record is now offered one naming the fork.
   Follow-up: #283.
 
 Revisit when a consumer needs a per-clone remote fact. That fact belongs in

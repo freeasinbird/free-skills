@@ -107,9 +107,8 @@ only record (no separate config or metadata file).
    work-unit stages, and follow them. The conventional order in
    `references/project-sections.md` §section-order interleaves these sections
    with the managed ones, so collect this content, or decide on placeholders,
-   before writing. Settle the forge record here too when a remote's host
-   isn't the forge's canonical host, so an accepted record enters the single
-   step-5 write. See "Forge Record" below.
+   before writing. Settle the forge record here too, so an accepted record
+   enters the single step-5 write. See "Forge Record" below.
 5. Settle `docs/agent-workflow.md`, then write AGENTS.md once and verify the
    write. Read `references/managed-blocks.md` §init-write and follow it.
 6. Create the scaffolding files listed in `references/managed-blocks.md`
@@ -223,12 +222,13 @@ sync must not delete or rewrite the record silently.
 
 ## Forge Record
 
-A remote whose host is an SSH alias hides the forge host and `owner/name`
-slug that forge CLI calls need. An agent that guesses the owner sends every
-call to a repository that doesn't exist. During init and update, validate
-any existing forge record against the base repository's remote whatever its
-host, and offer a new one in an unmanaged section when that remote's host
-isn't the forge's canonical host.
+A clone's remote can hide the forge host and `owner/name` slug that forge
+CLI calls need, for example behind an SSH host alias. An agent that guesses
+the owner sends every call to a repository that doesn't exist. During init
+and update, validate any existing forge record against the base repository's
+remote. When AGENTS.md has none and the forge is one `gh` serves, offer a new
+one in an unmanaged section, however this clone spells its remote. On any
+other forge, report that no record is offered.
 
 Read `references/audit.md` §forge-record and follow it. Derive the record
 from the remote, show it, and offer to add, correct, or remove it. The

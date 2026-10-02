@@ -173,7 +173,8 @@ such as `github.com`. A remote whose host is an SSH alias hides them, for
 example `git@bnw.github.com:owner/name.git` or `git@github-work:owner/name.git`.
 An agent that reads that URL sees an unfamiliar host. One that guesses the
 owner from a sibling project sends every call to a repository that doesn't
-exist, and the forge answers each one with a resolution error.
+exist, and the forge answers each one with a resolution error. A committed
+record states both once, for every clone.
 
 During init and update, list the remotes with a userinfo-redacted `git remote
 -v`. Validate any forge record AGENTS.md already carries against the base
@@ -194,10 +195,19 @@ the slug alone and keep the recorded host. Report that host as unverified in
 this clone, never as validated, and don't ask the user about it. The question
 to the user below is for deriving a new record's host.
 
-Offer a new record only when the base remote's host isn't the forge's
-canonical host: an entry in an unmanaged, project-specific section that
-states the forge host and the `owner/name` slug. Treat the audit as
-**detect → report → offer to write**, never a silent mutation:
+Offer a new record whenever AGENTS.md carries none and a remote names the
+base repository on a forge `gh` serves: `github.com` or a GitHub Enterprise
+host. The record is an entry in an unmanaged, project-specific section that
+states the forge host and the `owner/name` slug. Both are facts about the
+repository, while an alias is a fact about one clone, so the offer never
+depends on how this clone spells its remote.
+
+On any other forge, such as GitLab or Bitbucket, offer no new record and
+report that none is offered. The host confirmation and the template below
+both call `gh`, so the audit can't derive or write a usable record there.
+
+Treat the audit as **detect → report → offer to write**, never a silent
+mutation:
 
 - Redact userinfo from every remote URL as it is read. `git remote -v` and
   `git remote get-url` print an HTTP(S) URL's password or token verbatim,
@@ -248,7 +258,9 @@ same project-specific conventions section:
 
 The host is the forge's canonical host, never an alias. The `owner/name`
 slug is correct only for a CLI whose default host is that host. A
-canonical-host remote needs no new record, so report nothing beyond
-validating one that already exists. A fork layout records only the base
-repository's host and slug. Never move the record inside a managed block,
-and never delete or rewrite one during a sync.
+canonical-host remote gets the same offer as an aliased one. A project with
+no remote gets no record, because nothing names its repository yet. A
+project on a forge `gh` doesn't serve gets no new record either. A fork
+layout records only the base repository's host and slug. Never move the
+record inside a managed block, and never delete or rewrite one during a
+sync.
