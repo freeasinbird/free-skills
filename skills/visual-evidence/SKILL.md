@@ -85,6 +85,8 @@ capture. Keep the recipe separate from publication text.
 
 Capture this state before the fix exists.
 
+- **Project capture tooling exists:** Use the project's own capture script or
+  screenshot tests. They already encode its fixtures, devices, and states.
 - **Run the pre-change state:** Use the PR's merge-base, which isn't always
   `main`, or stash the fix.
 - **Show the problem:** Drive the app to the exact screen and interactive
