@@ -1,19 +1,20 @@
 ---
 name: visual-evidence
 description: >-
-  Capture before/after screenshots of a UI change so a human reviewer can see
-  it, not just read the diff. Use this when implementing or reviewing a visual
-  change (a UI bug fix, a CSS/layout/spacing/typography fix, a new component or
-  screen, a theming change, or a visual regression), or when the user asks to
-  "show the change", "add a screenshot", or "before/after". Reach for it early
-  and proactively: the *before* state is perishable and is often destroyed once
-  the fix lands. This skill owns capture craft and workflow timing (deciding to
-  capture, getting a clean deterministic pair, framing/cropping tight), then
-  uploads the finished images with `gh --attach`, falling back to an installed
-  gh-imgup. Review each image for sensitive data before uploading; that step is
-  mandatory here, and its checklist matches gh-imgup's bar. Not for non-visual
-  work (logic, backend, or docs with no output), or for attaching an image
-  that already exists.
+  Capture before/after screenshots of a UI change so a reviewer can see it, or
+  check, review, and upload screenshots that already exist. Use this when
+  implementing or reviewing a visual change (a UI bug fix, a
+  CSS/layout/spacing/typography fix, a new component or screen, a theming
+  change, or a visual regression), or when the user asks to "show the change",
+  "add a screenshot", or "before/after". Also use it when you hold screenshots
+  or screen recordings from any source (a project capture script, screenshot
+  tests, the user, QA) and are about to put them on a PR or issue: "attach the
+  screenshots", "upload the screenshots", or filling a PR's Screenshots
+  section. Capture early: the fix often destroys the *before* state. Uploads
+  use `gh --attach` or an installed gh-imgup. Reviewing each image for
+  sensitive data before uploading is mandatory. Not for non-visual work
+  (logic, backend, or docs with no output), an image that isn't rendered UI (a
+  diagram or photo), or an explicit request to upload with gh-imgup.
 ---
 
 # Visual Evidence
@@ -22,9 +23,11 @@ Capture screenshots that let a reviewer judge a visual change without reading
 the diff. Start early because the _before_ state usually disappears when the
 fix lands.
 
-This skill owns capture timing and craft. It produces clean, tightly framed
-evidence, then uploads it with `gh --attach`, or with an installed gh-imgup
-where gh can't upload. Without either, it stops at local files and says so.
+This skill owns capture timing and craft. It also owns checking, reviewing,
+and uploading screenshots that already exist, whatever produced them. It
+produces clean, tightly framed evidence, then uploads it with `gh --attach`,
+or with an installed gh-imgup where gh can't upload. Without either, it stops
+at local files and says so.
 
 Follow this procedure:
 
@@ -39,6 +42,12 @@ Follow this procedure:
 8. Upload and place the evidence.
 9. Verify the rendered result.
 
+**Screenshots that already exist:** Start at step 6 when a project capture
+script, screenshot tests, the user, or QA already produced the images. Steps 1
+to 5 don't apply. Steps 6 to 9 do: check, review, upload, verify. A screen
+recording you were given enters the same way, and so does a single image with
+no pair.
+
 ## When to Use It
 
 - **Visual implementation:** Use it for a UI bug, regression, restyle, new
@@ -46,6 +55,10 @@ Follow this procedure:
 - **UI review:** Use it when opening or reviewing a PR that changes rendered
   UI and screenshots would help the reviewer.
 - The user asks to "show the change", "add a screenshot", or "before/after".
+- **Screenshots in hand:** Use it when you hold screenshots or screen
+  recordings from any source and are about to put them on a PR or issue. That
+  covers "attach the screenshots", "upload the screenshots", and filling a
+  PR's Screenshots section.
 
 Suggest it proactively for visual work. Capturing the _before_ is cheap now and
 may be impossible later.
@@ -55,8 +68,12 @@ may be impossible later.
 - **Non-visual work:** Skip logic, backend, data, build, or configuration
   changes that have no rendered output.
 - Docs or comments that don't change anything a user sees rendered.
-- **Images already captured:** Run `gh pr comment --attach` or gh-imgup
-  directly when you only need to attach existing images.
+- **Explicit gh-imgup request:** Leave a request to upload with gh-imgup by
+  name to that tool's own instructions. Its review of each image still comes
+  before the upload.
+- **Images that aren't UI evidence:** A diagram, a photo, or any other image
+  that isn't a screenshot or recording of rendered UI is outside this skill.
+  It still needs a sensitive-data review before anyone uploads it.
 
 ## Capture the Before/After
 
@@ -70,6 +87,8 @@ may be impossible later.
 
 Before the first screenshot, including the _before_ shot, choose the method:
 
+- **Project capture tooling exists:** Use the project's own capture script or
+  screenshot tests. They already encode its fixtures, devices, and states.
 - **Fresh URL load reaches the state:** Use `capture.mjs` when appropriate.
 - **State needs setup:** For clicks, login, or prior navigation, use an
   available stateful browser or application test setup that can establish and
@@ -85,8 +104,6 @@ capture. Keep the recipe separate from publication text.
 
 Capture this state before the fix exists.
 
-- **Project capture tooling exists:** Use the project's own capture script or
-  screenshot tests. They already encode its fixtures, devices, and states.
 - **Run the pre-change state:** Use the PR's merge-base, which isn't always
   `main`, or stash the fix.
 - **Show the problem:** Drive the app to the exact screen and interactive
@@ -237,13 +254,15 @@ same craft with another capture method.
 
 ### 6. Check the Shots Before Handing Off
 
-Open every captured image. Don't publish evidence you haven't checked.
+Open every image, whether you captured it or were given it. Don't publish
+evidence you haven't checked.
 
 - **Reject blank or truncated shots:** An all-white or zero-size image may
   mean capture ran before render or matched no visible element.
 - **Fix empty shots:** Correct the wait or selector, then capture again.
 - **Check subject and state:** Confirm the intended screen, component, and
-  interactive state appear. The change must be visible.
+  interactive state appear. The change, or the problem a lone bug shot
+  reports, must be visible.
 - **Check comparability:** Match crop, viewport, and theme. Re-capture the odd
   image under the other's conditions when the pair doesn't line up.
 - **Inspect dimensions:** Use ImageMagick `identify`, macOS
@@ -255,14 +274,34 @@ Open every captured image. Don't publish evidence you haven't checked.
   change. Treat an unexplained difference as a non-comparable pair.
 - **Reject absurd sizes:** Re-capture a multi-thousand-pixel-tall scroll or a
   sub-100px sliver that lost the subject.
+- **Check a recording by watching it:** Confirm it shows the intended screen,
+  state, and change. If you can't watch it, say so; the review under Compose
+  and Attach treats it as flagged.
+- **Skip pair checks without a pair:** A single image or a recording has
+  nothing to match. The comparability and matching checks above don't apply
+  to it.
 - **Keep both checks:** This is the capture-quality pass. Apply the separate
   secret review under Compose and Attach when you open every image again.
+
+Several checks above say to capture again. Sometimes you can't, because the
+image was given to you or its state is gone. Don't publish a failing image on
+your own judgment:
+
+- **Project tooling produced it:** Re-run that tooling when a re-run can fix
+  the failure, such as a blank shot. Then check the new image.
+- **Nothing you can run will fix it:** Tell the user which image failed and
+  why. Publish it only if they accept it as it is; otherwise wait for a
+  replacement.
+
+That acceptance covers this step's quality checks only. The review under
+Compose and Attach keeps its own rule.
 
 ## Compose and Attach
 
 Apply the review below to every image before running any upload command.
 Then take the first upload path whose gate passes. Don't reimplement upload or
-invent another host.
+invent another host. A recording you were given counts as an image throughout
+this section, unless a line says otherwise.
 
 - **Authorization:** Invoking this skill authorizes the upload once every image
   passes the review below. Don't ask the user for permission to run the upload
@@ -284,6 +323,10 @@ invent another host.
   exactly what you found and where, and ask them to crop, redact, or pick a
   different image. When in doubt, ask before uploading.
 
+  A recording gets this checklist across its whole length, including any
+  audio. One frame or a preview isn't a review. Treat a recording you can't
+  inspect in full as flagged: say so, and ask before uploading.
+
 ### Choose the Upload Path
 
 Take the first path whose gate passes. GitHub Enterprise Server is a stop on
@@ -304,6 +347,7 @@ every path: keep the evidence local.
    This is the path under the Actions `GITHUB_TOKEN`, where it's the only
    option that needs no extra secret, and on gh older than 2.99.0. It uploads
    only to `github.com`, so on GitHub Enterprise Cloud go to path 3 instead.
+   It accepts only images, so a recording goes to path 3 too.
    Never download it with `npx -y`; an approval reviewer blocks an unknown
    package with credential access.
 3. **Stop at local files.** Say so at handoff and name the fix: upgrade gh for
@@ -345,11 +389,26 @@ elaborate than this.
   doesn't reference. An in-body reference keeps its own alt text.
 - **Attach each file once:** Every run uploads every `--attach` file again. A
   second `gh pr edit --attach` with the same file appends a duplicate.
+- **Start every edit of an existing body from the live body:** `--body-file`
+  replaces the whole body, so a fresh file sent to an open PR or an existing
+  issue erases its description. Fetch the live body first, for example
+  `gh pr view <n> --json body --jq .body > pr-body.md`, then add the
+  references to it. The same holds after an upload. gh rewrites the body it
+  sends, not the local file, so `pr-body.md` still holds local paths. Sending
+  it again with `gh pr edit --body-file` alone overwrites the hosted URLs with
+  those local paths, and the images break. See `references/gh-attach.md`
+  §body-rewrite.
 - **Respect gh's limits:** Images up to 10 MB (`png`, `jpg`, `jpeg`, `gif`,
   `webp`), video up to 100 MB, 50 files per command, validated by extension
   only. Never attach SVG: gh accepts it, but it can carry scripts, and
-  gh-imgup refuses it for that reason. Video is described in
-  `references/gh-attach.md` §video and is outside this skill's procedure.
+  gh-imgup refuses it for that reason.
+- **Give a recording its own paragraph:** Capturing video is outside this
+  skill's procedure, but a recording you were given uploads on this path.
+  Read `references/gh-attach.md` §video first. Write `![label](./demo.mp4)`
+  alone in its paragraph: gh turns it into a bare URL, which GitHub renders
+  as a player. In a table or beside other text it becomes a plain link. Video
+  has no alt text, so put the label in its own paragraph above, with a blank
+  line between them.
 - **Pre-authorize on platforms with a command allowlist:** An operator can
   allow `gh pr create`, `gh pr edit`, `gh pr comment`, and `gh issue comment`
   for this path, and `gh-imgup` for the fallback. In Claude Code,
@@ -374,28 +433,21 @@ carries the same review.
 ### Place and Verify
 
 - **Place evidence in the PR description:** It is most visible there. Use a
-- **Start every edit of an existing body from the live body:** `--body-file`
-  replaces the whole body, so a fresh file sent to an open PR or an existing
-  issue erases its description. Fetch the live body first, for example
-  `gh pr view <n> --json body --jq .body > pr-body.md`, then add the
-  references to it. The same holds after an upload. gh rewrites the body it
-  sends, not the local file, so `pr-body.md` still holds local paths. Sending
-  it again with `gh pr edit --body-file` alone overwrites the hosted URLs with
-  those local paths, and the images break. See `references/gh-attach.md`
-  §body-rewrite.
   comment for later additions or issues.
 - **Compose into the body:** On either path, put the evidence in the
   description instead of leaving it in a trailing comment.
-- **Label every image:** Use **Before** and **After**, plus the state shown,
-  such as "Empty state, dark mode."
+- **Label every image:** Use **Before** and **After** for a pair, plus the
+  state shown, such as "Empty state, dark mode." Label a single image by what
+  it shows; don't add a second image to make a pair.
 - **Show both palettes:** Include light and dark when both appearances change.
 - **Choose a concrete layout:** See
   `references/capture-craft.md` §display-layout for side-by-side and stacked
   layouts.
 - **Verify the rendered result:** Do this only after every image passes the
   review and the upload succeeds.
-- **Check the rendered body:** Both images must load. Each label must sit with
-  its image, and the pair must read from Before to After.
+- **Check the rendered body:** Every image must load, and a recording must
+  show a player. Each label must sit with its image, and a pair must read from
+  Before to After.
 - **Trust the rendered view:** Correct raw Markdown can still produce a broken
   image or layout.
 

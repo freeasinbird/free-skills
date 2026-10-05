@@ -23,12 +23,14 @@ belong in a session workspace outside the repo.
      pair.
   4. `interactive-menu-pair`: a menu starts closed and reveals cramped rows
      only after a click; expects an open-state pair and a local replay recipe.
-- `trigger-evals.json`: 20 user-approved queries (10 should-trigger,
+- `trigger-evals.json`: 24 user-approved queries (14 should-trigger,
   10 should-not-trigger) for the description-optimization loop
-  (skill-creator's `scripts.run_loop`). The negatives are deliberate
-  near-misses: attach-an-already-taken image (upload alone, no capture),
-  backend or perf fixes, docs changes, desktop screenshots, UI test
-  authoring.
+  (skill-creator's `scripts.run_loop`). Four positives are upload-only:
+  screenshots from the user, from QA, and from the project's snapshot
+  tests, and a screen recording from the user. The negatives are
+  deliberate near-misses: an explicit gh-imgup upload, a photo and a
+  diagram for an issue, backend or perf fixes, docs changes, desktop
+  screenshots, UI test authoring.
 
 ## Re-Running
 

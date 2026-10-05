@@ -41,7 +41,19 @@
   },
   {
     "query": "i already took a screenshot of the bug, it's on my desktop as bug.png, attach it to issue #88",
-    "should_trigger": false
+    "should_trigger": true
+  },
+  {
+    "query": "I have before.png and after.png from QA in ~/Downloads, put them in the PR description",
+    "should_trigger": true
+  },
+  {
+    "query": "the snapshot tests already wrote the new settings-page screenshots into __screenshots__/, attach them to the PR",
+    "should_trigger": true
+  },
+  {
+    "query": "I screen-recorded the new onboarding carousel as onboarding-demo.mp4, attach it to PR #164 so reviewers can watch the transition",
+    "should_trigger": true
   },
   {
     "query": "fixed the race condition in the payment webhook handler, open a PR with a good description",
@@ -68,15 +80,19 @@
     "should_trigger": false
   },
   {
-    "query": "I have before.png and after.png from QA in ~/Downloads, put them in the PR description",
-    "should_trigger": false
-  },
-  {
     "query": "generate an architecture diagram of our services and add it to the docs folder",
     "should_trigger": false
   },
   {
     "query": "add a playwright test that checks the login page renders the SSO button",
+    "should_trigger": false
+  },
+  {
+    "query": "use gh-imgup to upload screens/checkout-after.png and paste the markdown link it prints into PR #77",
+    "should_trigger": false
+  },
+  {
+    "query": "here's a photo of the whiteboard from planning (IMG_4412.jpg) and the sequence diagram I exported, attach both to issue #131",
     "should_trigger": false
   }
 ]
