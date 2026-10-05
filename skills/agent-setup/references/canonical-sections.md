@@ -117,8 +117,9 @@ The implementation checklist:
    see Branches.
 2. Create a correctly named branch in a dedicated worktree or equivalent
    isolated checkout. See Branches for the primary-checkout exception.
-3. Make the scoped change. Include the docs, tests, and assets needed to keep
-   it complete. Add a decision note only when its triggers apply.
+3. Make the scoped change. For a visible UI change, capture the current state
+   before you change it. Include the docs, tests, and assets needed to keep
+   the change complete. Add a decision note only when its triggers apply.
 4. Run relevant verification and the standard lint, build, and test checks.
    Record any check you could not run in the PR.
 5. Commit one concern at a time. Explain why in each commit body.
@@ -330,7 +331,8 @@ change.
 - **Keep the PR body current.** When review adds commits or changes scope,
   update What, the subject-based commit map, and Verification. Mark commits
   that resolve review findings. Keep each finding's outcome in its inline
-  reply, not a permanent feedback section.
+  reply, not a permanent feedback section. Once images are hosted, start a
+  later body edit from the live body.
 - **Keep the intended repository rules.** Use merge commits only, disable
   squash and rebase merges, use title-only merge messages, and auto-delete
   merged branches. Do not re-enable a disabled method. Enforce these rules
@@ -342,9 +344,10 @@ A PR is ready to hand off when it's open, green, self-reviewed, has no
 unhandled threads, and has no outstanding review activity. After opening the
 PR, read `docs/agent-workflow.md` §handing-off and follow its sequence:
 
-1. Start the review watch from the PR open or push event. Only reviewer
-   activity after that event counts as new. After another push, start counting
-   from that push.
+1. First check the installed skills for a review-watch skill, such as
+   `await-pr-review`, and use it when one exists. Start the review watch from
+   the PR open or push event. Only reviewer activity after that event counts
+   as new. After another push, start counting from that push.
 2. Refresh from the current base and record the base commit.
 3. Wait for required checks. Never hand off known-red work.
 4. Self-review the final diff.
