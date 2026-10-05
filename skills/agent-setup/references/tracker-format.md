@@ -50,7 +50,7 @@ Notes.
 
 Under the diagram, put this one caption line, verbatim:
 
-`**Legend:** thick arrow critical path · arrow starts-after · double border merged · green outline startable now · orange contract · grey dashed owner-run.`
+`**Legend:** thick arrow critical path · arrow starts-after · dotted arrow soft dependency · double border merged · green outline startable now · orange contract · grey dashed owner-run · dashed outline fenced.`
 
 Then add labeled bullets:
 
@@ -151,7 +151,7 @@ flowchart LR
     class i<B> startable
 ```
 
-**Legend:** thick arrow critical path · arrow starts-after · double border merged · green outline startable now · orange contract · grey dashed owner-run.
+**Legend:** thick arrow critical path · arrow starts-after · dotted arrow soft dependency · double border merged · green outline startable now · orange contract · grey dashed owner-run · dashed outline fenced.
 
 - **Startable now:** #<B> (<lane>, contract).
 - **Owner:** #<C> is owner-run.
