@@ -128,7 +128,13 @@ upload and the server side were not exercised.
   edits alone. An agent adding evidence to an open PR would have replaced its
   description. The rule now covers every edit of an existing body. A
   fresh-context refute pass on the recording text found this.
-- **Not run: the trigger loop and the behavior evals' baseline.**
+- **Run once, with the skill: behavior eval 5.** The run started at step 6,
+  captured nothing, opened all three images, and left the supplied files
+  byte-identical. It reported the hostname and its place in `after-page.png`,
+  kept that image out, and composed the clean pair. The order of its actions
+  comes from its own report, not an exported transcript, so the three
+  transcript assertions stay unverified. No baseline run was made.
+- **Not run: the trigger loop.**
   `devlog/2026-07-01-2212-visual-evidence-eval.md` lists the harness defects
   that made earlier trigger runs misleading. The new negatives prove nothing
   until that loop runs.

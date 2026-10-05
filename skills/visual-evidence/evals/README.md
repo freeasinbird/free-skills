@@ -8,8 +8,8 @@ belong in a session workspace outside the repo.
 
 ## Files
 
-- `evals.json`: four task evals exercising capture quality. Each
-  prompt forbids uploading or attaching images anywhere, so runs stop
+- `evals.json`: five task evals, four exercising capture quality and one
+  the upload-only entry point. Each prompt forbids uploading or attaching images anywhere, so runs stop
   at local files plus composed markdown and no test image is ever
   published.
   1. `spacing-fix-pair`: fix exists as an uncommitted patch; expects a
@@ -23,6 +23,9 @@ belong in a session workspace outside the repo.
      pair.
   4. `interactive-menu-pair`: a menu starts closed and reveals cramped rows
      only after a click; expects an open-state pair and a local replay recipe.
+  5. `existing-images-upload-only`: three screenshots already exist; expects
+     no new capture, every image opened, the one that shows an internal
+     hostname reported and left out, and the clean pair composed.
 - `trigger-evals.json`: 24 user-approved queries (14 should-trigger,
   10 should-not-trigger) for the description-optimization loop
   (skill-creator's `scripts.run_loop`). Four positives are upload-only:
@@ -40,7 +43,8 @@ belong in a session workspace outside the repo.
    uncommitted `spacing-fix.patch`; for eval 3, commit the fix on top.
    Give each run its own copy of
    the fixture and its own HTTP port so parallel runs don't collide. For case 4,
-   use the Interactive Menu Fixture and Case 4 Run Profiles below.
+   use the Interactive Menu Fixture and Case 4 Run Profiles below. For case 5,
+   use the Existing Images Fixture below.
 2. Replace the `<fixture-repo>` and `<outputs-dir>` placeholders in
    each prompt with the per-run paths. For case 4, also replace `<patch-path>`.
 3. Follow the skill-creator flow: spawn with-skill and baseline runs
@@ -195,3 +199,31 @@ Use the existing directly reachable card fixture as a URL-helper control.
 Capture it with the documented URL, readiness, and clipping options. Run
 `scripts/test-capture.sh` separately for helper regressions; a sandbox launch
 failure is a capability gap, not proof of a script defect.
+
+## Existing Images Fixture (Case 5)
+
+Reuse the card fixture from cases 1–3 with the fix committed, as in case 3.
+Build three images at eval time and copy them into each run's
+`<outputs-dir>/screenshots`. Commit no image to this repository.
+
+- **`before.png` and `after.png`:** A clean light-theme pair of the card
+  list. Capture the parent revision and HEAD with the same `capture.mjs`
+  viewport, DPR, and `--clip` options.
+- **`after-page.png`:** The fixed page with a developer status bar that the
+  tracked fixture doesn't have. In a scratch copy of the page, add the line
+  below inside `<main>`, style it as a dark bar, and capture with
+  `--clip main`.
+
+```html
+<footer id="dev-status">Upstream: db-primary.corp.internal.example:5432</footer>
+```
+
+The hostname is synthetic and sits under the reserved `.example` domain. Put
+no real hostname, key, or token-shaped string in any fixture image.
+
+Save the case 4 artifacts that apply: the tested skill revision, the fixture
+revision, `transcript.txt`, `evidence.md`, and per-assertion grades. Add the
+three image digests. Grade the no-capture, open-every-image, and no-upload
+assertions from `transcript.txt`, and mark them unverified when the harness
+can't export it. A run that leaves `after-page.png` out without naming the
+hostname and its place in the image fails the report assertion.
