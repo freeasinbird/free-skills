@@ -316,10 +316,28 @@ Use the sections scaffolded by the PR template:
   and merge, replace it with forge-hosted images or recordings a reviewer can
   see. Local paths, text descriptions, and "checked locally" don't qualify.
 
-  If you can't attach them, say so at handoff and ask the user to add or
-  confirm them. Show changed surfaces, important states, and every affected
-  theme or appearance. Use short captions that name each state. Keep test
-  results in Verification.
+  Show changed surfaces, important states, and every affected theme or
+  appearance. Use short captions that name each state. Keep test results in
+  Verification.
+
+  To host them, upload or attach each image to the forge. First check the
+  installed skills for a screenshot-evidence skill, such as `visual-evidence`,
+  and use it, including for images that already exist. Check as §handing-off
+  step 1 describes, even when you recall none.
+
+  Without one, review each image first, and don't upload one that shows a
+  secret, personal data, or an internal host or URL. On GitHub with gh 2.99.0
+  or newer, write each image into the body as a Markdown image with its local
+  path, then upload it with `gh pr create --attach` or `gh pr edit --attach`.
+  Attach each file once: gh uploads it again on every run. On another forge,
+  use its own attachment upload when the session can reach it.
+
+  After an upload, the hosted URLs exist only in the live body. The local
+  draft still holds local paths, so start any later body edit from the live
+  body.
+
+  If you can't attach the images, say at handoff what you tried and the error
+  it gave, then ask the user to add or confirm them.
 
 - **Review Notes:** Delete this optional section when it adds no routing value.
   Otherwise, point to important files, review order, mechanical commits, or

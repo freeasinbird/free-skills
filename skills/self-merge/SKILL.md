@@ -63,8 +63,8 @@ guardrail below holds.
 - The diff has a final self-review in the PR files view. Check for stray
   hunks, debug code, scope creep, and changes the editor view hid.
 - Required review artifacts are attached. This includes forge-hosted
-  screenshots for visible UI changes. If you can't attach them, stop and ask
-  the user.
+  screenshots for visible UI changes. If you can't attach them, stop, say what
+  you tried and the error it gave, and ask the user.
 - The change is reversible and has a low blast radius. For a data migration,
   force-push, release tag, production configuration, or another destructive
   action, stop at the PR and confirm with the user again.
