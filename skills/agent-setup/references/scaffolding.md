@@ -171,9 +171,16 @@ follow this full sequence:
    or observed automated reviewer before waiting for checks. This prevents the
    checks wait from delaying review.
 
-   Prefer a review-watch skill, tool, or automation that reports back without
-   manual polling. Otherwise, use a permitted background poll or scheduled
-   wake-up when the platform supports it. Do not ask whether to watch.
+   Before choosing a method, check whether a review-watch skill is installed,
+   such as `await-pr-review`: list the available skills or look in the
+   platform's skill directories. Check even when you recall none; a skill
+   listing shown at session start can drop out of context once the session is
+   condensed. When one exists, invoke it and let it own the review watch, even
+   when the host offers its own PR or CI monitor.
+
+   Otherwise, prefer a tool or automation that reports back without manual
+   polling, then a permitted background poll or scheduled wake-up when the
+   platform supports it. Do not ask whether to watch.
 
    If that method needs permission you don't have, use the next permitted
    method. Without background support, use a bounded foreground poll when it

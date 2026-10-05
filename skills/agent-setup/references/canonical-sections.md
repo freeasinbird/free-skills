@@ -342,9 +342,10 @@ A PR is ready to hand off when it's open, green, self-reviewed, has no
 unhandled threads, and has no outstanding review activity. After opening the
 PR, read `docs/agent-workflow.md` §handing-off and follow its sequence:
 
-1. Start the review watch from the PR open or push event. Only reviewer
-   activity after that event counts as new. After another push, start counting
-   from that push.
+1. First check the installed skills for a review-watch skill, such as
+   `await-pr-review`, and use it when one exists. Start the review watch from
+   the PR open or push event. Only reviewer activity after that event counts
+   as new. After another push, start counting from that push.
 2. Refresh from the current base and record the base commit.
 3. Wait for required checks. Never hand off known-red work.
 4. Self-review the final diff.
