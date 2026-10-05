@@ -66,6 +66,15 @@ against the 2.99.0 rewrite code with a scratch body:
 - **Nothing is deduplicated.** Every run uploads every `--attach` file. After
   the first run the body holds URLs, not local paths, so a second run with
   the same file finds nothing to rewrite and appends a duplicate.
+- **The local body file is never rewritten.** gh reads `--body-file` once and
+  rewrites only the copy it sends, so the file still holds local paths after
+  the upload. Sending it again with `--body-file` and no `--attach` overwrites
+  the live body: each hosted URL reverts to a local path, an appended image
+  is dropped, and the images break. Start any later edit from the live body
+  instead: `gh pr view <n> --json body --jq .body > pr-body.md`, or the same
+  flags on `gh issue view <n>` for an issue. To add another image, write its
+  local path into the fetched body, then pass that file and attach only the
+  new image.
 - **No integrity check.** gh doesn't compare a digest after upload. gh-imgup's
   SHA-256 round-trip has no equivalent here.
 

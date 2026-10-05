@@ -374,6 +374,15 @@ carries the same review.
 ### Place and Verify
 
 - **Place evidence in the PR description:** It is most visible there. Use a
+- **Start every edit of an existing body from the live body:** `--body-file`
+  replaces the whole body, so a fresh file sent to an open PR or an existing
+  issue erases its description. Fetch the live body first, for example
+  `gh pr view <n> --json body --jq .body > pr-body.md`, then add the
+  references to it. The same holds after an upload. gh rewrites the body it
+  sends, not the local file, so `pr-body.md` still holds local paths. Sending
+  it again with `gh pr edit --body-file` alone overwrites the hosted URLs with
+  those local paths, and the images break. See `references/gh-attach.md`
+  §body-rewrite.
   comment for later additions or issues.
 - **Compose into the body:** On either path, put the evidence in the
   description instead of leaving it in a trailing comment.
