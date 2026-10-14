@@ -694,6 +694,8 @@ and lint and formatting are clean.
   (`./scripts/test-merge-cleanup-landing.sh`)
 - Orchestration validation matrix green when merge-cleanup's
   `merge-cleanup.sh` changed (`./scripts/test-merge-cleanup.sh`)
+- Refresh validation matrix green when merge-cleanup's
+  `tracker-refresh.sh` changed (`./scripts/test-merge-cleanup-refresh.sh`)
 
 <!-- /agents-md:project:done-checks -->
 

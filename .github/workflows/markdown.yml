@@ -69,6 +69,7 @@ jobs:
           - test-merge-cleanup-inventory.sh
           - test-merge-cleanup-landing.sh
           - test-merge-cleanup-reconciliation.sh
+          - test-merge-cleanup-refresh.sh
           - test-merge-cleanup.sh
           - test-prompt-verification.sh
           - test-self-merge.sh
