@@ -217,9 +217,7 @@ start (plan §5.18, wave 11); that work is outside this plan.
   cleanly. Tests at landing and Codex's review of every push remain.
 - **A mechanical check for interaction at a distance.** One unit can
   change a behavior while another adds a caller elsewhere, without
-  touching the same place. Only tests at landing can catch that, and
-  the tests best placed to catch it are the race tests that aren't
-  reliable yet.
+  touching the same place. Only tests at landing can catch that.
 - **A defense against two migrations rewriting the same rows or two
   rebuilds of one table open at once,** beyond the ordering a planner
   records.
@@ -274,14 +272,26 @@ resolves each PR in the group from its merge commits and checks every
 Scope line. Enable the queue once measurements show ready PRs waiting
 on each other's rebases often enough to matter (§4, step 9).
 
-**Require the race tests once they are reliable.** Three jobs run the
-daemon's tests under the race detector, only after merge. Requiring them
-now would send back close to half the daemon PRs that reach them, nearly
-all for reasons unrelated to the PR (§5.4). Fix the four intermittent
-tests and the timeouts tracked in freeside-ai/freeside#1829,
-freeside-ai/freeside#1877, and freeside-ai/freeside#1152, then add those
-jobs to the required check. No test will then run only after merge, so
-the post-merge runs can be deleted.
+**Delete the race tests.** Three jobs ran the daemon's tests under the
+race detector, only after merge, with an observer that filed a
+`ci-race` issue on failure. Freeside chose that over a PR-gated race
+run on 2026-08-08 (`devlog/2026-08-08-1103-main-race-incident-policy.md`)
+on the assumption that a post-merge run would catch regressions worth
+its cost. In two months the detector reported no data race: the eight
+`ci-race` issues record suite timeouts, intermittent tests, the
+observer's own API failure, and one test's nil-pointer panic (§5.4).
+That test read a map entry its goroutine had already deleted, an
+ordering bug in the test that the detector's scheduling exposed; its
+fix changed no product code (freeside-ai/freeside#632).
+
+The jobs run the same suites as the required job, instrumented, so they
+add no test. They are CI's only run under the race detector, so
+deleting them leaves data races to `go test -race` as a local command.
+They cost three runners 17 to 26 minutes on every push to `main`. The
+owner decided on 2026-10-14 to delete the jobs and the observer rather
+than make them reliable and require them (decision 7;
+freeside-ai/freeside#2019). With no post-merge run left, no test runs
+only after merge.
 
 ### 3.2 Teloleo and Straylight
 
@@ -315,8 +325,7 @@ Steps 1, 2, and 4 are independent and change no coordination rule.
    gives it rule 2; until then it keeps its serial rules.
 5. **Write the land command** for Teloleo and Straylight and make it the
    self-merge skill's merge step (§3.2).
-6. **Make the race tests reliable, require them, and delete the
-   post-merge runs** (§3.1).
+6. **Delete the race tests and their incident observer** (§3.1).
 7. **Raise the number of open units** a step at a time, and measure.
 8. **Fix the hot files the measurements identify** (§5.2), one unit per
    row, when rebases conflict in them often enough to matter. The
@@ -430,7 +439,10 @@ against a peak of 21 merges in a day.
 
 Of 65 recent runs, 21 were green, 19 failed, and 25 were cancelled by the
 next push. Of 25 failures examined, one was a real collision, ten were
-intermittent failures in four tests, and 14 were suite timeouts.
+intermittent failures in four tests, and 14 were suite timeouts. The
+incident threads from 2026-08-09 to 2026-10-07 record no data-race
+report. The owner decided on 2026-10-14 to delete the jobs (§3.1,
+decision 7).
 
 ### 5.5 The Migration Runner
 
@@ -484,8 +496,9 @@ command must check how an issue closed.
   has running the audit's scope check in it from the PR body's Scope line.
 - **Whether `git range-diff` after a rebase is enough.** The reasoning
   follows from how rebase works; it was not checked against the history.
-- **The cause of the race-test timeouts** is unknown. A merge that
-  slowed the suite would look the same.
+- **The cause of the race-test timeouts** was never found. A merge that
+  slowed the suite would look the same. The deletion (§3.1) makes it
+  moot.
 - **Hot-file conflicts and fixes.** The counts measure touches, not
   conflicts, and the fixes are not prototyped. For example, I didn't
   check whether screenshot tests can read one digest file per surface.
@@ -516,11 +529,12 @@ command must check how an issue closed.
 | The two doors, scheduling and `Handle #N`                     | Rechecking when `main` moves is done by the required check, the queue, or the land command                                   | The cap of two contract units                                     |
 | Claims, and a planning reservation as a hold on its own issue | Migrations rely on the number collision, the declared-drop test, and ordinary `starts-after`                                 | `exclusive-with`, and a reservation's reach to other units        |
 | `starts-after`, `merges-after`, `stacked-on`                  | The audit's scope check runs on the commit that merges, in the required check once it can                                    | Comparing scope with open work before starting                    |
-| Rebase-only refresh and the fold rule                         | The race tests move into the required check once they are reliable                                                           | The shared-package surface rule                                   |
+| Rebase-only refresh and the fold rule                         |                                                                                                                              | The shared-package surface rule                                   |
 | Tracker format, wave planning, exit runs, comment trackers    | The spine becomes the planner and keeps only planning: milestones and listings, `starts-after` edges, and the deferral sweep | The author's repeated CI and readiness check after a base advance |
 | `kind:contract` as the label that invokes contract review     | The tracker refresh is a command                                                                                             | Runs that happen only after merge                                 |
 |                                                               | The agent-setup skill starts a project from rule 1                                                                           | The hand refresh                                                  |
 |                                                               |                                                                                                                              | Lanes                                                             |
+|                                                               |                                                                                                                              | The race tests and the `ci-race` observer                         |
 
 **Automation replaces the repeated manual recheck.** Today, when the
 base moves, the author repeats CI, diff review, and readiness checks.
@@ -629,6 +643,16 @@ The rule changes belong in these places:
    A plain topic label would be harmless if the issue list needs one.
    With no glossary, owned paths, or rule, it would not be a lane.
 
+7. **Delete the race tests rather than make them reliable and require
+   them?** Decided yes, 2026-10-14. In two months after merge they
+   reported no data race and filed eight incidents: suite timeouts,
+   intermittent tests, observer faults, and one test's nil-pointer
+   panic (§3.1, §5.4). This reverses Freeside's decision of 2026-08-08
+   to run them after merge; the assumption that changed is that the run
+   would catch regressions worth its cost. Revisit if a data race turns
+   up by hand or the daemon gains concurrency the standard suite doesn't
+   exercise.
+
 ## Revision Notes
 
 Each saved revision carries its own notes. Two rejected alternatives are
@@ -653,7 +677,8 @@ recorded only here:
   with large-team practice (§3), and its sources.
 - Freeside, as read on 2026-10-13 and 2026-10-14:
   - Issues freeside-ai/freeside#1712, freeside-ai/freeside#1829,
-    freeside-ai/freeside#1877, and freeside-ai/freeside#1152.
+    freeside-ai/freeside#1877, freeside-ai/freeside#1152, the eight
+    issues labeled `ci-race`, and pull request freeside-ai/freeside#632.
   - The sixteen trackers, freeside-ai/freeside#1613 and
     freeside-ai/freeside#1616 in particular.
   - Branch protection, `.github/workflows/`, pull request history, git
