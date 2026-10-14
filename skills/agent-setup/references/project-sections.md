@@ -118,23 +118,32 @@ During init or adoption:
   `references/coordination-discovery.md` §shapes to choose the smallest model
   the evidence supports.
 - With neither a credible plan nor a demonstrated coordination need, keep the
-  safe serial baseline. Treat a speculative, uncorroborated plan the same way.
+  landing baseline. Treat a speculative, uncorroborated plan the same way.
   Omit the coordination record unless the owner explicitly requests the
   fixed-field record from `references/coordination-discovery.md` §record; when
-  requested, record the safe serial shape. No record means serial work, not
-  missing content. Do not invent a lane, ownership map, graph, claim mechanism,
+  requested, record the landing baseline. No record means the landing baseline,
+  not missing content. Do not invent a lane, ownership map, graph, claim mechanism,
   or placeholder.
+- Look for a landing check here, before the AGENTS.md write. Read whether the
+  base branch's required checks must pass on a branch updated to the tip
+  (`references/audit.md` §required-checks), and ask the owner about a merge
+  queue or land command. When required checks exist without that rule, offer
+  to enable it now, so the write reflects the answer. Treat a setting you
+  cannot read, or a question nobody answers, as absent, and say so.
+- When the project has no landing check, write the record anyway: the
+  selected shape, shape 1 when nothing richer, at a width of one unit until
+  the check exists, per
+  `references/coordination-discovery.md` §record. Report the gap as a setup
+  finding.
 - When evidence supports a richer model, write the fixed-field record from
   `references/coordination-discovery.md` §record in unmanaged content near the
   `Agent-setup profile:` line. For typed relations, stable named streams, or an
   integration spine, keep the long mechanics in project documentation and
   point to it from the record.
-- Keep shared-contract serialization separate from component ownership. When
-  needed, distinguish start order, merge order, intentional stacking, and
-  mutual exclusion, and cap recommended concurrency at realistic review and
-  integration capacity. Shared-contract serialization means repo-wide mutual
-  exclusion on the surface, not per-unit ordering; define the mechanics per
-  shape 5 in `references/coordination-discovery.md` §shapes.
+- Keep the shared contract separate from component ownership. When needed,
+  distinguish start order, merge order, intentional stacking, and mutual
+  exclusion, and cap recommended concurrency at realistic review and
+  integration capacity.
 - If concurrency is expected and the project already defines a forge-visible
   claim mechanism, record how abandoned or stale claims are released or
   superseded. Never invent one silently; a claim advertises occupancy only.
@@ -146,9 +155,13 @@ During init or adoption:
 
 In update mode, detect and report whether an existing coordination record has
 all four fields. Preserve it as unmanaged content unless the owner explicitly
-requests a field change. Do not reassess an established model while syncing
-canonical sections; topology reassessment is a separate owner-assigned work
-unit under "Coordination Reassessment".
+requests a field change. When the settings check finds no landing check,
+report the gap and offer the width-one fallback: a shape 1 record when none
+exists, or a width of one in an existing record's **Current shape**. Write it
+only when the owner accepts, as an owner-requested coordination model. Do
+not reassess an established model while syncing canonical sections; topology
+reassessment is a separate owner-assigned work unit under "Coordination
+Reassessment".
 
 ## §stages
 

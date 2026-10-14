@@ -87,7 +87,7 @@ adoption, or managed-section update.
      On any malformation, stop and report it. Do not analyze coordination
      content, propose a documentation diff, or edit AGENTS.md or a project
      coordination document.
-   - When the file is absent, continue with the safe serial baseline, but keep
+   - When the file is absent, continue with the landing baseline, but keep
      reassessment report-only: do not create AGENTS.md or a project
      coordination document.
 
@@ -105,7 +105,7 @@ adoption, or managed-section update.
    - A present record must contain each of its four fixed fields exactly once. A
      missing or repeated field is ambiguous owner policy, not evidence to infer.
    - With no record, the field and mechanics validations don't apply, and the
-     effective model is the safe serial baseline.
+     effective model is the landing baseline.
 
    Validate the **stage record**:
    - Count the project-specific section grouping stage definitions as one stage
