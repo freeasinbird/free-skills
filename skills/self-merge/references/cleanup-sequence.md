@@ -89,6 +89,50 @@ same-repository queries can't enumerate. If auto-delete is enabled, stop
 before a direct merge or queue enqueue. Otherwise, the merge can delete a
 branch used elsewhere in the fork network before cleanup can keep it.
 
+### Land on the Current Base
+
+On a base without branch protection, nothing else checks that the head was
+tested against the current base. Run one landing round before the merge:
+
+1. Repeat the consumer and queue guards. A rebase push rewrites the branch
+   under any PR that heads or stacks on it.
+2. Fetch the base into its remote-tracking ref with a forced refspec
+   (`+refs/heads/<base>:refs/remotes/<remote>/<base>`), so a force-pushed
+   base still updates it, and record that tip. Stop if the forge reports a
+   different tip.
+3. Test `git merge-base --is-ancestor <tip> <verified-oid>`. When it fails,
+   rebase the verified OID onto the tip in a temporary detached worktree, then
+   remove that worktree. Stop when the rebase leaves no commits beyond the
+   tip. A rebase or reset can silently overwrite or delete ignored files. In
+   the worktree that holds the branch, confirm it is clean with no paused
+   operation. Then move the branch with
+   `git checkout --no-overwrite-ignore --no-recurse-submodules -B <branch> <new-oid>`.
+   Submodule recursion doesn't pass the ignored-file protection down.
+   Without such a worktree, use `git update-ref` with the verified OID as the
+   old value. Stop when the move is refused.
+4. On a conflict, stop. The branch is untouched. The author rebases by hand,
+   reads `git range-diff`, pushes, and starts again from `check`.
+5. Push the rebased branch with
+   `--force-with-lease=refs/heads/<branch>:<verified-oid>`. A refused lease
+   means someone pushed after `check`: move the local branch back to the
+   verified OID the same way, and stop. Otherwise, the round ends here without a merge. Read
+   `git range-diff <tip> <verified-oid> <new-oid>`, because CI reruns on the
+   new head but nothing reviews its diff. Then start again from `check` with
+   the new head as the verified OID.
+6. On the tip, wait for CI on that exact commit. Read
+   `repos/<repo>/commits/<oid>/check-runs` with `--paginate` and
+   `repos/<repo>/commits/<oid>/status`. Pass only when every check run and
+   status finished as success, neutral, or skipped, on two consecutive reads.
+   A commit with no check runs and no statuses by the deadline is a stop, and
+   so is one green read without a second before it.
+7. Reread the PR and stop if its base changed. Just before merging, read
+   `repos/<repo>/git/ref/heads/<branch>` for the base. Stop when its OID
+   differs from the recorded tip, and start the round again.
+
+One round is one attempt. The final read and the merge aren't atomic, which
+this procedure accepts while one person starts every merge. Clean up with the
+head that merged.
+
 ### Pin the Merge to the Reviewed Head
 
 Run
@@ -104,9 +148,10 @@ an empty or `null` result. Otherwise, a failed lookup can write
 Keep the final reads in this order:
 
 1. Read the title.
-2. Repeat the queue, consumer, and auto-delete guards.
-3. Refresh repository settings after the consumer queries.
-4. Make no more forge reads before merging.
+2. Repeat the queue and consumer guards.
+3. When landing, confirm that the base tip hasn't moved.
+4. Refresh repository settings and repeat the auto-delete guard.
+5. Make no more forge reads before merging.
 
 This order narrows the window in which auto-delete can change after its check.
 

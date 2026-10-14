@@ -10,12 +10,15 @@
 #
 # Usage:
 #   self-merge.sh check   --pr N --repo owner/name
+#   self-merge.sh land    --pr N --repo owner/name --head <40-hex-oid>
 #   self-merge.sh merge   --pr N --repo owner/name --head <40-hex-oid>
 #   self-merge.sh cleanup --pr N --repo owner/name --head <40-hex-oid>
 #     [--base-remote NAME]   # override remote resolution for the base repo
 #     [--head-remote NAME]   # override remote resolution for the head repo
-#     [--interval 10]        # merge phase: seconds between MERGED polls
-#     [--cap-minutes 15]     # merge phase: total wait for MERGED
+#     [--interval 10]        # land/merge: seconds between CI and MERGED polls
+#     [--cap-minutes 15]     # land/merge: total wait for MERGED
+#     [--ci-cap-minutes 30]  # land phase: total wait for CI on the head
+#     [--dry-run]            # land phase only: report, never rebase or merge
 #
 # Run each phase from the checkout the cleanup will rewrite (the one that
 # holds, or will hold, the base branch). --repo is required, never
@@ -27,6 +30,13 @@
 #          layout, no open PR sharing or stacked on the head branch, and a
 #          merge queue's method identified as merge-commit before anything
 #          is enqueued. Prints the verified head OID the later phases pin.
+# land     One round of the landing procedure for a base without branch
+#          protection: fetch the base. When the head is not on its tip,
+#          rebase it, lease-push it against --head, and STOP rebased with
+#          the new head: its range-diff needs reading before check and land
+#          run again with it. On the tip, wait for CI on the exact head
+#          commit, refuse if the forge's base tip moved since the fetch,
+#          then run merge. A refusal is a STOP; rerunning land is the retry.
 # merge    Merges pinned to --head with an explicit title-only message,
 #          then polls until the forge reports the PR MERGED (a zero exit
 #          from the merge command proves enqueueing, not merging).
@@ -48,7 +58,7 @@
 set -u
 
 PHASE="" PR="" REPO="" HEAD_OID="" BASE_REMOTE_OPT="" HEAD_REMOTE_OPT=""
-INTERVAL=10 CAP_MINUTES=15
+INTERVAL=10 CAP_MINUTES=15 CI_CAP_MINUTES=30 DRY_RUN=false
 
 usage() {
   sed -n '2,/^set -u$/p' "$0" | sed '$d' >&2
@@ -56,16 +66,22 @@ usage() {
 }
 
 case "${1:-}" in
-  check|merge|cleanup) PHASE="$1"; shift ;;
-  *) echo "self-merge.sh: first argument must be check, merge, or cleanup" >&2; usage ;;
+  check|land|merge|cleanup) PHASE="$1"; shift ;;
+  *) echo "self-merge.sh: first argument must be check, land, merge, or cleanup" >&2; usage ;;
 esac
 
 # Recognize the option, then require its value, before reading $2: a
 # trailing bare option must die as a usage error, not a set -u crash.
 while [ $# -gt 0 ]; do
   opt="$1"
+  # The one boolean flag. Land-only, so a mistyped `merge --dry-run` is a
+  # usage error rather than a real merge.
+  if [ "$opt" = --dry-run ]; then
+    [ "$PHASE" = land ] || { echo "self-merge.sh: --dry-run applies only to land" >&2; usage; }
+    DRY_RUN=true; shift; continue
+  fi
   case "$opt" in
-    --pr|--repo|--head|--base-remote|--head-remote|--interval|--cap-minutes) ;;
+    --pr|--repo|--head|--base-remote|--head-remote|--interval|--cap-minutes|--ci-cap-minutes) ;;
     *) echo "self-merge.sh: unknown option: $opt" >&2; usage ;;
   esac
   [ $# -ge 2 ] || { echo "self-merge.sh: $opt requires a value" >&2; usage; }
@@ -78,6 +94,7 @@ while [ $# -gt 0 ]; do
     --head-remote) HEAD_REMOTE_OPT="$val" ;;
     --interval) INTERVAL="$val" ;;
     --cap-minutes) CAP_MINUTES="$val" ;;
+    --ci-cap-minutes) CI_CAP_MINUTES="$val" ;;
   esac
 done
 
@@ -113,6 +130,12 @@ esac
 }
 [ "${#CAP_MINUTES}" -le 7 ] || {
   echo "self-merge.sh: --cap-minutes must be at most 9999999" >&2; usage
+}
+case "$CI_CAP_MINUTES" in ''|0?*|*[!0-9]*)
+  echo "self-merge.sh: --ci-cap-minutes must be a non-negative integer without leading zeros" >&2; usage ;;
+esac
+[ "${#CI_CAP_MINUTES}" -le 7 ] || {
+  echo "self-merge.sh: --ci-cap-minutes must be at most 9999999" >&2; usage
 }
 # Remote-name overrides: a leading hyphen would read as an option to git
 # even behind our own parsing, and every use below passes them as
@@ -1051,6 +1074,307 @@ remote_repo_check() { # remote_repo_check <remote> <role>
   stop remote-repo-mismatch "$role remote $remote does not match PR repository $REPO's authoritative clone endpoints"
 }
 
+# --- landing ----------------------------------------------------------------
+
+# Without branch protection nothing stops a merge of a head that was never
+# tested against the current base. land runs one round of the landing
+# procedure itself: the head must contain the base tip it fetched, CI must
+# be green on that exact head, and the forge's base tip must still be the
+# fetched one when the merge starts. Each refusal is a STOP and rerunning
+# land is the retry, so every refusal reaches the caller.
+LAND_TIP="" LAND_TMP_WT="" LAND_WT="" NEW_HEAD="" MOVE_ERR="" MOVE_IGNORED=false
+
+# Encode a branch for a forge path that takes it as slash-separated
+# segments (git/ref/heads/<branch>): each segment percent-encoded, the
+# slashes kept.
+urlencode_ref_path() {
+  local rest="$1" out=""
+  while :; do
+    case "$rest" in
+      */*) out+="$(urlencode "${rest%%/*}")/"; rest="${rest#*/}" ;;
+      *) out+="$(urlencode "$rest")"; break ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+forge_base_tip() { # sets FORGE_BASE_TIP to the forge's current tip of $BASE
+  FORGE_BASE_TIP=$(gh api "repos/$REPO/git/ref/heads/$(urlencode_ref_path "$BASE")" \
+    --jq '.object.sha' 2>/dev/null) \
+    || lookup_failed base-ref "could not read the tip of $BASE from $REPO"
+  case "$FORGE_BASE_TIP" in *[!0-9a-f]*|'')
+    lookup_failed base-ref "unexpected tip for $BASE: $FORGE_BASE_TIP" ;;
+  esac
+  [ "${#FORGE_BASE_TIP}" -eq 40 ] \
+    || lookup_failed base-ref "unexpected tip for $BASE: $FORGE_BASE_TIP"
+}
+
+# Read CI for one commit once. Sets CI_STATE to passed, failed, pending, or
+# missing, and CI_DETAIL to what is not green. Only success, neutral, and
+# skipped pass; every other conclusion (cancelled, timed_out,
+# action_required, stale) fails. No check run and no commit status is
+# missing, never green: CI that has not reported has not passed.
+ci_read() { # ci_read <oid>
+  local oid="$1" runs status st concl name total=0 bad="" waiting="" s_state s_total
+  runs=$(gh api --paginate "repos/$REPO/commits/$oid/check-runs?per_page=100" \
+    --jq '.check_runs[] | [.status, (.conclusion // "none"), .name] | @tsv' \
+    2>/dev/null) \
+    || lookup_failed check-runs "could not read check runs for $oid"
+  while IFS=$'\t' read -r st concl name; do
+    [ -n "$st" ] || continue
+    total=$((total + 1))
+    if [ "$st" != completed ]; then
+      waiting+=", $name ($st)"
+    else
+      case "$concl" in
+        success|neutral|skipped) ;;
+        *) bad+=", $name ($concl)" ;;
+      esac
+    fi
+  done <<< "$runs"
+  status=$(gh api "repos/$REPO/commits/$oid/status" \
+    --jq '[.state, (.total_count|tostring)] | @tsv' 2>/dev/null) \
+    || lookup_failed commit-status "could not read the combined status for $oid"
+  IFS=$'\t' read -r s_state s_total <<< "$status"
+  case "$s_total" in ''|*[!0-9]*)
+    lookup_failed commit-status "unparseable status count for $oid: $s_total" ;;
+  esac
+  # The combined state reads pending when no status exists at all, so it
+  # means something only when the count is nonzero.
+  if [ "$s_total" -gt 0 ]; then
+    total=$((total + s_total))
+    case "$s_state" in
+      success) ;;
+      pending) waiting+=", commit statuses (pending)" ;;
+      failure|error) bad+=", commit statuses ($s_state)" ;;
+      *) lookup_failed commit-status "unexpected combined state for $oid: $s_state" ;;
+    esac
+  fi
+  if [ -n "$bad" ]; then CI_STATE=failed; CI_DETAIL="${bad#, }"
+  elif [ -n "$waiting" ]; then CI_STATE=pending; CI_DETAIL="${waiting#, }"
+  elif [ "$total" -eq 0 ]; then CI_STATE=missing; CI_DETAIL="no check runs or commit statuses"
+  else CI_STATE=passed; CI_DETAIL="$total check(s) green"
+  fi
+}
+
+ci_wait() { # ci_wait <oid>: returns only once CI passed on <oid>
+  local oid="$1" deadline remaining sleep_for seen_passing=""
+  deadline=$(( SECONDS + CI_CAP_MINUTES * 60 ))
+  while :; do
+    ci_read "$oid"
+    [ "$CI_STATE" != failed ] \
+      || stop checks-failed "CI failed on $oid: $CI_DETAIL; fix the branch, then run check and land again"
+    # Workflows register their checks asynchronously after a push, so one
+    # green read can be a fast check finishing before a slow one exists.
+    # Pass only on the second consecutive green read with the same check
+    # count; a first green read at the cap is still unconfirmed.
+    if [ "$CI_STATE" = passed ]; then
+      [ "$seen_passing" != "$CI_DETAIL" ] || return 0
+      seen_passing="$CI_DETAIL"
+    else
+      seen_passing=""
+    fi
+    remaining=$(( deadline - SECONDS ))
+    if [ "$remaining" -le 0 ]; then
+      [ "$CI_STATE" != passed ] \
+        || stop checks-pending "CI on $oid read green only once before the $CI_CAP_MINUTES-minute cap, so a slower check may not have registered yet; rerun land to confirm it"
+      [ "$CI_STATE" != pending ] \
+        || stop checks-pending "CI is still running on $oid after $CI_CAP_MINUTES minute(s): $CI_DETAIL; rerun land when it finishes"
+      stop checks-missing "nothing reported CI on $oid within $CI_CAP_MINUTES minute(s); an unchecked commit is not green"
+    fi
+    sleep_for="$INTERVAL"
+    [ "$sleep_for" -le "$remaining" ] || sleep_for="$remaining"
+    sleep "$sleep_for"
+  done
+}
+
+# Remove land's temporary worktree. It holds only a detached checkout of
+# commits already in the object store, plus whatever hooks wrote there or a
+# rebase left paused, so --force discards nothing of value.
+remove_land_worktree() { # fails only when git cannot remove it
+  local rc=0
+  [ -n "$LAND_TMP_WT" ] || return 0
+  if git worktree remove --force -- "$LAND_TMP_WT/wt" >/dev/null 2>&1; then
+    rm -rf -- "$LAND_TMP_WT"
+  else
+    echo "self-merge.sh: could not remove the temporary worktree at $LAND_TMP_WT/wt; remove it with git worktree remove --force" >&2
+    rc=1
+  fi
+  LAND_TMP_WT=""
+  return "$rc"
+}
+
+# Move local $BRANCH from <from> to <to>. A worktree that holds the branch
+# moves with it through checkout --no-overwrite-ignore, which changes nothing
+# when an ignored file is in the way: at a path <to> tracks, inside a
+# directory <to> replaces with a file, or at a file <to> replaces with a
+# directory. A plain rebase or reset overwrites or deletes such a file.
+# Without a worktree only the ref moves, and only if it still holds <from>.
+land_move_branch() { # land_move_branch <from> <to>; sets MOVE_ERR on failure
+  local cur
+  MOVE_ERR="" MOVE_IGNORED=false
+  if [ -z "$LAND_WT" ]; then
+    git update-ref "refs/heads/$BRANCH" "$2" "$1" >/dev/null 2>&1 && return 0
+    MOVE_ERR="local $BRANCH no longer holds $1"
+    return 1
+  fi
+  cur=$(git rev-parse --verify --quiet "refs/heads/$BRANCH")
+  if [ "$cur" != "$1" ]; then
+    MOVE_ERR="local $BRANCH is ${cur:-unreadable}, not $1"
+    return 1
+  fi
+  # Submodule recursion would not pass --no-overwrite-ignore down. The C
+  # locale keeps git's refusal text matchable. A failing post-checkout hook
+  # fails the command after the move, so the ref and a clean index decide.
+  MOVE_ERR=$(LC_ALL=C git -C "$LAND_WT" checkout --quiet --no-overwrite-ignore \
+    --no-recurse-submodules -B "$BRANCH" "$2" 2>&1 >/dev/null) && return 0
+  case "$MOVE_ERR" in *untracked*) MOVE_IGNORED=true ;; esac
+  MOVE_ERR=$(printf '%s' "$MOVE_ERR" | tr -d '\0' | tr '\n\t' '  ' | tail -c 300)
+  cur=$(git rev-parse --verify --quiet "refs/heads/$BRANCH")
+  [ "$cur" = "$2" ] && [ -z "$(git -C "$LAND_WT" status --porcelain -uno --ignore-submodules=all 2>/dev/null)" ]
+}
+
+# Rebase the reviewed head onto LAND_TIP in a temporary detached worktree,
+# so the rebase never runs where ignored files live, then move the local
+# branch to the result. Sets NEW_HEAD and LAND_WT (the worktree that holds
+# the branch, or empty). Every refusal here leaves $BRANCH at HEAD_OID and
+# pushes nothing.
+land_rebase() {
+  local wt dirty err conflicts detail cur
+  worktree_scan "refs/heads/$BRANCH"; LAND_WT="$WT_MATCH"
+  if [ -n "$LAND_WT" ]; then
+    dirty=$(git -C "$LAND_WT" status -uall --porcelain 2>/dev/null) \
+      || lookup_failed head-worktree "could not read the status of the head worktree at $LAND_WT"
+    [ -z "$dirty" ] \
+      || stop dirty-tree "the head worktree at $LAND_WT has uncommitted changes; land does not move it under them"
+    if op_probe "$LAND_WT"; then
+      stop op-in-progress "$OP_FOUND exists in the head worktree at $LAND_WT"
+    fi
+  fi
+  LAND_TMP_WT=$(mktemp -d) || lookup_failed rebase "mktemp failed"
+  wt="$LAND_TMP_WT/wt"
+  if ! git worktree add --quiet --detach -- "$wt" "$HEAD_OID" >/dev/null 2>&1; then
+    # A failing post-checkout hook fails the add after registering it.
+    git worktree remove --force -- "$wt" >/dev/null 2>&1
+    rm -rf -- "$LAND_TMP_WT"; LAND_TMP_WT=""
+    lookup_failed rebase "could not add a temporary worktree at $HEAD_OID"
+  fi
+  trap remove_land_worktree EXIT
+  err=$(mktemp) || lookup_failed rebase "mktemp failed"
+  # Pin the settings that would let a rebase touch more than this commit:
+  # autostash stashes and reapplies work, and updateRefs moves branches.
+  if ! git -C "$wt" -c rebase.autoStash=false -c rebase.updateRefs=false \
+      rebase --quiet "$LAND_TIP" >/dev/null 2>"$err"; then
+    detail=$(tr -d '\0' < "$err" | tail -c 300); rm -f "$err"
+    conflicts=$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')
+    [ -n "$conflicts" ] \
+      || stop rebase-failed "rebasing $HEAD_OID onto $LAND_TIP failed without conflicts; $BRANCH is unchanged: $detail"
+    stop rebase-conflict "rebasing $BRANCH onto $BASE tip $LAND_TIP conflicts in: ${conflicts% }. $BRANCH is unchanged at $HEAD_OID. Rebase it by hand, read git range-diff, push, then run check and land again"
+  fi
+  rm -f "$err"
+  NEW_HEAD=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null) \
+    || lookup_failed rebase "could not read the rebased head"
+  # A leaked worktree would outlive the run unnoticed; stop while nothing
+  # has moved.
+  remove_land_worktree \
+    || stop rebase-failed "the temporary worktree at $wt could not be removed; $BRANCH is unchanged at $HEAD_OID and nothing was pushed"
+  # Every commit already on the base leaves nothing to land; pushing the
+  # base tip as the head would empty the PR.
+  [ "$NEW_HEAD" != "$LAND_TIP" ] \
+    || stop rebase-failed "every commit on $BRANCH is already on $BASE, so there is nothing to land; $BRANCH is unchanged at $HEAD_OID"
+  if ! land_move_branch "$HEAD_OID" "$NEW_HEAD"; then
+    cur=$(git rev-parse --verify --quiet "refs/heads/$BRANCH")
+    # A refusal leaves both the ref and the index at HEAD_OID; anything else
+    # is a half-finished move that needs a person.
+    [ "$cur" = "$HEAD_OID" ] && [ -z "$(git -C "${LAND_WT:-.}" status --porcelain -uno --ignore-submodules=all 2>/dev/null)" ] \
+      || stop rebase-failed "moving $BRANCH to the rebased $NEW_HEAD failed partway: $BRANCH is ${cur:-unreadable} and nothing was pushed; inspect it by hand: $MOVE_ERR"
+    [ "$MOVE_IGNORED" = false ] \
+      || stop ignored-clobber "moving the head worktree at $LAND_WT to the rebased $NEW_HEAD would overwrite or remove ignored files, so nothing moved and nothing was pushed; move them aside, then rerun land: $MOVE_ERR"
+    stop rebase-failed "could not move $BRANCH to the rebased $NEW_HEAD; it is unchanged at $HEAD_OID and nothing was pushed: $MOVE_ERR"
+  fi
+  # The agent judges the rebase from this, as it would a manual one.
+  echo "self-merge.sh: rebased $BRANCH onto $LAND_TIP; git range-diff $LAND_TIP $HEAD_OID $NEW_HEAD:" >&2
+  git range-diff --no-color "$LAND_TIP" "$HEAD_OID" "$NEW_HEAD" >&2 2>/dev/null \
+    || echo "self-merge.sh: (git range-diff failed; compare the commits by hand)" >&2
+}
+
+# Push the rebased branch with a lease on the reviewed head, so a push that
+# landed after check fails instead of being overwritten. A refused push puts
+# the local branch back at HEAD_OID, so check and land can run again from a
+# state that agrees with the forge.
+land_push() { # land_push <remote> <ssh-pin-or-empty>
+  local err detail restored=yes
+  err=$(mktemp) || lookup_failed push "mktemp failed"
+  if ! git_with_ssh_pin "$2" push --quiet \
+      --force-with-lease="refs/heads/$BRANCH:$HEAD_OID" \
+      -- "$1" "refs/heads/$BRANCH:refs/heads/$BRANCH" >/dev/null 2>"$err"; then
+    detail=$(tr -d '\0' < "$err" | tail -c 300); rm -f "$err"
+    land_move_branch "$NEW_HEAD" "$HEAD_OID" || restored=no
+    if [ "$restored" = yes ]; then
+      stop lease-failed "the lease-protected push of rebased $BRANCH to $1 was refused, and local $BRANCH is back at $HEAD_OID; the remote branch may have moved since check: $detail"
+    fi
+    stop lease-failed "the lease-protected push of rebased $BRANCH to $1 was refused, and local $BRANCH could not be put back from $NEW_HEAD to $HEAD_OID: $detail"
+  fi
+  rm -f "$err"
+}
+
+# Wait for the forge's PR head to show the pushed commit; it updates
+# asynchronously. Any third OID means someone else pushed.
+land_await_forge_head() {
+  local deadline remaining sleep_for fields state oid
+  deadline=$(( SECONDS + CI_CAP_MINUTES * 60 ))
+  while :; do
+    fields=$(gh pr view "$PR" --repo="$REPO" --json state,headRefOid \
+      --jq '[.state,.headRefOid] | @tsv' 2>/dev/null) \
+      || lookup_failed pr-view "could not reread PR $PR after the push"
+    IFS=$'\t' read -r state oid <<< "$fields"
+    [ "$state" = OPEN ] || stop pr-not-open "PR $PR is $state after land pushed $NEW_HEAD"
+    [ "$oid" != "$NEW_HEAD" ] || return 0
+    [ "$oid" = "$HEAD_OID" ] \
+      || stop oid-mismatch "after land pushed $NEW_HEAD the forge reports head $oid; something else pushed to $BRANCH"
+    remaining=$(( deadline - SECONDS ))
+    [ "$remaining" -gt 0 ] \
+      || lookup_failed pr-head "the forge still reports head $HEAD_OID after land pushed $NEW_HEAD; rerun check and land once it catches up"
+    sleep_for="$INTERVAL"
+    [ "$sleep_for" -le "$remaining" ] || sleep_for="$remaining"
+    sleep "$sleep_for"
+  done
+}
+
+# Read every check once and report what land would do, changing nothing
+# beyond the base fetch. The STOP or OK line is what a real run would hit
+# first; stderr carries all three results either way.
+land_dry_run() { # land_dry_run <on-tip>
+  local on_tip="$1" tip_msg ci_msg base_msg summary
+  ci_read "$HEAD_OID"
+  forge_base_tip
+  if [ "$on_tip" = true ]; then
+    tip_msg="head $HEAD_OID contains the fetched $BASE tip $LAND_TIP"
+  elif [ "$IS_FORK" = true ]; then
+    tip_msg="head $HEAD_OID is not on the fetched $BASE tip $LAND_TIP, and a cross-repository head must be rebased by its author"
+  else
+    tip_msg="head $HEAD_OID is not on the fetched $BASE tip $LAND_TIP; land would rebase it, push it with a lease on $HEAD_OID, and stop for the new head's range-diff"
+  fi
+  ci_msg="CI on $HEAD_OID is $CI_STATE ($CI_DETAIL)"
+  if [ "$FORGE_BASE_TIP" = "$LAND_TIP" ]; then
+    base_msg="the forge's $BASE tip is still the fetched $LAND_TIP"
+  else
+    base_msg="the forge's $BASE tip $FORGE_BASE_TIP differs from the fetched $LAND_TIP"
+  fi
+  printf 'self-merge.sh: land dry run, PR %s:\n  tip:    %s\n  checks: %s\n  base:   %s\n' \
+    "$PR" "$tip_msg" "$ci_msg" "$base_msg" >&2
+  summary="dry run, nothing changed. tip: $tip_msg. checks: $ci_msg. base: $base_msg"
+  [ "$on_tip" = true ] || stop not-on-tip "$summary"
+  case "$CI_STATE" in
+    failed) stop checks-failed "$summary" ;;
+    pending) stop checks-pending "$summary; a real run waits up to $CI_CAP_MINUTES minute(s)" ;;
+    missing) stop checks-missing "$summary; a real run waits up to $CI_CAP_MINUTES minute(s)" ;;
+  esac
+  [ "$FORGE_BASE_TIP" = "$LAND_TIP" ] || stop base-moved "$summary"
+  echo "OK land {\"dry_run\":true,\"head_oid\":\"$HEAD_OID\",\"base_tip\":\"$LAND_TIP\",\"checks\":\"$CI_STATE\",\"would\":\"merge\"}"
+  exit 0
+}
+
 # --- phases -----------------------------------------------------------------
 
 phase_check() {
@@ -1075,6 +1399,88 @@ phase_check() {
   echo "OK check {\"head_oid\":\"$FORGE_HEAD_OID\",\"head_branch\":\"$(json_escape "$BRANCH")\",\"base_branch\":\"$(json_escape "$BASE")\",\"fork\":$IS_FORK,\"queue\":\"$QUEUE\"}"
 }
 
+phase_land() {
+  [ "$PR_STATE" = OPEN ] || stop pr-not-open "PR $PR is $PR_STATE, not OPEN"
+  [ "$FORGE_HEAD_OID" = "$HEAD_OID" ] \
+    || stop oid-mismatch "the forge reports head $FORGE_HEAD_OID but --head pinned $HEAD_OID; something was pushed since check"
+  load_repo_facts
+  layout_check
+  # The local branch is what a rebase rewrites, so it must be the reviewed
+  # head too, as check required.
+  local local_tip rc=0 on_tip fields head_remote head_pin="" hr_furl
+  git show-ref --verify --quiet "refs/heads/$BRANCH" \
+    || stop no-local-branch "no local $BRANCH in this repository: run land from the clone that pushed it"
+  local_tip=$(git rev-parse "refs/heads/$BRANCH")
+  [ "$local_tip" = "$HEAD_OID" ] \
+    || stop oid-mismatch "local $BRANCH is $local_tip, not the reviewed head $HEAD_OID"
+  # merge repeats these at the end; asking first keeps a rebase push from
+  # rewriting a branch that another PR heads or stacks on.
+  consumer_checks
+  queue_check
+
+  if [ -n "$BASE_REMOTE_OPT" ]; then
+    BASE_REMOTE="$BASE_REMOTE_OPT"
+  else
+    resolve_remote "$REPO"
+    [ -n "$RESOLVED_REMOTE" ] \
+      || stop remote-unresolved "no configured remote's URL matches $REPO; pass --base-remote"
+    BASE_REMOTE="$RESOLVED_REMOTE"
+  fi
+  remote_repo_check "$BASE_REMOTE" base
+  # The + lets a base force-pushed to a non-descendant still update the
+  # tracking ref, so the checks below judge the base as it is now.
+  git fetch -- "$BASE_REMOTE" "+refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+    || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
+  LAND_TIP=$(git rev-parse --verify --quiet "refs/remotes/$BASE_REMOTE/$BASE^{commit}") \
+    || lookup_failed base-fetch "the fetched $BASE did not resolve to a commit"
+  git merge-base --is-ancestor "$LAND_TIP" "$HEAD_OID" >/dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) on_tip=true ;;
+    1) on_tip=false ;;
+    *) lookup_failed ancestry "could not compare $HEAD_OID with $BASE tip $LAND_TIP (git merge-base exit $rc)" ;;
+  esac
+
+  [ "$DRY_RUN" = false ] || land_dry_run "$on_tip"
+
+  if [ "$on_tip" = false ]; then
+    [ "$IS_FORK" != true ] \
+      || stop not-on-tip "head $HEAD_OID is not on $BASE tip $LAND_TIP, and land does not push to another repository's branch; its author must rebase and push, then run check and land again"
+    # A base remote that lags the forge would cost a rebase, a push, and a
+    # CI wait before the final check caught it.
+    forge_base_tip
+    [ "$FORGE_BASE_TIP" = "$LAND_TIP" ] \
+      || stop base-moved "the forge reports $BASE at $FORGE_BASE_TIP but $BASE_REMOTE fetched $LAND_TIP; nothing was rebased, so rerun land"
+    # Validate the push destination before rewriting anything, so a remote
+    # that fails here leaves the branch untouched.
+    head_remote="${HEAD_REMOTE_OPT:-$BASE_REMOTE}"
+    remote_repo_check "$head_remote" head
+    head_pin="$PINNED_SSH_COMMAND"
+    out_exact hr_furl git remote get-url -- "$head_remote" \
+      || lookup_failed head-remote "could not read $head_remote's URL"
+    push_ids_match "$head_remote" "$(url_id "$hr_furl")" \
+      || stop pushurl-mismatch "$head_remote must have exactly one effective push destination matching its fetch URL; git broadcasts to every configured push URL"
+    land_rebase
+    land_push "$head_remote" "$head_pin"
+    land_await_forge_head
+    # CI reruns on the rebased commit, but nothing reviews its diff, so the
+    # agent reads the range-diff printed above before landing it.
+    echo "STOP rebased {\"head_oid\":\"$NEW_HEAD\",\"old_head_oid\":\"$HEAD_OID\",\"base_tip\":\"$LAND_TIP\",\"detail\":\"$(json_escape "rebased $BRANCH onto $BASE tip $LAND_TIP and pushed $NEW_HEAD; read the range-diff on stderr, then run check and land --head $NEW_HEAD")\"}"
+    exit 2
+  fi
+
+  ci_wait "$HEAD_OID"
+
+  # The CI wait can be long; merge's own guards need the PR as it is now.
+  local base_now
+  fields=$(gh pr view "$PR" --repo="$REPO" --json state,headRefOid,baseRefName \
+    --jq '[.state,.headRefOid,.baseRefName] | @tsv' 2>/dev/null) \
+    || lookup_failed pr-view "could not reread PR $PR before the merge"
+  IFS=$'\t' read -r PR_STATE FORGE_HEAD_OID base_now <<< "$fields"
+  [ "$base_now" = "$BASE" ] \
+    || stop base-moved "PR $PR now targets $base_now, not $BASE, which land checked the head against; run check and land again"
+  phase_merge
+}
+
 phase_merge() {
   [ "$PR_STATE" = OPEN ] || stop pr-not-open "PR $PR is $PR_STATE, not OPEN"
   [ "$FORGE_HEAD_OID" = "$HEAD_OID" ] \
@@ -1093,6 +1499,16 @@ phase_merge() {
   # Both are re-asked at the last moment before anything irreversible.
   queue_check
   consumer_checks
+  # land's last refusal: the base tip it fetched and waited on must
+  # still be the forge's tip. Only the auto-delete refresh, which keeps its
+  # own zero-read window, sits between this read and the merge. The read and
+  # the merge are still not atomic; the landing design accepts that while
+  # one person starts every merge.
+  if [ -n "$LAND_TIP" ]; then
+    forge_base_tip
+    [ "$FORGE_BASE_TIP" = "$LAND_TIP" ] \
+      || stop base-moved "$BASE moved from $LAND_TIP to $FORGE_BASE_TIP after land fetched it; $HEAD_OID was not checked against the new tip, so run check and land again"
+  fi
   # consumer_checks loads repository facts for its lineage queries. Reload
   # them at the final boundary so an auto-delete setting changed while the
   # other guards ran cannot pass from the stale cache.
@@ -1119,7 +1535,11 @@ phase_merge() {
         --jq '[.state,(.mergedAt // "null")] | @tsv' 2>/dev/null); then
       IFS=$'\t' read -r state merged_at <<< "$pr_fields"
       if [ "$state" = MERGED ] && [ "$merged_at" != null ]; then
-        echo "OK merge {\"merged_at\":\"$(json_escape "$merged_at")\"}"
+        if [ "$PHASE" = land ]; then
+          echo "OK land {\"head_oid\":\"$HEAD_OID\",\"merged_at\":\"$(json_escape "$merged_at")\"}"
+        else
+          echo "OK merge {\"merged_at\":\"$(json_escape "$merged_at")\"}"
+        fi
         return 0
       fi
       [ "$state" = OPEN ] || [ "$state" = MERGED ] \
@@ -1389,6 +1809,7 @@ phase_cleanup() {
 
 case "$PHASE" in
   check) phase_check ;;
+  land) phase_land ;;
   merge) phase_merge ;;
   cleanup) phase_cleanup ;;
 esac

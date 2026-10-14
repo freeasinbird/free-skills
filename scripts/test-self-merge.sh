@@ -48,6 +48,9 @@ t 4 "valid check reaches the forge read" check --pr 83 --repo owner/name
 t 4 "valid merge reaches the forge read" merge --pr 83 --repo owner/name --head "$OID"
 t 4 "valid cleanup reaches the forge read" cleanup --pr 83 --repo owner/name --head "$OID"
 t 4 "uppercase head normalized" merge --pr 83 --repo owner/name --head "$(printf '%s' "$OID" | tr 'a-f' 'A-F')"
+t 4 "valid land reaches the forge read" land --pr 83 --repo owner/name --head "$OID"
+t 4 "land dry run reaches the forge read" land --pr 83 --repo owner/name --head "$OID" --dry-run
+t 4 "zero CI cap is accepted" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes 0
 
 t 64 "no arguments at all"
 t 64 "unknown phase" tidy --pr 83 --repo owner/name
@@ -64,6 +67,12 @@ t 64 "repo query injection" check --pr 83 --repo 'a/b?x=1'
 t 64 "repo missing name" check --pr 83 --repo a/
 t 64 "merge without head" merge --pr 83 --repo owner/name
 t 64 "cleanup without head" cleanup --pr 83 --repo owner/name
+t 64 "land without head" land --pr 83 --repo owner/name
+t 64 "dry run takes no value" land --pr 83 --repo owner/name --head "$OID" --dry-run yes
+t 64 "dry run outside land never merges" merge --pr 83 --repo owner/name --head "$OID" --dry-run
+t 64 "ci cap non-numeric" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes xyz
+t 64 "ci cap leading zeros" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes 08
+t 64 "ci cap beyond arithmetic bound" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes 10000000
 t 64 "head abbreviated" merge --pr 83 --repo owner/name --head 0123456
 t 64 "head non-hex" merge --pr 83 --repo owner/name --head zz23456789abcdef0123456789abcdef01234567
 t 64 "interval zero" check --pr 83 --repo owner/name --interval 0
@@ -137,6 +146,9 @@ fixture=''
 if [ "$sub" = api ]; then
   case "$api" in
     */rules/branches/*) fixture="$FIX/rules.json" ;;
+    */commits/*/check-runs*) fixture="$FIX/checks.json" ;;
+    */commits/*/status) fixture="$FIX/status.json" ;;
+    */git/ref/heads/*) fixture="$FIX/base-ref.json" ;;
     */pulls\?*) fixture="$FIX/fork-shared.json" ;;
     repos/*/*)
       if [ -f "$FIX/repo-next.json" ]; then
@@ -153,7 +165,7 @@ if [ "$sub" = api ]; then
   esac
 elif [ "$sub" = pr ] && [ "${verb:-}" = view ]; then
   case "$jsonval" in
-    *headRefName*) fixture="$FIX/pr-full.json" ;;
+    *headRefName*|*headRefOid*) fixture="$FIX/pr-full.json" ;;
     *mergedAt*) fixture="$FIX/pr-state.json" ;;
     title) fixture="$FIX/title.json" ;;
   esac
@@ -166,7 +178,19 @@ elif [ "$sub" = pr ] && [ "${verb:-}" = merge ]; then
   [ "$rc" -eq 0 ] || echo "merge refused by fixture" >&2
   exit "$rc"
 fi
+if [ "$fixture" = "$FIX/pr-full.json" ] && [ -f "$FIX/pr-next-armed" ]; then
+  if [ -f "$FIX/pr-read-once" ]; then fixture="$FIX/pr-next.json"
+  else : > "$FIX/pr-read-once"; fi
+fi
 [ -n "$fixture" ] && [ -f "$fixture" ] || exit 1
+# A live head: report the scratch remote's current head OID, as the forge
+# would after a push.
+if [ "$fixture" = "$FIX/pr-full.json" ] && [ -f "$FIX/live-remote" ]; then
+  live=$(git -C "$(cat "$FIX/live-remote")" rev-parse \
+    "refs/heads/$(jq -r .headRefName "$fixture")") || exit 1
+  jq --arg o "$live" '.headRefOid = $o' "$fixture" > "$FIX/pr-live.json"
+  fixture="$FIX/pr-live.json"
+fi
 if [ -n "$jqval" ]; then
   if [ -n "$paginate" ] \
      && [ "$fixture" = "$FIX/rules.json" ] \
@@ -190,7 +214,8 @@ SCENARIO=""
 scenario() {
   SCENARIO="$1"
   rm -f "$FIX"/*.json "$FIX"/calls.log "$FIX"/merge-rc \
-    "$FIX"/repo-read-once "$FIX"/rules-page2-fail
+    "$FIX"/repo-read-once "$FIX"/rules-page2-fail "$FIX"/live-remote \
+    "$FIX"/pr-next-armed "$FIX"/pr-read-once
   SCEN="$TMP/scen-$((pass + fail))"
   mkdir -p "$SCEN"
 }
@@ -212,6 +237,11 @@ want_call() {
   if grep -qF -- "$1" "$FIX/calls.log" 2>/dev/null; then ok; else
     bad "no gh call contained '$1' (log: $(cat "$FIX/calls.log" 2>/dev/null | tr '\n' ';'))"
   fi
+}
+want_no_call() {
+  if grep -qF -- "$1" "$FIX/calls.log" 2>/dev/null; then
+    bad "a gh call contained '$1'"
+  else ok; fi
 }
 
 # pr_full <state> <head> <base> <headOid> <fork> <owner> <name>
@@ -852,6 +882,431 @@ printf '{"state":"OPEN","mergedAt":null}' > "$FIX/pr-state.json"
 run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID" --cap-minutes 0 --interval 1
 want_rc 4
 want_out 'LOOKUP_FAILED merge-pending'
+
+# ---- land phase ----
+
+# Scratch layout for land: a bare "forge" remote holding main (A) and feat
+# (B on A), unmerged. "behind" adds C to the remote main after the branch
+# point; "conflict" makes C change feat.txt too. The work clone has main
+# checked out and a local feat at B.
+land_setup() { # land_setup [behind|conflict]
+  HB=feat; BB=main
+  BARE="$SCEN/remote.git"; WORK="$SCEN/work"; SRC="$SCEN/src"
+  git init --bare -q -b main "$BARE"
+  git init -q -b main "$SRC"
+  G "$SRC" config user.email t@t; G "$SRC" config user.name t
+  echo base > "$SRC/base.txt"; G "$SRC" add .; G "$SRC" commit -m A
+  G "$SRC" checkout -b feat
+  echo feat > "$SRC/feat.txt"; G "$SRC" add .; G "$SRC" commit -m B
+  G "$SRC" remote add origin "$BARE"
+  G "$SRC" push origin main feat
+  FEAT_OID=$(git -C "$SRC" rev-parse feat)
+  case "${1:-}" in
+    behind|conflict)
+      G "$SRC" checkout main
+      if [ "$1" = conflict ]; then echo other > "$SRC/feat.txt"
+      else echo more > "$SRC/more.txt"; fi
+      G "$SRC" add .; G "$SRC" commit -m C
+      G "$SRC" push origin main
+      ;;
+  esac
+  BASE_TIP=$(git -C "$SRC" rev-parse main)
+  git clone -q "$BARE" "$WORK"
+  G "$WORK" config user.email t@t; G "$WORK" config user.name t
+  G "$WORK" branch feat origin/feat
+}
+checks_fx() { # checks_fx <status> <conclusion-json>
+  jq -n --arg s "$1" --argjson c "$2" \
+    '{total_count:1, check_runs:[{name:"ci", status:$s, conclusion:$c}]}' \
+    > "$FIX/checks.json"
+}
+status_fx() { # status_fx <state> <count>
+  jq -n --arg s "$1" --argjson n "$2" '{state:$s, total_count:$n}' > "$FIX/status.json"
+}
+base_ref_fx() { jq -n --arg o "$1" '{object:{sha:$o, type:"commit"}}' > "$FIX/base-ref.json"; }
+land_fixtures() { # green CI, an unmoved base, and a live forge head
+  pr_full OPEN feat main "$FEAT_OID" false owner name
+  repo_fx main; rules_fx '[]'; lists_empty; merged_fx
+  printf '{"title":"T"}' > "$FIX/title.json"
+  checks_fx completed '"success"'
+  status_fx pending 0
+  base_ref_fx "$BASE_TIP"
+  echo "$BARE" > "$FIX/live-remote"
+}
+LAND=(land --pr 83 --repo owner/name --base-remote origin --head-remote origin --interval 1)
+remote_feat() { git -C "$BARE" rev-parse refs/heads/feat; }
+local_feat() { git -C "$WORK" rev-parse refs/heads/feat; }
+worktree_count() { git -C "$WORK" worktree list --porcelain | grep -c '^worktree '; }
+
+scenario "land merges a head already on the tip once CI is green"
+land_setup; land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out "OK land {\"head_oid\":\"$FEAT_OID\",\"merged_at\":"
+want_call "commits/$FEAT_OID/check-runs"
+want_call "commits/$FEAT_OID/status"
+want_call "git/ref/heads/main"
+want_call "--match-head-commit=$FEAT_OID"
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "an on-tip land rewrote the remote branch"
+
+scenario "land rebases a behind head, lease-pushes it, and stops for its range-diff"
+land_setup behind; land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+NEW_OID=$(remote_feat)
+[ "$NEW_OID" != "$FEAT_OID" ] && ok || bad "the remote branch was not rewritten"
+git -C "$BARE" merge-base --is-ancestor "$BASE_TIP" "$NEW_OID" && ok \
+  || bad "the pushed head does not contain the fetched tip"
+[ "$(local_feat)" = "$NEW_OID" ] && ok || bad "local feat is not the pushed head"
+want_out "STOP rebased {\"head_oid\":\"$NEW_OID\",\"old_head_oid\":\"$FEAT_OID\",\"base_tip\":\"$BASE_TIP\","
+want_no_call "commits/$NEW_OID/check-runs"
+want_no_call 'pr merge'
+[ "$(worktree_count)" -eq 1 ] && ok || bad "the temporary worktree was left behind"
+grep -qF 'git range-diff' "$FIX/stderr" && ok || bad "stderr lacks the range-diff"
+# The rerun with the new head finds it on the tip, waits for CI, and merges.
+run_sm "${LAND[@]}" --head "$NEW_OID"
+want_rc 0
+want_out "OK land {\"head_oid\":\"$NEW_OID\",\"merged_at\":"
+want_call "commits/$NEW_OID/check-runs"
+want_call "--match-head-commit=$NEW_OID"
+[ "$(remote_feat)" = "$NEW_OID" ] && ok || bad "the rerun rewrote the remote branch"
+
+scenario "land moves the worktree that holds the head to the rebased head"
+land_setup behind; land_fixtures
+G "$WORK" worktree add "$SCEN/feat-wt" feat
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebased'
+NEW_OID=$(remote_feat)
+[ "$(git -C "$SCEN/feat-wt" rev-parse HEAD)" = "$NEW_OID" ] && ok \
+  || bad "the head worktree is not at the rebased head"
+[ "$(git -C "$SCEN/feat-wt" symbolic-ref HEAD)" = refs/heads/feat ] && ok \
+  || bad "the head worktree no longer has feat checked out"
+[ -z "$(git -C "$SCEN/feat-wt" status --porcelain)" ] && ok || bad "the head worktree was left dirty"
+[ "$(worktree_count)" -eq 2 ] && ok || bad "the temporary worktree was left behind"
+
+scenario "files a hook writes in the temporary worktree do not leak it"
+land_setup behind; land_fixtures
+printf '#!/bin/sh\necho hook > hook-artifact.txt\n' > "$WORK/.git/hooks/post-checkout"
+chmod +x "$WORK/.git/hooks/post-checkout"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebased'
+[ "$(worktree_count)" -eq 1 ] && ok || bad "the temporary worktree was left behind"
+
+scenario "land refuses to rebase a dirty head worktree"
+land_setup behind; land_fixtures
+G "$WORK" worktree add "$SCEN/feat-wt" feat
+echo wip > "$SCEN/feat-wt/wip.txt"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP dirty-tree'
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the remote branch moved"
+
+scenario "a conflicting rebase is aborted and leaves both branches untouched"
+land_setup conflict; land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebase-conflict'
+want_out 'feat.txt'
+[ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "local feat moved"
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the remote branch moved"
+[ "$(worktree_count)" -eq 1 ] && ok || bad "the temporary worktree was left behind"
+want_no_call 'pr merge'
+
+scenario "a push since check fails the rebase lease and restores the local branch"
+land_setup behind; land_fixtures
+rm -f "$FIX/live-remote"   # the forge read still shows the reviewed head
+G "$SRC" checkout feat
+echo late > "$SRC/late.txt"; G "$SRC" add .; G "$SRC" commit -m late
+G "$SRC" push origin feat
+LATE_OID=$(git -C "$SRC" rev-parse feat)
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP lease-failed'
+[ "$(remote_feat)" = "$LATE_OID" ] && ok || bad "the lease did not protect the later push"
+[ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "local feat was not restored"
+want_no_call 'pr merge'
+
+scenario "a failed check stops land"
+land_setup; land_fixtures
+checks_fx completed '"failure"'
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+want_no_call 'pr merge'
+
+scenario "a failed commit status stops land even with green check runs"
+land_setup; land_fixtures
+status_fx failure 1
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+want_no_call 'pr merge'
+
+scenario "a green read waits for a second read before it passes"
+land_setup; land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 0
+[ "$(grep -c "commits/$FEAT_OID/check-runs" "$FIX/calls.log")" -ge 2 ] && ok \
+  || bad "land passed CI on a single read"
+
+scenario "a single green read at the cap is pending, not passed"
+land_setup; land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID" --ci-cap-minutes 0
+want_rc 2
+want_out 'STOP checks-pending'
+want_no_call 'pr merge'
+
+scenario "a check still running at the cap stops land"
+land_setup; land_fixtures
+checks_fx in_progress null
+run_sm "${LAND[@]}" --head "$FEAT_OID" --ci-cap-minutes 0
+want_rc 2
+want_out 'STOP checks-pending'
+want_no_call 'pr merge'
+
+scenario "a commit with no CI at the cap is missing, not green"
+land_setup; land_fixtures
+echo '{"total_count":0,"check_runs":[]}' > "$FIX/checks.json"
+run_sm "${LAND[@]}" --head "$FEAT_OID" --ci-cap-minutes 0
+want_rc 2
+want_out 'STOP checks-missing'
+want_no_call 'pr merge'
+
+scenario "an unreadable check list is unknown, not green"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED check-runs'
+want_no_call 'pr merge'
+
+scenario "a base that moved after the fetch stops land before the merge"
+land_setup; land_fixtures
+base_ref_fx 9999999999999999999999999999999999999999
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP base-moved'
+want_no_call 'pr merge'
+
+scenario "an ignored file the base starts tracking stops the worktree move"
+land_setup behind; land_fixtures
+G "$WORK" worktree add "$SCEN/feat-wt" feat
+echo more.txt >> "$WORK/.git/info/exclude"
+echo mine > "$SCEN/feat-wt/more.txt"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP ignored-clobber'
+[ "$(cat "$SCEN/feat-wt/more.txt")" = mine ] && ok || bad "the ignored file was overwritten"
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the remote branch moved"
+[ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "local feat moved"
+
+# Git's refusal names every blocking file; a long list must still classify.
+scenario "many ignored files in the way still stop ignored-clobber"
+land_setup
+G "$SRC" checkout main
+for i in $(seq 1 40); do echo "$i" > "$SRC/generated-file-with-a-long-name-$i.out"; done
+G "$SRC" add .; G "$SRC" commit -m many; G "$SRC" push origin main
+BASE_TIP=$(git -C "$SRC" rev-parse main)
+G "$WORK" worktree add "$SCEN/feat-wt" feat
+echo '*.out' >> "$WORK/.git/info/exclude"
+for i in $(seq 1 40); do echo mine > "$SCEN/feat-wt/generated-file-with-a-long-name-$i.out"; done
+land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP ignored-clobber'
+[ "$(cat "$SCEN/feat-wt/generated-file-with-a-long-name-40.out")" = mine ] && ok || bad "an ignored file was overwritten"
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the remote branch moved"
+
+# The base replaces a tracked directory with a file, or adds a path under an
+# ignored file. A rebase or reset deletes the ignored file in both shapes.
+for shape in dir-to-file file-to-dir; do
+  scenario "an ignored file in the way of a $shape change stops the worktree move"
+  land_setup
+  G "$SRC" checkout main
+  if [ "$shape" = dir-to-file ]; then
+    mkdir "$SRC/d"; echo x > "$SRC/d/x"; G "$SRC" add d; G "$SRC" commit -m M1
+    G "$SRC" checkout feat; G "$SRC" rebase main; G "$SRC" push -f origin feat
+    G "$SRC" checkout main
+    G "$SRC" rm -r d; echo file > "$SRC/d"; G "$SRC" add d; G "$SRC" commit -m M2
+    keep=d/keep.log; echo '*.log' >> "$WORK/.git/info/exclude"
+  else
+    mkdir "$SRC/d"; echo x > "$SRC/d/x"; G "$SRC" add d; G "$SRC" commit -m M1
+    keep=d; echo /d >> "$WORK/.git/info/exclude"
+  fi
+  G "$SRC" push origin main
+  BASE_TIP=$(git -C "$SRC" rev-parse main); FEAT_OID=$(git -C "$SRC" rev-parse feat)
+  G "$WORK" fetch origin; G "$WORK" branch -f feat origin/feat
+  G "$WORK" worktree add "$SCEN/feat-wt" feat
+  mkdir -p "$(dirname "$SCEN/feat-wt/$keep")"; echo mine > "$SCEN/feat-wt/$keep"
+  land_fixtures
+  run_sm "${LAND[@]}" --head "$FEAT_OID"
+  want_rc 2
+  want_out 'STOP ignored-clobber'
+  [ "$(cat "$SCEN/feat-wt/$keep" 2>/dev/null)" = mine ] && ok || bad "the ignored file was overwritten or removed"
+  [ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the remote branch moved"
+  [ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "local feat moved"
+done
+
+# The head stops tracking base.txt and keeps it as an ignored local file. An
+# in-place rebase would check out the base tip over it and then delete it.
+# Rebased elsewhere, an unchanged base lands with the file intact, and a
+# modify/delete conflict stops with it intact.
+for base_edit in unchanged modified; do
+  scenario "an ignored file the head untracked survives land (base $base_edit)"
+  land_setup behind
+  if [ "$base_edit" = modified ]; then
+    G "$SRC" checkout main
+    echo changed > "$SRC/base.txt"; G "$SRC" commit -am D
+    G "$SRC" push origin main
+    BASE_TIP=$(git -C "$SRC" rev-parse main)
+  fi
+  G "$WORK" worktree add "$SCEN/feat-wt" feat
+  G "$SCEN/feat-wt" rm --cached base.txt
+  echo base.txt > "$SCEN/feat-wt/.gitignore"
+  G "$SCEN/feat-wt" add .gitignore; G "$SCEN/feat-wt" commit -m untrack
+  G "$SCEN/feat-wt" push origin feat
+  FEAT_OID=$(git -C "$SCEN/feat-wt" rev-parse HEAD)
+  echo mine > "$SCEN/feat-wt/base.txt"
+  land_fixtures
+  run_sm "${LAND[@]}" --head "$FEAT_OID"
+  if [ "$base_edit" = modified ]; then
+    want_rc 2
+    want_out 'STOP rebase-conflict'
+    [ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the remote branch moved"
+  else
+    want_rc 2
+    want_out 'STOP rebased'
+    [ "$(git -C "$SCEN/feat-wt" rev-parse HEAD)" = "$(remote_feat)" ] && ok \
+      || bad "the head worktree is not at the rebased head"
+  fi
+  [ "$(cat "$SCEN/feat-wt/base.txt" 2>/dev/null)" = mine ] && ok || bad "the ignored file was overwritten or removed"
+done
+
+scenario "a push since check restores the branch in its own worktree"
+land_setup behind; land_fixtures
+rm -f "$FIX/live-remote"
+G "$WORK" worktree add "$SCEN/feat-wt" feat
+G "$SRC" checkout feat
+echo late > "$SRC/late.txt"; G "$SRC" add .; G "$SRC" commit -m late
+G "$SRC" push origin feat
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP lease-failed'
+[ "$(git -C "$SCEN/feat-wt" rev-parse HEAD)" = "$FEAT_OID" ] && ok \
+  || bad "the head worktree was not reset to the reviewed head"
+[ -z "$(git -C "$SCEN/feat-wt" status --porcelain)" ] && ok || bad "the head worktree was left dirty"
+
+scenario "a rebase that leaves nothing to land never pushes the base tip"
+land_setup behind; land_fixtures
+G "$SRC" checkout main
+G "$SRC" cherry-pick "$FEAT_OID"
+G "$SRC" push origin main
+BASE_TIP=$(git -C "$SRC" rev-parse main); base_ref_fx "$BASE_TIP"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebase-failed'
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the base tip was pushed as the head"
+[ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "local feat was not restored"
+
+scenario "a stacked PR opened after check stops land before any push"
+land_setup behind; land_fixtures
+echo '[{"number":90}]' > "$FIX/stacked.json"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP stacked-prs'
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "land pushed under a stacked PR"
+
+scenario "a base force-pushed to a non-descendant still lands against its new tip"
+land_setup behind
+G "$SRC" checkout main
+G "$SRC" commit --amend -m C-rewritten
+G "$SRC" push -f origin main
+BASE_TIP=$(git -C "$SRC" rev-parse main)
+land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebased'
+want_out "\"base_tip\":\"$BASE_TIP\""
+git -C "$BARE" merge-base --is-ancestor "$BASE_TIP" "$(remote_feat)" && ok \
+  || bad "the pushed head does not contain the rewritten tip"
+
+scenario "a lagging base remote stops before the rebase"
+land_setup behind; land_fixtures
+base_ref_fx 9999999999999999999999999999999999999999
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP base-moved'
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "land rebased against a stale base"
+
+scenario "neutral and skipped checks pass, a cancelled one fails"
+land_setup; land_fixtures
+echo '{"total_count":2,"check_runs":[{"name":"a","status":"completed","conclusion":"neutral"},{"name":"b","status":"completed","conclusion":"skipped"}]}' > "$FIX/checks.json"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 0
+scenario "a cancelled check fails land"
+land_setup; land_fixtures
+checks_fx completed '"cancelled"'
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+
+scenario "a pending commit status holds land at the cap"
+land_setup; land_fixtures
+status_fx pending 1
+run_sm "${LAND[@]}" --head "$FEAT_OID" --ci-cap-minutes 0
+want_rc 2
+want_out 'STOP checks-pending'
+
+scenario "a third head after the push stops land"
+land_setup behind; land_fixtures
+rm -f "$FIX/live-remote"
+pr_full OPEN feat main "$FEAT_OID" false owner name
+# The forge reports neither the reviewed head nor the pushed one after the
+# push: the shim serves this fixture to every read after the first.
+jq '.headRefOid = "8888888888888888888888888888888888888888"' "$FIX/pr-full.json" > "$FIX/pr-next.json"
+: > "$FIX/pr-next-armed"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP oid-mismatch'
+want_no_call 'pr merge'
+
+scenario "a retarget during the CI wait stops land"
+land_setup; land_fixtures
+: > "$FIX/pr-next-armed"
+jq '.baseRefName = "release"' "$FIX/pr-full.json" > "$FIX/pr-next.json"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP base-moved'
+want_no_call 'pr merge'
+
+scenario "a dry run on a behind head reports not-on-tip and changes nothing"
+land_setup behind; land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID" --dry-run
+want_rc 2
+want_out 'STOP not-on-tip'
+want_out 'dry run'
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "a dry run pushed"
+[ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "a dry run rebased"
+grep -qF 'checks:' "$FIX/stderr" && grep -qF 'base:' "$FIX/stderr" && ok \
+  || bad "the dry run did not report every check"
+want_no_call 'pr merge'
+
+scenario "a dry run on a ready head reports the merge it would make"
+land_setup; land_fixtures
+run_sm "${LAND[@]}" --head "$FEAT_OID" --dry-run
+want_rc 0
+want_out "OK land {\"dry_run\":true,\"head_oid\":\"$FEAT_OID\""
+want_no_call 'pr merge'
+
+scenario "a cross-repository head behind the tip is the author's to rebase"
+land_setup behind; land_fixtures
+pr_full OPEN feat main "$FEAT_OID" true someone fork
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP not-on-tip'
+[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "land pushed a fork's branch"
 
 # ---- cleanup phase ----
 

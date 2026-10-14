@@ -37,8 +37,9 @@ unclear, stop there and ask.
 1. Confirm that the user or project explicitly allows self-merge.
 2. Run the script's `check` phase from the base-branch checkout.
 3. Confirm the review guardrails that the script can't judge.
-4. Run `merge` with the head OID returned by `check`.
-5. Run `cleanup` with the same head OID.
+4. Run `land` with the head OID returned by `check`. After `STOP rebased`,
+   read its range-diff, then repeat steps 2 through 4 with the new head.
+5. Run `cleanup` with the head OID that `land` reports.
 6. Stop any review watch that became stale when the PR merged.
 7. Follow Project Duties for applicable post-merge work, including after a
    cleanup STOP when its independent prerequisites hold.
@@ -67,7 +68,10 @@ guardrail below holds.
   you tried and the error it gave, and ask the user.
 - The change is reversible and has a low blast radius. For a data migration,
   force-push, release tag, production configuration, or another destructive
-  action, stop at the PR and confirm with the user again.
+  action, stop at the PR and confirm with the user again. The lease push that
+  `land` makes after rebasing the PR's own head branch is part of the landing
+  procedure, not such an action; run `land --dry-run` first to see whether it
+  will rebase.
 
 If a guardrail fails and can't be fixed in the session, stop at the open PR.
 Tell the user exactly what blocks the merge.
@@ -93,6 +97,7 @@ reason in Guardrails, with the slug and `GH_HOST` set there. The script takes
 
 ```sh
 <skill-dir>/self-merge.sh check   --pr <n> --repo <owner/name>
+<skill-dir>/self-merge.sh land    --pr <n> --repo <owner/name> --head <oid>
 <skill-dir>/self-merge.sh merge   --pr <n> --repo <owner/name> --head <oid>
 <skill-dir>/self-merge.sh cleanup --pr <n> --repo <owner/name> --head <oid>
 ```
@@ -103,9 +108,15 @@ defaults don't fit:
 - `--base-remote <name>` and `--head-remote <name>` name the base or head
   remote. Use them when several remotes point to the same repository or the
   script resolves the wrong remote.
-- `--interval <seconds>` and `--cap-minutes <n>` apply only to `merge`. They
-  set the spacing between `MERGED` polls and the total wait. Defaults are 10
-  seconds and 15 minutes. Raise the cap for a slow merge queue.
+- `--interval <seconds>` and `--cap-minutes <n>` apply to `land` and `merge`.
+  They set the spacing between polls and the total wait for `MERGED`.
+  Defaults are 10 seconds and 15 minutes. Raise the cap for a slow merge
+  queue.
+- `--ci-cap-minutes <n>` applies only to `land`. It sets the total wait for
+  CI on the head commit. The default is 30 minutes.
+- `--dry-run` applies only to `land`. It reports the three landing checks and
+  the decision without rebasing, pushing, or merging. It reads CI once
+  instead of waiting, and its only change is fetching the base.
 
 A base or head remote may use a local `~/.ssh/config` `Host` alias, such as
 `git@bnw.github.com:owner/name.git` where the alias sets `HostName github.com`.
@@ -134,8 +145,8 @@ head branch. Worktrees in one clone share refs. The primary checkout can
 therefore see a head branch checked out in a linked worktree. Running from the
 head worktree is the error that the `wrong-checkout` guard stops.
 
-The result includes the local head tip. Pass that OID to `merge` and `cleanup`
-with `--head`. This binds the merge to the commit whose checks and diff you
+The result includes the local head tip. Pass that OID to `land` with
+`--head`. This binds the landing to the commit whose checks and diff you
 reviewed.
 
 ### 2. Confirm the Guardrails
@@ -143,15 +154,64 @@ reviewed.
 Confirm that checks are green, the diff is self-reviewed, and required
 artifacts are attached. The script can't judge these conditions.
 
-### 3. Run `merge`
+### 3. Run `land`
 
-The `merge` phase repeats the queue and branch-consumer checks. Earlier answers
+`land` stands in for branch protection on a base that has none. One run is one
+round of three checks, and the merge happens only if all three pass:
+
+1. **On the tip:** It fetches the base. If the head doesn't contain the
+   fetched tip, `land` rebases the head onto it and pushes with a lease on the
+   reviewed head. The rebase runs in a temporary detached worktree that it
+   removes afterward. A worktree that holds the branch then moves to the
+   result, unless an ignored file is in the way. The run then stops
+   `rebased`, before CI and the merge.
+2. **CI on the exact head:** It waits for every check run and commit status on
+   the head commit to finish as success, neutral, or skipped, on two
+   consecutive reads. No CI, or one green read, by the cap is a refusal, not a
+   pass.
+3. **Base unmoved:** Just before merging, it rereads the base tip from the
+   forge and refuses if the tip moved after the fetch.
+
+On the tip, `land` ends by running `merge`, described below. Its `OK land`
+result names the merged head as `head_oid`; pass that value to `cleanup`.
+
+Each refusal is a STOP that says why. Rerunning `land` is the retry; it never
+loops on its own.
+
+- `rebased`: `land` rebased the head and pushed it as `head_oid`; nothing
+  merged. CI will rerun on the new commit, but nothing reviews its diff. Read
+  the range-diff that `land` printed on stderr. If it shows only the reviewed
+  change on the new base, run `check` and then `land --head <head_oid>`.
+  Otherwise, judge the difference as you would a review finding.
+- `not-on-tip`: A dry run found the head behind the tip, or a
+  cross-repository head needs its author to rebase it.
+- `rebase-conflict` or `rebase-failed`: The rebase was undone and the branch
+  is unchanged. Rebase by hand, read `git range-diff`, push, then run `check`
+  and `land` again. `rebase-failed` also covers a branch whose commits are
+  all on the base already.
+- `ignored-clobber`: Moving the head worktree to the rebased head would
+  overwrite or remove an ignored file there. Nothing moved or was pushed.
+  Move the file aside.
+- `checks-failed`, `checks-pending`, or `checks-missing`: CI failed, was
+  still running or read green only once at the cap, or never reported.
+- `base-moved`: Another merge landed after the fetch, the base remote lags
+  the forge, or the PR was retargeted. Run `check` and `land` again.
+- `lease-failed`: Someone pushed to the branch after `check`. The local
+  branch is back at the reviewed head.
+
+When a rebase looks risky, run `land --dry-run` first and rebase by hand
+instead.
+
+Run `merge` directly only where the base's required checks already enforce
+this procedure, such as a required up-to-date check or a merge queue. The
+`merge` step repeats the queue and branch-consumer checks. Earlier answers
 can go stale while you review. A stacked PR may be retargeted to another base,
 or a new PR may start using the head branch.
 
-The phase creates a real merge commit with an explicit title-only message. It
-then waits for the forge to report the PR as merged. A zero exit from the merge
-command proves only that the PR was enqueued, so the wait is required.
+The `merge` step creates a real merge commit with an explicit title-only
+message. It then waits for the forge to report the PR as merged. A zero exit
+from the merge command proves only that the PR was enqueued, so the wait is
+required.
 
 ### 4. Run `cleanup`
 
@@ -211,7 +271,8 @@ the exit code rather than parsing prose:
   unless applicable task-specific worktree cleanup authority already covers
   the separate step described in "4. Run `cleanup`".
 - Examples include uncommitted changes, dependent PRs, a squash merge queue,
-  hidden worktree edits, and unmerged local commits.
+  hidden worktree edits, unmerged local commits, a rebase conflict, red CI,
+  and a base that moved before the merge.
 - Never bypass a guard with force, reset, or unauthorized manual deletion.
   Separately authorized worktree cleanup must satisfy the preservation and
   ownership checks; authorization alone doesn't clear the stop.
