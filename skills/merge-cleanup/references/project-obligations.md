@@ -307,8 +307,9 @@ Preserve the project's relation types:
   exactly its refresh step. Apply that step as the format's refresh section
   states it, without restating its conditions here: tick the unit's line,
   update its diagram node and the `startable` class, and rewrite
-  **Startable now**. The diagram's edges never change at merge, and a closed
-  tracker is never edited.
+  **Startable now**. Compute it with `tracker-refresh.sh`, as Reconcile
+  Project Obligations in `SKILL.md` describes. The diagram's edges never
+  change at merge, and a closed tracker is never edited.
 - When the mechanics also keep a merge-order field, recompute it separately;
   do not collapse start order into merge order or the reverse. Do not add a
   merge-order field the mechanics do not define.
