@@ -106,7 +106,9 @@ At merge, cleanup does this and nothing more:
    all merged.
 4. Rewrite the **Startable now** bullet.
 
-The diagram's edges never change at merge. Never edit a closed tracker.
+A unit closed as not planned isn't merged: its line stays unticked and its
+node single-bordered. The diagram's edges never change at merge. Never edit a
+closed tracker.
 
 ## style
 

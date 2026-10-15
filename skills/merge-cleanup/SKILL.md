@@ -45,8 +45,9 @@ cleanup, establish support through read-only project records and tool checks:
   another forge CLI or reconstruct the destructive sequence from prose.
 
 These requirements apply to the cleanup executor. The separate reconciliation
-checker also needs `awk`; its manual fallback is described in Reconcile Project
-Obligations and does not replace the executor.
+checker and the tracker refresh command also need `awk`; their manual
+fallbacks are described in Reconcile Project Obligations and do not replace
+the executor.
 
 Once prerequisites pass, follow this procedure:
 
@@ -314,6 +315,34 @@ including readable absence.
 Run it as `<skill-dir>/reconciliation-ledger.sh '<trace-file>'`; `--help`, or
 `-h`, prints the trace contract. If the executable check cannot run, apply the
 referenced state machine manually and report that verification gap.
+
+**Shared-format trackers.** Compute the refresh of a known containing tracker
+on the shared tracker format with the bundled command, not by hand. Run it
+immediately before the write, once for the body and once for each comment that
+holds both a `flowchart` fence and a `## Units` heading:
+
+```sh
+<skill-dir>/tracker-refresh.sh --repo <host/owner/name> --issue <N> > '<body-file>'
+<skill-dir>/tracker-refresh.sh --repo <host/owner/name> --issue <N> --comment <ID> > '<comment-file>'
+```
+
+- **The run is the fresh reread.** It reads the tracker and every unit and
+  prerequisite it consults, so record those as the write's inputs. It never
+  writes to the forge.
+- **Write only a change.** When its stderr line begins `OK unchanged`, record
+  a `noop`. Otherwise write stdout with `gh issue edit --body-file` or a
+  `gh api -X PATCH` of the comment's `body`, then run the command again; its
+  `OK unchanged` is the `verify` and `recheck fresh` evidence.
+- **Make no write on a stop.** Exit 2 means the tracker is closed or not on the
+  format, and exit 4 names the read, node, or Dependencies entry that failed.
+  Record the item unverified and name the cause to the owner.
+- **Report what it leaves.** Put its ticks, startable set, and every item it
+  left in place in the owner summary. `--help` prints the full contract.
+- **It applies the shared rule only.** A project's own additions to
+  **Startable now** stay the agent's judgment: apply them to stdout before the
+  write; to verify, apply them to the rerun's stdout and compare that with
+  the text written. If the command cannot run, apply the format's refresh
+  section by hand and report that gap.
 
 ## Stop the Review Watch
 
