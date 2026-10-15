@@ -197,14 +197,31 @@ follow this full sequence:
    another push, start counting from that push and replace the earlier watch.
    Do not leave duplicate watchers running.
 
-3. **Validate against the current base.** Resolve the latest base tip. Update
-   the PR branch with the project's merge or rebase method. Rerun relevant
-   checks and self-review the refreshed full diff.
+3. **Validate against the current base.** Resolve the latest base tip and
+   refresh the PR branch from it, preferring rebase so `git range-diff`
+   applies. Push the refreshed branch so the required checks run on it, and
+   self-review the refreshed full diff.
+
+   After a rebase that conflicted, run `git range-diff` between the branch
+   before and after the rebase. Record what the resolution changed in the PR's
+   Verification section.
 
    Record the base commit in the PR's Verification section or in the handoff.
-   If the base moves again before merge, the PR needs another integration
-   pass. If you can't update the branch, report that it's stale. Do not
-   rewrite a branch you don't own.
+   If the base moves again before merge, the landing check reruns CI. Under a
+   required check that must pass on the branch updated to the tip (on GitHub,
+   the up-to-date rule), refresh again and the check reruns on the push. A
+   merge queue or land command refreshes and reruns for you. Don't repeat CI
+   by hand; read `git range-diff` only when a rebase conflicts. A project
+   without a landing check needs another integration pass by hand.
+
+   A landing check reruns CI, not review. A clean rebase can still change the
+   diff, for example by following an upstream rename. When you push a refresh,
+   the recorded automated reviewer's pass on that push reads the new diff;
+   without one, self-review the refreshed diff. Either way, the push restarts
+   the review watch (step 2), and handoff waits for it to close (step 6).
+
+   If you can't update the branch, report that it's stale. Do not rewrite a
+   branch you don't own.
 
 4. **Wait for required checks.** Poll until they finish. On GitHub, use
    `gh pr checks <n>`. Fix red checks on the branch. Never hand off a known-red

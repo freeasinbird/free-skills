@@ -458,9 +458,14 @@ change.
 - **Self-review the full diff in the PR files view.** Look for stray changes,
   debug code, scope creep, and accidental files. This catches accidental
   changes; it doesn't check whether the solution is correct.
-- **Repeat integration checks when the base moves.** CI, final diff review,
-  and readiness count only for the base commit you checked. Repeat all three
-  if the base changes.
+- **Let the landing check repeat integration checks when the base moves.** A
+  required check that must pass on the branch updated to the tip, a merge
+  queue, or a land command reruns CI on the branch combined with the tip. It
+  doesn't review: a refresh you push restarts the review watch and still needs
+  its diff read, by the recorded automated reviewer's pass or by your
+  self-review. Without a landing check, repeat CI, final diff review, and
+  readiness by hand. After a conflicted rebase, read `git range-diff` as
+  `docs/agent-workflow.md` §handing-off describes.
 - **Use fresh eyes for substantive review.** Reviewing your own work in the
   same conversation shares the author's blind spots. A review in a fresh
   conversation is more independent. A bot from another provider or a human is

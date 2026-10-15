@@ -36,7 +36,8 @@ Weigh the evidence before choosing a shape:
 - **Record the disagreement.** When a coordination record exists or the owner
   requests one, put the disagreement in its reassessment trigger. Otherwise
   report the disagreement and an observable reassessment trigger in the setup
-  result, and persist no record.
+  result, and persist no record unless the project has no landing check
+  (§record).
 - **Never turn a tentative layout into structure.** A directory layout or
   roadmap heading is not a lane, ownership map, graph, or claim mechanism.
 
@@ -44,28 +45,49 @@ Cap concurrency at capacity. Recommend no more independent units than the
 project can review and integrate without building an unowned queue. Weigh
 reviewer and integrator availability, CI throughput, and shared-contract
 bottlenecks, not just the number of workers or isolated checkouts. When capacity
-is unknown, recommend serial work until the owner gives a credible limit.
+is unknown, make no width recommendation and ask the owner for a credible limit.
+Until then, the owner's authorizations set how many units run, except that a
+project without a landing check runs one at a time (§shapes).
 
 ## §shapes
 
-Start from the serial or path-and-dependency base. Add only the later
-capabilities the evidence requires.
+Start from the landing baseline: authorized units in isolated checkouts proceed
+unless a recorded dependency says otherwise, and the landing check is the
+baseline. Add only the later capabilities the evidence requires.
+
+A landing check merges a PR only after the required checks pass on its content
+combined with the tip it lands on. Any of these provides one:
+
+- **A required check** that must pass on the branch updated to the base tip,
+  such as GitHub's up-to-date rule. It refuses a merge until the branch
+  contains the tip.
+- **A merge queue** that tests each PR combined with the PRs ahead of it.
+- **A land command** that rebases onto the tip, waits for CI on that commit,
+  and merges only if the base has not moved since.
+
+The baseline presumes a landing check. When a project has none, report the gap
+as a setup finding, and run one unit at a time until the check exists. Write
+that width in the coordination record (§record) so the project's own agents
+see it. That fallback follows from the missing check; it is not a default.
 
 Shapes 3 through 5 may combine: typed relations, stable named streams, and an
 integration spine solve different problems. A richer primary shape keeps any
 earlier semantics the evidence still supports. Record the smallest combination
 that fully represents the project, not the highest label it could claim.
 
-### 1. Safe Serial Baseline
+### 1. Landing Baseline
 
-- **Use when:** the repository shows no credible plan and no demonstrated
-  independent work, its only plan is speculative and uncorroborated, or the
-  evidence conflicts.
-- **Do:** run work serially. No coordination record is required, because its
-  absence means this baseline. Do not invent lanes, owners, graphs, claims, or
-  parallel work.
-- **Reassess when:** repeated independent work units appear, or serial work
-  creates an observable integration delay.
+- **Use when:** the repository shows no credible plan and no demonstrated need
+  for recorded relations, its only plan is speculative and uncorroborated, or
+  the evidence conflicts.
+- **Do:** let authorized units proceed in isolated checkouts, and resolve
+  conflicts at landing. After a rebase that conflicted, the author reads what
+  the resolution changed. With a landing check, no coordination record is
+  required, because its absence means this baseline. Do not invent lanes,
+  owners, graphs, claims, or ordering.
+- **Reassess when:** rebase conflicts or landing failures concentrate in a few
+  files, units repeatedly need a recorded start order, or work is discarded at
+  landing because a dependency was missed.
 
 ### 2. Path and Dependency Units
 
@@ -92,8 +114,9 @@ that fully represents the project, not the highest label it could claim.
   document. The tracker notation is the scaffolded `docs/tracker-format.md`
   (`references/scaffolding.md` §tracker-format); cite it rather than defining
   a local notation.
-- **Serialize** any unknown or materially ambiguous relation until an owner or
-  designated integrator resolves it.
+- **Record an unknown or materially ambiguous relation** as a question for the
+  owner or designated integrator in the work contract. The unit proceeds under
+  the landing check while the question is open.
 - **Reassess when:** the relations repeatedly cluster into stable work
   boundaries.
 
@@ -110,56 +133,23 @@ that fully represents the project, not the highest label it could claim.
 ### 5. Integration Spine or Shared-Contract Domain
 
 - **Use when:** recurring convergence work needs a designated integration path,
-  or a shared contract must change serially even while component work stays
+  or a shared contract needs its own review even while component work stays
   independent.
 - **Separate the shared contract from component ownership.** Owning or working
-  in a component grants no concurrent access to the shared contract. An
-  integrator can coordinate convergence without owning every component.
-- **Serialize the shared surface repo-wide.** Serialization here means repo-wide
-  mutual exclusion among changes to the shared surface. It is not per-unit
-  ordering that sequences only each unit's contract change before its own
-  dependents. Per-unit ordering is the reading that fails. It lets several units
-  each open "its own serialized" contract change at once. They then collide
-  semantically on a surface where merge tooling does not reliably show the
-  conflict.
+  in a component grants no authority over the shared contract. An integrator can
+  coordinate convergence without owning every component.
+- **Treat the shared contract as a review and declared-surface concern.** Mark
+  contract-bearing units so they get contract review, and declare the surface
+  paths and generated artifacts in each unit's work contract. Contract changes
+  may be open together. Each one updates its consumers in the same change and
+  renames anything whose meaning changes, so a collision fails a check at
+  landing. That holds only when every consumer lives in the repository and the
+  checks exercise it. For stored data, record a start-order dependency between
+  units that rewrite the same rows or rebuild the same table, because the
+  second must be written against the first's result. For an outside consumer,
+  record one for units that rely on the change.
 - **Reassess when:** the bottleneck disappears, moves, or a simpler per-unit
   dependency captures it completely.
-
-When the selected model includes shared-contract serialization (not an
-integration-spine-only path with no serialized contract), the detailed-mechanics
-project document must define five things:
-
-1. **The surface:** the concrete paths and generated artifacts, including the
-   downstream sites a change must move in the same change (exhaustive-match
-   sites, generated consumers).
-2. **The exclusivity rule:**
-   - At most one active contract change at a time.
-   - Check it against every other in-flight contract change before starting.
-   - On collision, wait or surface the conflict; never proceed in parallel.
-   - Make acquisition race-safe, because creating an ordinary issue, PR, or
-     label is not an atomic check-and-register. Define a protocol that breaks a
-     concurrent tie deterministically. Register first, then recheck with a fixed
-     winner such as earliest entry or lowest ID, or have a designated authority
-     grant the lock. So two simultaneous starts can neither both proceed nor
-     both wait forever.
-3. **Forge-visible enumeration** of in-flight contract changes: a marker on
-   contract-bearing units, or their declared surface paths on a forge-visible
-   work contract.
-   - Register it before implementation begins, so a starting unit can check
-     against every in-flight change.
-   - A directly assigned unit whose contract would otherwise live only in the
-     prompt registers a forge-visible entry first: an issue, a draft PR, or the
-     project's claim mechanism.
-   - Gate registration on available forge capability. Where an assigned agent
-     lacks the tooling or permission to register, name a human or external
-     registrar, or a stop-and-escalate, so no agent faces an impossible startup
-     step.
-4. **Registration lifecycle:** when an entry joins the active set, when it
-   leaves it (normally on merge or close), and how a stale or abandoned entry is
-   released or superseded. A registration with no defined release blocks the
-   surface forever, or invites agents to bypass the lock by guessing it is dead.
-5. **Ordering relief** when several planned units need the surface: an explicit
-   dependency chain, or one combined leading contract change.
 
 For shapes 3 through 5, keep long mechanics outside AGENTS.md. The project
 document states relationship authority, work-unit boundaries, claim rules when
@@ -183,8 +173,12 @@ block. Use this fixed field list:
 
 Record rules:
 
-- **Omit the record for the safe serial baseline** unless the owner explicitly
-  wants it stated. No record means serial work, not missing content.
+- **Omit the record for the landing baseline** unless the owner explicitly
+  wants it stated. No record means the landing baseline, not missing content.
+- **Write the record when the project has no landing check.** Record the
+  shape the evidence supports, shape 1 when nothing richer, at a width of one
+  unit until a landing check exists. Keep that shape's mechanics, name the
+  missing check as the evidence, and reassess when the check exists.
 - **For shape 2,** the **Detailed mechanics** field may point to
   repository-local work-contract documentation instead of a dedicated
   coordination document.
@@ -207,7 +201,7 @@ not turn routine synchronization into policy analysis.
 
 Begin with the existing record and detailed mechanics, when present, and any
 stage record. If no coordination record exists, the observed starting model is
-the safe serial baseline. If AGENTS.md itself is absent, analyze and report
+the landing baseline. If AGENTS.md itself is absent, analyze and report
 only: init must establish the profile, canonical sections, and scaffolding
 before any coordination record or project coordination document is created.
 
@@ -219,7 +213,7 @@ record, and **Detailed mechanics** value. Apply this input-state table in order:
 
 | Input                     | Accepted state                                                                                                               | Stop condition                                                                        |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Coordination record       | Zero, meaning the safe serial baseline, or one record.                                                                       | More than one record.                                                                 |
+| Coordination record       | Zero, meaning the landing baseline, or one record.                                                                           | More than one record.                                                                 |
 | Fixed coordination fields | One record: each of the four fixed fields once. Zero records: not applicable.                                                | A field in the one record is missing or repeated.                                     |
 | Work-unit stage record    | Zero or one project-specific section; a section may hold several stages.                                                     | More than one stage section.                                                          |
 | Stage layout              | One accepted legacy or child-heading layout (see Read the Stage Record); zero stage sections, not applicable.                | A mixed or ambiguous layout (see Read the Stage Record).                              |
@@ -233,7 +227,7 @@ and labels; none adopts a value as policy.
 Classify the record:
 
 - **No coordination record:** skip the field and mechanics rows, and use the
-  safe serial baseline.
+  landing baseline.
 - **One record:** read **Current shape** only after the structural rows pass,
   then classify **Detailed mechanics** against the last row.
 - **Shapes 3, 4, or 5 take precedence** over a composed shape 2 and require a
@@ -333,6 +327,9 @@ report:
 - Start-order, merge-order, and mutual-exclusion constraints.
 - Documented manual scheduling friction, plus the people or agents available to
   review and integrate concurrent work.
+- Whether the project has a landing check (§shapes). Without one, keep or
+  propose the width-one fallback record (§record); simplification never
+  removes it.
 
 Report unavailable sources and ambiguous meanings as uncertainty. Separate
 observations from inferences, and cite the path, work unit, issue relation,
@@ -351,8 +348,8 @@ trigger starts analysis only when the owner requests reassessment; it never
 activates update mode or authorizes mutation.
 
 Re-run §shapes and select the smallest safe shape supported now. The result may
-keep the current model, add a capability, simplify it, or return to the safe
-serial baseline. Use the same evidence rule for both upgrades and
+keep the current model, add a capability, simplify it, or return to the landing
+baseline. Use the same evidence rule for both upgrades and
 simplifications. When sources conflict, prefer the simpler safe shape and report
 the conflict. Apply §evidence's review and integration capacity cap to every
 concurrency recommendation.
@@ -380,8 +377,9 @@ stacking, and exclusion constraints. That evidence justified stable named
 streams plus an integration spine and typed relations.
 
 The portable lesson is the derivation: recurring history justified names,
-shared-contract risk justified serialization, and observed integration needs
-justified a spine. Do not copy Freeside's lane names, tracker vocabulary,
+shared-contract risk justified distinct handling, and observed integration needs
+justified a spine. For a new project, the landing baseline replaces that
+serialization. Do not copy Freeside's lane names, tracker vocabulary,
 labels, or integration role into another project. Derive local terms only from
 that project's evidence. See
 [Freeside PR #801](https://github.com/freeside-ai/freeside/pull/801) for the
