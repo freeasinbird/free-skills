@@ -68,27 +68,27 @@
     },
     {
       "id": 5,
-      "eval_name": "empty-repository-serial-baseline",
-      "prompt": "You are working in the empty project at <fixture-repo>. It has a README with basic commands but no AGENTS.md, implementation plan, code, architecture documentation, or work-unit history. Initialize it with the agent-setup skill using the Standard profile. The owner has not requested concurrent work or a coordination record. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A Standard-profile agent setup that uses the safe serial coordination baseline, omits the optional coordination record, and invents no lanes, ownership map, dependency graph, claim mechanism, or concurrency width.",
+      "eval_name": "empty-repository-landing-baseline",
+      "prompt": "You are working in the empty project at <fixture-repo>. It has a README with basic commands but no AGENTS.md, implementation plan, code, architecture documentation, or work-unit history. Initialize it with the agent-setup skill using the Standard profile. The owner has not requested concurrent work or a coordination record. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A Standard-profile agent setup that uses the landing coordination baseline, omits the optional coordination record, and invents no lanes, ownership map, dependency graph, claim mechanism, ordering, or concurrency width.",
       "files": [],
       "expectations": [
-        "The setup identifies the safe serial baseline from the absence of coordination evidence",
+        "The setup identifies the landing baseline from the absence of coordination evidence and the confirmed landing check",
         "AGENTS.md contains no coordination model record or placeholder for one",
-        "The absent record is treated as serial work, not missing content",
-        "No lane, ownership map, dependency graph, claim mechanism, or parallel-work recommendation is invented",
+        "The absent record is treated as the landing baseline, not missing content",
+        "No lane, ownership map, dependency graph, claim mechanism, ordering, or concurrency-width recommendation is invented",
         "The result preserves the existing explicit-assignment and claim-is-not-authorization defaults"
       ]
     },
     {
       "id": 6,
       "eval_name": "speculative-plan-is-evidence",
-      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the Standard profile. Its only coordination source is a draft PLAN.md that sketches API and UI lanes, a dependency graph, and three parallel workers; no code or work-unit history corroborates those ideas, and review capacity is unknown. The owner explicitly wants a compact coordination record that captures today's justified model and when to revisit it. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "An unmanaged fixed-field coordination record that treats the draft plan as uncorroborated evidence, keeps the project on a serial baseline, states unknown review capacity, and names observable reassessment triggers without adopting the proposed lanes or graph.",
+      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the Standard profile. Its only coordination source is a draft PLAN.md that sketches API and UI lanes, a dependency graph, and three parallel workers; no code or work-unit history corroborates those ideas, and review capacity is unknown. The owner explicitly wants a compact coordination record that captures today's justified model and when to revisit it. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An unmanaged fixed-field coordination record that treats the draft plan as uncorroborated evidence, keeps the project on the landing baseline, makes no width recommendation because review capacity is unknown, and names observable reassessment triggers without adopting the proposed lanes or graph.",
       "files": [],
       "expectations": [
         "The plan is described as evidence rather than authoritative project policy",
-        "The selected current shape remains the safe serial baseline because no code or history corroborates the plan",
+        "The selected current shape remains the landing baseline because no code or history corroborates the plan, and the record makes no width recommendation because review capacity is unknown",
         "The record contains current shape, evidence basis, detailed mechanics, and reassessment trigger fields outside managed blocks",
         "The proposed API and UI lanes, dependency graph, and three-worker width are not adopted",
         "The reassessment trigger names observable corroboration such as implemented boundaries, repeated work-unit history, or confirmed review capacity"
@@ -97,15 +97,15 @@
     {
       "id": 7,
       "eval_name": "mature-simple-adoption",
-      "prompt": "You are adopting agent-setup management in the mature project at <fixture-repo>. Its existing AGENTS.md has useful project guidance but no managed markers or coordination record. Its code, architecture notes, and work-unit history show one maintainer completing small serial changes with no recurring independent streams, shared-contract bottleneck, intentional stacks, or parallel review capacity. Adopt the Standard profile, preserve the existing guidance, and run coordination discovery. The owner has not requested a coordination record. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "An adopted Standard-profile setup that preserves existing guidance, considers the mature repository's evidence, keeps its proven simple serial behavior, and does not force a coordination record or richer topology.",
+      "prompt": "You are adopting agent-setup management in the mature project at <fixture-repo>. Its existing AGENTS.md has useful project guidance but no managed markers or coordination record. Its code, architecture notes, and work-unit history show one maintainer completing small serial changes with no recurring independent streams, shared-contract bottleneck, intentional stacks, or parallel review capacity. Adopt the Standard profile, preserve the existing guidance, and run coordination discovery. The owner has not requested a coordination record. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An adopted Standard-profile setup that preserves existing guidance, considers the mature repository's evidence, keeps its proven simple behavior on the landing baseline, and does not force a coordination record or richer topology.",
       "files": [],
       "expectations": [
         "Adoption runs project-specific coordination discovery before completing the managed-block comparison",
         "Existing unmarked project guidance is preserved through adoption",
         "The setup inspects code, architecture notes, work-unit history, and owner capacity rather than equating repository age with complexity",
-        "The selected coordination shape remains the safe serial baseline",
-        "AGENTS.md contains no coordination model record because the owner did not request one and richer coordination is unsupported",
+        "The selected coordination shape remains the landing baseline",
+        "AGENTS.md contains no coordination model record because the owner did not request one, richer coordination is unsupported, and the project has a landing check",
         "No named streams, typed relation vocabulary, integration spine, or claim mechanism is introduced",
         "Existing simple project behavior remains intact"
       ]
@@ -113,7 +113,7 @@
     {
       "id": 8,
       "eval_name": "recurring-independent-streams",
-      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the Standard profile. Its architecture documentation and six completed work-unit records show two recurring, stable, independently reviewable streams that repeatedly use the same boundaries; the owner confirms those boundaries remain useful. One integrator can reliably review and merge at most two active units. Record the justified coordination model, keep long mechanics in project documentation, and do not infer any stream from directory names alone. Work only in the fixture; do not call the network or change repository settings.",
+      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the Standard profile. Its architecture documentation and six completed work-unit records show two recurring, stable, independently reviewable streams that repeatedly use the same boundaries; the owner confirms those boundaries remain useful. One integrator can reliably review and merge at most two active units. Record the justified coordination model, keep long mechanics in project documentation, and do not infer any stream from directory names alone. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
       "expected_output": "An unmanaged stable-named-streams coordination record with evidence from recurring history, a maximum width of two, a pointer to project-owned mechanics, and reassessment triggers; the detailed document keeps individual work contracts authoritative.",
       "files": [],
       "expectations": [
@@ -128,30 +128,32 @@
     {
       "id": 9,
       "eval_name": "shared-contract-integration-spine",
-      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the High-assurance profile. The owner requires decision notes for shared-schema changes, coordination-policy changes, and destructive migrations. Existing code, architecture documentation, and work-unit history show independent component work converging through one shared schema: schema changes must serialize, one integration role orders convergence, and prior units separately used start order, merge order, intentional stacking, and mutual exclusion. The owner confirms one integrator can handle two independent component units at once. Record the justified model and its detailed mechanics without treating schema serialization as component ownership. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A High-assurance setup with the supplied mandatory-note classes and an unmanaged integration-spine coordination record capped at two independent component units, with detailed project documentation that separates shared-schema serialization from component ownership and defines start, merge, stacking, and exclusion relations distinctly.",
+      "prompt": "You are initializing the project at <fixture-repo> with the agent-setup skill using the High-assurance profile. The owner requires decision notes for shared-schema changes, coordination-policy changes, and destructive migrations. Existing code, architecture documentation, and work-unit history show independent component work converging through one shared schema: schema changes get contract review, one integration role orders convergence, and prior units separately used start order, merge order, intentional stacking, and mutual exclusion. The required checks exercise every in-repository schema consumer, one outside reporting service also reads the schema, and migrations rewrite stored rows. The owner confirms one integrator can handle two independent component units at once. Record the justified model and its detailed mechanics without treating the shared schema as component ownership. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A High-assurance setup with the supplied mandatory-note classes and an unmanaged integration-spine coordination record capped at two independent component units, with detailed project documentation that separates the shared-schema contract from component ownership, treats it as a contract-review and declared-surface concern, and defines start, merge, stacking, and exclusion relations distinctly.",
       "files": [],
       "expectations": [
         "AGENTS.md records the High-assurance profile and the supplied shared-schema, coordination-policy, and destructive-migration mandatory-note classes",
-        "The current shape is an integration spine or serialized shared-contract domain supported by code, architecture, history, and owner evidence",
+        "The current shape is an integration spine or shared-contract domain supported by code, architecture, history, and owner evidence",
         "The coordination record contains all four fixed fields outside managed blocks and points to detailed project mechanics",
-        "Shared-schema serialization is modeled separately from component ownership",
+        "The shared-schema contract is modeled separately from component ownership",
         "Start order, merge order, intentional stacking, and mutual exclusion have distinct operational meanings",
-        "Unknown or materially ambiguous relations serialize until the designated authority resolves them",
+        "An unknown or materially ambiguous relation is recorded as a question for the owner or designated integrator in the work contract, and the unit proceeds under the landing check",
         "The recommended concurrency width is capped at two independent component units by actual integration capacity",
-        "The detailed mechanics define at most one active shared-contract change at a time, checked against a forge-visible enumeration of every in-flight contract change, not merely prose that schema changes serialize",
+        "The detailed mechanics mark contract-bearing units for contract review and require each work contract to declare its surface paths and generated artifacts",
+        "The detailed mechanics let shared-schema changes whose consumers all live in the repository and are exercised by the required checks be open together, each updating its consumers in the same change, rather than limiting work to one active contract change",
+        "The detailed mechanics record a start-order dependency between units that rewrite the same rows or rebuild the same table, and for units that rely on a change an outside consumer needs",
         "The result does not copy Freeside lane names, labels, or tracker vocabulary"
       ]
     },
     {
       "id": 10,
-      "eval_name": "new-evidence-after-serial-init",
-      "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. It was initialized early with no coordination record, so its effective model is the safe serial baseline. Architecture documentation and six recent work units now show two recurring, independently reviewable boundaries, while one integrator can reliably handle two active units. The owner has requested reassessment but has not approved any edit. Report the current model, evidence, uncertainty, and smallest supported change; show any proposed project-specific documentation diff for approval. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A reassessment report that observes the current serial baseline, cites the new recurring evidence, proposes an upgrade to two stable named streams capped at two active units, shows the exact documentation diff for approval, and leaves the fixture unchanged pending approval.",
+      "eval_name": "new-evidence-after-baseline-init",
+      "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. It was initialized early with no coordination record, so its effective model is the landing baseline. Architecture documentation and six recent work units now show two recurring, independently reviewable boundaries, while one integrator can reliably handle two active units. The owner has requested reassessment but has not approved any edit. Report the current model, evidence, uncertainty, and smallest supported change; show any proposed project-specific documentation diff for approval. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment report that observes the current landing baseline, cites the new recurring evidence, proposes an upgrade to two stable named streams capped at two active units, shows the exact documentation diff for approval, and leaves the fixture unchanged pending approval.",
       "files": [],
       "expectations": [
         "The explicit reassessment request, not AGENTS.md file state, selects reassessment mode",
-        "The absent coordination record is reported as the effective safe serial baseline rather than missing content",
+        "The absent coordination record is reported as the effective landing baseline rather than missing content",
         "The report distinguishes observed architecture and work-unit history from inference",
         "The proposed stable named streams are supported by recurring history and capped at two by integration capacity",
         "The proposal includes observable triggers for the next reassessment",
@@ -177,15 +179,17 @@
     {
       "id": 12,
       "eval_name": "repeated-shared-surface-collisions",
-      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its current model uses independent path-and-dependency units. Architecture records and five recent work units show repeated collisions on one shared schema, conflicting generated outputs, and integration delays. Component work remains independent, and one integrator can handle at most two active component units. The owner has requested reassessment but has not approved edits. Report the evidence and propose the smallest supported change. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A reassessment report proposing serialized shared-contract work or an integration spine while preserving independent component ownership, capping component concurrency at two, showing an exact documentation diff for approval, and leaving files unchanged pending approval.",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. Its current model uses independent path-and-dependency units. Architecture records and five recent work units show repeated collisions on one shared schema, conflicting generated outputs, and integration delays. The required checks exercise every in-repository schema consumer, one outside reporting service also reads the schema, and migrations rewrite stored rows. Component work remains independent, and one integrator can handle at most two active component units. The owner has requested reassessment but has not approved edits. Report the evidence and propose the smallest supported change. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A reassessment report proposing a shared-contract domain or integration spine that treats the shared schema as a contract-review and declared-surface concern while preserving independent component ownership, capping component concurrency at two, showing an exact documentation diff for approval, and leaving files unchanged pending approval.",
       "files": [],
       "expectations": [
         "Repeated shared-schema collisions, generated-output conflicts, and integration delays are cited as observations",
-        "The recommendation serializes the shared contract without assigning ownership of every component to the integrator",
+        "The recommendation separates the shared contract from component ownership without assigning ownership of every component to the integrator",
         "Independent component concurrency is capped at two by demonstrated integration capacity",
         "The report distinguishes the supported recommendation from any remaining uncertainty",
-        "The proposed mechanics define at most one active shared-contract change at a time with forge-visible enumeration of every in-flight contract change, not merely prose that schema changes serialize",
+        "The proposed mechanics mark contract-bearing units for contract review and require each work contract to declare its surface paths and generated artifacts, including the conflicting generated outputs",
+        "The proposed mechanics let shared-contract changes whose consumers all live in the repository and are exercised by the required checks be open together, each updating its consumers in the same change, rather than limiting work to one active contract change",
+        "The proposed mechanics record a start-order dependency between units that rewrite the same rows or rebuild the same table, and for units that rely on a change an outside consumer needs",
         "The exact project-specific documentation diff is shown before mutation",
         "The report states when disappearance or relocation of the bottleneck should trigger reassessment"
       ]
@@ -253,12 +257,12 @@
     {
       "id": 17,
       "eval_name": "missing-agents-keeps-reassessment-report-only",
-      "prompt": "You are reassessing coordination in the project at <fixture-repo>. It has no AGENTS.md, but architecture records and recent work units support two stable independently reviewable streams. The owner explicitly requested reassessment and says to record the richer model if the evidence supports it. Analyze the evidence and explain the safe next operation. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A report-only reassessment that treats the current model as the safe serial baseline, explains the evidence-supported richer recommendation and next triggers, requires a separately requested init before applying it, and creates no AGENTS.md or coordination document.",
+      "prompt": "You are reassessing coordination in the project at <fixture-repo>. It has no AGENTS.md, but architecture records and recent work units support two stable independently reviewable streams. The owner explicitly requested reassessment and says to record the richer model if the evidence supports it. Analyze the evidence and explain the safe next operation. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A report-only reassessment that treats the current model as the landing baseline, explains the evidence-supported richer recommendation and next triggers, requires a separately requested init before applying it, and creates no AGENTS.md or coordination document.",
       "files": [],
       "expectations": [
         "The explicit request selects reassessment mode even though AGENTS.md is absent",
-        "The absent file yields the effective safe serial baseline rather than a partial setup",
+        "The absent file yields the effective landing baseline rather than a partial setup",
         "The richer recommendation is supported by architecture and recurring work-unit evidence",
         "The owner's instruction to record the model does not bypass init's profile, canonical-section, and scaffolding workflow",
         "The report identifies a separately requested init operation as the safe path to apply the recommendation",
@@ -313,7 +317,7 @@
     {
       "id": 21,
       "eval_name": "combined-init-then-reassessment",
-      "prompt": "You are working in the project at <fixture-repo>. It has no AGENTS.md, but architecture records and six recent work units show two stable independently reviewable streams, and one integrator can handle two active units. In this one request, the owner asks you to initialize agent setup with the Standard profile, record the evidence-supported coordination model during setup, and then reassess whether that model fits. Work only in the fixture; do not call the network or change repository settings.",
+      "prompt": "You are working in the project at <fixture-repo>. It has no AGENTS.md, but architecture records and six recent work units show two stable independently reviewable streams, and one integrator can handle two active units. In this one request, the owner asks you to initialize agent setup with the Standard profile, record the evidence-supported coordination model during setup, and then reassess whether that model fits. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
       "expected_output": "A complete Standard-profile initialization followed by reassessment of the resulting setup. AGENTS.md contains the canonical sections, scaffolding is created, the initial evidence-supported coordination record is capped at two active units, and reassessment reports whether that resulting model needs any further change instead of discarding initialization or creating a partial file.",
       "files": [],
       "expectations": [
@@ -417,12 +421,12 @@
     },
     {
       "id": 28,
-      "eval_name": "zero-record-uses-serial-baseline",
-      "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and no coordination record or Detailed mechanics field. One unmanaged multi-stage record is valid, and current evidence supports no richer coordination model. Validate the project-specific inputs and report the effective model without inventing missing fields. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A no-change reassessment that treats the absent coordination record as the safe serial baseline, skips field and mechanics validation that applies only to a present record, accepts the single stage section, and invents no coordination policy.",
+      "eval_name": "zero-record-uses-landing-baseline",
+      "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and no coordination record or Detailed mechanics field. One unmanaged multi-stage record is valid, and current evidence supports no richer coordination model. Validate the project-specific inputs and report the effective model without inventing missing fields. The owner confirms a landing check: required checks must pass on a branch updated to the base tip before merging. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that treats the absent coordination record as the landing baseline, skips field and mechanics validation that applies only to a present record, accepts the single stage section, and invents no coordination policy.",
       "files": [],
       "expectations": [
-        "Zero coordination records is accepted as the effective safe serial baseline",
+        "Zero coordination records is accepted as the effective landing baseline",
         "The four fixed-field and Detailed mechanics checks are treated as not applicable without a record",
         "The single valid multi-stage section does not make a coordination record appear present",
         "Available evidence is assessed without inventing a shape, field, pointer, or mechanics document",
@@ -840,6 +844,55 @@
         "AGENTS.md includes the managed devlog block and devlog/README.md is scaffolded",
         "The mandatory-note list contains exactly the requested classes when supplied, and no mandatory classes are invented otherwise",
         "The standalone scaffold exit does not suppress explicit devlog or decision-record setup"
+      ]
+    },
+    {
+      "id": 57,
+      "eval_name": "missing-landing-check-writes-width-one",
+      "prompt": "You are working in the project at <fixture-repo>. It has a README with build, test, lint, and format commands, a CI workflow, and required status checks on main, but no AGENTS.md, implementation plan, or work-unit history. Initialize it with the agent-setup skill using the Standard profile. When asked about a landing check, the owner says branches need not be up to date with main before merging, the project has no merge queue or land command, and the owner declines to change repository settings now. The owner has not requested a coordination record. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A Standard-profile setup that reports the missing landing check as a setup finding, offers to enable the up-to-date rule without changing settings, and writes an unmanaged shape 1 coordination record at a width of one unit in the same init, inventing no richer coordination.",
+      "files": [],
+      "expectations": [
+        "The setup looks for a landing check before its AGENTS.md write, using the stated required-check rule and the owner's merge-queue and land-command answers",
+        "The missing landing check is reported as a setup finding",
+        "The setup offers to require branches to be up to date before merging and changes no repository settings",
+        "AGENTS.md contains an unmanaged Coordination model record near the Agent-setup profile line, outside every managed block, although the owner did not request one",
+        "The record's Current shape is the landing baseline (shape 1) at a width of one unit until a landing check exists",
+        "The record's Evidence basis names the missing landing check, and its Reassess when field names the check existing",
+        "The Detailed mechanics field points to no mechanics document and holds no placeholder",
+        "No lane, ownership map, dependency graph, claim mechanism, or ordering is invented"
+      ]
+    },
+    {
+      "id": 58,
+      "eval_name": "update-offers-width-one-fallback",
+      "prompt": "You are updating agent-setup in the agent-ready project at <fixture-repo>. Its AGENTS.md has valid managed markers, one managed block that has drifted from the canonical source, unmanaged project guidance, and no coordination record. Main has required status checks. Branches need not be up to date with main before merging, and the project has no merge queue or land command. Run an ordinary update. The owner approves the exact managed-block refresh you show, and accepts any coordination change you offer. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "An ordinary update that shows the drifted managed block's diff and refreshes it on approval, reports the missing landing check, offers a width-one shape 1 coordination record, writes it only after the owner accepts, preserves all other unmanaged content verbatim, and does not reassess the topology.",
+      "files": [],
+      "expectations": [
+        "The drifted managed block's diff is shown, and the block is refreshed from the canonical source after the owner approves",
+        "The missing landing check is reported as a finding",
+        "The width-one shape 1 coordination record is offered to the owner rather than written silently",
+        "The record is written only after the owner accepts, as an owner-requested coordination model in unmanaged content near the Agent-setup profile line",
+        "The written record has all four fixed fields, a width of one unit until a landing check exists, the missing check as its evidence basis, and the check existing as its reassessment trigger",
+        "All other unmanaged project guidance is preserved verbatim",
+        "No topology reassessment runs and no richer shape is proposed",
+        "No repository settings change"
+      ]
+    },
+    {
+      "id": 59,
+      "eval_name": "reassessment-keeps-width-one-record",
+      "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged coordination record with all four fixed fields: Current shape is the landing baseline at a width of one unit until a landing check exists, Evidence basis names the missing landing check, and Reassess when names the check existing. The project still has no landing check. Branches need not be up to date with main before merging, and the project has no merge queue or land command. Current evidence supports no richer coordination model. The owner has requested reassessment but has not approved any edit. Work only in the fixture; do not call the network or change repository settings.",
+      "expected_output": "A no-change reassessment that keeps the width-one record because the landing check is still missing, does not treat it as an obsolete record to remove, restates the missing check as the reassessment trigger, and leaves AGENTS.md unchanged.",
+      "files": [],
+      "expectations": [
+        "The record passes the four-field validation and is read as the effective model",
+        "The report states that the project still has no landing check, citing the stated settings",
+        "The width-one record is kept and is not proposed for removal as obsolete, because simplification never removes the fallback while the check is missing",
+        "No richer shape or wider concurrency is proposed",
+        "The report restates the landing check existing as the observable reassessment trigger",
+        "AGENTS.md remains unchanged"
       ]
     }
   ]
