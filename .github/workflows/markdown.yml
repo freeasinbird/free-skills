@@ -81,3 +81,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes ripgrep
       - name: Run ${{ matrix.script }}
         run: ./scripts/${{ matrix.script }}
+
+  # Protection on main requires this one context, so adding a matrix script
+  # needs no protection change. Keep `if: always()`: without it a failed leg
+  # skips this job, and a skipped required check counts as passing.
+  required:
+    name: markdown-required
+    needs: [check, matrices]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every markdown job to pass
+        run: |
+          test "${{ needs.check.result }}" = success
+          test "${{ needs.matrices.result }}" = success

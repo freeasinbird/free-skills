@@ -228,6 +228,13 @@ the Mechanical Commit-Message Checks below. `.github/workflows/markdown.yml`
 publishes `markdown-checks` for Markdown lint and formatting, the touched-prose
 gate, prose-tic, list-capitalization, skill-structure, managed-sync, and
 review-convergence layer checks, plus one context for every script test matrix.
+Its `markdown-required` context passes only when `markdown-checks` and every
+matrix context pass.
+
+Branch protection on `main` requires `check` and `markdown-required`, both
+from GitHub Actions, and requires branches to be up to date before merging.
+Adding a script test matrix therefore needs no protection change. Keep the
+fan-in job's `if: always()`: a skipped required check counts as passing.
 
 `CLAUDE.md` imports `AGENTS.md`. Edit `AGENTS.md`, never the pointer.
 
