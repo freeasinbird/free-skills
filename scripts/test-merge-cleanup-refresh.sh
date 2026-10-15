@@ -386,6 +386,62 @@ tracker "$TMP/dup.md"
 run --repo "$REPO" --issue 1
 want_rc 4; want_err "node i10 of unit #10 is declared more than once"
 
+# A redeclaration inline on an edge is ambiguous the same way; a mention of
+# the ID in front matter, a comment, a label, edge text, a keyword statement,
+# or a longer ID is not a declaration.
+redeclared() { # redeclared <desc> <sed expression>
+  CASE="a unit's node ID redeclared inline is ambiguous ($1)"
+  sed "$2" "$TMP/lane-open.md" >"$TMP/dup.md"
+  tracker "$TMP/dup.md"
+  run --repo "$REPO" --issue 1
+  want_rc 4; want_err "node i11 of unit #11 is declared more than once"
+  [ -s "$OUT" ] && bad "printed text on a stop" || ok
+}
+redeclared "edge target" 's/^    i10 ==> i11$/    i10 ==> i11["#90 Relabeled"]/'
+redeclared "edge source" 's/^    i10 ==> i11$/    i11["#90 Relabeled"] --> i13/'
+redeclared "no spaces" 's/^    i10 ==> i11$/    i10==>i11["#90 Relabeled"]/'
+redeclared "pipe edge text" 's/^    i10 ==> i11$/    i10 -->|after schema| i11["#90 Relabeled"]/'
+redeclared "unquoted edge text" 's/^    i10 ==> i11$/    i10 -- after schema --> i11["#90 Relabeled"]/'
+redeclared "dotted edge text" 's/^    i10 ==> i11$/    i10 -. after schema .-> i11("#90 Relabeled")/'
+redeclared "after &" 's/^    i10 ==> i11$/    i10 \& i11["#90 Relabeled"] --> i13/'
+redeclared "after a multi-line Markdown string" 's/^    i90\["#90 Other tracker work"\]$/    i90["`#90 Other\
+    tracker work`"] --> i11["#90 Relabeled"]/'
+
+mentioned() { # mentioned <desc> <sed expression>
+  CASE="a mention of a unit's node ID is not a declaration ($1)"
+  sed "$2" "$TMP/lane-open.md" >"$TMP/dup.md"
+  tracker "$TMP/dup.md"
+  run --repo "$REPO" --issue 1
+  want_rc 0; want_out "$TMP/dup.md"
+}
+I90='^    i90\["#90 Other tracker work"\]$'
+mentioned "comment" "s/$I90/&\\
+    %% i11[\"#11 old label\"] was moved/"
+mentioned "hyphenated ID" "s/$I90/&\\
+    lane-i11[\"Lane note\"]/"
+mentioned "punctuated IDs" 's/^    i90\["#90 Other tracker work"\]$/&\
+    lane.i11["Lane note"] --> a\&i11["Joined note"]/'
+mentioned "front matter" 's/^flowchart LR$/---\
+title: Reader i11(x)\
+---\
+&/'
+mentioned "unquoted edge text" "s/$I90/&\\
+    i90 -- after i11 (reader) --> i13/"
+mentioned "edge text with a shape" "s/$I90/&\\
+    i90 -- after i11[x] --> i13/"
+mentioned "pipe edge text" "s/$I90/&\\
+    i90 -->|after i11>x| i13/"
+mentioned "subgraph title" 's/^    subgraph spine\["Spine work"\]$/    subgraph spine [Spine for i11>x]/'
+mentioned "accTitle and accDescr" 's/^flowchart LR$/&\
+    accTitle: chart for i11[Reader]\
+    accDescr: i11[Reader] waits on i10\
+    accDescr {\
+    i11[Reader] waits\
+    }/'
+mentioned "quoted label" "s/$I90/    i90[\"#90 see i11[Reader]\"]/"
+mentioned "multi-line Markdown string" 's/^    i90\["#90 Other tracker work"\]$/    i90["`#90 Other\
+    i11[Reader] follows`"]/'
+
 CASE="closed tracker is refused"
 tracker "$TMP/lane-open.md" CLOSED
 run --repo "$REPO" --issue 1

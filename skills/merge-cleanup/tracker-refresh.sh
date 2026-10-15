@@ -38,10 +38,11 @@
 #   2   STOP: the tracker is closed, the comment is not on it, or the text is
 #       not on the shared tracker format (including a unit line, class line,
 #       or unit node it cannot read exactly)
-#   4   LOOKUP_FAILED: a read failed, a node maps to units ambiguously, or an
-#       open unit's Dependencies field is missing or does not parse. Parsing
-#       fails closed: a shape it does not know stops the run rather than
-#       dropping a prerequisite.
+#   4   LOOKUP_FAILED: a read failed, a node maps to units ambiguously (a
+#       unit's node ID declared more than once, on its own line or inline on
+#       an edge), or an open unit's Dependencies field is missing or does
+#       not parse. Parsing fails closed: a shape it does not know stops the
+#       run rather than dropping a prerequisite.
 #   64  usage on stderr
 #   69  gh or awk missing
 set -u
@@ -135,6 +136,127 @@ function last_index(s, t,   p, q) {
 }
 function join(list, item) { return list == "" ? item : list ", " item }
 
+# count_node_declarations: set NIDC[id] to how many times chart lines a..b
+# declare node id, on its own line or inline on an edge. A declaration is an
+# ID followed at once by a shape opener. The scan reads the chart as one
+# stream and tells apart only what can make a mention look like one: front
+# matter; strings, which may span lines; `%%` comments; statements that open
+# with a keyword such as `subgraph` or `accTitle`; edge text; shape bodies;
+# and longer IDs. Anything else is passed over, so unknown syntax can at
+# worst hide a redeclaration, never stop a valid chart.
+function count_node_declarations(a, b,   s, i, len, p, c, d, e, q, w, stmt, stmt_was) {
+  # Mermaid strips front matter before it parses the chart.
+  if (L[a] ~ /^[ \t]*---[ \t]*$/)
+    for (i = a + 1; i <= b; i++) if (L[i] ~ /^[ \t]*---[ \t]*$/) { a = i + 1; break }
+  s = ""
+  for (i = a; i <= b; i++) s = s L[i] "\n"
+  len = length(s); p = 1; stmt = 1
+  while (p <= len) {
+    c = substr(s, p, 1); d = substr(s, p, 2)
+    if (c == "\n" || c == ";") { stmt = 1; p++; continue }
+    if (c == " " || c == "\t") { p++; continue }
+    if (d == "%%") { p = line_end(s, p); continue }
+    stmt_was = stmt; stmt = 0
+    if (stmt_was && match(substr(s, p, 12), /^[A-Za-z]+/)) {
+      w = substr(s, p, RLENGTH); e = substr(s, p + RLENGTH, 1)
+      if (w ~ /^acc(Title|Descr)$/ && e ~ /[ \t:{]/) {
+        for (p += RLENGTH; substr(s, p, 1) ~ /[ \t]/; p++) ;
+        if (substr(s, p, 1) != "{") { p = line_end(s, p); continue }
+        q = index(substr(s, p), "}")
+        p = q ? p + q : len + 1
+        continue
+      }
+      if (w ~ /^(subgraph|end|direction|class|classDef|style|linkStyle|click|flowchart|graph)$/ && (e == "" || e ~ /[ \t\n;]/)) {
+        p = statement_end(s, p + RLENGTH); continue
+      }
+    }
+    if (c == "\"") { p = string_end(s, p); continue }
+    if (d == "--" || d == "-." || d == "==") { p = edge_end(s, p); continue }
+    # As in Mermaid, an ID runs to whitespace, a quote, `;`, one of
+    # ()<=>@[]^{|}~, or an arrow, so `a-->b` is two IDs while `lane-i10`,
+    # `lane.i10`, and `a&i10` are each one.
+    for (q = p; q <= len && substr(s, q, 1) !~ /[] \t\n";()<=>@[^{|}~]/ && substr(s, q, 2) !~ /^-[-.>]/; q++) ;
+    if (q == p) { p++; continue }
+    w = substr(s, p, q - p); p = q
+    c = substr(s, p, 1)
+    if (c == "[" || c == "(" || c == "{" || c == ">" || substr(s, p, 2) == "@{") {
+      NIDC[w]++
+      p = shape_end(s, p + (c == "@" ? 2 : 1))
+    }
+  }
+}
+# string_end: p is at an opening quote; return the index past its closing
+# quote, or past the end of s when it never closes.
+function string_end(s, p,   q) {
+  q = index(substr(s, p + 1), "\"")
+  return q ? p + q + 1 : length(s) + 1
+}
+# line_end: the index of the newline that ends p's line.
+function line_end(s, p,   q) {
+  q = index(substr(s, p), "\n")
+  return q ? p + q - 1 : length(s) + 1
+}
+# statement_end: the index of the newline or `;` that ends p's statement,
+# passing over strings and stopping at a `%%` comment.
+function statement_end(s, p,   c, len) {
+  len = length(s)
+  while (p <= len) {
+    c = substr(s, p, 1)
+    if (c == "\n" || c == ";" || substr(s, p, 2) == "%%") return p
+    p = (c == "\"") ? string_end(s, p) : p + 1
+  }
+  return p
+}
+# shape_end: p is past a shape opener; return the index past the closing
+# run, such as `]`, `]]`, `)]`, or `}}`, passing over strings.
+function shape_end(s, p,   c, len) {
+  len = length(s)
+  while (p <= len) {
+    c = substr(s, p, 1)
+    if (c == "\"") { p = string_end(s, p); continue }
+    p++
+    if (c ~ /[])}]/) {
+      while (substr(s, p, 1) ~ /[])}]/) p++
+      return p
+    }
+  }
+  return p
+}
+# edge_end: p is at an edge's `--`, `-.`, or `==`. An arrow continues at once
+# (`-->`, `-.->`, `==>`, `--o`); otherwise the edge has text, as in
+# `-- text -->`, that runs to the closing arrow on the same line. Return the
+# index past the arrow and any `|text|` after it. Text with no closing
+# arrow is not edge text, and the scan resumes after the opening pair.
+function edge_end(s, p,   q, c, len, closer) {
+  len = length(s); q = p + 2
+  if (substr(s, q, 1) ~ /[-.=xo>]/) return arrow_end(s, q)
+  closer = (substr(s, p, 2) == "-.") ? ".-" : substr(s, p, 2)
+  while (q <= len) {
+    c = substr(s, q, 1)
+    if (c == "\n") break
+    if (substr(s, q, 2) == closer) return arrow_end(s, q + 2)
+    q = (c == "\"") ? string_end(s, q) : q + 1
+  }
+  return p + 2
+}
+# arrow_end: q is past an arrow's opening pair; return the index past the
+# rest of the arrow (more `-`, `.`, or `=`, then one `x`, `o`, or `>`) and
+# any `|text|` label after it.
+function arrow_end(s, q,   r, c, len) {
+  len = length(s)
+  while (substr(s, q, 1) ~ /[-.=]/) q++
+  if (substr(s, q, 1) ~ /[xo>]/) q++
+  for (r = q; substr(s, r, 1) ~ /[ \t]/; r++) ;
+  if (substr(s, r, 1) != "|") return q
+  for (r++; r <= len; ) {
+    c = substr(s, r, 1)
+    if (c == "|") return r + 1
+    if (c == "\n") return q
+    r = (c == "\"") ? string_end(s, r) : r + 1
+  }
+  return r
+}
+
 function parse_tracker(   i, s0, s1, u0, u1, lane, ref, k, ln, rest, p, dbl, lbl, q, nm, cnt, j, t, ids, m, cls, x, key_name) {
   s0 = s1 = u0 = u1 = 0
   for (i = 1; i <= n; i++) {
@@ -180,6 +302,7 @@ function parse_tracker(   i, s0, s1, u0, u1, lane, ref, k, ln, rest, p, dbl, lbl
   bend = b0
   while (bend + 1 < s1 && L[bend + 1] ~ /^[ \t]+[^ \t]/) bend++
 
+  count_node_declarations(f0 + 1, f1 - 1)
   IND = ""
   for (i = f0 + 1; i < f1; i++) {
     ln = L[i]
@@ -205,7 +328,6 @@ function parse_tracker(   i, s0, s1, u0, u1, lane, ref, k, ln, rest, p, dbl, lbl
     match(ln, /^[ \t]*/); rest = substr(ln, RLENGTH + 1)
     p = index(rest, "[")
     id = substr(rest, 1, p - 1)
-    NIDC[id]++
     dbl = (substr(rest, p, 3) == "[[\"")
     lbl = substr(rest, p + (dbl ? 3 : 2))
     lbl = substr(lbl, 1, last_index(lbl, "\"") - 1)
