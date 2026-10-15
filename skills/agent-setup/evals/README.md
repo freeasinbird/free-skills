@@ -8,7 +8,7 @@ workspace outside the repo.
 
 - `trigger-eval.json`: eighteen description-only queries, twelve positive and
   six negative, for setup, devlog, sync, reassessment, and standalone scaffolds.
-- `evals.json`: fifty-six task evals for scope routing, factual intake, profiles,
+- `evals.json`: fifty-nine task evals for scope routing, factual intake, profiles,
   optional work-unit stages, coordination discovery, and reassessment.
   1. `single-stage-init`: initializes a plain project and expects the normal
      single implementation workflow with no stage record.
@@ -21,22 +21,23 @@ workspace outside the repo.
   4. `first-stage-adoption-update`: updates an agent-ready project that has no
      stage record, adding an owner-requested planning-only record while
      preserving unrelated guidance and the undeclared implementation default.
-  5. `empty-repository-serial-baseline`: initializes an empty project with the
-     safe serial default and no invented coordination structure.
+  5. `empty-repository-landing-baseline`: initializes an empty project with
+     the landing baseline and no invented coordination structure.
   6. `speculative-plan-is-evidence`: keeps an uncorroborated draft plan from
-     becoming lanes, a graph, or unsupported parallel width.
-  7. `mature-simple-adoption`: adopts management while preserving demonstrated
-     serial behavior in a mature project that needs no richer coordination.
+     becoming lanes, a graph, or a width recommendation.
+  7. `mature-simple-adoption`: adopts management while keeping a mature
+     project's simple behavior on the landing baseline.
   8. `recurring-independent-streams`: derives stable named streams from
      recurring history and caps width at proven integration capacity.
-  9. `shared-contract-integration-spine`: separates serialized shared-contract
-     work from component ownership and keeps typed relations distinct.
-  10. `new-evidence-after-serial-init`: proposes an evidence-supported upgrade
-      after an early serial initialization without mutating before approval.
+  9. `shared-contract-integration-spine`: treats the shared contract as a
+     review and declared-surface concern separate from component ownership,
+     and keeps typed relations distinct.
+  10. `new-evidence-after-baseline-init`: proposes an evidence-supported
+      upgrade from the landing baseline without mutating before approval.
   11. `stale-streams-after-architecture-change`: identifies obsolete named
       streams and proposes simplification without silently renaming them.
-  12. `repeated-shared-surface-collisions`: derives shared-contract
-      serialization from recurring collisions and integration limits.
+  12. `repeated-shared-surface-collisions`: derives contract review, declared
+      surfaces, and recorded start order from recurring collisions.
   13. `obsolete-integration-spine`: removes a spine from the proposal when its
       bottleneck has disappeared.
   14. `ordinary-update-does-not-reassess`: preserves a rich coordination record
@@ -46,7 +47,8 @@ workspace outside the repo.
   16. `rejected-diff-keeps-triggers-report-only`: keeps new reassessment
       triggers out of an existing record after the owner rejects its diff.
   17. `missing-agents-keeps-reassessment-report-only`: reports a supported
-      recommendation without creating a partial agent setup.
+      recommendation from the landing baseline without creating a partial
+      agent setup.
   18. `managed-record-blocks-reassessment`: rejects a coordination record and
       pointer inside structurally valid managed ranges.
   19. `unsafe-mechanics-target-blocks-reassessment`: resolves the mechanics
@@ -67,8 +69,8 @@ workspace outside the repo.
       issue as unavailable read-only evidence rather than an unsafe target.
   27. `missing-current-shape-blocks-reassessment`: stops before inferring a
       model from an incomplete fixed-field record.
-  28. `zero-record-uses-serial-baseline`: skips present-record field checks and
-      keeps the absent-record safe serial baseline.
+  28. `zero-record-uses-landing-baseline`: skips present-record field checks
+      and keeps the absent-record landing baseline.
   29. `composed-rich-shape-requires-local-mechanics`: keeps the local mechanics
       requirement when shape 2 composes with a richer shape.
   30. `combined-update-preflights-policy-location`: validates project-policy
@@ -123,6 +125,12 @@ workspace outside the repo.
   55. `explicit-devlog-default`: retains Decision-log for a devlog request.
   56. `explicit-devlog-mandatory-classes`: retains High-assurance when the owner
       supplies mandatory note classes.
+  57. `missing-landing-check-writes-width-one`: reports a missing landing check
+      and writes a width-one shape 1 record during init.
+  58. `update-offers-width-one-fallback`: offers the width-one record during an
+      ordinary update and writes it only after the owner accepts.
+  59. `reassessment-keeps-width-one-record`: keeps the width-one record while
+      the landing check is still missing.
 
 ## Re-Running
 
@@ -152,7 +160,10 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
    record-preservation paths observable together.
 4. For eval 4, start with an agent-ready project whose AGENTS.md has current
    managed blocks and unrelated unmanaged guidance, but no stage record.
-5. For eval 5, provide only the basic README. Do not add a plan, code,
+5. For evals 5, 6, 7, 10, 17, and 28, the owner confirms a landing check:
+   required checks must pass on a branch updated to the base tip. The same
+   holds for evals 8, 9, 12, and 21, whose recorded width exceeds one. For
+   eval 5, provide only the basic README. Do not add a plan, code,
    architecture document, work-unit history, or AGENTS.md.
 6. For eval 6, add only the speculative PLAN.md described by the prompt. Its
    proposed lanes and graph must have no corroborating code or history.
@@ -163,9 +174,12 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
    that demonstrate the same two independent boundaries. Directory names must
    not be the only evidence.
 9. For eval 9, provide code, architecture notes, and work-unit history showing
-   independent components, a serialized shared schema, one integration role,
-   and examples of all four typed relations.
-10. For eval 10, start from an agent-ready serial project with no coordination
+   independent components, a shared schema whose changes get contract review,
+   one integration role, and examples of all four typed relations. Make the
+   required checks exercise every in-repository schema consumer, add one
+   outside reporting service that reads the schema, and include migrations
+   that rewrite stored rows.
+10. For eval 10, start from an agent-ready project with no coordination
     record, then add architecture notes and six work-unit records showing two
     recurring independent boundaries and a two-unit integration limit.
 11. For eval 11, add an unmanaged API/UI stream record and mechanics document,
@@ -173,7 +187,8 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
     those boundaries.
 12. For eval 12, start with path-and-dependency units and add architecture plus
     five work-unit records showing repeated shared-schema and generated-output
-    collisions, integration delays, and a two-unit component capacity.
+    collisions, integration delays, and a two-unit component capacity. Give it
+    the same schema consumer, outside-service, and stored-row facts as eval 9.
 13. For eval 13, add an integration-spine record, evidence that its shared
     contract was split behind versioned interfaces, and eight work units that
     integrated without the spine or manual scheduling.
@@ -210,7 +225,8 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
 27. For eval 27, add one unmanaged coordination record that omits Current shape
     but includes the other three fields and a mechanics document.
 28. For eval 28, omit the coordination record and mechanics field, and add one
-    valid unmanaged multi-stage section plus evidence for serial coordination.
+    valid unmanaged multi-stage section plus evidence for no richer
+    coordination.
 29. For eval 29, add one complete unmanaged record combining path-and-dependency
     units with typed relations, but point mechanics only to an external issue.
 30. For eval 30, place a complete coordination record inside a structurally
@@ -254,6 +270,15 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
     Detailed mechanics field and no external work contract.
 48. For eval 48, add one record combining shapes 2 and 3 with a present but blank
     Detailed mechanics field.
+49. For evals 57–59, add a CI workflow and record that main has required
+    status checks, does not require branches to be up to date, and has no
+    merge queue or land command. Offline runs cannot read branch protection,
+    so the prompts state these facts. For eval 57, omit AGENTS.md and the
+    coordination evidence; the owner declines a settings change.
+50. For eval 58, add valid managed blocks with one drifted block, unrelated
+    unmanaged guidance, and no coordination record.
+51. For eval 59, add valid managed blocks and an unmanaged shape 1 record at a
+    width of one unit that names the missing landing check as its evidence.
 
 ### Scope and Intake Fixtures
 
@@ -343,11 +368,14 @@ ask for the missing run command; settled facts need no confirmation.
 
 Replace `<fixture-repo>` in each prompt with its per-run path. Run new task
 cases against both skill revisions, grade each expectation, and retain the
-scratch artifacts. Rerun cases 1, 5, 7, 14, 17, and 21 for Standard init,
-empty-project placeholders, adoption preservation, sync, and reassessment.
+scratch artifacts. Rerun cases 1, 5, 7, 14, 17, 21, and 57 for Standard
+init, empty-project placeholders, adoption preservation, sync, reassessment,
+and the missing-landing-check fallback.
 Cases 55 and 56 cover the note-keeping profile defaults.
 
 Parse both JSON files before behavioral runs. Check task IDs and names for
 uniqueness, the existing task fields for presence, and trigger values for
-Boolean type. Verify the counts above from parsed data and preserve all 48
-existing task definitions and expectations unchanged.
+Boolean type. Verify the counts above from parsed data. The landing-baseline
+update changed evals 5–10, 12, 17, 21, and 28 and added 57–59; keep every
+other task definition and expectation unchanged unless the reference text it
+grades changes.
