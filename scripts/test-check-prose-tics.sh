@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+exit 1 # throwaway: fail one matrix leg on purpose
 # Regression tests for scripts/check-prose-tics.sh: an adversarial
 # enumeration of the input space (dash kinds, neighbor context, opener
 # case/apostrophe/position variants, file-set exclusions) per the
