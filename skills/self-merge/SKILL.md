@@ -11,14 +11,18 @@ description: >-
 
 # Self-Merge
 
-Self-merge lets an agent merge its own pull request and clean up afterward.
-It overrides the safe default of stopping at an open PR for a human to merge.
-Never choose this workflow on your own.
+Self-merge lets an agent merge its own pull request. It ends at the merge and
+hands the merged PR to the merge-cleanup skill. It overrides the safe default
+of stopping at an open PR for a human to merge. Never choose this workflow on
+your own.
 
 This skill needs git, a shell, and a PR host CLI such as `gh`. The CLI must be
 authenticated for the PR's repository. Git alone cannot poll required checks,
-merge the PR, confirm the merge, or run the forge guards before deletion.
-Without the CLI, stop at the open PR and hand the merge to the user.
+merge the PR, confirm the merge, or run the forge guards before the merge.
+Without the CLI, stop at the open PR and hand the merge to the user. It also
+needs the merge-cleanup skill installed beside it, because that skill owns
+everything after the merge. A per-skill install can omit it, so confirm it
+before the merge; see Guardrails.
 
 ## When This Applies
 
@@ -36,14 +40,20 @@ unclear, stop there and ask.
 
 1. Confirm that the user or project explicitly allows self-merge.
 2. Run the script's `check` phase from the base-branch checkout.
-3. Confirm the review guardrails that the script can't judge.
+3. Confirm the guardrails that the script can't judge, including that
+   merge-cleanup is installed and its prerequisites hold.
 4. Run `land` with the head OID returned by `check`. After `STOP rebased`,
    read its range-diff, then repeat steps 2 through 4 with the new head.
-5. Run `cleanup` with the head OID that `land` reports.
-6. Stop any review watch that became stale when the PR merged.
-7. Follow Project Duties for applicable post-merge work, including after a
-   cleanup STOP when its independent prerequisites hold.
-8. Report what merged, what cleanup changed, and each duty's outcome or blocker.
+5. Stop any review watch that became stale when the PR merged.
+6. Run the merge-cleanup skill's procedure for the merged PR, from Resolve the
+   Work Unit through Summarize, including `merge-cleanup.sh`. Its Check
+   Prerequisites already passed in step 3. See "4. Hand Off to
+   merge-cleanup".
+7. Follow Project Duties for what self-merge adds to merge-cleanup's post-merge
+   work, including after a merge-cleanup STOP when the duty's independent
+   prerequisites hold.
+8. Report what merged, merge-cleanup's outcome, and each duty's outcome or
+   blocker.
 
 ## Guardrails
 
@@ -63,6 +73,13 @@ guardrail below holds.
   `GH_HOST` to the recorded host when the CLI's default differs.
 - The diff has a final self-review in the PR files view. Check for stray
   hunks, debug code, scope creep, and changes the editor view hid.
+- The merge-cleanup skill is installed, and its Check Prerequisites pass from
+  the base-branch checkout. Confirm that its `SKILL.md` and `merge-cleanup.sh`
+  are present where your agent finds skills, then run that section's checks.
+  Self-merge hands the merged PR to that skill, and a merge is irreversible,
+  so a companion found missing afterward leaves no guarded cleanup. If it is
+  absent or its prerequisites fail, stop at the open PR and say what is
+  missing.
 - Required review artifacts are attached. This includes forge-hosted
   screenshots for visible UI changes. If you can't attach them, stop, say what
   you tried and the error it gave, and ask the user.
@@ -76,30 +93,27 @@ guardrail below holds.
 If a guardrail fails and can't be fixed in the session, stop at the open PR.
 Tell the user exactly what blocks the merge.
 
-## Merging and Cleanup
+## Merging
 
-The merge-and-cleanup sequence can delete a remote branch and rewrite a
-working tree. Use `self-merge.sh`, next to this file, instead of rebuilding the
-commands by hand. Its guards cover ignored-file clobbering, tag shadowing,
-case-folded ref collisions, worktree mis-parsing, and squash merge queues.
+The merge sequence can rewrite the head branch and merge it irreversibly. Use
+`self-merge.sh`, next to this file, instead of rebuilding the commands by hand.
+Its guards cover ignored-file clobbering, case-folded ref collisions,
+worktree mis-parsing, and squash merge queues.
 
 Most of these hazards were found by running the commands, not by reading them.
+The regression matrix in `scripts/test-self-merge.sh` tests each guard against
+real scratch repositories.
 
-The script stops before removing a separate linked worktree. It also keeps the
-local branch for separate, verified cleanup. The regression matrix in
-`scripts/test-self-merge.sh` tests each guard against real scratch repositories.
-
-Invoke the script by path from the checkout that cleanup will rewrite. That
-checkout holds, or will hold, the base branch. Here, `<skill-dir>` is the
-directory that contains this file. Always pass `--repo` for the fork-clone
-reason in Guardrails, with the slug and `GH_HOST` set there. The script takes
-`owner/name` alone and resolves it against the CLI's default host.
+Invoke the script by path from the base-branch checkout, the one merge-cleanup
+will later rewrite. Here, `<skill-dir>` is the directory that contains this
+file. Always pass `--repo` for the fork-clone reason in Guardrails, with the
+slug and `GH_HOST` set there. The script takes `owner/name` alone and resolves
+it against the CLI's default host.
 
 ```sh
-<skill-dir>/self-merge.sh check   --pr <n> --repo <owner/name>
-<skill-dir>/self-merge.sh land    --pr <n> --repo <owner/name> --head <oid>
-<skill-dir>/self-merge.sh merge   --pr <n> --repo <owner/name> --head <oid>
-<skill-dir>/self-merge.sh cleanup --pr <n> --repo <owner/name> --head <oid>
+<skill-dir>/self-merge.sh check --pr <n> --repo <owner/name>
+<skill-dir>/self-merge.sh land  --pr <n> --repo <owner/name> --head <oid>
+<skill-dir>/self-merge.sh merge --pr <n> --repo <owner/name> --head <oid>
 ```
 
 Ordinary same-repository PRs need no overrides. Use these only when the
@@ -121,8 +135,8 @@ defaults don't fit:
 A base or head remote may use a local `~/.ssh/config` `Host` alias, such as
 `git@bnw.github.com:owner/name.git` where the alias sets `HostName github.com`.
 The script resolves the alias with `ssh -G` and accepts it only when the
-resolved host, user, and default port name the PR's forge endpoint. The
-destructive head delete then pins that resolved endpoint, so a later config
+resolved host, user, and default port name the PR's forge endpoint. The lease
+push that `land` makes then pins that resolved endpoint, so a later config
 change can't reroute it. The check stops `remote-repo-mismatch` when `ssh` is
 absent, an ssh-command override is active (`GIT_SSH_COMMAND`, `core.sshCommand`,
 or `GIT_SSH`), or the alias resolves elsewhere. To proceed then, add a remote
@@ -151,8 +165,9 @@ reviewed.
 
 ### 2. Confirm the Guardrails
 
-Confirm that checks are green, the diff is self-reviewed, and required
-artifacts are attached. The script can't judge these conditions.
+Confirm that checks are green, the diff is self-reviewed, required artifacts
+are attached, and merge-cleanup is installed with its prerequisites met. The
+script can't judge these conditions.
 
 ### 3. Run `land`
 
@@ -173,7 +188,7 @@ round of three checks, and the merge happens only if all three pass:
    forge and refuses if the tip moved after the fetch.
 
 On the tip, `land` ends by running `merge`, described below. Its `OK land`
-result names the merged head as `head_oid`; pass that value to `cleanup`.
+result names the merged head as `head_oid`; report it as what merged.
 
 Each refusal is a STOP that says why. Rerunning `land` is the retry; it never
 loops on its own.
@@ -213,45 +228,30 @@ message. It then waits for the forge to report the PR as merged. A zero exit
 from the merge command proves only that the PR was enqueued, so the wait is
 required.
 
-### 4. Run `cleanup`
+### 4. Hand Off to merge-cleanup
 
-If a separate linked worktree still holds the head branch, `cleanup` stops
-before changing either branch. Report its path and STOP reason for owner
-removal or explicit task-specific cleanup authorization. Self-merge permission
-alone doesn't authorize removing it.
+Once the forge reports the PR merged, self-merge's own work is done. Stop the
+stale review watch, then run the merge-cleanup skill's procedure for the
+merged PR, including `merge-cleanup.sh`. Start at Resolve the Work Unit; its
+Check Prerequisites passed as a guardrail before the merge, so a missing
+companion stops at the open PR, never after it. A self-merge request grants that
+cleanup for the PR it merged; it is the same opt-in that authorized the merge.
+Merge-cleanup's fork, cross-repository, and consumer guards apply unchanged.
 
-Honor applicable cleanup authority already granted in the task without asking
-again. Removal remains a separate step outside `self-merge.sh`:
+Run merge-cleanup from the same base-branch checkout, and pass:
 
-- Stop concurrent users, then refresh all linked-worktree checks through
-  read-only inspection outside `cleanup`. Confirm the unique worktree path and
-  that both its branch and `HEAD` still match the pinned merged head. Recheck
-  ownership, operation state, and the full file inventory, including hidden
-  files and index flags. Authorization, clean status, or an idle assertion
-  doesn't waive these checks.
-- Keep the worktree and report failed or unresolved checks. Removal authority
-  alone doesn't authorize moving, changing, or deleting its contents to clear
-  a STOP.
-- Remove it only when separately authorized and all checks pass. Never remove
-  the worktree in which the shell is running.
+- `--repo` as `<host>/<owner>/<name>`: the forge record's host joined to the
+  `owner/name` slug self-merge used. Name the host explicitly even when it is
+  `github.com`.
+- `--pr` as the same PR number.
+- `--checkout` as that checkout's absolute root.
 
-Rerun `cleanup` only after the separately authorized step has cleared the stop.
-
-Otherwise, `cleanup` runs this order:
-
-1. Land on the base branch.
-2. Resolve and validate the base remote under that checkout's configuration.
-3. Fast-forward the base before touching the remote feature branch.
-4. Check whether forge auto-delete already removed the remote branch.
-5. Resolve and validate the head remote again.
-6. Keep a fork's branch and report it instead of deleting it.
-7. Otherwise, delete a surviving branch behind OID, consumer, and lease
-   guards.
-8. Prune remote-tracking refs.
-9. Report the local branch as `kept_manual`.
-
-Delete the local branch only as a separate step. First verify its tip and
-confirm that no worktree uses it.
+Merge-cleanup reads the merged head from the forge, so the `head_oid` that
+`OK land` reported is for your summary, not an input. Its guards and
+dispositions apply as that skill documents them. It stops
+`head-worktree-present` and leaves a linked head worktree to its owner. It
+retargets open stacked PRs onto the base before deleting the branch. It
+deletes the local and fork head branches behind its OID and lease guards.
 
 ## Handle Script Results
 
@@ -267,20 +267,15 @@ the exit code rather than parsing prose:
 | 69   | note on stderr         | `gh` missing: stop unless an equivalent authenticated host CLI exists |
 
 - Report every `STOP`. It marks a state where continuing could destroy work
-  or break this skill's cleanup promises. Leave the decision to the user
-  unless applicable task-specific worktree cleanup authority already covers
-  the separate step described in "4. Run `cleanup`".
+  or merge what nobody reviewed. Leave the decision to the user.
 - Examples include uncommitted changes, dependent PRs, a squash merge queue,
-  hidden worktree edits, unmerged local commits, a rebase conflict, red CI,
-  and a base that moved before the merge.
-- Never bypass a guard with force, reset, or unauthorized manual deletion.
-  Separately authorized worktree cleanup must satisfy the preservation and
-  ownership checks; authorization alone doesn't clear the stop.
+  a rebase conflict, red CI, and a base that moved before the merge.
+- Never bypass a guard with force, reset, or a manual merge.
 - `LOOKUP_FAILED` means a listing or fetch did not complete. Retry or
   investigate. Never treat an empty result as proof that nothing depends on
   the branch.
 
-Without `bash`, use `references/cleanup-sequence.md` only when an authenticated
+Without `bash`, use `references/merge-sequence.md` only when an authenticated
 PR-host CLI remains available. Don't improvise the commands from memory. The
 consumer, queue, merge, and merged-state guards still need that CLI.
 
@@ -297,9 +292,10 @@ await-pr-review.
 Self-merge watches often outlive their PR. The watch starts when the PR opens,
 and the merge may follow only minutes later.
 
-The trigger is the merge, not a successful cleanup. Stop the watch even when
-a guard stops cleanup partway. If the platform can list and stop background
-tasks, stop the watch and report it.
+The trigger is the merge, not a completed merge-cleanup. Stop the watch
+before handing off, and keep it stopped even when a merge-cleanup guard stops
+partway. If the platform can list and stop background tasks, stop the watch
+and report it.
 
 If the platform can't stop the watch, don't invent a mechanism. Say that it
 will end after activity or its time cap. A later empty wake-up is expected
@@ -307,10 +303,16 @@ noise, not a failure.
 
 ## Project Duties
 
-After a verified merge, read the governing project instructions and their
-named post-merge procedures from one freshly resolved, immutable base commit.
-Use the PR host or a fresh fetch, even if cleanup stopped before resync.
-Don't discover policy from the feature checkout, stale refs, or issue comments.
+Merge-cleanup owns the post-merge duties: its Verify Issue Closure, Reconcile
+Project Obligations, and Summarize sections, with the referenced
+`project-obligations.md` procedure. Follow them as written, with their
+authorization, freshness, input-reread, verification, ledger, and reporting
+requirements. Self-merge adds only the rules below.
+
+Read the governing project instructions and their named post-merge procedures
+from one freshly resolved, immutable base commit, even when merge-cleanup
+stopped before resync. Use the PR host or a fresh fetch. Don't discover policy
+from the feature checkout, stale refs, or issue comments.
 
 - **Readable absence:** Continue to the ordinary summary without new
   mutations, tracker machinery, or a required companion skill.
@@ -318,41 +320,18 @@ Don't discover policy from the feature checkout, stale refs, or issue comments.
   Report the exact source or rule that prevents determining the duties.
 - **Applicable duties:** Name them before acting. Perform only work already
   authorized by the task or governing project policy; reuse prior authority
-  without asking again. A self-merge request, issue reference, or successful
-  merge alone doesn't authorize issue closure or tracker writes.
+  without asking again. A self-merge request grants the merged PR's Git
+  cleanup, nothing more: it, an issue reference, or a successful merge alone
+  doesn't authorize issue closure or tracker writes.
 
-Reuse an available project procedure or the relevant non-Git sections of an
-available skill. Preserve that procedure's authorization, freshness, input
-rereads, verification, ledger, and reporting requirements. Don't require a new
-obligation schema or an installed skill when the project supplies its own
-procedure.
+Reuse an available project procedure when the project supplies its own.
+Preserve that procedure's authorization, freshness, input rereads,
+verification, ledger, and reporting requirements. Don't require a new
+obligation schema when the project supplies its own procedure.
 
-For applicable duties, resolve the current base tip immediately before each
-project mutation and before the final duty report. Use the procedure's
-equivalent or stricter checks when supplied; don't duplicate them. If the tip
-differs from the policy revision or can't be verified, stop pending writes.
-Retain observed completed or unknown results and every mechanical guard.
-Report that current policy must be rediscovered before further work or a
-claim that all project duties are complete.
-
-When using merge-cleanup, read its Verify Issue Closure through Reconcile
-Project Obligations sections and Summarize, including the referenced
-`project-obligations.md` procedure. Its merge-cleanup-request authority doesn't
-come from a self-merge request. Reuse only those non-Git stages; never run
-`merge-cleanup.sh` to obtain duty results or import its fork, local-branch,
-or stacked-PR cleanup policy.
-
-When an applicable project duty requires issue-close verification, read the
-merged PR body and `closingIssuesReferences` with the forge host and repository
-pinned. Check each close-keyword target in its own repository, including those the
-forge didn't recognize. Self-merge's result has no `closing_refs`; obtain
-this evidence from the forge. Plain `Refs #N` is non-closing. Report still-open
-issues; close one only with separate applicable authority.
-
-A mechanical STOP preserves completed Git results and every outstanding
-guard. Carry out only safe, independent duties whose own merge, authority,
-and evidence prerequisites hold. This handoff never clears a worktree STOP,
-changes `kept_manual`, or deletes a retained fork branch.
+A mechanical STOP from merge-cleanup preserves its completed dispositions and
+every outstanding guard. Carry out only safe, independent duties whose own
+merge, authority, and evidence prerequisites hold.
 
 If a required procedure, tool, authority, or verification is unavailable,
 report the affected duty and concrete blocker. Name the next action needed
@@ -361,9 +340,9 @@ hand off an edit computed from stale inputs.
 
 ## Summarize
 
-Report what merged, what was deleted and resynced, and whether a watch stopped
-or will expire. Name any guard that still needs the user, such as a dirty tree,
-worktree conflict, OID mismatch, or diverged base.
+Report what merged, merge-cleanup's ledger dispositions, and whether a watch
+stopped or will expire. Name any guard that still needs the user, such as a
+dirty tree, a linked head worktree, an OID mismatch, or a diverged base.
 
 Account for each applicable project duty separately: verified changes or
 no-ops, skipped work with its reason, and blocked or unknown outcomes with
