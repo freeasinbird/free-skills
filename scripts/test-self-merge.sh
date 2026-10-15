@@ -1904,6 +1904,119 @@ fi
 
 rm -f "$SHIMD/ssh"
 
+# ---- handoff to merge-cleanup ----
+# After `merge`, the self-merge skill hands the merged PR to merge-cleanup.
+# std_setup already leaves the scratch forge in the state merge-cleanup
+# requires (a real merge commit on the bare's base, the work clone's base at
+# the pre-merge tip), so one scenario runs both scripts in sequence against
+# their own gh shims. The second shim mirrors scripts/test-merge-cleanup.sh's
+# routing so merge-cleanup.sh's own --jq filters run against the fixtures.
+
+MC_SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/skills/merge-cleanup/merge-cleanup.sh"
+if ! [ -f "$MC_SCRIPT" ]; then
+  skip=$((skip + 1))
+  echo "SKIP: handoff case needs $MC_SCRIPT" >&2
+else
+MCSHIM="$TMP/mc-shim"; MCFIX="$TMP/mc-fix"
+mkdir -p "$MCSHIM" "$MCFIX"
+{
+  echo '#!/bin/bash'
+  echo "FIX=\"$MCFIX\""
+  cat <<'MCEOF'
+echo "$*" >> "$FIX/calls.log"
+sub="" verb="" api="" json="" jqf="" head=false base=false slurp=false prev=""
+for arg in "$@"; do
+  case "$prev" in --json) json="$arg" ;; --jq) jqf="$arg" ;; esac
+  case "$arg" in
+    pr|api) [ -n "$sub" ] || sub="$arg" ;;
+    view|list|edit) [ "$sub" != pr ] || [ -n "$verb" ] || verb="$arg" ;;
+    graphql|repos/*) api="$arg" ;;
+    --json=*) json="${arg#--json=}" ;;
+    --jq=*) jqf="${arg#--jq=}" ;;
+    --head=*) head=true ;;
+    --base=*) base=true ;;
+    --slurp) slurp=true ;;
+  esac
+  prev="$arg"
+done
+fixture=""
+if [ "$sub" = api ]; then
+  case "$api" in
+    graphql) fixture="$FIX/associated.json" ;;
+    *"/pulls?"*"head="*) fixture="$FIX/shared.json" ;;
+    *"/pulls?"*"base="*) fixture="$FIX/stacked.json" ;;
+    repos/*)
+      case "$jqf" in *default_branch*) fixture="$FIX/repo-base.json" ;; *)
+        fixture="$FIX/repo-head.json" ;; esac ;;
+  esac
+elif [ "$sub" = pr ] && [ "$verb" = view ]; then
+  case "$json" in *headRefName*) fixture="$FIX/pr.json" ;; *)
+    fixture="$FIX/stacked-view.json" ;; esac
+elif [ "$sub" = pr ] && [ "$verb" = list ]; then
+  [ "$head" = false ] || fixture="$FIX/shared.json"
+  [ "$base" = false ] || fixture="$FIX/stacked.json"
+elif [ "$sub" = pr ] && [ "$verb" = edit ]; then
+  exit 0
+fi
+[ -n "$fixture" ] && [ -f "$fixture" ] || exit 1
+if [ -n "$jqf" ]; then
+  [ "$slurp" = false ] && exec jq -r "$jqf" "$fixture"
+  exec jq -s -r "$jqf" "$fixture"
+fi
+[ "$slurp" = false ] || exec jq -s '.' "$fixture"
+exec cat "$fixture"
+MCEOF
+} > "$MCSHIM/gh"
+chmod +x "$MCSHIM/gh"
+
+scenario "merge-cleanup tidies the PR self-merge just merged"
+std_setup; std_fixtures
+printf '{"title":"Fix the thing"}' > "$FIX/title.json"
+run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
+want_rc 0
+want_out 'OK merge {"merged_at":'
+# merge-cleanup reads the merged head from the forge, not from OK merge.
+jq -n --arg b "$HB" --arg o "$FEAT_OID" \
+  '{state:"MERGED",mergedAt:"2026-07-25T12:00:00Z",headRefName:$b,
+    baseRefName:"main",headRefOid:$o,isCrossRepository:false,
+    headRepositoryOwner:{login:"owner"},headRepository:{name:"name"},
+    url:"https://github.invalid/owner/name/pull/83",
+    closingIssuesReferences:[]}' > "$MCFIX/pr.json"
+jq -n '{default_branch:"main",fork:false,forks_count:0,
+    delete_branch_on_merge:false,parent:null,source:null,
+    clone_url:"https://github.invalid/owner/name.git",
+    ssh_url:"git@github.invalid:owner/name.git",
+    merge_commit_title:"PR_TITLE",merge_commit_message:"BLANK"}' \
+  | tee "$MCFIX/repo-base.json" > "$MCFIX/repo-head.json"
+printf '[]\n' > "$MCFIX/shared.json"
+printf '[]\n' > "$MCFIX/stacked.json"
+printf '{"baseRefName":"main"}\n' > "$MCFIX/stacked-view.json"
+jq -n --arg oid "$FEAT_OID" \
+  '{data:{repository:{object:{associatedPullRequests:{
+    pageInfo:{hasNextPage:false,endCursor:"cursor"},
+    nodes:[{number:83,state:"MERGED",headRefName:"feat",headRefOid:$oid,
+      baseRepository:{nameWithOwner:"owner/name"},
+      headRepository:{nameWithOwner:"owner/name"}}]}}}}}' \
+  > "$MCFIX/associated.json"
+OUT=$(cd "$WORK" && PATH="$MCSHIM:$PATH" bash "$MC_SCRIPT" \
+  --repo github.invalid/owner/name --pr 83 --checkout "$WORK" \
+  --base-remote origin --head-remote origin 2>"$FIX/stderr")
+RC=$?
+want_rc 0
+want_out 'OK cleanup'
+want_out '"remote_branch":"deleted"'
+want_out '"base_resync":"resynced"'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  bad "the remote head survived merge-cleanup"
+else ok; fi
+if git -C "$WORK" show-ref --verify --quiet "refs/heads/$HB"; then
+  bad "the local head survived merge-cleanup"
+else ok; fi
+[ "$(git -C "$WORK" symbolic-ref --short HEAD)" = "$BB" ] && ok || bad "HEAD left $BB"
+[ "$(git -C "$WORK" rev-parse HEAD)" = "$(git -C "$BARE" rev-parse "refs/heads/$BB")" ] \
+  && ok || bad "local $BB was not resynced to the merged base"
+fi
+
 fi
 
 note=""
