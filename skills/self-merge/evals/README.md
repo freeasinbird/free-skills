@@ -15,13 +15,15 @@ stubs, and grading artifacts belong in a scratch workspace outside the repo.
   5. `unavailable-tool`: Existing authority with missing tracker tooling.
   6. `missing-authority`: Issue verification without closure or tracker writes.
   7. `cleanup-stop-after-merge`: Independent duty and watch shutdown survive
-     a cleanup STOP; the dependent local audit stays blocked.
+     a merge-cleanup STOP; the dependent local audit stays blocked.
   8. `unreadable-policy`: Missing source is not readable absence.
   9. `unverified-duty-result`: A successful write call with an unknown result.
-  10. `reuse-reconciliation-procedure`: Reuse merge-cleanup's non-Git stages,
-      including freshness, full-input rereads, and its observed ledger.
-  11. `reuse-without-authority`: Available reconciliation procedures and a
-      complete record don't grant tracker authority to a self-merge request.
+  10. `reuse-reconciliation-procedure`: Continue with merge-cleanup's
+      reconciliation stages, including freshness, full-input rereads, and its
+      observed ledger, without repeating its finished Git cleanup.
+  11. `reuse-without-tracker-authority`: Available reconciliation procedures,
+      a complete record, and finished Git cleanup don't grant tracker authority
+      on their own.
   12. `policy-revoked-before-write`: A changed base revokes the sole tracker
       grant before a project-local write, leaving the duty blocked.
   13. `policy-moved-before-report`: A final base change preserves the verified

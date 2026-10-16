@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # self-merge.sh: the executable form of the self-merge skill's guarded
-# merge-and-cleanup sequence. The skill's prose owns the judgment (when
+# merge sequence. It ends at the merge; post-merge cleanup belongs to the
+# merge-cleanup skill. The skill's prose owns the judgment (when
 # self-merge applies, the pre-merge guardrails, what to do when a guard
 # fires); this script owns the mechanics, so no agent re-derives quoting,
 # encoding, or parsing rules at runtime. Every forge- or git-sourced value
@@ -12,7 +13,6 @@
 #   self-merge.sh check   --pr N --repo owner/name
 #   self-merge.sh land    --pr N --repo owner/name --head <40-hex-oid>
 #   self-merge.sh merge   --pr N --repo owner/name --head <40-hex-oid>
-#   self-merge.sh cleanup --pr N --repo owner/name --head <40-hex-oid>
 #     [--base-remote NAME]   # override remote resolution for the base repo
 #     [--head-remote NAME]   # override remote resolution for the head repo
 #     [--interval 10]        # land/merge: seconds between CI and MERGED polls
@@ -20,10 +20,10 @@
 #     [--ci-cap-minutes 30]  # land phase: total wait for CI on the head
 #     [--dry-run]            # land phase only: report, never rebase or merge
 #
-# Run each phase from the checkout the cleanup will rewrite (the one that
-# holds, or will hold, the base branch). --repo is required, never
-# defaulted: a bare PR number resolves against the CLI's default
-# repository, which in a fork clone can act on a different PR entirely.
+# Run each phase from the base-branch checkout, the one merge-cleanup will
+# later rewrite. --repo is required, never defaulted: a bare PR number
+# resolves against the CLI's default repository, which in a fork clone can
+# act on a different PR entirely.
 #
 # check    Pre-merge guards: PR open, no head/base name collision, clean
 #          workspace, no git operation in progress, no competing worktree
@@ -40,12 +40,6 @@
 # merge    Merges pinned to --head with an explicit title-only message,
 #          then polls until the forge reports the PR MERGED (a zero exit
 #          from the merge command proves enqueueing, not merging).
-# cleanup  Post-merge: land on and resync the base branch, then a
-#          lease-protected remote branch delete behind re-checked remote and
-#          consumer guards,
-#          stop before mutating branches when a separate linked head worktree
-#          remains, keep the local branch for a separate deliberate delete,
-#          prune.
 #
 # Last line on stdout is the machine-readable result:
 #   OK <phase> <json>            phase completed; json carries the facts
@@ -66,8 +60,8 @@ usage() {
 }
 
 case "${1:-}" in
-  check|land|merge|cleanup) PHASE="$1"; shift ;;
-  *) echo "self-merge.sh: first argument must be check, land, merge, or cleanup" >&2; usage ;;
+  check|land|merge) PHASE="$1"; shift ;;
+  *) echo "self-merge.sh: first argument must be check, land, or merge" >&2; usage ;;
 esac
 
 # Recognize the option, then require its value, before reading $2: a
@@ -413,38 +407,9 @@ collision_check() {
   fi
 }
 
-# Test raw ref presence without a version-new `show-ref --exists` dependency.
-# Ask symbolic-ref first, which sees even a dangling symref; then verify an
-# ordinary direct ref. Return 0 for present and 1 for absent; every other Git
-# result is an unknown state and stops the caller.
-ref_exists() { # ref_exists <full-ref>
-  local rc=0
-  git symbolic-ref -q "$1" >/dev/null 2>&1 || rc=$?
-  case "$rc" in
-    0) return 0 ;;
-    1) ;;
-    *) lookup_failed local-ref "could not determine whether $1 is symbolic (git symbolic-ref exit $rc)" ;;
-  esac
-  rc=0
-  git show-ref --verify --quiet "$1" >/dev/null 2>&1 || rc=$?
-  case "$rc" in
-    0) return 0 ;;
-    1) ;;
-    *) lookup_failed local-ref "could not determine whether $1 exists (git show-ref exit $rc)" ;;
-  esac
-  # A direct ref can become a dangling symref between the two reads above.
-  # Repeat the symbolic probe before linearizing the result as absent.
-  rc=0
-  git symbolic-ref -q "$1" >/dev/null 2>&1 || rc=$?
-  case "$rc" in
-    0) return 0 ;;
-    1) return 1 ;;
-    *) lookup_failed local-ref "could not recheck whether $1 is symbolic (git symbolic-ref exit $rc)" ;;
-  esac
-}
-
 # Workspace preflight, in the checkout this script runs from, which is the
-# working tree the cleanup rewrites. A clean tree elsewhere says nothing.
+# base checkout the later phases operate from. A clean tree elsewhere says
+# nothing.
 workspace_preflight() {
   # -uall on the command line overrides status.showUntrackedFiles=no; a
   # guard that inherits repository configuration can be switched off by the
@@ -459,8 +424,8 @@ workspace_preflight() {
 }
 
 # Is a git operation paused in the given worktree? Operation state is
-# per-worktree, so the cleanup checkout's probes say nothing about the
-# worktree being removed. Probe the per-worktree paths, never the names as
+# per-worktree, so this checkout's probes say nothing about another
+# worktree. Probe the per-worktree paths, never the names as
 # revisions: an ordinary refs/heads/MERGE_HEAD otherwise looks like a
 # paused merge. out_exact preserves a trailing newline in a linked
 # worktree's git-dir path; -L also catches a dangling marker symlink.
@@ -476,58 +441,6 @@ op_probe() { # op_probe <dir>: returns 0 and sets OP_FOUND when one is paused
     fi
   done
   return 1
-}
-
-# Diagnose state that makes even manual worktree removal unsafe. Automated
-# cleanup stops afterward even when this inventory is clean.
-worktree_preservation_preflight() { # worktree_preservation_preflight <dir>
-  local d="$1" inv flagged
-  if op_probe "$d"; then
-    stop worktree-op-in-progress "$OP_FOUND exists in the linked head worktree at $d"
-  fi
-  inv=$(git -C "$d" status -uall --porcelain --ignored 2>/dev/null) \
-    || lookup_failed worktree-inventory "could not inventory $d"
-  [ -z "$inv" ] \
-    || stop worktree-dirty "the worktree at $d holds untracked or ignored files; preserve it and report this stop; removal authority alone does not authorize moving, changing, or deleting its contents to clear the stop"
-  # A flagged row is hidden state unless something explains its absence.
-  # Sparse checkout marks every excluded path skip-worktree (`S`) and leaves
-  # it absent, which is the one benign absence: an absent assume-unchanged
-  # row is an uncommitted deletion, and status reports neither. So exempt an
-  # absent row only when it is `S` and this worktree has sparse checkout on
-  # (the setting is per-worktree, so it is read from there). Read
-  # NUL-terminated (`-vz`) rather than line-wise, and stream through a temp
-  # file, because a path can hold a newline and command substitution drops
-  # NUL bytes outright; `--full-name` keeps each path relative to the
-  # worktree root that `$d/` then anchors. The read's own failure must not
-  # count as "no flagged files": a pipeline into grep -c reports grep's
-  # status, and zero matches and a failed git read print the same 0.
-  # --bool because git accepts every boolean spelling (`yes`, `on`, `1`) while
-  # --get returns the raw string, so a raw comparison reports an ordinary
-  # sparse worktree as hidden work. A failed read is not sparse, which exempts
-  # nothing.
-  local tmp rec tag sparse=false sparse_cfg
-  flagged=0
-  out_exact sparse_cfg git -C "$d" config --bool --get core.sparseCheckout || sparse_cfg=false
-  [ "$sparse_cfg" != true ] || sparse=true
-  tmp=$(mktemp) || lookup_failed worktree-inventory "mktemp failed"
-  git -C "$d" ls-files -vz --full-name > "$tmp" 2>/dev/null \
-    || { rm -f "$tmp"; lookup_failed worktree-inventory "could not read the index of $d"; }
-  while IFS= read -r -d '' rec; do
-    case "$rec" in
-      [a-z]\ *|S\ *) ;;
-      *) continue ;;
-    esac
-    tag="${rec%% *}"
-    rec="${rec#? }"
-    if ! [ -e "$d/$rec" ] && ! [ -L "$d/$rec" ] \
-      && [ "$tag" = S ] && [ "$sparse" = true ]; then
-      continue
-    fi
-    flagged=$((flagged + 1))
-  done < "$tmp"
-  rm -f "$tmp"
-  [ "$flagged" -eq 0 ] \
-    || stop worktree-flagged "$flagged tracked file(s) in $d carry assume-unchanged or skip-worktree; their edits and deletions are invisible to status"
 }
 
 # Parse `git worktree list --porcelain -z` NUL-aware: the output is
@@ -556,7 +469,7 @@ worktree_scan() { # worktree_scan <ref>: sets WT_MATCH to the unique path
   done < "$tmp"
   rm -f "$tmp"
   [ "$count" -le 1 ] \
-    || stop duplicate-worktree "$count worktrees check out $want; cleanup cannot choose one without leaving or moving another"
+    || stop duplicate-worktree "$count worktrees check out $want; the sequence cannot choose one without leaving or moving another"
 }
 
 layout_check() {
@@ -576,10 +489,9 @@ layout_check() {
   if [ -n "$base_wt" ] && ! [ "$base_wt" -ef "$CWD_CDUP" ]; then
     stop wrong-checkout "the base branch is checked out in another worktree: run this phase from $base_wt"
   fi
-  # Reject ambiguity at the layout boundary. Cleanup repeats this scan after
-  # validating the local head ref and immediately before remote resolution,
-  # retrieving the path afresh and closing layout changes during those local
-  # checks.
+  # Reject ambiguity at the layout boundary. land_rebase repeats this scan
+  # immediately before moving the head worktree, retrieving the path afresh
+  # and closing layout changes made during the earlier checks.
   worktree_scan "refs/heads/$BRANCH"
 }
 
@@ -626,14 +538,14 @@ consumer_checks() {
 
 # A same-repository head on a base repository that is itself a fork can
 # also head PRs to sibling forks, which no repository-scoped query can
-# enumerate. If this repository auto-deletes heads on merge, cleanup's
-# kept_fork_network path runs too late: the forge already removed the
-# branch. Stop before both direct merges and queue enqueueing.
+# enumerate. If this repository auto-deletes heads on merge, merge-cleanup's
+# consumer guards run too late: the forge already removed the branch. Stop
+# before both direct merges and queue enqueueing.
 fork_auto_delete_check() {
   load_repo_facts
   if [ "$IS_FORK" != true ] && [ "$DELETE_BRANCH_ON_MERGE" = true ]; then
     if [ "$REPO_IS_FORK" = true ] || [ "$FORKS_COUNT" -gt 0 ]; then
-      stop fork-auto-delete "$REPO participates in a fork network and auto-deletes merged head branches; $BRANCH may have unenumerable fork consumers, so merging could delete it before cleanup can keep it"
+      stop fork-auto-delete "$REPO participates in a fork network and auto-deletes merged head branches; $BRANCH may have unenumerable fork consumers, so merging could delete it before merge-cleanup can check its consumers"
     fi
   fi
 }
@@ -774,7 +686,7 @@ url_id() {
 # Ask Git to expand its leading ~/ and ~user/ path syntax, root other relative
 # paths at the worktree root, and follow every symlink before the identity
 # crosses a checkout boundary. Keep the remaining resolution in shell so
-# cleanup does not gain another executable dependency.
+# the script does not gain another executable dependency.
 canonical_local_path() { # canonical_local_path <path>
   local path="$1" link dir base physical suffix="" hops=0
   case "$path" in
@@ -1556,260 +1468,8 @@ phase_merge() {
   done
 }
 
-phase_cleanup() {
-  local merged_at local_tip local_deleted=absent base_symbolic_rc=0
-  local removed_worktree=none initial_base_id="" initial_head_id=""
-  local remote_deleted=kept_fork repo_fork_network=false
-  merged_at=$(gh pr view "$PR" --repo="$REPO" --json state,mergedAt \
-    --jq 'if .state == "MERGED" and .mergedAt != null then .mergedAt else "no" end' 2>/dev/null) \
-    || lookup_failed pr-view "could not read PR $PR's merge state"
-  [ "$merged_at" != no ] || stop pr-not-merged "the forge does not report PR $PR merged; cleanup would tidy around a branch nothing merged"
-  collision_check
-  workspace_preflight
-  layout_check
-
-  git symbolic-ref -q "refs/heads/$BASE" >/dev/null 2>&1 \
-    || base_symbolic_rc=$?
-  case "$base_symbolic_rc" in
-    0) stop local-base "local $BASE is a symbolic ref; preserve it rather than checking out and following its target" ;;
-    1) ;;
-    *) lookup_failed local-base "could not determine whether local $BASE is symbolic (git symbolic-ref exit $base_symbolic_rc)" ;;
-  esac
-
-  # A linked head worktree is a stop before any branch mutation. Git has no
-  # portable operation that atomically verifies its HEAD and inventories its
-  # files while removing the worktree: a concurrent reset can move a clean
-  # detached HEAD after either check, and removal then drops its only ref and
-  # reflog. Diagnose hidden state first, but leave even a clean worktree for a
-  # separate, explicitly idle cleanup step.
-  if ref_exists "refs/heads/$BRANCH"; then
-    if git symbolic-ref -q "refs/heads/$BRANCH" >/dev/null 2>&1; then
-      stop local-branch "local $BRANCH is a symbolic ref; preserve it rather than following it to another branch"
-    fi
-    local_tip=$(git rev-parse "refs/heads/$BRANCH" 2>/dev/null) \
-      || lookup_failed local-branch "could not read local $BRANCH"
-    [ "$local_tip" = "$HEAD_OID" ] \
-      || stop local-branch "local $BRANCH is $local_tip, not the pinned merged head $HEAD_OID; preserve the repurposed checkout"
-  fi
-  worktree_scan "refs/heads/$BRANCH"
-  if [ -n "$WT_MATCH" ] && ! [ "$WT_MATCH" -ef "$CWD_CDUP" ]; then
-    worktree_preservation_preflight "$WT_MATCH"
-    stop head-worktree-present "the clean head worktree at $WT_MATCH remains; report it for owner removal or separately authorized cleanup; honor existing task-specific authority, retain preservation and ownership checks, and rerun cleanup only after the stop is cleared"
-  fi
-
-  # Base remote first: the resync depends on it whatever happens to the
-  # head branch.
-  if [ -n "$BASE_REMOTE_OPT" ]; then
-    BASE_REMOTE="$BASE_REMOTE_OPT"
-  else
-    resolve_remote "$REPO"
-    [ -n "$RESOLVED_REMOTE" ] \
-      || stop remote-unresolved "no configured remote's URL matches $REPO; pass --base-remote"
-    BASE_REMOTE="$RESOLVED_REMOTE"
-  fi
-  remote_repo_check "$BASE_REMOTE" base
-  initial_base_id="$CHECKED_REMOTE_ID"
-
-  # An explicit hostless head remote is a trust decision made against the
-  # configuration active at invocation. Pin that identity now so the checkout
-  # cannot silently redirect the later delete. Hosted remotes are checked
-  # against the forge's authoritative endpoints at use time instead.
-  if [ "$IS_FORK" != true ] && [ "$REPO_IS_FORK" != true ] \
-      && [ "$FORKS_COUNT" -eq 0 ]; then
-    if [ -n "$HEAD_REMOTE_OPT" ]; then
-      remote_repo_check "$HEAD_REMOTE_OPT" head
-      initial_head_id="$CHECKED_REMOTE_ID"
-    else
-      initial_head_id="$initial_base_id"
-    fi
-  fi
-
-  # Land on the base branch. The bare-name switch is only taken when the
-  # local branch verifiably exists (a rev-parse existence probe is
-  # satisfied by a same-named tag, and a bare checkout then detaches HEAD
-  # at the tag); otherwise the branch is created from a freshly fetched
-  # tracking ref, since the start-point can be absent in a fresh,
-  # single-branch, or sparse clone. Both switches refuse to overwrite an
-  # ignored file the base tracks; that refusal surfaces as a stop.
-  base_created=false
-  if git show-ref --verify --quiet "refs/heads/$BASE"; then
-    git checkout --no-overwrite-ignore "$BASE" >/dev/null 2>&1 \
-      || stop checkout-refused "switching to $BASE was refused (an ignored file the base tracks, or a conflicting state); nothing was overwritten"
-  else
-    git fetch -- "$BASE_REMOTE" "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-      || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
-    git checkout --no-overwrite-ignore --no-track -b "$BASE" "refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-      || stop checkout-refused "creating local $BASE from $BASE_REMOTE was refused; nothing was overwritten"
-    base_created=true
-  fi
-  [ "$(git symbolic-ref -q HEAD 2>/dev/null)" = "refs/heads/$BASE" ] \
-    || stop detached "HEAD is not on $BASE after the switch (a same-named tag or OID shadowed the branch)"
-
-  # Branch-conditioned includes can change every remote URL at checkout. Do
-  # not carry the pre-landing remote selection into the resync: resolve and
-  # validate it again under the base branch's effective configuration. Hosted
-  # URLs must still identify the PR repository. A post-checkout hostless path
-  # cannot be matched to the forge, so it must be the exact path explicitly
-  # trusted before the checkout.
-  if [ -n "$BASE_REMOTE_OPT" ]; then
-    BASE_REMOTE="$BASE_REMOTE_OPT"
-  else
-    resolve_remote "$REPO"
-    [ -n "$RESOLVED_REMOTE" ] \
-      || stop remote-unresolved "no configured remote's URL matches $REPO after landing on $BASE; pass --base-remote"
-    BASE_REMOTE="$RESOLVED_REMOTE"
-  fi
-  remote_repo_check "$BASE_REMOTE" base
-  case "$CHECKED_REMOTE_ID" in path\ *)
-    [ "$CHECKED_REMOTE_ID" = "$initial_base_id" ] \
-      || stop remote-config-changed "base remote $BASE_REMOTE became a hostless path not trusted before checkout; preserve the remote branch and validate the new path manually" ;;
-  esac
-  if [ "$base_created" = true ]; then
-    git config "branch.$BASE.remote" "$BASE_REMOTE" \
-      && git config "branch.$BASE.merge" "refs/heads/$BASE" \
-      || stop tracking-config-failed "could not configure local $BASE to track $BASE_REMOTE/$BASE; preserve the remote branch and repair the upstream manually"
-  fi
-
-  # Resync before deleting the remote feature branch: fetch, then an explicit
-  # fast-forward merge. Not git pull: its
-  # merge step updates ignored files by default and rejects
-  # --no-overwrite-ignore, and a bare pull follows the configured
-  # upstream, which in a fork clone can be the fork's stale copy.
-  git fetch -- "$BASE_REMOTE" "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-    || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
-  git merge --ff-only --no-overwrite-ignore "refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
-    || stop resync-failed "fast-forwarding $BASE refused (divergence, or an ignored file the fetch started tracking); resolve it rather than forcing"
-
-  # Delete the remote head only after the base resync succeeds. A fork's
-  # branch may head PRs anywhere in its fork network, which per-repository
-  # queries cannot enumerate, so fork-network branches are kept and reported.
-  # Refresh that fact after the resync because a first fork can appear while
-  # cleanup is running.
-  REPO_FACTS_LOADED=""
-  load_repo_facts
-  if [ "$REPO_IS_FORK" = true ] || [ "$FORKS_COUNT" -gt 0 ]; then
-    repo_fork_network=true
-  fi
-  if [ "$IS_FORK" != true ] && [ "$repo_fork_network" = true ]; then
-    remote_deleted=kept_fork_network
-  fi
-  if [ "$IS_FORK" != true ] && [ "$repo_fork_network" != true ]; then
-    if [ -n "$HEAD_REMOTE_OPT" ]; then
-      HEAD_REMOTE="$HEAD_REMOTE_OPT"
-    else
-      HEAD_REMOTE="$BASE_REMOTE"
-    fi
-    remote_repo_check "$HEAD_REMOTE" head
-    # Capture the alias endpoint pin (empty for a direct remote) now: the head
-    # ls-remote and the lease-protected delete both route through it so a
-    # Match-exec change after acceptance cannot redirect the destructive push.
-    local head_ssh_pin="$PINNED_SSH_COMMAND"
-    case "$CHECKED_REMOTE_ID" in path\ *)
-      [ "$CHECKED_REMOTE_ID" = "$initial_head_id" ] \
-        || stop remote-config-changed "head remote $HEAD_REMOTE became a hostless path not trusted before checkout; preserve the branch and validate the new path manually" ;;
-    esac
-    # Whatever chose the remote, override included: the repository the
-    # existence and OID checks read (the fetch URL) must be the only
-    # repository the delete writes. git push sends to every configured
-    # push URL, so all of them are held to the fetch URL's identity; a
-    # split would validate one repository and delete from another.
-    local hr_furl
-    out_exact hr_furl git remote get-url -- "$HEAD_REMOTE" \
-      || lookup_failed head-remote "could not read $HEAD_REMOTE's URL"
-    push_ids_match "$HEAD_REMOTE" "$(url_id "$hr_furl")" \
-      || stop pushurl-mismatch "$HEAD_REMOTE must have exactly one effective push destination matching its fetch URL; git broadcasts to every configured push URL"
-    local ls_out ls_rc remote_oid="" line_oid line_ref exact=0 decoys=0
-    ls_out=$(git_with_ssh_pin "$head_ssh_pin" ls-remote --exit-code --heads \
-      -- "$HEAD_REMOTE" "refs/heads/$BRANCH" 2>/dev/null)
-    ls_rc=$?
-    if [ "$ls_rc" -eq 2 ]; then
-      remote_deleted=already # a genuine absence: --exit-code separates it
-    elif [ "$ls_rc" -ne 0 ]; then
-      # from a transport or auth failure, which must not read as deletion
-      lookup_failed ls-remote "could not reach $HEAD_REMOTE to check refs/heads/$BRANCH (exit $ls_rc)"
-    else
-      # The pattern match is not exact: a remote branch literally named
-      # refs/heads/<branch> matches the qualified pattern too, so accept
-      # only a full-string ref-column match.
-      while IFS=$'\t' read -r line_oid line_ref; do
-        if [ "$line_ref" = "refs/heads/$BRANCH" ]; then
-          exact=$((exact + 1)); remote_oid="$line_oid"
-        elif [ -n "$line_ref" ]; then
-          decoys=$((decoys + 1))
-        fi
-      done <<< "$ls_out"
-      if [ "$exact" -eq 0 ]; then
-        remote_deleted=already
-      elif [ "$exact" -gt 1 ]; then
-        lookup_failed ls-remote "ambiguous listing for refs/heads/$BRANCH"
-      else
-        # A sibling ref that suffix-matches (refs/heads/refs/heads/<branch>)
-        # makes the delete refspec itself ambiguous: git suffix-matches push
-        # destinations, so both --delete and the :ref form refuse with "dst
-        # refspec matches more than one" (verified on git 2.50). No push
-        # refspec can express the delete atomically then, and a forge-API
-        # delete re-runs no lease check, so this is a stop, not a workaround.
-        [ "$decoys" -eq 0 ] \
-          || stop ambiguous-ref "a ref suffix-matching refs/heads/$BRANCH exists on $HEAD_REMOTE; git cannot express this delete unambiguously, delete it manually"
-        [ "$remote_oid" = "$HEAD_OID" ] \
-          || stop oid-mismatch "remote $BRANCH is $remote_oid but the merged head was $HEAD_OID; the branch moved or was reused after the merge"
-        [ "$FORGE_HEAD_OID" = "$HEAD_OID" ] \
-          || stop oid-mismatch "the forge reports head $FORGE_HEAD_OID but the merged head was $HEAD_OID"
-        # Fork-network membership and consumers are re-checked at the last
-        # moment the branch exists: either answer can go stale after the
-        # resync and remote-identity checks.
-        REPO_FACTS_LOADED=""
-        load_repo_facts
-        if [ "$REPO_IS_FORK" = true ] || [ "$FORKS_COUNT" -gt 0 ]; then
-          remote_deleted=kept_fork_network
-        else
-          consumer_checks
-          # The lease makes the OID guard atomic: a push landing between
-          # the check above and this delete fails the delete instead of
-          # losing the new work. A plain --delete or a forge-API delete
-          # re-opens that race.
-          git_with_ssh_pin "$head_ssh_pin" push --delete \
-            --force-with-lease="refs/heads/$BRANCH:$HEAD_OID" \
-            -- "$HEAD_REMOTE" "refs/heads/$BRANCH" >/dev/null 2>&1 \
-            || stop lease-failed "the lease-protected delete of $BRANCH on $HEAD_REMOTE was refused; the ref may have just moved"
-          remote_deleted=deleted
-        fi
-      fi
-    fi
-  fi
-
-  # Keep the local branch. Git exposes no portable deletion that combines an
-  # expected-old OID with the checked-out-worktree guard: update-ref supplies
-  # the former but can dangle a worktree, while branch -d supplies the latter
-  # but can delete a backward-repointed ref between verification and deletion.
-  # The report makes the remaining deliberate step explicit.
-  if ref_exists "refs/heads/$BRANCH"; then
-    local_deleted=kept_manual
-  else
-    local_deleted=absent
-  fi
-
-  # Prune with the remote named: a bare --prune prunes only the default
-  # remote. HEAD_REMOTE is only bound on the delete path. A failure leaves
-  # cleanup incomplete, so it cannot be discarded before an OK report.
-  if [ -n "${HEAD_REMOTE:-}" ]; then
-    git fetch --prune -- "$HEAD_REMOTE" >/dev/null 2>&1 \
-      || lookup_failed prune "cleanup completed its branch operations but could not prune $HEAD_REMOTE"
-    if [ "$HEAD_REMOTE" != "$BASE_REMOTE" ]; then
-      git fetch --prune -- "$BASE_REMOTE" >/dev/null 2>&1 \
-        || lookup_failed prune "cleanup completed its branch operations but could not prune $BASE_REMOTE"
-    fi
-  else
-    git fetch --prune -- "$BASE_REMOTE" >/dev/null 2>&1 \
-      || lookup_failed prune "cleanup completed its branch operations but could not prune $BASE_REMOTE"
-  fi
-
-  echo "OK cleanup {\"remote_branch\":\"$remote_deleted\",\"local_branch\":\"$local_deleted\",\"worktree_removed\":\"$(json_escape "$removed_worktree")\",\"resynced\":\"$(json_escape "$BASE")\"}"
-}
-
 case "$PHASE" in
   check) phase_check ;;
   land) phase_land ;;
   merge) phase_merge ;;
-  cleanup) phase_cleanup ;;
 esac

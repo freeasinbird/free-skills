@@ -46,7 +46,7 @@ OID=0123456789abcdef0123456789abcdef01234567
 
 t 4 "valid check reaches the forge read" check --pr 83 --repo owner/name
 t 4 "valid merge reaches the forge read" merge --pr 83 --repo owner/name --head "$OID"
-t 4 "valid cleanup reaches the forge read" cleanup --pr 83 --repo owner/name --head "$OID"
+t 64 "cleanup is no longer a phase" cleanup --pr 83 --repo owner/name --head "$OID"
 t 4 "uppercase head normalized" merge --pr 83 --repo owner/name --head "$(printf '%s' "$OID" | tr 'a-f' 'A-F')"
 t 4 "valid land reaches the forge read" land --pr 83 --repo owner/name --head "$OID"
 t 4 "land dry run reaches the forge read" land --pr 83 --repo owner/name --head "$OID" --dry-run
@@ -66,7 +66,6 @@ t 64 "repo extra segment" check --pr 83 --repo a/b/c
 t 64 "repo query injection" check --pr 83 --repo 'a/b?x=1'
 t 64 "repo missing name" check --pr 83 --repo a/
 t 64 "merge without head" merge --pr 83 --repo owner/name
-t 64 "cleanup without head" cleanup --pr 83 --repo owner/name
 t 64 "land without head" land --pr 83 --repo owner/name
 t 64 "dry run takes no value" land --pr 83 --repo owner/name --head "$OID" --dry-run yes
 t 64 "dry run outside land never merges" merge --pr 83 --repo owner/name --head "$OID" --dry-run
@@ -81,8 +80,8 @@ t 64 "interval beyond arithmetic bound" check --pr 83 --repo owner/name --interv
 t 64 "cap non-numeric" check --pr 83 --repo owner/name --cap-minutes xyz
 t 64 "cap leading zeros" check --pr 83 --repo owner/name --cap-minutes 08
 t 64 "cap beyond arithmetic bound" check --pr 83 --repo owner/name --cap-minutes 10000000
-t 64 "base-remote leading hyphen" cleanup --pr 83 --repo owner/name --head "$OID" --base-remote --upload-pack=/x
-t 64 "head-remote leading hyphen" cleanup --pr 83 --repo owner/name --head "$OID" --head-remote -r
+t 64 "base-remote leading hyphen" land --pr 83 --repo owner/name --head "$OID" --base-remote --upload-pack=/x
+t 64 "head-remote leading hyphen" land --pr 83 --repo owner/name --head "$OID" --head-remote -r
 
 # Missing gh: preflight must exit 69 immediately.
 BASH_BIN=$(command -v bash)
@@ -319,7 +318,6 @@ std_fixtures() { # std_fixtures [state]: fixtures matching std_setup
   merged_fx
 }
 CHECK=(check --pr 83 --repo owner/name)
-CLEAN=(cleanup --pr 83 --repo owner/name --base-remote origin --head-remote origin)
 
 # ---- check phase ----
 
@@ -659,14 +657,14 @@ run_sm "${CHECK[@]}"
 want_rc 0
 want_out 'OK check'
 
-scenario "duplicate base worktrees stop before cleanup"
+scenario "duplicate base worktrees stop at check"
 std_setup; std_fixtures
 G "$WORK" worktree add --force "$SCEN/basewt" "$BB"
 run_sm "${CHECK[@]}"
 want_rc 2
 want_out 'STOP duplicate-worktree'
 
-scenario "duplicate head worktrees stop before cleanup"
+scenario "duplicate head worktrees stop at check"
 std_setup; std_fixtures
 G "$WORK" worktree add "$SCEN/featwt" "$HB"
 G "$WORK" worktree add --force "$SCEN/featwt2" "$HB"
@@ -680,6 +678,22 @@ G "$WORK" branch -D "$HB"
 run_sm "${CHECK[@]}"
 want_rc 2
 want_out 'STOP no-local-branch'
+
+scenario "a branch in a fork-owned repository can head an upstream PR: stop"
+std_setup; std_fixtures
+repo_fx "$BB" upstream/name
+echo '[{"number":83}]' > "$FIX/fork-shared.json"   # same number, other repo, still counts
+run_sm "${CHECK[@]}"
+want_rc 2
+want_out 'STOP shared-head'
+
+scenario "fork consumer lookups use the owner-qualified encoded form"
+std_setup 'feat#2' main
+pr_full OPEN 'feat#2' main "$FEAT_OID" true forker name
+repo_fx main; rules_fx '[]'; lists_empty
+run_sm "${CHECK[@]}"
+want_rc 0
+want_call 'pulls?state=open&head=forker:feat%232'
 
 # ---- merge phase ----
 
@@ -937,6 +951,18 @@ LAND=(land --pr 83 --repo owner/name --base-remote origin --head-remote origin -
 remote_feat() { git -C "$BARE" rev-parse refs/heads/feat; }
 local_feat() { git -C "$WORK" rev-parse refs/heads/feat; }
 worktree_count() { git -C "$WORK" worktree list --porcelain | grep -c '^worktree '; }
+# A stop before the rebase must leave both copies of the head where check
+# saw them; a push proves the guard ran too late.
+want_land_untouched() { # want_land_untouched <message>
+  if [ "$(remote_feat)" = "$FEAT_OID" ] && [ "$(local_feat)" = "$FEAT_OID" ]; then
+    ok
+  else bad "$1"; fi
+}
+want_land_pushed() { # the rebased head reached the forge
+  if [ "$(remote_feat)" != "$FEAT_OID" ] && [ "$(local_feat)" = "$(remote_feat)" ]; then
+    ok
+  else bad "the rebased head was not pushed (remote $(remote_feat), local $(local_feat))"; fi
+}
 
 scenario "land merges a head already on the tip once CI is green"
 land_setup; land_fixtures
@@ -1308,779 +1334,136 @@ want_rc 2
 want_out 'STOP not-on-tip'
 [ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "land pushed a fork's branch"
 
-# ---- cleanup phase ----
-
-scenario "same-repo cleanup deletes remote, resyncs, and keeps local branch"
-std_setup; std_fixtures
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"deleted"'
-want_out '"local_branch":"kept_manual"'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  bad "remote branch survived the lease delete"
-else ok; fi
-if git -C "$WORK" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the local branch was deleted automatically"; fi
-if [ "$(git -C "$WORK" symbolic-ref -q HEAD)" = "refs/heads/$BB" ] \
-   && [ "$(git -C "$WORK" rev-parse HEAD)" = "$(git -C "$BARE" rev-parse "refs/heads/$BB")" ]; then
-  ok
-else bad "work checkout did not land on the resynced base"; fi
-
-# Discriminating against the old delete-first sequence: the remote exists while
-# the feature branch is checked out and disappears from effective config on the
-# base. The old sequence deleted the head, switched, then failed its base fetch.
-scenario "a branch-conditioned base remote that disappears stops before delete"
-std_setup; std_fixtures
-G "$WORK" checkout "$HB"
-INC="$SCEN/feature-remote.cfg"
-G "$WORK" config --unset-all remote.origin.url
-G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
-git config --file "$INC" remote.origin.url "$BARE"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 4
-want_out 'LOOKUP_FAILED base-remote'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted before the post-landing remote stop"; fi
-
-# Discriminating against carrying a remote name across checkout. The include is
-# split across two mutually exclusive includes, so feature resolves origin to
-# the real repository while main resolves it to a different, valid local
-# repository whose main is a descendant. Without the identity pin, fetch and
-# fast-forward both succeed against the wrong repository.
-scenario "a branch-conditioned base remote cannot redirect the resync"
-std_setup; std_fixtures
-WRONG_BARE="$SCEN/wrong.git"
-WRONG_WORK="$SCEN/wrong-work"
-git clone -q --bare "$BARE" "$WRONG_BARE"
-git clone -q "$WRONG_BARE" "$WRONG_WORK"
-G "$WRONG_WORK" config user.email t@t; G "$WRONG_WORK" config user.name t
-G "$WRONG_WORK" checkout "$BB"
-echo wrong > "$WRONG_WORK/wrong.txt"; G "$WRONG_WORK" add .; G "$WRONG_WORK" commit -m wrong
-G "$WRONG_WORK" push origin "$BB"
-WRONG_OID=$(git -C "$WRONG_WORK" rev-parse HEAD)
-G "$WORK" checkout "$HB"
-INC="$SCEN/feature-remote.cfg"; MAIN_INC="$SCEN/base-remote.cfg"
-G "$WORK" config --unset-all remote.origin.url
-G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
-G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
-git config --file "$INC" remote.origin.url "$BARE"
-git config --file "$MAIN_INC" remote.origin.url "$WRONG_BARE"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP remote-config-changed'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted after the base remote redirected"; fi
-if [ "$(git -C "$WORK" rev-parse HEAD)" != "$WRONG_OID" ]; then
-  ok
-else bad "the base fast-forwarded from the wrong repository"; fi
-
-# A missing local base is created from the remote selected while the feature
-# branch is checked out. The checkout must not retain that pre-landing remote
-# as its upstream when base-conditioned configuration resolves the same
-# repository through another remote after landing.
-scenario "a created base tracks the post-landing remote"
-std_setup; std_fixtures
-G "$WORK" checkout "$HB"
-G "$WORK" branch -D "$BB"
-MAIN_INC="$SCEN/base-remote.cfg"
-G "$WORK" remote add base "$BARE"
-G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
-git config --file "$MAIN_INC" remote.origin.pushurl \
-  https://github.invalid/other/name.git
-GIT_REAL=$(command -v git)
-GIT_SHIM="$SCEN/git-shim"
-mkdir "$GIT_SHIM"
-printf '#!/bin/sh\nif [ "$1" = remote ] && [ "$2" = get-url ]; then\n  out=$("%s" "$@") || exit\n  if [ "$out" = "%s" ]; then\n    out=https://github.invalid/owner/name.git\n  fi\n  printf "%%s\\n" "$out"\n  exit 0\nfi\nexec "%s" "$@"\n' \
-  "$GIT_REAL" "$BARE" "$GIT_REAL" > "$GIT_SHIM/git"
-chmod +x "$GIT_SHIM/git"
-run_sm_with_git_shim "$GIT_SHIM" cleanup --pr 83 --repo owner/name \
-  --head "$FEAT_OID"
-want_rc 0
-if [ "$(git -C "$WORK" config --get "branch.$BB.remote")" = base ] \
-   && [ "$(git -C "$WORK" config --get "branch.$BB.merge")" = "refs/heads/$BB" ]; then
-  ok
-else bad "the created base did not track the post-landing remote"; fi
-
-# Refute the asymmetric identity check: validating only a new hosted URL would
-# still accept a checkout that replaces a forge-verified hosted remote with an
-# arbitrary hostless path. The path is valid and fast-forwardable, so equality
-# with the pre-checkout identity is the only available guard.
-scenario "a hosted base remote cannot become an untrusted hostless path"
-std_setup; std_fixtures
-WRONG_BARE="$SCEN/wrong.git"
-WRONG_WORK="$SCEN/wrong-work"
-git clone -q --bare "$BARE" "$WRONG_BARE"
-git clone -q "$WRONG_BARE" "$WRONG_WORK"
-G "$WRONG_WORK" config user.email t@t; G "$WRONG_WORK" config user.name t
-G "$WRONG_WORK" checkout "$BB"
-echo wrong > "$WRONG_WORK/wrong.txt"; G "$WRONG_WORK" add .; G "$WRONG_WORK" commit -m wrong
-G "$WRONG_WORK" push origin "$BB"
-WRONG_OID=$(git -C "$WRONG_WORK" rev-parse HEAD)
-G "$WORK" checkout "$HB"
-INC="$SCEN/feature-remote.cfg"; MAIN_INC="$SCEN/base-remote.cfg"
-G "$WORK" config --unset-all remote.origin.url
-G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
-G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
-git config --file "$INC" remote.origin.url https://github.invalid/owner/name.git
-git config --file "$MAIN_INC" remote.origin.url "$WRONG_BARE"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP remote-config-changed'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted after the hosted remote became local"; fi
-if [ "$(git -C "$WORK" rev-parse HEAD)" != "$WRONG_OID" ]; then
-  ok
-else bad "the base trusted a hostless replacement after checkout"; fi
-
-scenario "a checkout-switched symlink cannot redirect head deletion"
-std_setup; std_fixtures
-WRONG_BARE="$SCEN/wrong.git"
-G "$WORK" checkout "$HB"
-ln -s "$BARE" "$WORK/remote.git"
-G "$WORK" add remote.git; G "$WORK" commit -m feature-link
-G "$WORK" push origin "$HB"
-FEAT_OID=$(git -C "$WORK" rev-parse HEAD)
-G "$MRG" fetch origin
-G "$MRG" checkout "$BB"
-G "$MRG" merge --no-ff -m redirected-head "origin/$HB"
-rm "$MRG/remote.git"
-ln -s "$WRONG_BARE" "$MRG/remote.git"
-G "$MRG" add remote.git; G "$MRG" commit -m base-link
-G "$MRG" push origin "$BB"
-git clone -q --bare "$BARE" "$WRONG_BARE"
-pr_full OPEN "$HB" "$BB" "$FEAT_OID" false owner name
-G "$WORK" remote add base "$BARE"
-G "$WORK" config remote.origin.url ./remote.git
-mkdir "$WORK/subdir"
-OUT=$(cd "$WORK/subdir" && PATH="$SHIMD:$PATH" bash "$SCRIPT" cleanup \
-  --pr 83 --repo owner/name --base-remote base --head-remote origin \
-  --head "$FEAT_OID" 2>"$FIX/stderr")
-RC=$?
-want_rc 2
-want_out 'STOP remote-config-changed'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the trusted repository lost its head branch"; fi
-if git -C "$WRONG_BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the symlink replacement lost its head branch"; fi
-
-scenario "a Git-expanded tilde symlink cannot redirect head deletion"
-std_setup; std_fixtures
-WRONG_BARE="$SCEN/wrong.git"
-G "$WORK" checkout "$HB"
-ln -s "$BARE" "$WORK/remote.git"
-G "$WORK" add remote.git; G "$WORK" commit -m feature-link
-G "$WORK" push origin "$HB"
-FEAT_OID=$(git -C "$WORK" rev-parse HEAD)
-G "$MRG" fetch origin
-G "$MRG" checkout "$BB"
-G "$MRG" merge --no-ff -m redirected-head "origin/$HB"
-rm "$MRG/remote.git"
-ln -s "$WRONG_BARE" "$MRG/remote.git"
-G "$MRG" add remote.git; G "$MRG" commit -m base-link
-G "$MRG" push origin "$BB"
-git clone -q --bare "$BARE" "$WRONG_BARE"
-pr_full OPEN "$HB" "$BB" "$FEAT_OID" false owner name
-G "$WORK" remote add base "$BARE"
-G "$WORK" config remote.origin.url '~/remote.git'
-mkdir "$WORK/subdir"
-OUT=$(cd "$WORK/subdir" && HOME="$WORK" PATH="$SHIMD:$PATH" \
-  bash "$SCRIPT" cleanup --pr 83 --repo owner/name \
-  --base-remote base --head-remote origin --head "$FEAT_OID" 2>"$FIX/stderr")
-RC=$?
-want_rc 2
-want_out 'STOP remote-config-changed'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the tilde path's trusted repository lost its head branch"; fi
-if git -C "$WRONG_BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the tilde path's symlink replacement lost its head branch"; fi
-
-scenario "a branch-conditioned head remote is revalidated after resync"
-std_setup; std_fixtures
-WRONG_BARE="$SCEN/wrong.git"
-git clone -q --bare "$BARE" "$WRONG_BARE"
-G "$WORK" remote add base "$BARE"
-G "$WORK" checkout "$HB"
-INC="$SCEN/feature-head.cfg"; MAIN_INC="$SCEN/base-head.cfg"
-G "$WORK" config --add "includeIf.onbranch:$HB.path" "$INC"
-G "$WORK" config --add "includeIf.onbranch:$BB.path" "$MAIN_INC"
-git config --file "$INC" remote.head.url "$BARE"
-git config --file "$MAIN_INC" remote.head.url "$WRONG_BARE"
-run_sm cleanup --pr 83 --repo owner/name --base-remote base --head-remote head --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP remote-config-changed'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the changed head remote deleted the original branch"; fi
-if [ "$(git -C "$WORK" rev-parse HEAD)" = "$(git -C "$BARE" rev-parse "refs/heads/$BB")" ]; then
-  ok
-else bad "the head-remote stop happened before the base resync"; fi
-
-scenario "a local branch created during cleanup reports kept_manual"
-std_setup; std_fixtures
-G "$WORK" update-ref -d "refs/heads/$HB"
-HOOK="$WORK/.git/hooks/post-merge"
-printf '#!/bin/sh\ngit update-ref "%s" "%s"\n' "refs/heads/$HB" "$FEAT_OID" > "$HOOK"
-chmod +x "$HOOK"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"local_branch":"kept_manual"'
-if git -C "$WORK" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the branch created during cleanup did not survive"; fi
-
-scenario "a final prune failure cannot report cleanup complete"
-std_setup; std_fixtures
-G "$WORK" config --add remote.origin.fetch not-a-refspec
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 4
-want_out 'LOOKUP_FAILED prune'
-
-scenario "cleanup refuses while the forge says the PR is unmerged"
-std_setup; std_fixtures
-printf '{"state":"OPEN","mergedAt":null}' > "$FIX/pr-state.json"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP pr-not-merged'
-
-scenario "an auto-deleted remote branch reads as already gone"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"already"'
-
-scenario "an unreachable head remote is unknown, never auto-deleted"
-std_setup; std_fixtures
-G "$WORK" remote add dead "$SCEN/nonexistent.git"
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote dead --head "$FEAT_OID"
-want_rc 4
-want_out 'LOOKUP_FAILED ls-remote'
-
-scenario "a decoy refs/heads/refs/heads ref is not the head branch"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-git -C "$BARE" update-ref "refs/heads/refs/heads/$HB" "$FEAT_OID"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"already"'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/refs/heads/$HB"; then
-  ok
-else bad "the decoy ref was deleted"; fi
-
-scenario "a suffix-matching decoy makes the delete inexpressible: stop"
-std_setup; std_fixtures
-git -C "$BARE" update-ref "refs/heads/refs/heads/$HB" "$FEAT_OID"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP ambiguous-ref'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB" \
-   && git -C "$BARE" show-ref --verify --quiet "refs/heads/refs/heads/$HB"; then
-  ok
-else bad "a ref was deleted despite the ambiguity"; fi
-
-scenario "a moved remote branch stops on the OID guard"
-std_setup; std_fixtures
-G "$SRC" checkout "$HB"
-echo later > "$SRC/later.txt"; G "$SRC" add .; G "$SRC" commit -m later
-G "$SRC" push origin "refs/heads/$HB"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP oid-mismatch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the moved branch was deleted anyway"; fi
-
-scenario "consumers are re-checked at delete time"
-std_setup; std_fixtures
-echo '[{"number":90}]' > "$FIX/shared.json"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP shared-head'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "a shared head was deleted"; fi
-
-scenario "a symbolic local base stops before remote deletion"
-std_setup; std_fixtures
-G "$WORK" branch base-target "refs/heads/$BB"
-git -C "$WORK" symbolic-ref "refs/heads/$BB" refs/heads/base-target
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP local-base'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted before the symbolic-base stop"; fi
-
-scenario "a same-named tag cannot detach the landing"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-G "$WORK" tag "$BB" "$FEAT_OID"      # tag shadowing the base name
-G "$WORK" checkout "$HB"
-G "$WORK" branch -D "$BB"            # no local base: the create path runs
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-if [ "$(git -C "$WORK" symbolic-ref -q HEAD)" = "refs/heads/$BB" ]; then
-  ok
-else bad "HEAD detached at the shadowing tag"; fi
-
-scenario "an ignored file the base tracks aborts the switch intact"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-G "$MRG" checkout "$BB"
-echo remote-secret > "$MRG/.env"; G "$MRG" add -f .env
-G "$MRG" commit -m env; G "$MRG" push origin "$BB"
-G "$WORK" checkout "$HB"   # move off the base so the fetch below can update it
-G "$WORK" fetch origin "refs/heads/$BB:refs/heads/$BB"  # local base now tracks .env
-echo .env > "$WORK/.git/info/exclude"
-echo local-secret > "$WORK/.env"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP checkout-refused'
-if [ "$(cat "$WORK/.env")" = local-secret ]; then ok; else bad ".env was clobbered"; fi
-
-scenario "an ignored file the resync starts tracking aborts the fast-forward intact"
-std_setup; std_fixtures
-G "$MRG" checkout "$BB"
-echo remote-secret > "$MRG/.env"; G "$MRG" add -f .env
-G "$MRG" commit -m env; G "$MRG" push origin "$BB"
-echo .env > "$WORK/.git/info/exclude"
-echo local-secret > "$WORK/.env"   # local base still pre-merge: hazard hits the merge
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP resync-failed'
-if [ "$(cat "$WORK/.env")" = local-secret ]; then ok; else bad ".env was clobbered"; fi
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted before the refused resync"; fi
-
-scenario "a diverged base refuses the fast-forward"
-std_setup; std_fixtures
-echo local > "$WORK/local.txt"; G "$WORK" add .; G "$WORK" commit -m local
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP resync-failed'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted before the diverged-base stop"; fi
-
-scenario "worktree preservation targets the right record despite hostile names"
-std_setup 'x$(touch${IFS}probe-file)' main
-std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-DECOY="$SCEN/decoy wt"
-G "$WORK" branch decoy "$BB"
-G "$WORK" worktree add "$DECOY" decoy
-TARGET="$SCEN/wt with space"$'\f\n'
-G "$WORK" worktree add "$TARGET" "$HB"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP head-worktree-present'
-want_out 'wt with space\u000c\n remains'   # form feed and trailing newline, both escaped
-if [ -e "$WORK/probe-file" ] || [ -e "$SCEN/probe-file" ]; then
-  bad "the hostile branch name executed"
-else ok; fi
-if [ -d "$TARGET" ]; then ok; else bad "the head worktree was removed"; fi
-if [ -d "$DECOY" ]; then ok; else bad "the decoy sibling worktree was removed"; fi
-
-scenario "a worktree holding only an ignored file is not removed"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-echo .env > "$WORK/.git/info/exclude"
-echo secret > "$WT/.env"
-G "$WORK" config status.showUntrackedFiles no   # must not blind the inventory
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP worktree-dirty'
-if [ -f "$WT/.env" ]; then ok; else bad "the ignored file was destroyed"; fi
-
-scenario "a paused operation inside the head worktree blocks its removal"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-( cd "$WT" && git rev-parse HEAD > "$(git rev-parse --git-path MERGE_HEAD)" )
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP worktree-op-in-progress'
-if [ -d "$WT" ]; then ok; else bad "a worktree with a paused merge was removed"; fi
-
-scenario "a dangling marker inside the head worktree blocks its removal"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-ln -s missing "$(cd "$WT" && git rev-parse --git-path MERGE_HEAD)"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP worktree-op-in-progress'
-if [ -d "$WT" ]; then ok; else bad "a worktree with a dangling operation marker was removed"; fi
-
-scenario "an assume-unchanged edit blocks worktree removal"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-G "$WT" update-index --assume-unchanged feat.txt
-echo edited > "$WT/feat.txt"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP worktree-flagged'
-if [ "$(cat "$WT/feat.txt")" = edited ]; then ok; else bad "the flagged edit was destroyed"; fi
-
-scenario "a sparse checkout's absent skip-worktree paths are not flagged state"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-G "$WT" sparse-checkout set --no-cone /base.txt   # leaves feat.txt `S`, absent
-if [ -e "$WT/feat.txt" ]; then bad "the sparse fixture left the excluded path present"; fi
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-# The preservation stop, not worktree-flagged: a sparse checkout marks every
-# excluded path `S` while leaving it absent, so nothing is there to lose.
-want_out 'STOP head-worktree-present'
-
-scenario "a sparse checkout spelled with a non-canonical boolean is still sparse"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-G "$WT" sparse-checkout set --no-cone /base.txt
-G "$WT" config --worktree core.sparseCheckout yes   # `--get` returns yes, not true
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP head-worktree-present'
-
-scenario "an assume-unchanged deletion blocks worktree removal"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-G "$WT" update-index --assume-unchanged feat.txt
-rm "$WT/feat.txt"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-# An absent flagged path is a hidden deletion unless sparse checkout explains
-# it; status reports neither the flag nor the missing file.
-want_out 'STOP worktree-flagged'
-
-scenario "a skip-worktree deletion outside a sparse checkout blocks removal"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-G "$WT" update-index --skip-worktree feat.txt
-rm "$WT/feat.txt"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP worktree-flagged'
-
-scenario "a present skip-worktree file still blocks worktree removal"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-G "$WT" update-index --skip-worktree feat.txt
-echo edited > "$WT/feat.txt"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP worktree-flagged'
-if [ "$(cat "$WT/feat.txt")" = edited ]; then ok; else bad "the flagged edit was destroyed"; fi
+# ---- remote identity on the land push ----
+# Each case configures a remote whose identity land must refuse (or accept)
+# before its lease push rewrites the head branch. A behind head makes land
+# reach the push path; a stop there leaves both copies of the head untouched.
 
 scenario "a newline-bearing remote URL cannot be validated: stop"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add nlrem "$SCEN/x"$'\n'
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote nlrem --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote nlrem --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
-
-scenario "an unmerged branch stops before its worktree is removed"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-( cd "$WT" && echo repurposed > new.txt && git add . && git commit -qm repurposed )
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP local-branch'
-if [ -d "$WT" ]; then ok; else bad "the repurposed worktree was removed before the containment stop"; fi
-
-scenario "a branch repointed backward stops before its worktree is removed"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-G "$WT" reset --hard "$BASE_PRE"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP local-branch'
-if [ -d "$WT" ]; then ok; else bad "the backward-repointed worktree was removed"; fi
-if [ "$(git -C "$WORK" rev-parse "refs/heads/$HB")" = "$BASE_PRE" ]; then
-  ok
-else bad "the backward-repointed branch was deleted or moved"; fi
-
-scenario "a symbolic local head ref stops before its target is deleted"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-G "$WORK" branch pinned-alias "$FEAT_OID"
-G "$WORK" symbolic-ref "refs/heads/$HB" refs/heads/pinned-alias
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP local-branch'
-if git -C "$WORK" show-ref --verify --quiet refs/heads/pinned-alias; then
-  ok
-else bad "the symbolic head ref's target was deleted"; fi
-if [ "$(git -C "$WORK" symbolic-ref "refs/heads/$HB")" = refs/heads/pinned-alias ]; then
-  ok
-else bad "the symbolic head ref was changed"; fi
-
-scenario "a dangling symbolic local head ref is not mistaken for absence"
-std_setup; std_fixtures
-G "$WORK" update-ref -d "refs/heads/$HB"
-G "$WORK" symbolic-ref "refs/heads/$HB" refs/heads/missing
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP local-branch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote branch was deleted after a dangling local symref bypass"; fi
-if [ "$(git -C "$WORK" symbolic-ref "refs/heads/$HB")" = refs/heads/missing ]; then
-  ok
-else bad "the dangling symbolic head ref was changed"; fi
-
-scenario "a direct ref becoming a dangling symref between probes stops"
-std_setup; std_fixtures
-GIT_REAL=$(command -v git)
-GIT_SHIM="$SCEN/git-shim"
-MARKER="$SCEN/swapped"
-mkdir "$GIT_SHIM"
-printf '#!/bin/sh\nif [ "$1" = symbolic-ref ] && [ "$2" = -q ] && [ "$3" = "%s" ] && [ ! -f "%s" ]; then\n  "%s" "$@"\n  rc=$?\n  "%s" -C "%s" update-ref -d "%s"\n  "%s" -C "%s" symbolic-ref "%s" refs/heads/missing\n  : > "%s"\n  exit "$rc"\nfi\nexec "%s" "$@"\n' \
-  "refs/heads/$HB" "$MARKER" "$GIT_REAL" "$GIT_REAL" "$WORK" \
-  "refs/heads/$HB" "$GIT_REAL" "$WORK" "refs/heads/$HB" "$MARKER" \
-  "$GIT_REAL" > "$GIT_SHIM/git"
-chmod +x "$GIT_SHIM/git"
-run_sm_with_git_shim "$GIT_SHIM" "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP local-branch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote branch was deleted after the ref-probe race"; fi
-if [ "$(git -C "$WORK" symbolic-ref "refs/heads/$HB")" = refs/heads/missing ]; then
-  ok
-else bad "the raced dangling symbolic ref was changed"; fi
-
-scenario "a clean head worktree stops before any branch mutation"
-std_setup; std_fixtures
-WT="$SCEN/featwt"
-G "$WORK" worktree add "$WT" "$HB"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP head-worktree-present'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote branch was deleted before the worktree stop"; fi
-if git -C "$WORK" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the local branch was deleted before the worktree stop"; fi
-if [ -d "$WT" ]; then ok; else bad "the clean head worktree was removed"; fi
-
-scenario "a multibyte worktree path reports as its UTF-8 bytes"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"
-G "$WORK" worktree add "$SCEN/wté" "$HB"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP head-worktree-present'
-want_out 'wt\u00c3\u00a9 remains'   # e-acute is C3 A9: code points equal the bytes
-
-scenario "unmerged local work survives the auto-delete path"
-std_setup; std_fixtures
-G "$SRC" push origin --delete "refs/heads/$HB"   # forge auto-delete already ran
-G "$WORK" checkout "$HB"
-echo unmerged > "$WORK/unmerged.txt"; G "$WORK" add .; G "$WORK" commit -m unmerged
-G "$WORK" checkout "$BB"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP local-branch'
-if git -C "$WORK" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the unmerged branch was deleted"; fi
-
-scenario "a branch in a fork-owned repository can head an upstream PR: stop"
-std_setup; std_fixtures
-repo_fx "$BB" upstream/name
-echo '[{"number":83}]' > "$FIX/fork-shared.json"   # same number, other repo, still counts
-run_sm "${CHECK[@]}"
-want_rc 2
-want_out 'STOP shared-head'
-
-scenario "a fork-owned repository keeps its branch at cleanup"
-std_setup; std_fixtures
-repo_fx "$BB" upstream/name
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"kept_fork_network"'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "a fork-owned repository's branch was deleted"; fi
-
-scenario "a root repository with forks keeps its branch at cleanup"
-std_setup; std_fixtures
-repo_fx "$BB" "" false 1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"kept_fork_network"'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "a fork-network root branch was deleted"; fi
-
-scenario "a first fork appearing during cleanup keeps the branch"
-std_setup; std_fixtures
-repo_fx "$BB" "" false 0
-jq '.forks_count = 1' "$FIX/repo.json" > "$FIX/repo-next.json"
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"kept_fork_network"'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "a branch was deleted after its repository gained a fork"; fi
-
-scenario "a fork head is kept and reported, never deleted"
-std_setup; std_fixtures
-pr_full MERGED "$HB" "$BB" "$FEAT_OID" true forker name
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"kept_fork"'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "a fork-named branch was deleted from a remote"; fi
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a split fetch/push remote identity stops before any check"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url --push origin "$SCEN/other.git" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "a branch was deleted across a fetch/push split"; fi
+want_land_untouched "a branch was pushed across a fetch/push split"
 
 scenario "a hosted head override must identify the PR repository"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add wrong https://github.invalid/other/name.git
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote wrong --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote wrong --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a hosted base override must identify the PR repository"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add wrong https://github.invalid/other/name.git
-run_sm cleanup --pr 83 --repo owner/name --base-remote wrong --head-remote origin --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote wrong --head-remote origin --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a hosted override with an extra path prefix is not the PR repository"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add wrong https://github.invalid/prefix/owner/name.git
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote wrong --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote wrong --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a userless SCP override must identify the PR repository"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add wrong github.invalid:other/name.git
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote wrong --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote wrong --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "different SSH users are different push destinations"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split git@github.invalid:owner/name.git
 git -C "$WORK" remote set-url --push split deploy@github.invalid:owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "different ssh-scheme users are different push destinations"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 jq '.ssh_url = "ssh://git@github.invalid/owner/name.git"' \
   "$FIX/repo.json" > "$FIX/repo.new"
 mv "$FIX/repo.new" "$FIX/repo.json"
 G "$WORK" remote add split ssh://git@github.invalid/owner/name.git
 git -C "$WORK" remote set-url --push split ssh://deploy@github.invalid/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "HTTPS and userless SSH are different push destinations"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split https://github.invalid/owner/name.git
 git -C "$WORK" remote set-url --push split ssh://github.invalid/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "HTTPS and git transport are different push destinations"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split https://github.invalid/owner/name.git
 git -C "$WORK" remote set-url --push split git://github.invalid/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "SCP and ssh scheme are different push destinations"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split git@github.invalid:owner/name.git
 git -C "$WORK" remote set-url --push split ssh://git@github.invalid/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "auto-resolution skips an origin with the wrong SSH user"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote set-url origin deploy@github.invalid:owner/name.git
 G "$WORK" remote add forge git@github.invalid:owner/name.git
-run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 4
 want_out 'LOOKUP_FAILED base-fetch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted before the selected base remote failed"; fi
+want_land_untouched "the remote head was pushed before the selected base remote failed"
 
 scenario "a second configured push URL still stops the split"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url --push origin "$BARE" >/dev/null 2>&1
 git -C "$WORK" remote set-url --push --add origin "$SCEN/other.git" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "a branch was deleted despite a broadcast push URL"; fi
+want_land_untouched "a branch was pushed despite a broadcast push URL"
 
-scenario "duplicate effective push URLs stop before the lease delete"
-std_setup; std_fixtures
+scenario "duplicate effective push URLs stop before the lease push"
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url --push origin "$BARE" >/dev/null 2>&1
 git -C "$WORK" remote set-url --push --add origin "$BARE" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the first duplicate destination deleted the branch before the stop"; fi
+want_land_untouched "the first duplicate destination pushed the branch before the stop"
 
 scenario "a blank push URL stops before the valid destination is mutated"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url --push origin "$BARE" >/dev/null 2>&1
 BLANK_PUSH_SHIM="$SCEN/blank-push-shim"
 mkdir -p "$BLANK_PUSH_SHIM"
@@ -2096,220 +1479,232 @@ REAL_GIT=$(command -v git)
   echo 'exec "$REAL_GIT" "$@"'
 } > "$BLANK_PUSH_SHIM/git"
 chmod +x "$BLANK_PUSH_SHIM/git"
-run_sm_with_git_shim "$BLANK_PUSH_SHIM" "${CLEAN[@]}" --head "$FEAT_OID"
+run_sm_with_git_shim "$BLANK_PUSH_SHIM" "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the valid destination deleted the branch before the blank-URL stop"; fi
+want_land_untouched "the valid destination pushed the branch before the blank-URL stop"
 
 scenario "two local paths sharing a tail are two repositories"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split "$SCEN/a/owner/name"
 git -C "$WORK" remote set-url --push split "$SCEN/b/owner/name" >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "two hosted paths sharing a tail are two repositories"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split https://github.invalid/a/owner/name.git
 git -C "$WORK" remote set-url --push split https://github.invalid/b/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "hosted path case is part of the endpoint identity"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split https://github.invalid/A/owner/name.git
 git -C "$WORK" remote set-url --push split https://github.invalid/a/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a hosted .git suffix is part of the endpoint identity"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split https://github.invalid/prefix/owner/name
 git -C "$WORK" remote set-url --push split https://github.invalid/prefix/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a hosted path prefix does not hide its forge repository tail"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add prefixed https://github.invalid/prefix/owner/name.git
-run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-unresolved'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a host named path cannot collide with the local-path marker"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 jq '.url = "https://path/owner/name/pull/83"' \
   "$FIX/pr-full.json" > "$FIX/pr-full.new"
 mv "$FIX/pr-full.new" "$FIX/pr-full.json"
 G "$WORK" remote add colliding https://path/owner/name.git
-run_sm cleanup --pr 83 --repo owner/name --head-remote missing --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --head-remote missing --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-unresolved'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a bracketed IPv6 SCP host keeps its forge repository tail"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 jq '.url = "https://[2001:db8::1]/owner/name/pull/83"' \
   "$FIX/pr-full.json" > "$FIX/pr-full.new"
 mv "$FIX/pr-full.new" "$FIX/pr-full.json"
 G "$WORK" remote add ipv6 'git@[2001:db8::1]:prefix/owner/name.git'
-run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-unresolved'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "two ports on one host are two endpoints"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split https://github.invalid:8443/owner/name.git
 git -C "$WORK" remote set-url --push split https://github.invalid:9443/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "userinfo does not truncate the host at its colon"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add auth https://u:p@github.invalid/owner/name.git
 git -C "$WORK" remote set-url --push auth https://github.invalid/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote auth --head "$FEAT_OID"
-want_rc 4
-want_out 'LOOKUP_FAILED ls-remote'   # identities agree; the dead host is next
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote auth --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP lease-failed'   # identities agree; the push reaches the dead host next
+want_land_untouched "the refused push did not restore the local branch"
 
 scenario "a file:// URL and its plain path are one identity"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url --push origin "file://$BARE" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"deleted"'
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebased'
+want_land_pushed
 
 scenario "file://localhost and its absolute path are one identity"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url --push origin "file://LOCALHOST$BARE" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"deleted"'
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebased'
+want_land_pushed
 
 scenario "an uppercase FILE scheme is not Git's file transport"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url --push origin "FILE://localhost$BARE" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "an uppercase FILE helper cannot collide with a hosted transport"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split FILE://github.invalid/prefix/owner/name.git
 git -C "$WORK" remote set-url --push split https://github.invalid/prefix/owner/name.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a file URL preserves local path case"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split "file://$SCEN/A/repo.git"
 git -C "$WORK" remote set-url --push split "$SCEN/a/repo.git" >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a file URL preserves a doubled leading slash"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 DOUBLE_BARE="/$BARE"
 git -C "$WORK" remote set-url origin "$DOUBLE_BARE" >/dev/null 2>&1
 git -C "$WORK" remote set-url --push origin "file://$DOUBLE_BARE" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
-want_rc 0
-want_out '"remote_branch":"deleted"'
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rebased'
+want_land_pushed
 
 scenario "a doubled file path does not collapse to one leading slash"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 DOUBLE_BARE="/$BARE"
 git -C "$WORK" remote set-url --push origin "file://$DOUBLE_BARE" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "file://localhost cannot collide with a relative path"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 git -C "$WORK" remote set-url origin "file://localhost$BARE" >/dev/null 2>&1
 git -C "$WORK" remote set-url --push origin "localhost$BARE" >/dev/null 2>&1
-run_sm "${CLEAN[@]}" --head "$FEAT_OID"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP pushurl-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a non-local file authority cannot collide with a relative path"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split "file://server$BARE"
 git -C "$WORK" remote set-url --push split "server$BARE" >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "two non-local file authorities stay distinct"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split "file://a$BARE"
 git -C "$WORK" remote set-url --push split "file://b$BARE" >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "an authority-only file URL is not a relative path"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split file://rel.git
 git -C "$WORK" remote set-url --push split rel.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a file URL with dot authority is not dot-relative"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split file://./rel.git
 git -C "$WORK" remote set-url --push split ./rel.git >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a non-double-slash file form is not an absolute path"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add split "file:$BARE"
 git -C "$WORK" remote set-url --push split "$BARE" >/dev/null 2>&1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin --head-remote split --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --base-remote origin --head-remote split --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a same-tail remote on another host never auto-resolves"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add mirror https://gitlab.invalid/owner/name.git
-run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP remote-unresolved'
+want_land_untouched "the stop still rewrote the head branch"
 
 scenario "a host-and-tail match is chosen and acted on"
-std_setup; std_fixtures
+land_setup behind; land_fixtures
 G "$WORK" remote add forge https://github.invalid/owner/name.git
-run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 4
-want_out 'LOOKUP_FAILED base-fetch'   # resolution succeeded; resync reaches the dead host first
-if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-  ok
-else bad "the remote head was deleted before the selected base remote failed"; fi
+want_out 'LOOKUP_FAILED base-fetch'   # resolution succeeded; the base fetch reaches the dead host first
+want_land_untouched "the remote head was pushed before the selected base remote failed"
 
-scenario "fork consumer lookups use the owner-qualified encoded form"
-std_setup 'feat#2' main
-pr_full OPEN 'feat#2' main "$FEAT_OID" true forker name
-repo_fx main; rules_fx '[]'; lists_empty
-run_sm "${CHECK[@]}"
-want_rc 0
-want_call 'pulls?state=open&head=forker:feat%232'
-
-# ---- SSH host alias cleanup ----
+# ---- SSH host alias on the land push ----
 # A local ~/.ssh/config Host alias (label bnw.github.invalid, HostName
 # github.invalid) names the forge's real endpoint. One ssh shim serves the
 # alias both for `ssh -G` identity resolution and for the git transport that
-# deletes over it, so the destructive path runs end to end. ALIAS_GHOST/GUSER/
+# land's lease push rewrites the head over, so the destructive path runs end
+# to end. ALIAS_GHOST/GUSER/
 # GPORT perturb the resolved endpoint; ALIAS_SERVE is the verified bare repo.
 # When ALIAS_SERVE_ROGUE is set, an unpinned transport (HostName not pinned to
 # ALIAS_EXPECT_HOST) is routed there instead. The `-G` target is the last
@@ -2351,185 +1746,276 @@ SSH
   chmod +x "$SHIMD/ssh"
 }
 install_ssh_shim
-alias_head_gone() { # assert BARE lost the head branch
-  if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-    bad "remote head survived the aliased delete"
-  else ok; fi
-}
-alias_head_kept() { # assert BARE still holds the head branch
-  if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
-    ok
-  else bad "the aliased mismatch stop still deleted the remote head"; fi
-}
 
-scenario "explicit ssh host alias resolves to the forge and deletes"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+scenario "ssh alias to a different repository still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/other.git'
 export ALIAS_SERVE="$BARE"
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
 unset ALIAS_SERVE
-want_rc 0
-want_out '"remote_branch":"deleted"'
-alias_head_gone
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
+
+scenario "ssh alias on a non-default port still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GPORT=2222
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GPORT
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
+
+scenario "ssh alias resolver failure after plausible output still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GFAIL_AFTER=1
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GFAIL_AFTER
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
+
+scenario "ssh alias with an unsafe resolved user still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GUSER_U='git;rogue'
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GUSER_U
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
+
+# A user-dependent ssh config: the bare host resolves to the forge, but the
+# user-qualified git@host Git actually connects through resolves elsewhere. The
+# guard must resolve the same user@host Git uses; resolving the bare host would
+# bless the forge yet push via the other endpoint. Discriminating: neutering
+# the user pass (querying only the bare host) resolves the forge and pushes.
+scenario "ssh alias diverging by remote user still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" ALIAS_GHOST_U=rogue.github.invalid
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
+unset ALIAS_SERVE ALIAS_GHOST_U
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
+
+# Git honors an ssh-command override (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH)
+# for the transport, but the guard queries the plain ssh on PATH, so the offline
+# resolution need not reflect the endpoint Git reaches. The guard fails closed
+# whenever an override is active. Discriminating: without the fail-closed the
+# alias resolves to the forge (via the shim) and the branch is rewritten through
+# the unverified endpoint.
+scenario "ssh alias under GIT_SSH_COMMAND override still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" GIT_SSH_COMMAND='ssh -F /dev/null'
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
+unset ALIAS_SERVE GIT_SSH_COMMAND
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
+
+scenario "ssh alias under core.sshCommand override still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+G "$WORK" config core.sshCommand 'ssh -F /dev/null'
+export ALIAS_SERVE="$BARE"
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
+unset ALIAS_SERVE
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
+
+scenario "ssh alias under GIT_SSH override still stops"
+land_setup behind; land_fixtures
+G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
+export ALIAS_SERVE="$BARE" GIT_SSH="$SHIMD/ssh"
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
+unset ALIAS_SERVE GIT_SSH
+want_rc 2
+want_out 'STOP remote-repo-mismatch'
+want_land_untouched "the aliased mismatch stop still rewrote the head branch"
 
 scenario "ssh host alias auto-resolves as the base and head remote"
-std_setup; std_fixtures
+# origin is a hostless path remote, so it never auto-resolves; the alias is
+# the only candidate, and resolve_remote must see through it for both the
+# base fetch and the lease push.
+land_setup behind; land_fixtures
 G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
 export ALIAS_SERVE="$BARE"
-run_sm cleanup --pr 83 --repo owner/name --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 unset ALIAS_SERVE
-want_rc 0
-want_out '"remote_branch":"deleted"'
-alias_head_gone
+want_rc 2
+want_out 'STOP rebased'
+want_land_pushed
 
-scenario "ssh alias destructive transport pins the verified endpoint"
-std_setup; std_fixtures
+scenario "ssh alias land push pins the verified endpoint"
+land_setup behind; land_fixtures
 ROGUE="$SCEN/rogue.git"
 git clone -q --bare "$BARE" "$ROGUE"
 G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
 ALIAS_TRANSPORT_LOG="$FIX/alias-transport.log"
 : >"$ALIAS_TRANSPORT_LOG"
 export ALIAS_SERVE="$BARE" ALIAS_SERVE_ROGUE="$ROGUE" ALIAS_TRANSPORT_LOG
-# Discriminate the pin: the same lease-protected delete without HostName
-# pinning routes to the rogue mirror and deletes its copy.
-if UNPINNED_OID=$(PATH="$SHIMD:$PATH" git -C "$WORK" ls-remote \
-    --exit-code --heads -- 'git@bnw.github.invalid:owner/name.git' \
-    "refs/heads/$HB" | awk '{print $1}') \
-    && [ "$UNPINNED_OID" = "$FEAT_OID" ] \
-    && PATH="$SHIMD:$PATH" git -C "$WORK" push --delete \
-      --force-with-lease="refs/heads/$HB:$FEAT_OID" -- \
-      'git@bnw.github.invalid:owner/name.git' "refs/heads/$HB" >/dev/null 2>&1; then
+# Discriminate the pin: the same lease push without HostName pinning routes
+# to the rogue mirror and rewrites its copy.
+if PATH="$SHIMD:$PATH" git -C "$WORK" push --quiet \
+    --force-with-lease="refs/heads/$HB:$FEAT_OID" -- \
+    'git@bnw.github.invalid:owner/name.git' "refs/heads/$BB:refs/heads/$HB" >/dev/null 2>&1; then
   ok
 else
-  bad "the unpinned counter-run did not delete from the rogue repository"
+  bad "the unpinned counter-run did not push to the rogue repository"
 fi
-if git -C "$ROGUE" show-ref --verify --quiet "refs/heads/$HB"; then
+if [ "$(git -C "$ROGUE" rev-parse "refs/heads/$HB")" = "$FEAT_OID" ]; then
   bad "the unpinned counter-run left the rogue head in place"
 else ok; fi
-git -C "$BARE" push -q "$ROGUE" "refs/heads/$HB:refs/heads/$HB"
+git -C "$BARE" push -q -f "$ROGUE" "refs/heads/$HB:refs/heads/$HB"
 : >"$ALIAS_TRANSPORT_LOG"
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
+run_sm land --pr 83 --repo owner/name --base-remote origin \
+  --head-remote alias --interval 1 --head "$FEAT_OID"
 unset ALIAS_SERVE ALIAS_SERVE_ROGUE ALIAS_TRANSPORT_LOG
-want_rc 0
-want_out '"remote_branch":"deleted"'
-alias_head_gone
-if git -C "$ROGUE" show-ref --verify --quiet "refs/heads/$HB"; then
+want_rc 2
+want_out 'STOP rebased'
+want_land_pushed
+if [ "$(git -C "$ROGUE" rev-parse "refs/heads/$HB")" = "$FEAT_OID" ]; then
   ok
-else bad "the pinned delete reached the rogue mirror"; fi
+else bad "the pinned push reached the rogue mirror"; fi
 if awk '
     index($0, "HostName=github.invalid") && index($0, "User=git") &&
     index($0, "Port=22") && index($0, "CanonicalizeHostname=no") &&
     index($0, "bnw.github.invalid") { pinned++ }
-    END { exit !(pinned == 2) }
+    END { exit !(pinned == 1) }
   ' "$FIX/alias-transport.log"; then
   ok
 else
-  bad "ls-remote and push did not both pin the endpoint through the alias: $(paste -sd ';' "$FIX/alias-transport.log")"
+  bad "the land push did not pin the endpoint through the alias: $(paste -sd ';' "$FIX/alias-transport.log")"
 fi
 
-scenario "ssh alias to a different repository still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/other.git'
-export ALIAS_SERVE="$BARE"
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
-scenario "ssh alias on a non-default port still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
-export ALIAS_SERVE="$BARE" ALIAS_GPORT=2222
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE ALIAS_GPORT
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
-scenario "ssh alias resolver failure after plausible output still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
-export ALIAS_SERVE="$BARE" ALIAS_GFAIL_AFTER=1
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE ALIAS_GFAIL_AFTER
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
-scenario "ssh alias with an unsafe resolved user still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
-export ALIAS_SERVE="$BARE" ALIAS_GUSER_U='git;rogue'
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE ALIAS_GUSER_U
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
-# A user-dependent ssh config: the bare host resolves to the forge, but the
-# user-qualified git@host Git actually connects through resolves elsewhere. The
-# guard must resolve the same user@host Git uses; resolving the bare host would
-# bless the forge yet delete via the other endpoint. Discriminating: neutering
-# the user pass (querying only the bare host) resolves the forge and deletes.
-scenario "ssh alias diverging by remote user still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
-export ALIAS_SERVE="$BARE" ALIAS_GHOST_U=rogue.github.invalid
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE ALIAS_GHOST_U
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
-# Git honors an ssh-command override (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH)
-# for the transport, but the guard queries the plain ssh on PATH, so the offline
-# resolution need not reflect the endpoint Git reaches. The guard fails closed
-# whenever an override is active. Discriminating: without the fail-closed the
-# alias resolves to the forge (via the shim) and the branch is deleted through
-# the unverified endpoint.
-scenario "ssh alias under GIT_SSH_COMMAND override still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
-export ALIAS_SERVE="$BARE" GIT_SSH_COMMAND='ssh -F /dev/null'
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE GIT_SSH_COMMAND
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
-scenario "ssh alias under core.sshCommand override still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
-G "$WORK" config core.sshCommand 'ssh -F /dev/null'
-export ALIAS_SERVE="$BARE"
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
-scenario "ssh alias under GIT_SSH override still stops"
-std_setup; std_fixtures
-G "$WORK" remote add alias 'git@bnw.github.invalid:owner/name.git'
-export ALIAS_SERVE="$BARE" GIT_SSH="$SHIMD/ssh"
-run_sm cleanup --pr 83 --repo owner/name --base-remote origin \
-  --head-remote alias --head "$FEAT_OID"
-unset ALIAS_SERVE GIT_SSH
-want_rc 2
-want_out 'STOP remote-repo-mismatch'
-alias_head_kept
-
 rm -f "$SHIMD/ssh"
+
+# ---- handoff to merge-cleanup ----
+# After `merge`, the self-merge skill hands the merged PR to merge-cleanup.
+# std_setup already leaves the scratch forge in the state merge-cleanup
+# requires (a real merge commit on the bare's base, the work clone's base at
+# the pre-merge tip), so one scenario runs both scripts in sequence against
+# their own gh shims. The second shim mirrors scripts/test-merge-cleanup.sh's
+# routing so merge-cleanup.sh's own --jq filters run against the fixtures.
+
+MC_SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/skills/merge-cleanup/merge-cleanup.sh"
+if ! [ -f "$MC_SCRIPT" ]; then
+  skip=$((skip + 1))
+  echo "SKIP: handoff case needs $MC_SCRIPT" >&2
+else
+MCSHIM="$TMP/mc-shim"; MCFIX="$TMP/mc-fix"
+mkdir -p "$MCSHIM" "$MCFIX"
+{
+  echo '#!/bin/bash'
+  echo "FIX=\"$MCFIX\""
+  cat <<'MCEOF'
+echo "$*" >> "$FIX/calls.log"
+sub="" verb="" api="" json="" jqf="" head=false base=false slurp=false prev=""
+for arg in "$@"; do
+  case "$prev" in --json) json="$arg" ;; --jq) jqf="$arg" ;; esac
+  case "$arg" in
+    pr|api) [ -n "$sub" ] || sub="$arg" ;;
+    view|list|edit) [ "$sub" != pr ] || [ -n "$verb" ] || verb="$arg" ;;
+    graphql|repos/*) api="$arg" ;;
+    --json=*) json="${arg#--json=}" ;;
+    --jq=*) jqf="${arg#--jq=}" ;;
+    --head=*) head=true ;;
+    --base=*) base=true ;;
+    --slurp) slurp=true ;;
+  esac
+  prev="$arg"
+done
+fixture=""
+if [ "$sub" = api ]; then
+  case "$api" in
+    graphql) fixture="$FIX/associated.json" ;;
+    *"/pulls?"*"head="*) fixture="$FIX/shared.json" ;;
+    *"/pulls?"*"base="*) fixture="$FIX/stacked.json" ;;
+    repos/*)
+      case "$jqf" in *default_branch*) fixture="$FIX/repo-base.json" ;; *)
+        fixture="$FIX/repo-head.json" ;; esac ;;
+  esac
+elif [ "$sub" = pr ] && [ "$verb" = view ]; then
+  case "$json" in *headRefName*) fixture="$FIX/pr.json" ;; *)
+    fixture="$FIX/stacked-view.json" ;; esac
+elif [ "$sub" = pr ] && [ "$verb" = list ]; then
+  [ "$head" = false ] || fixture="$FIX/shared.json"
+  [ "$base" = false ] || fixture="$FIX/stacked.json"
+elif [ "$sub" = pr ] && [ "$verb" = edit ]; then
+  exit 0
+fi
+[ -n "$fixture" ] && [ -f "$fixture" ] || exit 1
+if [ -n "$jqf" ]; then
+  [ "$slurp" = false ] && exec jq -r "$jqf" "$fixture"
+  exec jq -s -r "$jqf" "$fixture"
+fi
+[ "$slurp" = false ] || exec jq -s '.' "$fixture"
+exec cat "$fixture"
+MCEOF
+} > "$MCSHIM/gh"
+chmod +x "$MCSHIM/gh"
+
+scenario "merge-cleanup tidies the PR self-merge just merged"
+std_setup; std_fixtures
+printf '{"title":"Fix the thing"}' > "$FIX/title.json"
+run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
+want_rc 0
+want_out 'OK merge {"merged_at":'
+# merge-cleanup reads the merged head from the forge, not from OK merge.
+jq -n --arg b "$HB" --arg o "$FEAT_OID" \
+  '{state:"MERGED",mergedAt:"2026-07-25T12:00:00Z",headRefName:$b,
+    baseRefName:"main",headRefOid:$o,isCrossRepository:false,
+    headRepositoryOwner:{login:"owner"},headRepository:{name:"name"},
+    url:"https://github.invalid/owner/name/pull/83",
+    closingIssuesReferences:[]}' > "$MCFIX/pr.json"
+jq -n '{default_branch:"main",fork:false,forks_count:0,
+    delete_branch_on_merge:false,parent:null,source:null,
+    clone_url:"https://github.invalid/owner/name.git",
+    ssh_url:"git@github.invalid:owner/name.git",
+    merge_commit_title:"PR_TITLE",merge_commit_message:"BLANK"}' \
+  | tee "$MCFIX/repo-base.json" > "$MCFIX/repo-head.json"
+printf '[]\n' > "$MCFIX/shared.json"
+printf '[]\n' > "$MCFIX/stacked.json"
+printf '{"baseRefName":"main"}\n' > "$MCFIX/stacked-view.json"
+jq -n --arg oid "$FEAT_OID" \
+  '{data:{repository:{object:{associatedPullRequests:{
+    pageInfo:{hasNextPage:false,endCursor:"cursor"},
+    nodes:[{number:83,state:"MERGED",headRefName:"feat",headRefOid:$oid,
+      baseRepository:{nameWithOwner:"owner/name"},
+      headRepository:{nameWithOwner:"owner/name"}}]}}}}}' \
+  > "$MCFIX/associated.json"
+OUT=$(cd "$WORK" && PATH="$MCSHIM:$PATH" bash "$MC_SCRIPT" \
+  --repo github.invalid/owner/name --pr 83 --checkout "$WORK" \
+  --base-remote origin --head-remote origin 2>"$FIX/stderr")
+RC=$?
+want_rc 0
+want_out 'OK cleanup'
+want_out '"remote_branch":"deleted"'
+want_out '"base_resync":"resynced"'
+if git -C "$BARE" show-ref --verify --quiet "refs/heads/$HB"; then
+  bad "the remote head survived merge-cleanup"
+else ok; fi
+if git -C "$WORK" show-ref --verify --quiet "refs/heads/$HB"; then
+  bad "the local head survived merge-cleanup"
+else ok; fi
+[ "$(git -C "$WORK" symbolic-ref --short HEAD)" = "$BB" ] && ok || bad "HEAD left $BB"
+[ "$(git -C "$WORK" rev-parse HEAD)" = "$(git -C "$BARE" rev-parse "refs/heads/$BB")" ] \
+  && ok || bad "local $BB was not resynced to the merged base"
+fi
 
 fi
 
