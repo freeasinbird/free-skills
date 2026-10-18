@@ -457,8 +457,9 @@ remote, and confirm the issues the PR closes actually closed. Leave the local
 branch.
 
 Never print a bare `git worktree remove` line for the owner to paste: even
-without `--force`, it deletes the worktree's ignored files and exits 0. Removing worktrees is the
-owner's, in a separate sweep.
+without `--force`, it deletes the worktree's ignored files and exits 0.
+Removing worktrees is the owner's, after the batch: point them at
+merge-cleanup's worktree sweep, which reports what each removal would delete.
 
 ## Ordering
 
@@ -503,8 +504,9 @@ children or merges the parent.
 
 Once the owner has released a stale lock, the next run starts as usual. Report,
 and leave in place, any temporary worktree the dead run's `land` left
-registered; it blocks nothing, and deleting it is the owner's. The PR the dead
-run was on is in one of three states:
+registered, at a path ending in `land-wt.XXXXXX/wt`. It blocks nothing, and the
+owner removes it with merge-cleanup's worktree sweep. The PR the dead run was
+on is in one of three states:
 
 - **Not yet pushed:** it is still approved and starts over.
 - **Rebased and pushed, not merged:** its head is neither the approved head
