@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression matrix for the self-merge script. Offline and deterministic:
+# Regression matrix for land-approved-prs' landing engine, land.sh. Offline and deterministic:
 # a PATH shim replaces gh (serving canned JSON through the caller's own
 # --jq filter, so a wrong field name fails a test rather than silently
 # matching nothing), while git runs for real against scratch repositories
@@ -11,10 +11,10 @@
 # a case with every future fix so the class stops recurring one finding
 # at a time.
 #
-# Set SELF_MERGE_SCRIPT to test a different copy of the script.
+# Set LAND_SCRIPT to test a different copy of the script.
 set -u
 
-SCRIPT="${SELF_MERGE_SCRIPT:-$(cd "$(dirname "$0")/.." && pwd)/skills/self-merge/self-merge.sh}"
+SCRIPT="${LAND_SCRIPT:-$(cd "$(dirname "$0")/.." && pwd)/skills/land-approved-prs/land.sh}"
 [ -f "$SCRIPT" ] || { echo "not found: $SCRIPT" >&2; exit 1; }
 
 TMP=$(mktemp -d)
@@ -1905,7 +1905,7 @@ fi
 rm -f "$SHIMD/ssh"
 
 # ---- handoff to merge-cleanup ----
-# After `merge`, the self-merge skill hands the merged PR to merge-cleanup.
+# After `merge`, the land-approved-prs skill hands the merged PR to merge-cleanup.
 # std_setup already leaves the scratch forge in the state merge-cleanup
 # requires (a real merge commit on the bare's base, the work clone's base at
 # the pre-merge tip), so one scenario runs both scripts in sequence against
@@ -1969,7 +1969,7 @@ MCEOF
 } > "$MCSHIM/gh"
 chmod +x "$MCSHIM/gh"
 
-scenario "merge-cleanup tidies the PR self-merge just merged"
+scenario "merge-cleanup tidies the PR land.sh just merged"
 std_setup; std_fixtures
 printf '{"title":"Fix the thing"}' > "$FIX/title.json"
 run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
@@ -2021,5 +2021,5 @@ fi
 
 note=""
 [ "$skip" -eq 0 ] || note=", $skip skipped (see SKIP above)"
-echo "self-merge matrix: $pass passed, $fail failed$note"
+echo "land matrix: $pass passed, $fail failed$note"
 [ "$fail" -eq 0 ]

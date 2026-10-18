@@ -693,8 +693,8 @@ and lint and formatting are clean.
   (`./scripts/test-check-review-convergence-layers.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
   changed (`./scripts/test-capture.sh`)
-- Self-merge validation matrix green when self-merge's `self-merge.sh`
-  changed (`./scripts/test-self-merge.sh`)
+- Landing engine matrix green when land-approved-prs' `land.sh` changed
+  (`./scripts/test-land.sh`)
 - Readiness-list matrix green when land-approved-prs' `list-ready.sh`
   changed (`./scripts/test-list-ready.sh`)
 - Landed-since matrix green when land-approved-prs' `landed-since.sh`

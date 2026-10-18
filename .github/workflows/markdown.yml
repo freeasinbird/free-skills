@@ -66,6 +66,7 @@ jobs:
           - test-check-review-convergence-layers.sh
           - test-check-skill-structure.sh
           - test-compare-managed-blocks.sh
+          - test-land.sh
           - test-landed-since.sh
           - test-list-ready.sh
           - test-merge-cleanup-inventory.sh
@@ -74,7 +75,6 @@ jobs:
           - test-merge-cleanup-refresh.sh
           - test-merge-cleanup.sh
           - test-prompt-verification.sh
-          - test-self-merge.sh
           - test-watch-review.sh
     steps:
       - uses: actions/checkout@v4

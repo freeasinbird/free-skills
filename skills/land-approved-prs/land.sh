@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# self-merge.sh: the executable form of the self-merge skill's guarded
+# land.sh: the landing engine of the land-approved-prs skill, its guarded
 # merge sequence. It ends at the merge; post-merge cleanup belongs to the
-# merge-cleanup skill. The skill's prose owns the judgment (when
-# self-merge applies, the pre-merge guardrails, what to do when a guard
+# merge-cleanup skill. The skill's prose owns the judgment (which PRs are
+# ready, whether one still holds, what to do when a guard
 # fires); this script owns the mechanics, so no agent re-derives quoting,
 # encoding, or parsing rules at runtime. Every forge- or git-sourced value
 # stays in a shell variable and reaches commands through argv, behind an
@@ -10,9 +10,9 @@
 # here re-parses a value through a shell.
 #
 # Usage:
-#   self-merge.sh check   --pr N --repo owner/name
-#   self-merge.sh land    --pr N --repo owner/name --head <40-hex-oid>
-#   self-merge.sh merge   --pr N --repo owner/name --head <40-hex-oid>
+#   land.sh check   --pr N --repo owner/name
+#   land.sh land    --pr N --repo owner/name --head <40-hex-oid>
+#   land.sh merge   --pr N --repo owner/name --head <40-hex-oid>
 #     [--base-remote NAME]   # override remote resolution for the base repo
 #     [--head-remote NAME]   # override remote resolution for the head repo
 #     [--interval 10]        # land/merge: seconds between CI and MERGED polls
@@ -61,7 +61,7 @@ usage() {
 
 case "${1:-}" in
   check|land|merge) PHASE="$1"; shift ;;
-  *) echo "self-merge.sh: first argument must be check, land, or merge" >&2; usage ;;
+  *) echo "land.sh: first argument must be check, land, or merge" >&2; usage ;;
 esac
 
 # Recognize the option, then require its value, before reading $2: a
@@ -71,14 +71,14 @@ while [ $# -gt 0 ]; do
   # The one boolean flag. Land-only, so a mistyped `merge --dry-run` is a
   # usage error rather than a real merge.
   if [ "$opt" = --dry-run ]; then
-    [ "$PHASE" = land ] || { echo "self-merge.sh: --dry-run applies only to land" >&2; usage; }
+    [ "$PHASE" = land ] || { echo "land.sh: --dry-run applies only to land" >&2; usage; }
     DRY_RUN=true; shift; continue
   fi
   case "$opt" in
     --pr|--repo|--head|--base-remote|--head-remote|--interval|--cap-minutes|--ci-cap-minutes) ;;
-    *) echo "self-merge.sh: unknown option: $opt" >&2; usage ;;
+    *) echo "land.sh: unknown option: $opt" >&2; usage ;;
   esac
-  [ $# -ge 2 ] || { echo "self-merge.sh: $opt requires a value" >&2; usage; }
+  [ $# -ge 2 ] || { echo "land.sh: $opt requires a value" >&2; usage; }
   val="$2"; shift 2
   case "$opt" in
     --pr) PR="$val" ;;
@@ -94,54 +94,54 @@ done
 
 [ -n "$PR" ] && [ -n "$REPO" ] || usage
 case "$PR" in ''|*[!0-9]*|0*)
-  echo "self-merge.sh: --pr must be a positive integer without leading zeros" >&2; usage ;;
+  echo "land.sh: --pr must be a positive integer without leading zeros" >&2; usage ;;
 esac
 case "$REPO" in
-  */*/*|*[!A-Za-z0-9._/-]*) echo "self-merge.sh: --repo must be owner/name" >&2; usage ;;
+  */*/*|*[!A-Za-z0-9._/-]*) echo "land.sh: --repo must be owner/name" >&2; usage ;;
   ?*/?*) ;;
-  *) echo "self-merge.sh: --repo must be owner/name" >&2; usage ;;
+  *) echo "land.sh: --repo must be owner/name" >&2; usage ;;
 esac
 if [ "$PHASE" != check ]; then
   HEAD_OID=$(printf '%s' "$HEAD_OID" | tr 'A-F' 'a-f')
   case "$HEAD_OID" in *[!0-9a-f]*|'')
-    echo "self-merge.sh: --head must be the full 40-hex verified head OID" >&2; usage ;;
+    echo "land.sh: --head must be the full 40-hex verified head OID" >&2; usage ;;
   esac
   [ "${#HEAD_OID}" -eq 40 ] || {
-    echo "self-merge.sh: --head must be the full 40-hex verified head OID" >&2; usage
+    echo "land.sh: --head must be the full 40-hex verified head OID" >&2; usage
   }
 fi
 case "$INTERVAL" in ''|0|0*|*[!0-9]*)
-  echo "self-merge.sh: --interval must be a positive integer without leading zeros (seconds)" >&2; usage ;;
+  echo "land.sh: --interval must be a positive integer without leading zeros (seconds)" >&2; usage ;;
 esac
 case "$CAP_MINUTES" in ''|0?*|*[!0-9]*)
-  echo "self-merge.sh: --cap-minutes must be a non-negative integer without leading zeros" >&2; usage ;;
+  echo "land.sh: --cap-minutes must be a non-negative integer without leading zeros" >&2; usage ;;
 esac
 # Keep later arithmetic inside a signed 32-bit range on every supported Bash.
 # These limits are far beyond a useful interactive wait while rejecting values
 # that could wrap only after the irreversible merge command has run.
 [ "${#INTERVAL}" -le 9 ] || {
-  echo "self-merge.sh: --interval must be at most 999999999 seconds" >&2; usage
+  echo "land.sh: --interval must be at most 999999999 seconds" >&2; usage
 }
 [ "${#CAP_MINUTES}" -le 7 ] || {
-  echo "self-merge.sh: --cap-minutes must be at most 9999999" >&2; usage
+  echo "land.sh: --cap-minutes must be at most 9999999" >&2; usage
 }
 case "$CI_CAP_MINUTES" in ''|0?*|*[!0-9]*)
-  echo "self-merge.sh: --ci-cap-minutes must be a non-negative integer without leading zeros" >&2; usage ;;
+  echo "land.sh: --ci-cap-minutes must be a non-negative integer without leading zeros" >&2; usage ;;
 esac
 [ "${#CI_CAP_MINUTES}" -le 7 ] || {
-  echo "self-merge.sh: --ci-cap-minutes must be at most 9999999" >&2; usage
+  echo "land.sh: --ci-cap-minutes must be at most 9999999" >&2; usage
 }
 # Remote-name overrides: a leading hyphen would read as an option to git
 # even behind our own parsing, and every use below passes them as
 # positionals, so refuse the shape outright rather than trusting quoting.
 for rn in "$BASE_REMOTE_OPT" "$HEAD_REMOTE_OPT"; do
   case "$rn" in -*)
-    echo "self-merge.sh: remote names must not begin with a hyphen" >&2; usage ;;
+    echo "land.sh: remote names must not begin with a hyphen" >&2; usage ;;
   esac
 done
 
 command -v gh >/dev/null 2>&1 || {
-  echo "self-merge.sh: gh (GitHub CLI) not found on PATH; stop and hand off unless another authenticated PR-host CLI can perform every required forge check" >&2
+  echo "land.sh: gh (GitHub CLI) not found on PATH; stop and hand off unless another authenticated PR-host CLI can perform every required forge check" >&2
   exit 69
 }
 
@@ -1109,7 +1109,7 @@ remove_land_worktree() { # fails only when git cannot remove it
   if git worktree remove --force -- "$LAND_TMP_WT/wt" >/dev/null 2>&1; then
     rm -rf -- "$LAND_TMP_WT"
   else
-    echo "self-merge.sh: could not remove the temporary worktree at $LAND_TMP_WT/wt; remove it with git worktree remove --force" >&2
+    echo "land.sh: could not remove the temporary worktree at $LAND_TMP_WT/wt; remove it with git worktree remove --force" >&2
     rc=1
   fi
   LAND_TMP_WT=""
@@ -1205,9 +1205,9 @@ land_rebase() {
     stop rebase-failed "could not move $BRANCH to the rebased $NEW_HEAD; it is unchanged at $HEAD_OID and nothing was pushed: $MOVE_ERR"
   fi
   # The agent judges the rebase from this, as it would a manual one.
-  echo "self-merge.sh: rebased $BRANCH onto $LAND_TIP; git range-diff $LAND_TIP $HEAD_OID $NEW_HEAD:" >&2
+  echo "land.sh: rebased $BRANCH onto $LAND_TIP; git range-diff $LAND_TIP $HEAD_OID $NEW_HEAD:" >&2
   git range-diff --no-color "$LAND_TIP" "$HEAD_OID" "$NEW_HEAD" >&2 2>/dev/null \
-    || echo "self-merge.sh: (git range-diff failed; compare the commits by hand)" >&2
+    || echo "land.sh: (git range-diff failed; compare the commits by hand)" >&2
 }
 
 # Push the rebased branch with a lease on the reviewed head, so a push that
@@ -1273,7 +1273,7 @@ land_dry_run() { # land_dry_run <on-tip>
   else
     base_msg="the forge's $BASE tip $FORGE_BASE_TIP differs from the fetched $LAND_TIP"
   fi
-  printf 'self-merge.sh: land dry run, PR %s:\n  tip:    %s\n  checks: %s\n  base:   %s\n' \
+  printf 'land.sh: land dry run, PR %s:\n  tip:    %s\n  checks: %s\n  base:   %s\n' \
     "$PR" "$tip_msg" "$ci_msg" "$base_msg" >&2
   summary="dry run, nothing changed. tip: $tip_msg. checks: $ci_msg. base: $base_msg"
   [ "$on_tip" = true ] || stop not-on-tip "$summary"
@@ -1457,7 +1457,7 @@ phase_merge() {
       [ "$state" = OPEN ] || [ "$state" = MERGED ] \
         || stop pr-closed "PR $PR is $state after the merge command; nothing merged"
     else
-      echo "self-merge.sh: merge-state poll failed; retrying" >&2
+      echo "land.sh: merge-state poll failed; retrying" >&2
     fi
     remaining=$(( deadline - SECONDS ))
     [ "$remaining" -gt 0 ] \
