@@ -1195,7 +1195,9 @@ land_rebase() {
       stop op-in-progress "$OP_FOUND exists in the head worktree at $LAND_WT"
     fi
   fi
-  LAND_TMP_WT=$(mktemp -d) || lookup_failed rebase "mktemp failed"
+  # The land-wt template is how merge-cleanup's worktree-sweep.sh tells a
+  # worktree a dead lander left from any other detached worktree.
+  LAND_TMP_WT=$(mktemp -d "${TMPDIR:-/tmp}/land-wt.XXXXXX") || lookup_failed rebase "mktemp failed"
   wt="$LAND_TMP_WT/wt"
   if ! git worktree add --quiet --detach -- "$wt" "$HEAD_OID" >/dev/null 2>&1; then
     # A failing post-checkout hook fails the add after registering it.
