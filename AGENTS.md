@@ -374,9 +374,27 @@ material, examples, and sub-prompts may live beside it.
   - **Slug:** `freeasinbird/free-skills`. Pass
     `--repo freeasinbird/free-skills` to `gh`; never derive the owner from a
     sibling project.
-  - **Consumers:** `await-pr-review`, `merge-cleanup`, `self-merge`, and
-    `visual-evidence` read this record before inferring a repository from a
-    remote.
+  - **Consumers:** `await-pr-review`, `land-approved-prs`, `merge-cleanup`,
+    and `visual-evidence` read this record before inferring a repository
+    from a remote.
+
+- **Land approved PRs by label.** This project has the following landing
+  record:
+
+  - **Mechanism:** `label`.
+  - **Approval:** `approved`, added only by the approver. Agents never add
+    it, even to a PR they wrote, and a chat message isn't approval.
+  - **Hand-back:** `needs-human`. Only the approver removes it; re-adding
+    `approved` and removing `needs-human` means "try again."
+  - **Approver:** `bennelsonweiss`.
+  - **Stale lock age:** `240` minutes: the engine's default caps (30 for CI
+    plus 15 for the merge) times four allowed runs, plus a reviewer wait and
+    a margin.
+  - **Base-advance checks:** none.
+  - **Reviewer:** `chatgpt-codex-connector`, from the reviewer record.
+  - **Reviewer completion marker:** `codex-pull-request-review-summary`.
+  - **Consumer:** `land-approved-prs` reads this record from the default
+    branch's tip. Update the skill if the record's shape changes.
 
 <!-- TODO: Fill in more as patterns emerge: prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->
