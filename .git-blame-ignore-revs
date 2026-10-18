@@ -6,3 +6,6 @@
 
 # Sweep em dashes from non-devlog prose
 cdd4b5023738cdd66a0b5bfa65d6e450a6f66102
+
+# Move the self-merge engine into land-approved-prs as land.sh
+a05b88293b1d8d754af6ac7e8759fc9a19d14c81
