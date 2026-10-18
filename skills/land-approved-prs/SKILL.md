@@ -279,8 +279,9 @@ pushed after the list: list again and let filter 4 decide.
 
 `check` verifies that the PR is open, the tree is clean, and no git operation
 is paused. It also checks that no competing worktree layout exists, the head
-and base names don't collide, no other open PR shares or stacks on the head
-branch, and any merge queue uses merge commits.
+and base names don't collide, no other open PR shares the head branch, and
+any merge queue uses merge commits. Its `OK` result lists the open PRs
+stacked on the head branch as `stacked_prs`; see "Stacks."
 
 One `land` run is one round of three checks, and it merges only when all
 three pass:
@@ -345,8 +346,8 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
   hand back.
 - **`checks-pending` or `checks-missing`:** Rerun within the bound above, then
   hand back.
-- **`stacked-prs`:** The PR is a stack's parent. Hand back naming the guard;
-  see "Stacks."
+- **`stacked-prs`:** The PR is the parent of a stack on a cross-repository
+  head. Hand back naming the guard; see "Stacks."
 - **`lease-failed`:** Someone else pushed to the branch after approval. Hand
   back and say so.
 - **`pr-closed` or `pr-not-open`:** The PR closed or merged since the list.
@@ -462,10 +463,34 @@ didn't sequence follow in approval order.
 
 ## Stacks
 
-A child becomes eligible when its parent merges (filter 2). The parent is the
-problem: the engine refuses to land a branch that an open PR is based on, and
-stops `stacked-prs`. Hand the parent back naming the guard. The owner then
-retargets the child or merges the parent.
+Land a stack's parent like any other PR. The engine reports the open PRs
+based on its branch, in `check`'s `stacked_prs` and a stderr line from every
+phase, and continues: nothing it runs deletes the branch. The forge retargets
+each child onto the parent's base when the merged branch is deleted, and
+merge-cleanup retargets them itself before its own delete. The next
+`list-ready.sh` call then admits each approved child under filter 2. Name the
+children in the batch report as unblocked by the parent.
+
+When the repository doesn't auto-delete merged branches and merge-cleanup
+stops `head-worktree-present`, nothing deletes or retargets yet. The children
+stay based on the merged branch, and filter 2 keeps excluding them. Name them
+in the batch report as waiting on the owner's removal of that worktree; the
+cleanup run after it retargets them.
+
+A child's turn after a rebased parent starts from the parent's pre-rebase
+commits. Its own `land` rebase drops the ones that match what merged, and the
+range-diff shows them dropping. A conflict there is a `rebase-conflict` and
+follows that stop's rule.
+
+A native GitHub stack (one managed with `gh stack`) must have linear history
+between its branches before it can merge. After `land` rebases only the
+parent, its `merge` may stop `merge-refused`. Hand the parent back naming the
+guard; the owner re-linearizes the stack with `gh stack rebase --upstack`.
+
+A cross-repository head still stops `stacked-prs`. Its children live in the
+head's repository, where neither the forge nor merge-cleanup can retarget them
+onto this base. Hand the parent back naming the guard; the owner retargets the
+children or merges the parent.
 
 ## Recovery After a Dead Lander
 
