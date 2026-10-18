@@ -728,6 +728,8 @@ and lint and formatting are clean.
 - Inventory validation matrix green when merge-cleanup's
   `worktree-inventory.sh` changed
   (`./scripts/test-merge-cleanup-inventory.sh`)
+- Sweep validation matrix green when merge-cleanup's `worktree-sweep.sh`
+  changed (`./scripts/test-merge-cleanup-sweep.sh`)
 - Landing validation matrix green when merge-cleanup's
   `base-landing-plan.sh` changed
   (`./scripts/test-merge-cleanup-landing.sh`)
