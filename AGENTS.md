@@ -695,6 +695,10 @@ and lint and formatting are clean.
   changed (`./scripts/test-capture.sh`)
 - Self-merge validation matrix green when self-merge's `self-merge.sh`
   changed (`./scripts/test-self-merge.sh`)
+- Readiness-list matrix green when land-approved-prs' `list-ready.sh`
+  changed (`./scripts/test-list-ready.sh`)
+- Landed-since matrix green when land-approved-prs' `landed-since.sh`
+  changed (`./scripts/test-landed-since.sh`)
 - Reconciliation validation matrix green when merge-cleanup's
   `reconciliation-ledger.sh` changed
   (`./scripts/test-merge-cleanup-reconciliation.sh`)
