@@ -232,7 +232,7 @@ the approval label yourself. Never run its `merge` phase on its own.
 
 1. **Read it.** Title, body, diff, and review threads.
 2. **Read what landed.** Run `landed-since.sh`. It prints the default
-   branch's first-parent log with `--stat` from the PR's original merge base
+   branch's first-parent log with `--stat` from the PR's original fork point
    to the tip, then runs the record's base-advance checks. Open any commit
    that could bear on the PR, not only those touching the same paths, and
    decide whether the PR still holds.
@@ -250,12 +250,14 @@ the approval label yourself. Never run its `merge` phase on its own.
 <skill-dir>/landed-since.sh --repo <owner/name> --pr <n> --since <oid>
 ```
 
-The original merge base is the merge base of the PR's first pushed head with
-the default branch. It doesn't move as the default branch advances or the
-author rebases. A later head is no substitute: its merge base skips exactly
-the landings the author's rebase absorbed without anyone reading them against
-this PR. When the first head can't be found, the script stops
-`first-head-unknown`; hand the PR back.
+The original fork point is the common ancestor of the default-branch parents
+of every commit the PR has had, across its current head and every head a force
+push replaced. On one line, that's the oldest of those parents. It doesn't
+move as the default branch advances or the author merges it in or rebases. A
+later base is no substitute: it skips exactly the landings the author's merge
+or rebase absorbed without anyone reading them against this PR. When a force
+push replaced a head the forge no longer has, the script stops
+`original-base-unknown`; hand the PR back.
 
 Use `--since` with the tip from your last read when re-reading after
 `rebased`. Base-advance checks see `LAND_PR`, `LAND_FROM`, and `LAND_TIP` in
@@ -543,9 +545,9 @@ lock's state: `acquired`, `refreshed`, `released`, or `absent`. It reports
 - `remote-unresolved`, `remote-ambiguous`, or `not-a-repo`: fix the
   invocation.
 
-`landed-since.sh` reports `OK landed-since` with the range, the first head,
-the commit count, and each check's exit status. It stops
-`first-head-unknown` when the original base can't be found.
+`landed-since.sh` reports `OK landed-since` with the range, the number of
+heads it examined, the commit count, and each check's exit status. It stops
+`original-base-unknown` when the original fork point can't be found.
 
 ## Comments and the Batch Report
 
