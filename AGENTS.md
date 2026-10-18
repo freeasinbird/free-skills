@@ -374,9 +374,27 @@ material, examples, and sub-prompts may live beside it.
   - **Slug:** `freeasinbird/free-skills`. Pass
     `--repo freeasinbird/free-skills` to `gh`; never derive the owner from a
     sibling project.
-  - **Consumers:** `await-pr-review`, `merge-cleanup`, `self-merge`, and
-    `visual-evidence` read this record before inferring a repository from a
-    remote.
+  - **Consumers:** `await-pr-review`, `land-approved-prs`, `merge-cleanup`,
+    and `visual-evidence` read this record before inferring a repository
+    from a remote.
+
+- **Land approved PRs by label.** This project has the following landing
+  record:
+
+  - **Mechanism:** `label`.
+  - **Approval:** `approved`, added only by the approver. Agents never add
+    it, even to a PR they wrote, and a chat message isn't approval.
+  - **Hand-back:** `needs-human`. Only the approver removes it; re-adding
+    `approved` and removing `needs-human` means "try again."
+  - **Approver:** `bennelsonweiss`.
+  - **Stale lock age:** `240` minutes: the engine's default caps (30 for CI
+    plus 15 for the merge) times four allowed runs, plus a reviewer wait and
+    a margin.
+  - **Base-advance checks:** none.
+  - **Reviewer:** `chatgpt-codex-connector`, from the reviewer record.
+  - **Reviewer completion marker:** `codex-pull-request-review-summary`.
+  - **Consumer:** `land-approved-prs` reads this record from the default
+    branch's tip. Update the skill if the record's shape changes.
 
 <!-- TODO: Fill in more as patterns emerge: prompt structure guidelines,
      how to handle skill dependencies, testing/validation patterns. -->
@@ -531,6 +549,11 @@ PR, read `docs/agent-workflow.md` §handing-off and follow its sequence:
 4. Self-review the final diff.
 5. Close the watch by handling findings or recording its bounded timeout.
 6. Stop and summarize for the human reviewer.
+
+Once the approver approves a PR to land, stop pushing to it unless you are the
+landing batch. Turn off any auto-fix, CI repair, or review watch the platform
+runs for it, where the platform offers that control; otherwise tell the
+approver which automation still runs.
 
 If the user asks you to merge, read
 `docs/agent-workflow.md` §merge-and-resync first and follow it step by step.
@@ -693,8 +716,12 @@ and lint and formatting are clean.
   (`./scripts/test-check-review-convergence-layers.sh`)
 - Capture validation matrix green when visual-evidence's `capture.mjs`
   changed (`./scripts/test-capture.sh`)
-- Self-merge validation matrix green when self-merge's `self-merge.sh`
-  changed (`./scripts/test-self-merge.sh`)
+- Landing engine matrix green when land-approved-prs' `land.sh` changed
+  (`./scripts/test-land.sh`)
+- Readiness-list matrix green when land-approved-prs' `list-ready.sh`
+  changed (`./scripts/test-list-ready.sh`)
+- Landed-since matrix green when land-approved-prs' `landed-since.sh`
+  changed (`./scripts/test-landed-since.sh`)
 - Reconciliation validation matrix green when merge-cleanup's
   `reconciliation-ledger.sh` changed
   (`./scripts/test-merge-cleanup-reconciliation.sh`)

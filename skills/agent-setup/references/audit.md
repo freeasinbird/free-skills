@@ -251,9 +251,9 @@ same project-specific conventions section:
   - **Host:** `github.com`.
   - **Slug:** `owner/name`. Pass `--repo owner/name` to `gh`; never derive
     the owner from a sibling project.
-  - **Consumers:** `await-pr-review`, `merge-cleanup`, `self-merge`, and
-    `visual-evidence` read this record before inferring a repository from a
-    remote.
+  - **Consumers:** `await-pr-review`, `land-approved-prs`, `merge-cleanup`,
+    and `visual-evidence` read this record before inferring a repository
+    from a remote.
 ```
 
 The host is the forge's canonical host, never an alias. The `owner/name`

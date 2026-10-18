@@ -359,6 +359,11 @@ PR, read `docs/agent-workflow.md` §handing-off and follow its sequence:
 5. Close the watch by handling findings or recording its bounded timeout.
 6. Stop and summarize for the human reviewer.
 
+Once the approver approves a PR to land, stop pushing to it unless you are the
+landing batch. Turn off any auto-fix, CI repair, or review watch the platform
+runs for it, where the platform offers that control; otherwise tell the
+approver which automation still runs.
+
 If the user asks you to merge, read
 `docs/agent-workflow.md` §merge-and-resync first and follow it step by step.
 Do not merge or resync from memory.

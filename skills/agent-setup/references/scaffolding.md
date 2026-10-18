@@ -243,6 +243,16 @@ follow this full sequence:
    the reviewer should inspect closely. Leave merging, branch cleanup, and
    `main` resync to the approver.
 
+   Once the approver approves the PR to land, stop pushing to it unless you
+   are the landing batch, which records each push it makes. A landing batch
+   merges the head the approval covered, and a push it didn't record keeps the
+   PR from landing until the approver approves again. Freeze the PR too when
+   the approver only says it's approved, even though only the landing
+   record's signal makes it ready to land. Turn off any auto-fix, CI repair,
+   or review watch the platform runs for the PR, where the platform offers
+   that control. Without that control, tell the approver which automation
+   still runs.
+
 ## merge-and-resync
 
 Run this procedure only when the user asks you to merge.
