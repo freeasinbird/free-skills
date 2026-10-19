@@ -4,8 +4,10 @@
 # through the caller's own --jq filter, while git runs for real against a
 # bare scratch remote whose default branch has a known first-parent history.
 #
-# The cases pin the merge-base choice (the first pushed head's base, never a
-# later rebased head's), the stops when the first head is unknown, the
+# The cases pin the fork-point choice (the oldest default-branch parent of
+# any commit the PR has had, across its current head and every force-pushed
+# head, never a later merge-in or rebase base), the stop when a force-pushed
+# head is gone, the lookup failures on truncated or unreadable lists, the
 # --since re-read, and the base-advance checks read from the default-branch
 # tip.
 #
@@ -72,9 +74,9 @@ new_repo() {
   git -C "$SEED" push -q "$SRV" main
   git clone -q "$SRV" "$WORK"
   echo '{"default_branch":"main"}' > "$FIX/repo.json"
-  echo '{"createdAt":"2026-10-01T00:00:00Z","headRefName":"feat/one"}' > "$FIX/pr.json"
-  echo '[]' > "$FIX/timeline.json"
-  echo '{"workflow_runs":[]}' > "$FIX/runs.json"
+  echo '{"head":{"sha":"'"$C2"'"},"commits":0}' > "$FIX/pull.json"
+  echo '[]' > "$FIX/pr-commits.json"
+  echo '{"data":{"repository":{"pullRequest":{"timelineItems":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}' > "$FIX/forcepushes.json"
 }
 
 # --- validation half: dead gh shim ------------------------------------------
@@ -162,20 +164,19 @@ for a in "$@"; do
   case "$a" in
     pr|api) [ -z "$sub" ] && sub="$a" ;;
     view|list) [ "$sub" = pr ] && [ -z "$verb" ] && verb="$a" ;;
-    repos/*) [ -z "$api" ] && api="$a" ;;
+    repos/*|graphql) [ -z "$api" ] && api="$a" ;;
   esac
   prev="$a"
 done
 fixture=''
 if [ "$sub" = api ]; then
   case "$api" in
-    */issues/*/timeline*) fixture="$FIX/timeline.json" ;;
-    */actions/runs*) fixture="$FIX/runs.json" ;;
-    */compare/*) fixture="$FIX/compare-${api##*...}.json" ;;
+    graphql) fixture="$FIX/forcepushes.json" ;;
+    */pulls/*/commits*) fixture="$FIX/pr-commits.json" ;;
+    */pulls/*) fixture="$FIX/pull.json" ;;
+    */compare/*) h="${api##*...}"; fixture="$FIX/compare-${h%%\?*}.json" ;;
     repos/*/*) fixture="$FIX/repo.json" ;;
   esac
-elif [ "$sub" = pr ] && [ "$verb" = view ]; then
-  fixture="$FIX/pr.json"
 fi
 [ -n "$fixture" ] && [ -f "$fixture" ] || exit 1
 if [ -n "$jqval" ]; then exec jq -r "$jqval" "$fixture"; fi
@@ -184,21 +185,28 @@ SHIMEOF
 } > "$SHIMD/gh"
 chmod +x "$SHIMD/gh"
 
-F1=f111111111111111111111111111111111111111
-R1=e111111111111111111111111111111111111111
-X1=d111111111111111111111111111111111111111
+A1=a111111111111111111111111111111111111111
+A2=a222222222222222222222222222222222222222
+B1=b111111111111111111111111111111111111111
+B2=b222222222222222222222222222222222222222
+D1=d111111111111111111111111111111111111111
+X1=e111111111111111111111111111111111111111
 
-ci_run() { # ci_run <at> <oid> [head-repository]
-  jq --arg at "$1" --arg o "$2" --arg r "${3:-Owner/Name}" \
-    '.workflow_runs += [{created_at:$at, head_sha:$o, head_repository:{full_name:$r}}]' "$FIX/runs.json" > "$FIX/r.tmp" \
-    && mv "$FIX/r.tmp" "$FIX/runs.json"
+pr_commit() { # pr_commit <oid> <parent>...: add a commit to the current head
+  local o="$1"; shift
+  jq --arg o "$o" --args '. + [{sha:$o, parents:[$ARGS.positional[] | {sha:.}]}]' "$@" < "$FIX/pr-commits.json" > "$FIX/c.tmp" \
+    && mv "$FIX/c.tmp" "$FIX/pr-commits.json"
+  jq --arg o "$o" '.head.sha = $o | .commits += 1' "$FIX/pull.json" > "$FIX/p.tmp" && mv "$FIX/p.tmp" "$FIX/pull.json"
 }
-force_pushed() { # force_pushed <at> <oid>
-  jq --arg at "$1" --arg o "$2" '. + [{event:"head_ref_force_pushed", created_at:$at, commit_id:$o}]' "$FIX/timeline.json" > "$FIX/t.tmp" \
-    && mv "$FIX/t.tmp" "$FIX/timeline.json"
+force_pushed() { # force_pushed <before-oid|null>
+  jq --arg o "$1" '.data.repository.pullRequest.timelineItems.nodes += [{beforeCommit:(if $o == "null" then null else {oid:$o} end)}]' \
+    "$FIX/forcepushes.json" > "$FIX/f.tmp" && mv "$FIX/f.tmp" "$FIX/forcepushes.json"
 }
-merge_base_of() { # merge_base_of <head> <base>
-  jq -n --arg b "$2" '{merge_base_commit:{sha:$b}}' > "$FIX/compare-$1.json"
+pushed_away() { # pushed_away <head> <merge-base> [<oid> <parent>[,<parent>]]...
+  local h="$1" m="$2"; shift 2
+  jq -n --arg m "$m" --args '{merge_base_commit:{sha:$m},
+    commits:[$ARGS.positional | range(0; length; 2) as $i | {sha:.[$i], parents:[.[$i + 1] | split(",")[] | {sha:.}]}]}
+    | .total_commits = (.commits | length)' "$@" > "$FIX/compare-$h.json"
 }
 
 RC=0 LAST="" JSON=""
@@ -224,70 +232,235 @@ expect_lookup() {
 expect_out() { if grep -qF -- "$1" "$TMP/out"; then ok; else bad "$2: output lacks '$1'"; fi; }
 expect_no_out() { if grep -qF -- "$1" "$TMP/out"; then bad "$2: output has '$1'"; else ok; fi; }
 
-# --- the merge-base choice ---
+# --- the fork-point choice ---
 
-# The author rebased from c0 onto c2 before handoff: the first head's base
-# is c0, the rebased head's is c2. Starting from c2 would skip c1 and M.
+# The Problem scenario: the opening commit forks from c0, and a later merge
+# of the newer main (c2) leaves no timeline event. Starting from the merge's
+# parent would skip c1 and M.
 new_repo
-ci_run 2026-10-01T00:00:05Z "$F1"; merge_base_of "$F1" "$C0"
-force_pushed 2026-10-03T00:00:00Z "$R1"; ci_run 2026-10-03T00:00:05Z "$R1"; merge_base_of "$R1" "$C2"
+pr_commit "$A1" "$C0"; pr_commit "$D1" "$A1" "$C2"
 ls_run
-expect_field .from "$C0" "the range starts at the first pushed head's merge base"
-expect_field .first_head "$F1" "the first pushed head is the earliest CI run's head"
+expect_field .from "$C0" "the range starts at the opening commit's fork point, not the merge-in parent"
+expect_field .heads 1 "one head examined without force pushes"
 expect_field .commits 3 "the count is first-parent commits since the original base"
 expect_field .tip "$C2" "the range ends at the fetched tip"
-expect_out "c1 first landing" "a landing the handoff rebase absorbed is shown"
+expect_out "c1 first landing" "a landing the merge-in absorbed is shown"
 expect_out "M merge side" "a merge commit is shown"
 expect_out " two | 1 +" "the log carries --stat"
 expect_no_out "s1 side work" "the log is first-parent only"
+if grep -q 'actions/runs\|/timeline' "$FIX/calls.log"; then bad "no CI run or REST timeline read"; else ok; fi
 
 new_repo
-ci_run 2026-10-03T00:00:05Z "$R1"; merge_base_of "$R1" "$C2"
-ci_run 2026-10-01T00:00:05Z "$F1"; merge_base_of "$F1" "$C1"
+pr_commit "$D1" "$A1" "$C2"; pr_commit "$A1" "$C0"
 ls_run
-expect_field .from "$C1" "the earliest run wins regardless of listing order"
+expect_field .from "$C0" "the oldest parent wins regardless of listing order"
+
+# Rebased before any CI run: the pushed-away head forked from c0, the
+# current one from c2.
+new_repo
+pushed_away "$B1" "$C0" "$B1" "$C0"
+force_pushed "$B1"
+pr_commit "$A1" "$C2"
+ls_run
+expect_field .from "$C0" "a rebase resolves to the pre-rebase fork point"
+expect_field .heads 2 "the current head and one force-pushed head examined"
 
 new_repo
-ci_run 2026-09-20T00:00:00Z "$X1"; merge_base_of "$X1" "$C0"
-ci_run 2026-10-01T00:00:05Z "$F1"; merge_base_of "$F1" "$C1"
+pushed_away "$B1" "$C0" "$B1" "$C0" "$A2" "$B1"
+pushed_away "$B2" "$C1" "$B2" "$C1"
+force_pushed "$B1"; force_pushed "$B2"
+pr_commit "$A1" "$C2"
 ls_run
-expect_field .first_head "$F1" "a run from before the PR existed belongs to another PR"
-expect_field .from "$C1" "the reused branch name's old run does not move the base"
+expect_field .from "$C0" "the oldest head's fork point wins across several force pushes"
+expect_field .heads 3 "every force-pushed head is examined"
+if [ "$(grep -c '/compare/' "$FIX/calls.log")" -eq 2 ]; then ok; else bad "one compare per force-pushed head"; fi
 
 new_repo
-ci_run 2026-10-01T00:00:01Z "$X1" stranger/name; merge_base_of "$X1" "$C2"
-ci_run 2026-10-01T00:00:05Z "$F1"; merge_base_of "$F1" "$C1"
+pushed_away "$B1" "$C2" "$B1" "$C2"
+force_pushed "$B1"
+pr_commit "$A1" "$C1"
 ls_run
-expect_field .first_head "$F1" "a fork's run on a same-named branch is not the first head"
-expect_field .from "$C1" "a fork's run does not move the base"
+expect_field .from "$C1" "the current head's fork point wins when it is the oldest"
 
 new_repo
+pushed_away "$B1" "$C0" "$B1" "$C0"
+force_pushed "$B1"; force_pushed null
+pr_commit "$A1" "$C2"
 ls_run
-expect_stop first-head-unknown "a PR with no CI run has no known first head"
+expect_stop original-base-unknown "a force push from a commit the forge no longer has stops"
 
 new_repo
-force_pushed 2026-10-01T00:00:03Z "$R1"
-ci_run 2026-10-01T00:00:05Z "$R1"; merge_base_of "$R1" "$C2"
+echo '{"head":{"sha":"'"$C2"'"},"commits":0}' > "$FIX/pull.json"
+pushed_away "$C2" "$C2"
 ls_run
-expect_stop first-head-unknown "a force-push before the earliest run hides the first head"
-
-new_repo
-ci_run 2026-10-01T00:00:05Z "$F1"; merge_base_of "$F1" "$C2"
-force_pushed 2026-10-02T00:00:00Z "$R1"
-ls_run
-expect_field .from "$C2" "a force-push after the earliest run leaves the first head known"
+expect_field .from "$C2" "a head already on main forks at its merge base"
 expect_field .commits 0 "nothing landed since the original base"
 expect_out "0 first-parent commit(s)" "an empty range says so"
 
 new_repo
-ci_run 2026-10-01T00:00:05Z "$F1"
+pushed_away "$B1" "$C0" "$B1" "$C0"
+jq '.total_commits = 2' "$FIX/compare-$B1.json" > "$FIX/x.tmp" && mv "$FIX/x.tmp" "$FIX/compare-$B1.json"
+force_pushed "$B1"
+pr_commit "$A1" "$C2"
+ls_run
+expect_lookup compare "a compare listing fewer commits than its total is a lookup failure"
+expect_out "truncated" "a truncated compare says so"
+
+new_repo
+pr_commit "$A1" "$C0"
+jq '.commits = 251' "$FIX/pull.json" > "$FIX/x.tmp" && mv "$FIX/x.tmp" "$FIX/pull.json"
+ls_run
+expect_lookup pr-commits "a PR over the forge's 250-commit list cap is a lookup failure"
+expect_out "at most 250" "the cap failure names the forge's limit"
+if grep -q 'pulls/5/commits' "$FIX/calls.log"; then bad "a capped PR reads no commit list"; else ok; fi
+
+new_repo
+pr_commit "$A1" "$C0"; pr_commit "$D1" "$A1" "$C2"
+jq '.commits = 3' "$FIX/pull.json" > "$FIX/x.tmp" && mv "$FIX/x.tmp" "$FIX/pull.json"
+ls_run
+expect_lookup pr-commits "a commit list shorter than the PR's count is a lookup failure"
+
+new_repo
+pr_commit "$A1" "$C0"
+jq '.[0].parents[0].sha = "c0"' "$FIX/pr-commits.json" > "$FIX/x.tmp" && mv "$FIX/x.tmp" "$FIX/pr-commits.json"
+ls_run
+expect_lookup pr-commits "an abbreviated parent oid is a lookup failure"
+
+new_repo
+pr_commit "$A1" "$C0"
+force_pushed "${B1:0:12}"
+ls_run
+expect_lookup force-pushes "an abbreviated before-commit is a lookup failure"
+
+new_repo
+pr_commit "$A1" "$C0"
+rm "$FIX/forcepushes.json"
+ls_run
+expect_lookup force-pushes "a failed force-push read is a lookup failure"
+
+new_repo
+force_pushed "$B1"
+pr_commit "$A1" "$C0"
 ls_run
 expect_lookup compare "a failed compare read is a lookup failure"
 
 new_repo
-ci_run 2026-10-01T00:00:05Z "$F1"; merge_base_of "$F1" "$X1"
+pr_commit "$A1" "$X1"
 ls_run
-expect_lookup merge-base "a merge base missing from the fetched branch is a lookup failure"
+expect_lookup merge-base "a fork point missing from the fetched branch is a lookup failure"
+
+# A commit this checkout has that isn't on main: being an object is not
+# being on the default branch.
+new_repo
+OFF=$(git -C "$WORK" commit-tree -p "$C0" -m "off main" "$C0^{tree}")
+pr_commit "$A1" "$OFF"
+ls_run
+expect_lookup merge-base "a fork point off the fetched branch is a lookup failure"
+
+# A head the list doesn't contain belongs to another push: a force push
+# between the PR read and the list read would drop the first head's lineage.
+new_repo
+pr_commit "$A2" "$C2"
+jq --arg h "$A1" '.head.sha = $h' "$FIX/pull.json" > "$FIX/x.tmp" && mv "$FIX/x.tmp" "$FIX/pull.json"
+ls_run
+expect_lookup pr-commits "a commit list without the PR's head is a lookup failure"
+
+new_repo
+pushed_away "$B1" "$C0" "$B2" "$C0"
+force_pushed "$B1"
+pr_commit "$A1" "$C2"
+ls_run
+expect_lookup compare "a compare without its own head is a lookup failure"
+
+new_repo
+pushed_away "$C1" "$C0"
+force_pushed "$C1"
+pr_commit "$A1" "$C2"
+ls_run
+expect_lookup compare "an empty compare whose merge base isn't its head is a lookup failure"
+
+# A replaced head that has since landed has an empty compare whose merge
+# base is the head itself, newer than its fork point. s1 forked from c1 and
+# landed through M.
+new_repo
+S1=$(git -C "$WORK" rev-parse "$C2^1^2")
+pushed_away "$S1" "$S1"
+force_pushed "$S1"
+pr_commit "$A1" "$C2"
+ls_run
+expect_field .from "$C1" "a replaced head that landed starts at its own fork point"
+
+# landed_repo: new_repo, then a branch cut from c0 merges c1 in (OLD) and
+# lands through X (TIPX), the new tip. A range from OLD would skip c1, the
+# landing its merge-in absorbed.
+landed_repo() {
+  new_repo
+  git -C "$SEED" checkout -q -b old "$C0"
+  echo b > "$SEED/b"; git -C "$SEED" add b; git -C "$SEED" commit -qm "b1 old head work"
+  git -C "$SEED" merge -q --no-ff -m "b2 merge main in" "$C1"
+  OLD=$(git -C "$SEED" rev-parse HEAD)
+  git -C "$SEED" checkout -q main
+  git -C "$SEED" merge -q --no-ff -m "X land the old head" old
+  TIPX=$(git -C "$SEED" rev-parse HEAD)
+  git -C "$SEED" push -q "$SRV" main
+  git -C "$WORK" fetch -q origin
+}
+
+landed_repo
+pushed_away "$OLD" "$OLD"
+force_pushed "$OLD"
+pr_commit "$A1" "$TIPX"
+ls_run
+expect_field .from "$C0" "a replaced head that merged main in and landed starts at its fork point"
+expect_out "c1 first landing" "a landing the replaced head's merge-in absorbed is shown"
+
+# Only a prefix landed: the compare lists B1 alone, whose parent OLD is on
+# main but off its first-parent line.
+landed_repo
+pushed_away "$B1" "$TIPX" "$B1" "$OLD"
+force_pushed "$B1"
+pr_commit "$A1" "$TIPX"
+ls_run
+expect_field .from "$C0" "a replaced head whose prefix landed starts at the prefix's fork point"
+expect_out "c1 first landing" "a landing the landed prefix's merge-in absorbed is shown"
+
+landed_repo
+pr_commit "$A1" "$OLD"
+ls_run
+expect_field .from "$C0" "a current head whose prefix landed starts at the prefix's fork point"
+expect_out "c1 first landing" "a landing the current head's landed prefix absorbed is shown"
+
+# side_repo: main is c0 - c1 - c2 - M(side s1 - s2 - s3, cut from c0) - c3.
+# Sets C0, C1, C2, C3, and SK, the side branch's tip. Counted in commits
+# behind the tip, c1 (six) and c2 (five) look older than SK (four), yet a
+# range from either skips c1, which a range from SK covers.
+side_repo() {
+  local i
+  new_repo
+  git -C "$SEED" checkout -q -b side2 "$C0"
+  for i in 1 2 3; do echo "$i" > "$SEED/s$i"; git -C "$SEED" add "s$i"; git -C "$SEED" commit -qm "s$i side two"; done
+  SK=$(git -C "$SEED" rev-parse HEAD)
+  git -C "$SEED" checkout -q main
+  git -C "$SEED" merge -q --no-ff -m "M2 merge side two" side2
+  echo 3 > "$SEED/three"; git -C "$SEED" add three; git -C "$SEED" commit -qm "c3 third landing"
+  C3=$(git -C "$SEED" rev-parse HEAD)
+  git -C "$SEED" push -q "$SRV" main
+  git -C "$WORK" fetch -q origin
+}
+
+side_repo
+pr_commit "$A1" "$SK"; pr_commit "$D1" "$A1" "$C1"
+ls_run
+expect_field .from "$C0" "a branch cut from a side branch starts at the candidates' common ancestor"
+expect_out "c1 first landing" "a landing older than the side branch's merge is shown"
+
+side_repo
+pushed_away "$B1" "$SK" "$B1" "$SK"
+force_pushed "$B1"
+pr_commit "$A1" "$C2"
+ls_run
+expect_field .from "$C0" "a force-pushed head cut from a side branch keeps the range wide"
+expect_out "c2 second landing" "a landing the rebase absorbed is shown"
 
 # --- the re-read after rebased ---
 
@@ -295,8 +468,8 @@ new_repo
 ls_run --since "$C1"
 expect_field .from "$C1" "--since starts the range at the earlier read's tip"
 expect_field .commits 2 "--since counts only what landed after it"
-expect_field .first_head "" "--since needs no first head"
-if grep -q '^pr view\|actions/runs' "$FIX/calls.log" 2>/dev/null; then bad "--since reads no PR history"; else ok; fi
+expect_field .heads 0 "--since examines no heads"
+if grep -q 'pulls/\|graphql' "$FIX/calls.log" 2>/dev/null; then bad "--since reads no PR history"; else ok; fi
 
 new_repo
 ls_run --since "$X1"

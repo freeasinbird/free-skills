@@ -8,13 +8,19 @@
 #   landed-since.sh --repo owner/name --pr N [--since <40-hex-oid>]
 #     [--base-remote NAME]   # override remote resolution for the repository
 #
-# Without --since, the range starts at the PR's original merge base: the
-# merge base of its first pushed head with the default branch, which does
-# not move as the default branch advances or the author rebases. The first
-# pushed head is the head of the PR's earliest pull_request CI run. When no
-# run exists, or a force-push precedes the earliest run, the first head is
-# unknown and the script stops first-head-unknown rather than start from a
-# later head, which would skip exactly the commits this read exists for.
+# Without --since, the range starts at the PR's original fork point: the
+# common ancestor of the default-branch parents of every commit the PR has
+# ever had, which on one line is the oldest of those parents and which does
+# not move as the default branch advances or the author merges it in or
+# rebases. The commits come from the PR's current commit list and from the
+# compare of the default branch with each force push's before-commit. A
+# candidate off the default branch's first-parent line, such as a head or
+# prefix another PR landed, is replaced by the parents of the commits it
+# brought onto that line, read from the checkout, since a merge-in can make
+# its own fork point older. A force push whose before-commit the forge no
+# longer has stops original-base-unknown, and a truncated commit list is a
+# lookup failure, rather than start from a later base, which would skip
+# exactly the commits this read exists for.
 #
 # --since starts the range at an earlier read's tip instead, for the re-read
 # after land stops rebased.
@@ -144,49 +150,164 @@ git fetch -q --no-tags -- "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$
 TIP=$(git rev-parse --verify --quiet "refs/remotes/$REMOTE/$DEFAULT^{commit}") \
   || lookup_failed base-fetch "the fetched $DEFAULT did not resolve to a commit"
 
-FIRST_HEAD=""
+# lineage_points <want> <head>: read one head's lineage as lines "C <sha>" (a
+# commit off the default branch), "P <sha>" (one of its parents), "T <n>"
+# (the forge's commit total), and "M <sha>" (its merge base), and print its
+# fork-point candidates: the parents that are not themselves in the lineage,
+# or the merge base when the lineage is empty because the head is already on
+# the default branch. <want> is the commit count to expect, or empty to use
+# T. A list shorter than that count is truncated, and one without <head> (or
+# an empty one whose merge base isn't <head>) belongs to another head, as
+# when a push lands between reads. Printing its candidates could miss the
+# oldest one, so this prints "ERR <reason>" and fails instead.
+lineage_points() {
+  awk -v want="$1" -v head="$2" '
+    function is_oid(s) { return length(s) == 40 && s !~ /[^0-9a-f]/ }
+    err != "" { next }
+    $1 == "T" { if (total == "") total = $2; next }
+    !is_oid($2) { err = "unparseable oid \"" $2 "\""; next }
+    $1 == "C" { if (!($2 in c)) { c[$2] = 1; n++ }; next }
+    $1 == "P" { p[$2] = 1; next }
+    $1 == "M" { if (base == "") base = $2; next }
+    { err = "unexpected line \"" $1 "\"" }
+    END {
+      if (err != "") { print "ERR " err; exit 1 }
+      if (want == "") want = total
+      if (want !~ /^[0-9]+$/) { print "ERR unparseable commit count \"" want "\""; exit 1 }
+      if (n + 0 < want + 0) { print "ERR the commit list is truncated: " n + 0 " of " want; exit 1 }
+      if (n + 0 > want + 0) { print "ERR the commit list has " n " commits, more than the " want " reported"; exit 1 }
+      if (n + 0 == 0) {
+        if (base != head) { print "ERR the merge base \"" base "\" is not the head " head; exit 1 }
+        print base; exit
+      }
+      if (!(head in c)) { print "ERR the commit list does not contain the head " head; exit 1 }
+      for (s in p) if (!(s in c)) print s
+    }'
+}
+
+# landing_lineage <commit>: for a commit off the fetched tip's first-parent
+# line, print in lineage_points' line format the commits it brought onto
+# that line: those reachable from it but not from the first parent of the
+# oldest first-parent commit that contains it. A candidate that entered
+# through a merge may have merged the default branch in itself, so its own
+# fork point can be older than it.
+landing_lineage() {
+  local c="$1" entered lin
+  # A hash lookup, not grep -f: BSD grep's cost is patterns times lines.
+  entered=$(printf '%s\n' "$CHAIN" \
+    | awk 'NR == FNR { d[$1]; next } $1 in d' <(git rev-list --ancestry-path "$c..$TIP") - \
+    | tail -n 1)
+  [ -n "$entered" ] || return 1
+  lin=$(git rev-list --parents "$c" "^$entered^1") || return 1
+  printf 'T %s\n' "$(printf '%s\n' "$lin" | grep -c .)"
+  printf '%s\n' "$lin" | awk '{ print "C " $1; for (i = 2; i <= NF; i++) print "P " $i }'
+}
+
+HEADS=0
 if [ -n "$SINCE" ]; then
   FROM="$SINCE"
   git cat-file -e "$FROM^{commit}" 2>/dev/null \
     || lookup_failed since "--since $FROM is not a commit in this repository; fetch it or read from the original base"
 else
-  fields=$(gh pr view "$PR" --repo "$REPO" --json createdAt,headRefName \
-    --jq '[.createdAt, .headRefName] | @tsv' 2>/dev/null) \
+  fields=$(gh api "repos/$REPO/pulls/$PR" --jq '[.head.sha, .commits] | @tsv' 2>/dev/null) \
     || lookup_failed pr-view "could not read PR $PR"
-  IFS=$'\t' read -r created head <<< "$fields"
-  [ -n "$created" ] && [ -n "$head" ] || lookup_failed pr-view "PR $PR reported no creation time or head branch"
-  # A pull_request run created before the PR existed belongs to an earlier
-  # PR that reused the branch name, and one whose head lives in another
-  # repository belongs to a fork's PR from a same-named branch.
-  repo_lc=$(printf '%s' "$REPO" | tr 'A-Z' 'a-z')
-  first_run=$(gh api -X GET --paginate "repos/$REPO/actions/runs" -f event=pull_request \
-    -f branch="$head" -f per_page=100 \
-    --jq ".workflow_runs[] | select((.head_repository.full_name // \"\" | ascii_downcase) == \"$repo_lc\") | [.created_at, .head_sha] | @tsv" 2>/dev/null) \
-    || lookup_failed actions-runs "could not read PR $PR's CI runs"
-  first_run=$(printf '%s\n' "$first_run" | awk -F'\t' -v c="$created" 'NF == 2 && $1 >= c' | sort -t $'\t' -k1,1 | head -n 1)
-  first_push=$(gh api --paginate "repos/$REPO/issues/$PR/timeline?per_page=100" \
-    --jq '.[] | select(.event == "head_ref_force_pushed") | .created_at' 2>/dev/null) \
-    || lookup_failed timeline "could not read PR $PR's timeline"
-  first_push=$(printf '%s\n' "$first_push" | sed '/^$/d' | sort | head -n 1)
-  [ -n "$first_run" ] \
-    || stop first-head-unknown "PR $PR has no pull_request CI run, so its first pushed head is unknown; hand it back"
-  run_at="${first_run%%$'\t'*}" FIRST_HEAD="${first_run#*$'\t'}"
-  if [ -n "$first_push" ] && [[ "$first_push" < "$run_at" ]]; then
-    stop first-head-unknown "PR $PR was force-pushed at $first_push, before its earliest CI run at $run_at, so its first pushed head is unknown; hand it back"
+  IFS=$'\t' read -r head_oid head_count <<< "$fields"
+  case "$head_oid" in *[!0-9a-f]*|'') lookup_failed pr-view "unparseable head '$head_oid'" ;; esac
+  [ "${#head_oid}" -eq 40 ] || lookup_failed pr-view "unparseable head '$head_oid'"
+  case "$head_count" in *[!0-9]*|'') lookup_failed pr-view "unparseable commit count '$head_count'" ;; esac
+  [ "$head_count" -le 250 ] \
+    || lookup_failed pr-commits "PR $PR has $head_count commits, and the forge lists at most 250 of them"
+  # The REST timeline's force-push commit_id is the after-commit, so the
+  # before-commits come from GraphQL. Page on pageInfo, never totalCount:
+  # with the type filter, totalCount can count events the filter drops.
+  before=$(gh api graphql --paginate -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$PR" -f query='
+    query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          timelineItems(first: 100, after: $endCursor, itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT]) {
+            pageInfo { hasNextPage endCursor }
+            nodes { ... on HeadRefForcePushedEvent { beforeCommit { oid } } }
+          }
+        }
+      }
+    }' --jq '.data.repository.pullRequest.timelineItems.nodes[] | select(has("beforeCommit")) | .beforeCommit.oid // "-"' 2>/dev/null) \
+    || lookup_failed force-pushes "could not read PR $PR's force pushes"
+  before=$(printf '%s\n' "$before" | sed '/^$/d')
+  pushes=0 heads=""
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    [ "$b" != "-" ] \
+      || stop original-base-unknown "PR $PR was force-pushed from a commit the forge no longer has, so its original base is unknown; hand it back"
+    case "$b" in *[!0-9a-f]*) lookup_failed force-pushes "unparseable before-commit '$b'" ;; esac
+    [ "${#b}" -eq 40 ] || lookup_failed force-pushes "unparseable before-commit '$b'"
+    pushes=$((pushes + 1)) heads+="$b"$'\n'
+  done <<< "$before"
+  HEADS=$((pushes + 1))
+
+  points=""
+  if [ "$head_count" -gt 0 ]; then
+    got=$(gh api --paginate "repos/$REPO/pulls/$PR/commits?per_page=100" \
+      --jq '.[] | "C \(.sha)", "P \(.parents[].sha)"' 2>/dev/null) \
+      || lookup_failed pr-commits "could not read PR $PR's commits"
+    got=$(printf '%s\n' "$got" | lineage_points "$head_count" "$head_oid") \
+      || lookup_failed pr-commits "PR $PR's commits: ${got#ERR }"
+    points+="$got"$'\n'
+  else
+    # No commits off the default branch: the head itself is on it, and the
+    # compare reports the head as its own merge base.
+    heads+="$head_oid"$'\n'
   fi
-  case "$FIRST_HEAD" in *[!0-9a-f]*|'') lookup_failed actions-runs "unparseable head '$FIRST_HEAD'" ;; esac
-  # The forge keeps force-pushed-away commits and reports their merge base,
-  # so this works even when the first head is gone from every branch.
-  FROM=$(gh api "repos/$REPO/compare/$DEFAULT...$FIRST_HEAD" --jq .merge_base_commit.sha 2>/dev/null) \
-    || lookup_failed compare "could not read the merge base of $FIRST_HEAD with $DEFAULT"
-  case "$FROM" in *[!0-9a-f]*|'') lookup_failed compare "unparseable merge base '$FROM'" ;; esac
-  git cat-file -e "$FROM^{commit}" 2>/dev/null \
-    || lookup_failed merge-base "the merge base $FROM is not in the fetched $DEFAULT"
+  # Compare against the fetched tip, not the branch name, so every
+  # candidate is reachable from the tip this run reads up to.
+  while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    got=$(gh api --paginate "repos/$REPO/compare/$TIP...$h?per_page=250" \
+      --jq '"T \(.total_commits)", "M \(.merge_base_commit.sha)", (.commits[] | "C \(.sha)", "P \(.parents[].sha)")' 2>/dev/null) \
+      || lookup_failed compare "could not read the compare of $DEFAULT with $h"
+    got=$(printf '%s\n' "$got" | lineage_points "" "$h") \
+      || lookup_failed compare "the compare of $DEFAULT with $h: ${got#ERR }"
+    points+="$got"$'\n'
+  done < <(printf '%s' "$heads" | sort -u)
+
+  # A candidate off the fetched tip's first-parent line entered the default
+  # branch through a merge, as when another PR landed a head or a prefix of
+  # one, and may have merged the default branch in first. Replace it with
+  # the candidates of the commits it brought onto that line until every
+  # candidate is on the line. Each replacement is an ancestor, so this only
+  # widens the range, and the merge base of candidates on one line is the
+  # oldest of them. A parent the forge reports that isn't on the fetched
+  # default branch would start the range somewhere this read can't follow.
+  CHAIN=$(git rev-list --first-parent "$TIP") \
+    || lookup_failed merge-base "could not list $DEFAULT's first-parent line"
+  candidates=() seen="" pending=$(printf '%s' "$points" | sort -u)
+  while [ -n "$pending" ]; do
+    next=""
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      case "$seen" in *"$c"*) continue ;; esac
+      seen+="$c"$'\n'
+      git merge-base --is-ancestor "$c" "$TIP" 2>/dev/null \
+        || lookup_failed merge-base "the fork point $c is not in the fetched $DEFAULT"
+      if printf '%s\n' "$CHAIN" | grep -qFx "$c"; then candidates+=("$c"); continue; fi
+      got=$(landing_lineage "$c") \
+        || lookup_failed merge-base "could not read where $c landed on the fetched $DEFAULT"
+      got=$(printf '%s\n' "$got" | lineage_points "" "$c") \
+        || lookup_failed merge-base "the landing of $c: ${got#ERR }"
+      [ -n "$got" ] \
+        || lookup_failed merge-base "the fork point $c has no ancestor on $DEFAULT's first-parent line"
+      next+="$got"$'\n'
+    done <<< "$pending"
+    pending=$(printf '%s' "$next" | sed '/^$/d' | sort -u)
+  done
+  [ "${#candidates[@]}" -gt 0 ] \
+    || stop original-base-unknown "no commit PR $PR has had has a parent on $DEFAULT, so its original base is unknown; hand it back"
+  FROM=$(git merge-base --octopus "${candidates[@]}" 2>/dev/null) \
+    || lookup_failed merge-base "the fork points of PR $PR have no common ancestor on $DEFAULT"
 fi
 
 COUNT=$(git rev-list --first-parent --count "$FROM..$TIP" 2>/dev/null) \
   || lookup_failed log "could not count $FROM..$TIP"
-echo "landed on $DEFAULT from ${FROM:0:7} to ${TIP:0:7}: $COUNT first-parent commit(s)${FIRST_HEAD:+ (original base of first head ${FIRST_HEAD:0:7})}"
+echo "landed on $DEFAULT from ${FROM:0:7} to ${TIP:0:7}: $COUNT first-parent commit(s)$([ "$HEADS" -eq 0 ] || echo " (original fork point of $HEADS head(s))")"
 if [ "$COUNT" -gt 0 ]; then
   git --no-pager log --first-parent --stat --no-color "$FROM..$TIP" \
     || lookup_failed log "could not print $FROM..$TIP"
@@ -230,4 +351,4 @@ case "$checks" in
     ;;
 esac
 
-echo "OK landed-since {\"pr\":$PR,\"from\":\"$FROM\",\"tip\":\"$TIP\",\"first_head\":\"$FIRST_HEAD\",\"commits\":$COUNT,\"checks\":[${checks_json#,}]}"
+echo "OK landed-since {\"pr\":$PR,\"from\":\"$FROM\",\"tip\":\"$TIP\",\"heads\":$HEADS,\"commits\":$COUNT,\"checks\":[${checks_json#,}]}"
