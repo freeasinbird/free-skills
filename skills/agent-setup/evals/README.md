@@ -125,12 +125,12 @@ workspace outside the repo.
   55. `explicit-devlog-default`: retains Decision-log for a devlog request.
   56. `explicit-devlog-mandatory-classes`: retains High-assurance when the owner
       supplies mandatory note classes.
-  57. `missing-landing-check-writes-width-one`: reports a missing landing check
-      and writes a width-one shape 1 record during init.
-  58. `update-offers-width-one-fallback`: offers the width-one record during an
-      ordinary update and writes it only after the owner accepts.
-  59. `reassessment-keeps-width-one-record`: keeps the width-one record while
-      the landing check is still missing.
+  57. `missing-landing-check-reports-gap`: reports a missing landing check
+      during init and writes no record or width for it.
+  58. `update-reports-missing-landing-check`: reports the missing check during
+      an ordinary update and offers no record or width for it.
+  59. `reassessment-retires-width-one-record`: proposes removing an older
+      width-one record whose only basis is the missing check.
 
 ## Re-Running
 

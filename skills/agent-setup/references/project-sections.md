@@ -130,11 +130,12 @@ During init or adoption:
   queue or land command. When required checks exist without that rule, offer
   to enable it now, so the write reflects the answer. Treat a setting you
   cannot read, or a question nobody answers, as absent, and say so.
-- When the project has no landing check, write the record anyway: the
-  selected shape, shape 1 when nothing richer, at a width of one unit until
-  the check exists, per
-  `references/coordination-discovery.md` §record. Report the gap as a setup
-  finding.
+- When the project has no landing check, report the gap as a setup finding.
+  Write no coordination record and set no width because of the gap
+  (`references/coordination-discovery.md` §shapes); merges repeat the
+  base-moved recheck by hand until the check exists, one merge at a time,
+  while development and PR starts stay parallel. Evidence for a richer model
+  still gets its record under the next bullet.
 - When evidence supports a richer model, write the fixed-field record from
   `references/coordination-discovery.md` §record in unmanaged content near the
   `Agent-setup profile:` line. For typed relations, stable named streams, or an
@@ -156,12 +157,12 @@ During init or adoption:
 In update mode, detect and report whether an existing coordination record has
 all four fields. Preserve it as unmanaged content unless the owner explicitly
 requests a field change. When the settings check finds no landing check,
-report the gap and offer the width-one fallback: a shape 1 record when none
-exists, or a width of one in an existing record's **Current shape**. Write it
-only when the owner accepts, as an owner-requested coordination model. Do
-not reassess an established model while syncing canonical sections; topology
-reassessment is a separate owner-assigned work unit under "Coordination
-Reassessment".
+report the gap and offer the check, but offer no record or width because of
+the gap. When an existing record's only basis is a missing landing check,
+such as a width-one fallback from an earlier setup, report it as obsolete and
+offer to remove it. Remove it only when the owner accepts. Do not reassess an
+established model while syncing canonical sections; topology reassessment is
+a separate owner-assigned work unit under "Coordination Reassessment".
 
 ## §stages
 
