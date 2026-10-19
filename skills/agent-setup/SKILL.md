@@ -107,8 +107,9 @@ only record (no separate config or metadata file).
    work-unit stages, and follow them. The conventional order in
    `references/project-sections.md` §section-order interleaves these sections
    with the managed ones, so collect this content, or decide on placeholders,
-   before writing. Settle the forge record here too, so an accepted record
-   enters the single step-5 write. See "Forge Record" below.
+   before writing. Settle the forge and landing records here too, so accepted
+   records enter the single step-5 write. See "Forge Record" and "Landing
+   Record" below.
 5. Settle `docs/agent-workflow.md`, then write AGENTS.md once and verify the
    write. Read `references/managed-blocks.md` §init-write and follow it.
 6. Create the scaffolding files listed in `references/managed-blocks.md`
@@ -120,11 +121,12 @@ only record (no separate config or metadata file).
    then report which are present, which are missing, and suggest creating any
    that apply. Don't create them (content is project-specific); just flag.
    Also check for an automated-reviewer record (see "Automated Reviewer
-   Record" below). The forge record was settled in step 4, so confirm only
-   that the step-5 write carries it.
+   Record" below). The forge and landing records were settled in step 4, so
+   confirm that the step-5 write carries the accepted records.
 8. Check the settings in `references/audit.md` §repo-settings and
    `references/audit.md` §required-checks, and offer to align them. Report
    any that can't be checked or set (wrong permissions, non-GitHub forge).
+   Check landing labels as `references/audit.md` §landing-record describes.
 9. Summarize what was created, what the user should fill in, which standard
    files are missing, and which repo settings need attention.
 
@@ -139,10 +141,9 @@ only record (no separate config or metadata file).
 4. Discover the profile: look for the `Agent-setup profile:` line, then read
    `references/managed-blocks.md` §profile-discovery and follow it. Never
    switch a recorded profile without the user's explicit choice.
-5. Protect the reviewer and forge records before refreshing. If an
-   automated-reviewer record or a forge record appears inside a managed
-   block, resolve its location first (see "Automated Reviewer Record" and
-   "Forge Record").
+5. Protect the reviewer, forge, and landing records before refreshing. If
+   any appears inside a managed block, resolve its location first (see
+   "Automated Reviewer Record", "Forge Record", and "Landing Record").
 6. For each managed block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`, exclude the
@@ -153,8 +154,9 @@ only record (no separate config or metadata file).
      `docs/agent-workflow.md` `§slug` pointers depend on that file existing and
      matching, so settle it in the same decision (see step 9).
 7. Leave all unmarked (project-specific) content untouched, except for
-   owner-requested creation or modification of a forge record, a coordination
-   model, or a work-unit stage record. Within any of those, create or change
+   owner-requested creation or modification of a forge record, a landing
+   record, a coordination model, or a work-unit stage record. Within any of
+   those, create or change
    only the requested fields or stages; preserve every unrequested field or
    stage and all unrelated unmarked content verbatim. The only structural
    exception is an owner-approved legacy-stage migration described in
@@ -181,13 +183,15 @@ only record (no separate config or metadata file).
    let the user decide per file.
 10. Audit standard project files (`references/audit.md` §standard-files) and
     flag any newly missing. Also check the automated-reviewer record, the
-    forge record, any coordination model, and any optional work-unit stage
-    record (see "Automated Reviewer Record", "Forge Record",
+    forge record and its Consumers, the landing record, any coordination
+    model, and any optional work-unit stage record (see "Automated Reviewer
+    Record", "Forge Record", "Landing Record",
     `references/project-sections.md` §work-contracts, and
     `references/project-sections.md` §stages).
 11. Check the settings in `references/audit.md` §repo-settings and
     `references/audit.md` §required-checks, and offer to align any that have
-    drifted.
+    drifted. Check landing labels as `references/audit.md` §landing-record
+    describes.
 
 Where the running agent can execute shell scripts, run this skill's
 `scripts/compare-managed-blocks.sh` for the mechanical parts of steps 3 and 6.
@@ -235,3 +239,13 @@ from the remote, show it, and offer to add, correct, or remove it. The
 record holds the host and slug only, never the clone's remote URL, name, or
 alias. Treat this as **detect → report → offer to write**, never a silent
 mutation, and never let a managed-block sync delete or move it.
+
+## Landing Record
+
+During init and update, offer a landing record when AGENTS.md has none and
+the forge record or base remote names a host `gh` serves. Ask the owner for
+the Approver login; never guess it. Read `references/audit.md` §landing-record
+for the template, existing-record validation, and label check. Show the exact
+text before writing it beside the forge and reviewer records as unmanaged
+project content. Report drift and missing labels; don't create labels or
+silently rewrite or move an existing record during a managed-block sync.
