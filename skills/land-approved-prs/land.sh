@@ -27,9 +27,11 @@
 #
 # check    Pre-merge guards: PR open, no head/base name collision, clean
 #          workspace, no git operation in progress, no competing worktree
-#          layout, no open PR sharing or stacked on the head branch, and a
-#          merge queue's method identified as merge-commit before anything
-#          is enqueued. Prints the verified head OID the later phases pin.
+#          layout, no open PR sharing the head branch, and a merge queue's
+#          method identified as merge-commit before anything is enqueued.
+#          Prints the verified head OID the later phases pin and the open
+#          PRs stacked on the head branch, which every phase reports
+#          rather than refuses unless the head is cross-repository.
 # land     One round of the landing procedure for a base without branch
 #          protection: fetch the base. When the head is not on its tip,
 #          rebase it, lease-push it against --head, and STOP rebased with
@@ -512,11 +514,23 @@ consumer_checks() {
   fi
   case "$shared" in ''|*[!0-9]*) lookup_failed shared-head "unparseable shared-head listing" ;; esac
   [ "$shared" -eq 0 ] || stop shared-head "$shared other open PR(s) use $BRANCH as their head; deleting or auto-deleting it closes them"
+  # Stacked PRs are reported, not refused: nothing in these phases deletes
+  # the branch. merge-cleanup owns the delete and retargets each
+  # same-repository child onto the base first. A cross-repository head's
+  # children live in the head's repository, where neither the forge nor
+  # merge-cleanup can retarget them onto this base, so they still stop.
   stacked=$(gh pr list --repo="$HEAD_REPO" --base="$BRANCH" --state=open --json=number \
-    --jq length 2>/dev/null) \
+    --jq '[.[].number] | tojson' 2>/dev/null) \
     || lookup_failed stacked-prs "could not list open PRs based on $BRANCH"
-  case "$stacked" in ''|*[!0-9]*) lookup_failed stacked-prs "unparseable stacked-PR listing" ;; esac
-  [ "$stacked" -eq 0 ] || stop stacked-prs "$stacked open PR(s) are based on $BRANCH; confirm their retarget before it is deleted"
+  n=${stacked#\[}; n=${n%\]}
+  case "$stacked" in '['*']') ;; *) lookup_failed stacked-prs "unparseable stacked-PR listing" ;; esac
+  case "$n" in *[!0-9,]*|,*|*,|*,,*) lookup_failed stacked-prs "unparseable stacked-PR listing" ;; esac
+  STACKED_PRS=$stacked
+  if [ -n "$n" ]; then
+    [ "$IS_FORK" = false ] \
+      || stop stacked-prs "open PR(s) $n in $HEAD_REPO are based on $BRANCH and cannot be retargeted onto $REPO/$BASE"
+    echo "land.sh: PR $PR: open PR(s) $n are based on $BRANCH; they move onto $BASE when $BRANCH is deleted after the merge" >&2
+  fi
   # A repository that is itself a fork: its branch can simultaneously head
   # a PR to the parent or root of its network, which the per-repository
   # listings above cannot see. Query the recorded lineage; no cross-repo
@@ -1308,7 +1322,7 @@ phase_check() {
   local_tip=$(git rev-parse "refs/heads/$BRANCH")
   [ "$local_tip" = "$FORGE_HEAD_OID" ] \
     || stop oid-mismatch "local $BRANCH is $local_tip but the forge reports $FORGE_HEAD_OID; the branch moved"
-  echo "OK check {\"head_oid\":\"$FORGE_HEAD_OID\",\"head_branch\":\"$(json_escape "$BRANCH")\",\"base_branch\":\"$(json_escape "$BASE")\",\"fork\":$IS_FORK,\"queue\":\"$QUEUE\"}"
+  echo "OK check {\"head_oid\":\"$FORGE_HEAD_OID\",\"head_branch\":\"$(json_escape "$BRANCH")\",\"base_branch\":\"$(json_escape "$BASE")\",\"fork\":$IS_FORK,\"queue\":\"$QUEUE\",\"stacked_prs\":$STACKED_PRS}"
 }
 
 phase_land() {
@@ -1326,7 +1340,9 @@ phase_land() {
   [ "$local_tip" = "$HEAD_OID" ] \
     || stop oid-mismatch "local $BRANCH is $local_tip, not the reviewed head $HEAD_OID"
   # merge repeats these at the end; asking first keeps a rebase push from
-  # rewriting a branch that another PR heads or stacks on.
+  # rewriting a branch that another PR heads or a cross-repository PR stacks
+  # on. Same-repository children are only reported: the rebase leaves them on
+  # the parent's pre-rebase commits, which their own land rebase drops.
   consumer_checks
   queue_check
 

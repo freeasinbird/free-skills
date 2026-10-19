@@ -232,6 +232,7 @@ run_sm_with_git_shim() { # run_sm_with_git_shim <shim-dir> <args...>
 }
 want_rc() { if [ "$RC" -eq "$1" ]; then ok; else bad "exit $RC, want $1 (out: $OUT; err: $(tail -c 200 "$FIX/stderr" 2>/dev/null))"; fi; }
 want_out() { case "$OUT" in *"$1"*) ok ;; *) bad "stdout lacks '$1' (got: $OUT)" ;; esac; }
+want_err() { grep -qF -- "$1" "$FIX/stderr" && ok || bad "stderr lacks '$1' (got: $(tail -c 200 "$FIX/stderr"))"; }
 want_call() {
   if grep -qF -- "$1" "$FIX/calls.log" 2>/dev/null; then ok; else
     bad "no gh call contained '$1' (log: $(cat "$FIX/calls.log" 2>/dev/null | tr '\n' ';'))"
@@ -447,12 +448,34 @@ run_sm "${CHECK[@]}"
 want_rc 4
 want_out 'LOOKUP_FAILED shared-head'
 
-scenario "an open PR stacked on the branch stops check"
+scenario "check reports open PRs stacked on the branch and passes"
 std_setup; std_fixtures
-echo '[{"number":91}]' > "$FIX/stacked.json"
+echo '[{"number":91},{"number":92}]' > "$FIX/stacked.json"
 run_sm "${CHECK[@]}"
-want_rc 2
-want_out 'STOP stacked-prs'
+want_rc 0
+want_out '"stacked_prs":[91,92]}'
+want_err 'open PR(s) 91,92 are based on feat; they move onto main'
+
+scenario "check reports an empty stacked list when nothing stacks"
+std_setup; std_fixtures
+run_sm "${CHECK[@]}"
+want_rc 0
+want_out '"stacked_prs":[]}'
+if grep -qF 'are based on' "$FIX/stderr"; then bad "stderr reported a stack that is not there"; else ok; fi
+
+scenario "a failed stacked-PR listing is unknown, not absence"
+std_setup; std_fixtures
+rm "$FIX/stacked.json"
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED stacked-prs'
+
+scenario "an unparseable stacked-PR listing is unknown, not absence"
+std_setup; std_fixtures
+echo '[{"number":"x"}]' > "$FIX/stacked.json"
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED stacked-prs'
 
 scenario "merge-commit queue passes and is reported"
 std_setup; std_fixtures
@@ -695,6 +718,15 @@ run_sm "${CHECK[@]}"
 want_rc 0
 want_call 'pulls?state=open&head=forker:feat%232'
 
+scenario "a PR stacked on a cross-repository head still stops check"
+std_setup
+pr_full OPEN feat main "$FEAT_OID" true forker name
+repo_fx main; rules_fx '[]'; lists_empty
+echo '[{"number":91}]' > "$FIX/stacked.json"
+run_sm "${CHECK[@]}"
+want_rc 2
+want_out 'STOP stacked-prs'
+
 # ---- merge phase ----
 
 scenario "merge pins the head, passes a title-only message, and waits for MERGED"
@@ -705,6 +737,16 @@ want_rc 0
 want_out 'OK merge'
 want_call "--match-head-commit=$FEAT_OID"
 want_call "--subject=Fix the thing (#83)"
+
+scenario "merge reports a stacked PR and still merges"
+std_setup; std_fixtures
+printf '{"title":"Fix the thing"}' > "$FIX/title.json"
+echo '[{"number":90}]' > "$FIX/stacked.json"
+run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
+want_rc 0
+want_out 'OK merge'
+want_call 'pr merge'
+want_err 'open PR(s) 90 are based on feat'
 
 scenario "merge polling caps a long interval at the remaining deadline"
 std_setup; std_fixtures
@@ -1236,13 +1278,14 @@ want_out 'STOP rebase-failed'
 [ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "the base tip was pushed as the head"
 [ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "local feat was not restored"
 
-scenario "a stacked PR opened after check stops land before any push"
+scenario "land rebases a behind head under a stacked PR and reports it"
 land_setup behind; land_fixtures
 echo '[{"number":90}]' > "$FIX/stacked.json"
 run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
-want_out 'STOP stacked-prs'
-[ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "land pushed under a stacked PR"
+want_out 'STOP rebased'
+want_land_pushed
+want_err 'open PR(s) 90 are based on feat'
 
 scenario "a base force-pushed to a non-descendant still lands against its new tip"
 land_setup behind
