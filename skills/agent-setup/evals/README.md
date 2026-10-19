@@ -8,8 +8,9 @@ workspace outside the repo.
 
 - `trigger-eval.json`: eighteen description-only queries, twelve positive and
   six negative, for setup, devlog, sync, reassessment, and standalone scaffolds.
-- `evals.json`: fifty-nine task evals for scope routing, factual intake, profiles,
-  optional work-unit stages, coordination discovery, and reassessment.
+- `evals.json`: sixty-two task evals for scope routing, factual intake, profiles,
+  optional work-unit stages, coordination discovery, reassessment, and landing
+  records.
   1. `single-stage-init`: initializes a plain project and expects the normal
      single implementation workflow with no stage record.
   2. `planning-implementation-handoff`: initializes a project with separate
@@ -131,6 +132,12 @@ workspace outside the repo.
       an ordinary update and offers no record or width for it.
   59. `reassessment-retires-width-one-record`: proposes removing an older
       width-one record whose only basis is the missing check.
+  60. `init-offers-landing-record`: asks for the Approver and shows the exact
+      record before including it in the single init write on acceptance.
+  61. `missing-approval-label-reports-gap`: reports a missing `approved` label
+      without creating or applying labels or changing valid project records.
+  62. `stale-forge-consumers-flagged`: offers and applies an accepted correction
+      limited to the forge record's Consumers bullet.
 
 ## Re-Running
 
@@ -279,6 +286,21 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
     unmanaged guidance, and no coordination record.
 51. For eval 59, add valid managed blocks and an unmanaged shape 1 record at a
     width of one unit that names the missing landing check as its evidence.
+52. For eval 60, omit AGENTS.md and any reviewer record. Give the fixture a
+    base remote naming `example/widgets` on `github.com`. Answer the Approver
+    question with `release-owner`, only after the agent asks. Accept the exact
+    record only after the agent shows it. Save both exchanges and the write
+    transcript to check the single-write requirement.
+53. For eval 61, add current Standard blocks and complete unmanaged forge,
+    reviewer, and landing records with the values in its prompt. Add the
+    sentinel `Local instruction: preserve this sentence verbatim.` Save the
+    original bytes. Supply the complete label listing from the prompt; don't
+    use a real repository or create labels for the fixture. In a separate copy,
+    apply the invalid record values in the prompt and save the original bytes.
+54. For eval 62, reuse the current Standard setup with Reviewer `none` and no
+    marker bullet. Change only the forge Consumers to the stale list in the
+    prompt. Save the original bytes, then accept only the exact Consumers
+    correction after it is shown. Compare the remaining content byte-for-byte.
 
 ### Scope and Intake Fixtures
 
@@ -376,6 +398,6 @@ Cases 55 and 56 cover the note-keeping profile defaults.
 Parse both JSON files before behavioral runs. Check task IDs and names for
 uniqueness, the existing task fields for presence, and trigger values for
 Boolean type. Verify the counts above from parsed data. The landing-baseline
-update changed evals 5–10, 12, 17, 21, and 28 and added 57–59; keep every
-other task definition and expectation unchanged unless the reference text it
-grades changes.
+update changed evals 5–10, 12, 17, 21, and 28 and added 57–59. The landing-record
+update adds 60–62 without changing earlier task definitions or expectations.
+Keep other cases unchanged unless the reference text they grade changes.

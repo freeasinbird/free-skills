@@ -182,8 +182,15 @@ repository's remote, whatever that remote's host. Every consumer prefers the
 record over the remote, so a transfer or a switch to a canonical URL can leave
 a stale record routing them.
 
-Validation compares only the record's host and slug with the host and slug
-derived from the base remote. A clone's remote may use a different remote
+Validation compares the record's host and slug with the host and slug
+derived from the base remote. It also compares Consumers with the template's
+list: `await-pr-review`, `land-approved-prs`, `merge-cleanup`, and
+`visual-evidence`. Any other consumer, such as the retired `self-merge`, or
+any missing member of that list is drift. Show the exact correction and
+offer to change only the Consumers bullet, keeping Host, Slug, and all other
+content verbatim unless separately approved for correction.
+
+A clone's remote may use a different remote
 name, protocol, or local SSH host alias, which changes neither, so none of
 those is a disagreement. Two contributors whose clones use different remote
 URLs get the same result. The local remote is input only: read it to derive
@@ -264,3 +271,103 @@ project on a forge `gh` doesn't serve gets no new record either. A fork
 layout records only the base repository's host and slug. Never move the
 record inside a managed block, and never delete or rewrite one during a
 sync.
+
+## §landing-record
+
+Without a landing record, `land-approved-prs/list-ready.sh` stops with
+`no-landing-record`, so an agent-ready project still can't run a landing
+batch. During init and update, offer one when AGENTS.md has none and the
+forge record or base remote names `github.com` or a GitHub Enterprise host.
+Resolve the host and slug as §forge-record describes. On other forges, or
+with no repository identity, report that no record is offered: the label
+mechanism and its audit need a host `gh` serves.
+
+Treat this as **detect → report → offer to write**, never a silent mutation.
+Ask the owner for the Approver login. Don't derive it from the `gh` login,
+a commit author, or the remote's owner. Approver must be nonempty and contain
+only letters, digits, and hyphens. If the owner hasn't supplied a compatible login, report
+the gap, leave the offer pending, and continue independent setup work.
+
+Read the project's reviewer record before filling the template below. Copy
+its login without a `[bot]` suffix and its completion marker. With no reviewer
+record, write Reviewer as `none` and omit the marker bullet. If a named
+reviewer has no recorded completion marker, report the gap and leave the
+landing-record offer pending; don't invent a marker or turn off review.
+After removing the suffix, the reviewer login must be nonempty and contain
+only letters, digits, and hyphens. If it doesn't, report the incompatibility and leave the
+offer pending.
+
+The completion marker must contain only letters, digits, dots, underscores,
+or hyphens. If the recorded marker uses another form, report the
+incompatibility and leave the offer pending: the landing parser would reject
+it. Don't silently shorten or replace the project's marker.
+
+Show the exact text with the owner's answer and reviewer values filled in,
+then offer to write it. On acceptance, put this bullet beside the forge and
+reviewer records in the unmanaged project-specific conventions section:
+
+```markdown
+- **Land approved PRs by label.** This project has the following landing
+  record:
+
+  - **Mechanism:** `label`.
+  - **Approval:** `approved`, added only by the approver; agents never add
+    it.
+  - **Hand-back:** `needs-human`.
+  - **Approver:** `owner-login`.
+  - **Stale lock age:** `240` minutes.
+  - **Base-advance checks:** none.
+  - **Reviewer:** `chatgpt-codex-connector`.
+  - **Reviewer completion marker:** `codex-pull-request-review-summary`.
+  - **Consumer:** `land-approved-prs`.
+```
+
+Keep the template's defaults for a new record: Stale lock age is `240`,
+Base-advance checks is `none`, and Consumer is `land-approved-prs`. The
+Mechanism bullet starts the parsed record. Keep the bullets together with
+the indentation shown; each value is the first backticked span on its
+bullet, except that Base-advance checks accepts bare `none`.
+
+### Existing Records
+
+Validate an existing record without replacing its project choices with the
+template's defaults:
+
+- Mechanism is `label`. Approval and Hand-back have distinct, nonempty
+  backticked values. Approver is an owner-supplied login in backticks, using
+  only letters, digits, and hyphens.
+- Reviewer is present as a backticked login or `none`. A named login uses only
+  letters, digits, and hyphens, with no `[bot]` suffix. It matches the login
+  in the project's reviewer record after removing that suffix, and its marker
+  matches that record within the parser's character set above. Use the
+  no-reviewer rule above when no record exists.
+- Stale lock age, if present, has one to six digits in backticks, starting
+  with 1 through 9. Base-advance checks is present as `none` (bare or
+  backticked) or backticked commands.
+  Preserve existing commands; don't run them as part of setup.
+- Consumer is `land-approved-prs`, and the bullets retain the parsed shape
+  described above.
+
+Report drift and offer a correction of only the differing bullet, showing
+the exact text first. Preserve every other bullet and unrelated content.
+Never move or rewrite the record during a managed-block sync. If it sits
+inside a managed block, use `references/managed-blocks.md`
+§reviewer-record-audit's relocation offers before refreshing that block.
+
+### Landing Labels
+
+Read all labels using the resolved forge host and slug, so the default
+page limit can't hide an existing label:
+
+```sh
+gh api --hostname <host> --paginate 'repos/<slug>/labels' --jq '.[].name'
+```
+
+Compare the result with the record's Approval and Hand-back values, or the
+proposed values when the offer is pending. Report each missing label by its
+exact name. Don't create either label: agents never apply the approval label,
+and this setup leaves creation of both labels to the owner.
+
+If the read fails, including on a later page, report that the labels couldn't
+be checked instead of inferring they're missing. Without `gh` or a supported
+forge, report the check as unavailable.

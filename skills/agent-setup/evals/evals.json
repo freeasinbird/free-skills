@@ -891,6 +891,54 @@
         "No richer shape is proposed, and no other width limit replaces the record",
         "AGENTS.md remains unchanged because the owner approved no edit"
       ]
+    },
+    {
+      "id": 60,
+      "eval_name": "init-offers-landing-record",
+      "prompt": "Initialize agent-setup with the Standard profile in <fixture-repo>. Its README supplies the build, test, lint, and format commands. The base remote names example/widgets on github.com. There is no AGENTS.md or reviewer record. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. The repository has approved and needs-human labels. The Approver login has not been supplied; ask the owner for it. The owner will answer and then decide on the exact record you show. Work only in the fixture; use these supplied forge facts without network calls, and do not create or apply labels.",
+      "expected_output": "A Standard init that offers a landing record, asks for the Approver login without guessing, shows the filled record for acceptance, and includes it beside the forge record in the single AGENTS.md write after acceptance. With no reviewer record, Reviewer is none and no marker is invented.",
+      "files": [],
+      "expectations": [
+        "The agent offers the landing record and asks the owner for the Approver login before writing it, without deriving a candidate from authentication, a commit author, or the remote owner",
+        "The exact offered text uses the owner's answer, and is shown before the owner accepts it",
+        "After acceptance, the single AGENTS.md write includes the landing record beside the forge record in unmanaged project content",
+        "Mechanism is label, Approval is approved, Hand-back is needs-human, Stale lock age is 240, Base-advance checks is none, and Consumer is land-approved-prs",
+        "Reviewer is backticked none and the Reviewer completion marker bullet is omitted because the project has no reviewer record",
+        "The record starts at the Mechanism bullet, keeps its indented bullets together, and uses first backticked values except for bare none in Base-advance checks",
+        "No labels are created or applied, and no network calls occur"
+      ]
+    },
+    {
+      "id": 61,
+      "eval_name": "missing-approval-label-reports-gap",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks, unrelated unmanaged guidance, and unmanaged forge, reviewer, and landing records. The forge is example/widgets on github.com, matching the base remote. The reviewer record names chatgpt-codex-connector with completion marker codex-pull-request-review-summary; the landing record matches it and names label, approved, needs-human, release-owner, 240 minutes, no base-advance checks, and consumer land-approved-prs. The forge Consumers are current. The complete label listing contains needs-human but no approved label. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls. Work only in the fixture; the owner has approved no changes to project records or labels. In a separate copy of the fixture, set both Approval and Hand-back to approved, Approver to release_owner, Reviewer to chatgpt-codex-connector[bot], and Stale lock age to 000240. Run the same update there with no approved changes.",
+      "expected_output": "An update that validates and preserves the existing records, reports the missing approved label by name, and leaves creation to the owner without creating or applying either label. In the separate copy, report the equal labels and parser-incompatible Approver, Reviewer, and Stale lock age without changing the record.",
+      "files": [],
+      "expectations": [
+        "The missing approved label is reported as a setup gap by its exact name",
+        "The existing needs-human label is not reported as missing",
+        "The report says the owner creates the labels and agents never apply the approval label",
+        "No label is created or applied, and no network calls occur",
+        "The existing landing, reviewer, and forge records and unrelated unmanaged guidance remain byte-for-byte unchanged",
+        "The agent does not ask for a new Approver or replace the existing record with template defaults",
+        "In the separate copy, the agent reports that Approval and Hand-back must differ",
+        "In the separate copy, the agent reports the underscore in Approver, the bot suffix in Reviewer, and the leading zeros in Stale lock age as incompatible with the landing parser",
+        "The separate copy remains unchanged because the owner approved no correction"
+      ]
+    },
+    {
+      "id": 62,
+      "eval_name": "stale-forge-consumers-flagged",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks and an unmanaged forge record naming github.com and example/widgets, matching the base remote. Its Consumers are await-pr-review, self-merge, merge-cleanup, and visual-evidence. It also has a valid unmanaged landing record with Reviewer none, no reviewer record, and unrelated unmanaged guidance. Both landing labels exist. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. The owner will accept an exact correction limited to Consumers after you show it. Use these supplied forge facts without network calls and work only in the fixture.",
+      "expected_output": "An update that flags the retired self-merge consumer and missing land-approved-prs consumer, shows a Consumers-only correction to the current four-skill list, and applies it after acceptance while preserving Host, Slug, and all other content verbatim.",
+      "files": [],
+      "expectations": [
+        "The report identifies both the unexpected self-merge consumer and the missing land-approved-prs consumer as drift",
+        "The offered Consumers value is await-pr-review, land-approved-prs, merge-cleanup, and visual-evidence",
+        "The exact correction is shown before it is accepted and applied",
+        "Only the Consumers bullet changes; Host, Slug, the landing record, and all unrelated content remain byte-for-byte unchanged",
+        "The update neither creates or applies labels nor calls the network"
+      ]
     }
   ]
 }
