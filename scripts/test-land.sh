@@ -1081,12 +1081,19 @@ NEW_OID=$(remote_feat)
 
 scenario "files a hook writes in the temporary worktree do not leak it"
 land_setup behind; land_fixtures
-printf '#!/bin/sh\necho hook > hook-artifact.txt\n' > "$WORK/.git/hooks/post-checkout"
+printf '#!/bin/sh\necho hook > hook-artifact.txt\npwd > "%s/hook-pwd"\n' "$SCEN" \
+  > "$WORK/.git/hooks/post-checkout"
 chmod +x "$WORK/.git/hooks/post-checkout"
 run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP rebased'
 [ "$(worktree_count)" -eq 1 ] && ok || bad "the temporary worktree was left behind"
+# merge-cleanup's worktree sweep recognizes a dead lander's worktree only by
+# this template, so the path is a contract, not a detail.
+case "$(cat "$SCEN/hook-pwd" 2>/dev/null)" in
+  */land-wt.*/wt) ok ;;
+  *) bad "the temporary worktree is not under the land-wt template: $(cat "$SCEN/hook-pwd" 2>/dev/null)" ;;
+esac
 
 scenario "land refuses to rebase a dirty head worktree"
 land_setup behind; land_fixtures

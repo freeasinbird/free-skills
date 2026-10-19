@@ -4,7 +4,9 @@ description: >-
   Run post-merge cleanup when a user reports "merged", "PR merged, please
   clean up", "PR #N is merged", "just merged it, tidy up", or "the PR landed".
   Safely tidies branches and refs, verifies issue closure, performs documented
-  project reconciliation, and stops review watches. Not for merging a PR or
+  project reconciliation, and stops review watches. Also sweeps the
+  worktrees of merged branches when the owner asks: "sweep the worktrees" or
+  "remove the worktrees for merged branches". Not for merging a PR or
   cleaning up one that remains open. The bundled executor requires a
   shell-capable environment with Bash, Git, required utilities, and
   authenticated GitHub CLI for GitHub or a compatible GitHub Enterprise host.
@@ -137,7 +139,8 @@ The script runs this mechanical sequence in order:
    - Compare-and-delete the local head at the forge-verified OID, then prune
      the base and distinct head remotes.
    - Stop for the owner to remove a linked head worktree: Git offers no
-     inventory lease for safe automatic removal.
+     inventory lease for safe automatic removal. The owner can remove it with
+     the sweep in Sweep Worktrees for Merged Branches.
    - Retain `branch.<name>` config deliberately: Git cannot couple its
      deletion atomically to the expected ref OID.
 
@@ -373,3 +376,64 @@ blocked, with its reason. Take each state from the ledger:
 An unreadable required source is one blocked line for the whole
 reconciliation. Never fold these lines into a general cleanup verdict; the
 user should see each tracker by name.
+
+## Sweep Worktrees for Merged Branches
+
+Run the sweep only when the owner asks for it in this session, such as "sweep
+the worktrees" or "remove the worktrees for merged branches". A merge-cleanup
+request or a landing batch never authorizes it. Removing a worktree deletes
+files: `git worktree remove` without `--force` still deletes ignored ones.
+
+Fetch the base's remote first, with `git fetch --prune <remote>`: `origin`
+by default, or the remote in the ref `--base` names. The sweep never fetches,
+so a branch merged on the forge but not yet fetched looks unmerged and stays.
+Then run it from the primary checkout, starting with the dry run:
+
+```sh
+<skill-dir>/worktree-sweep.sh
+```
+
+Show the owner the report. Remove only with the flags the owner names for this
+run; approval of an earlier run doesn't carry over:
+
+- `--remove` removes the clean candidates.
+- `--remove --remove-dirty` also removes the dirty candidates, deleting the
+  files their lines list. `--remove-dirty` alone is a usage error.
+- `--base '<ref>'` names the branch merged branches land on, when
+  `refs/remotes/origin/HEAD` doesn't, such as a remote not called `origin`.
+- `--help` or `-h` prints the full contract.
+
+```sh
+<skill-dir>/worktree-sweep.sh --remove
+<skill-dir>/worktree-sweep.sh --remove --remove-dirty
+```
+
+A candidate is a linked worktree on a branch merged into the base, or a
+detached worktree that a dead `land` run left at its exact
+`land-wt.XXXXXX/wt` template (six letters or digits).
+Don't run a removal while a landing batch is running: the batch's live
+temporary worktree is a candidate too.
+
+Each registered worktree gets one `WORKTREE <disposition> <json>` line:
+
+- **`removed`:** This run removed it.
+- **`clean`:** A candidate whose removal deletes nothing but its checkout.
+- **`dirty`:** A candidate holding untracked, modified, ignored, or
+  index-flagged files, a paused operation, or a detached HEAD that no ref
+  holds; its line lists each file. A
+  dirty branch whose line says no landing merge was found is never removed: a
+  branch with no commits of its own looks the same and may be work in
+  progress.
+- **Never a candidate:** `primary`, `self`, `locked`, `prunable`,
+  `holds-worktree`, `holds-submodule`, `holds-repository`, `base-branch`,
+  `unmerged`, `unresolved-branch`, `unreadable`, `redirected`, and
+  `detached-other`. The line's reason says why. A `prunable` entry is reported, never pruned.
+
+The last line is `OK sweep <json>` with counts, `STOP no-base`,
+`STOP remove-failed` when git refused a removal and nothing after it was
+attempted, or `LOOKUP_FAILED <what>` when a read failed. Report removed and
+kept worktrees by path. The sweep rechecks each worktree right before removing
+it, which narrows a race with another process but can't close it.
+
+Afterwards, rerun merge-cleanup for each PR that stopped
+`head-worktree-present`.
