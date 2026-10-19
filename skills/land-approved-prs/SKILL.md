@@ -110,6 +110,21 @@ Each value is the first backticked span on its bullet:
 The record ends at the first line that is neither a bullet of this shape nor
 its four-space continuation, so keep its bullets together.
 
+Both labels must exist on the forge before a batch. Use `#0e8a16` as the
+default color for `approved` and `#d93f0b` for `needs-human`. Keep a project's
+existing colors unless it wants these defaults. Replace `owner/name` with the
+project's repository and use the record's Approval and Hand-back names if
+they differ from the examples. Run the commands for missing labels. Add
+`--force` only to replace an existing label's color and description with the
+defaults below.
+
+```sh
+gh label create approved --repo owner/name --color 0e8a16 \
+  --description "The owner approved this PR to land; the lander may take it"
+gh label create needs-human --repo owner/name --color d93f0b \
+  --description "The lander handed this PR back; it needs the owner"
+```
+
 Only the owner adds the approval label. Any agent running under the owner's
 login can add it, and the record is what makes doing so a violation. Never add
 it, even to a PR you wrote, and never treat a chat message as approval.
