@@ -39,7 +39,7 @@ RECORD_DEFAULT='  - **Mechanism:** `label`.
   - **Approval:** `approved`, added only by the approver; agents never
     add it.
   - **Hand-back:** `needs-human`.
-  - **Approver:** `owner1`.
+  - **Approver permission:** `write`.
   - **Stale lock age:** `240` minutes.
   - **Base-advance checks:** none.
   - **Reviewer:** `codexbot`.
@@ -69,6 +69,7 @@ new_repo() { # new_repo [record-body]: fresh remote, clone, and fixtures
   git clone -q "$SRV" "$WORK"
   echo '{"default_branch":"main"}' > "$FIX/repo.json"
   echo '[]' > "$FIX/prs.json"
+  echo '{"permission":"admin","role_name":"admin"}' > "$FIX/role-owner1.json"
 }
 
 # --- validation half: dead gh shim ------------------------------------------
@@ -208,6 +209,10 @@ if [ "$sub" = api ]; then
       fixture="$FIX/comments-$n.json"; default='[]' ;;
     */actions/runs*)
       fixture="$FIX/runs-$(printf '%s' "$branch" | tr / _).json"; default='{"workflow_runs":[]}' ;;
+    */collaborators/*/permission*)
+      u="${api#*/collaborators/}"; u="${u%%/*}"
+      u=$(printf '%s' "$u" | sed 's/%5B/[/g; s/%5D/]/g')  # the server decodes the path
+      fixture="$FIX/role-$u.json"; default='{"permission":"none","role_name":""}' ;;
     repos/*/*) fixture="$FIX/repo.json" ;;
   esac
 elif [ "$sub" = pr ] && [ "$verb" = list ]; then
@@ -258,6 +263,13 @@ labeled() { # labeled <num> <at> [actor] [label]
   [ -f "$f" ] || echo '[]' > "$f"
   jq --arg at "$2" --arg a "${3:-owner1}" --arg l "${4:-approved}" \
     '. + [{event:"labeled", created_at:$at, label:{name:$l}, actor:{login:$a}}]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+}
+collaborator() { # collaborator <login> <permission> [role-name] [base-role]
+  # A base role adds the user.permissions flags a custom role inherits.
+  jq -n --arg p "$2" --arg r "${3-$2}" --arg b "${4-}" '{permission:$p, role_name:$r}
+    + (if $b == "" then {} else (["read","triage","write","maintain","admin"] | index($b)) as $i
+       | {user:{permissions:{pull:($i >= 0), triage:($i >= 1), push:($i >= 2), maintain:($i >= 3), admin:($i >= 4)}}} end)' \
+    > "$FIX/role-$1.json"
 }
 force_pushed() { # force_pushed <num> <at> <oid>
   local f="$FIX/timeline-$1.json"
@@ -397,7 +409,83 @@ pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 
 labeled 1 2026-10-02T00:00:00Z owner1
 labeled 1 2026-10-03T00:00:00Z intruder
 lr --run r1
-expect_excluded 1 3 "filter 3: the latest approved label is not the approver's" "not the recorded approver"
+expect_excluded 1 3 "filter 3: the latest approved label came from a non-collaborator" "permission is none, below the recorded write"
+
+new_repo
+collaborator writer write
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z writer
+lr --run r1
+expect_ready 1 "filter 3: any collaborator with write permission approves"
+
+new_repo
+collaborator triager read triage
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z triager
+lr --run r1
+expect_excluded 1 3 "filter 3: triage is below write" "permission is triage, below the recorded write"
+
+new_repo
+collaborator lead write release-manager
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z lead
+lr --run r1
+expect_ready 1 "filter 3: a custom role falls back to the legacy permission"
+
+new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed '/Approver permission/s/`write`/`maintain`/')"
+collaborator writer write
+collaborator lead write maintain
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z writer
+pr_add 2 feat/two "$H2"; ci_run feat/two 2026-10-01T01:00:00Z "$H2"; reviewed 2 "$H2"
+labeled 2 2026-10-02T00:00:00Z lead
+lr --run r1
+expect_excluded 1 3 "filter 3: a maintain record rejects write" "permission is write, below the recorded maintain"
+expect_ready 2 "filter 3: a maintain record reads role_name, which the legacy field hides"
+
+new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed '/Approver permission/s/`write`/`maintain`/')"
+collaborator captain write release-captain maintain
+collaborator helper write release-helper write
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z captain
+pr_add 2 feat/two "$H2"; ci_run feat/two 2026-10-01T01:00:00Z "$H2"; reviewed 2 "$H2"
+labeled 2 2026-10-02T00:00:00Z helper
+lr --run r1
+expect_ready 1 "filter 3: a custom role based on maintain passes a maintain floor through user.permissions"
+expect_excluded 2 3 "filter 3: a custom role based on write fails a maintain floor through user.permissions" "permission is write, below the recorded maintain"
+
+new_repo
+collaborator 'release[bot]' write
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z 'release[bot]'
+lr --run r1
+expect_ready 1 "filter 3: a bot login's brackets are encoded in the permission path"
+if grep -q 'collaborators/release%5Bbot%5D/permission' "$FIX/calls.log"; then ok; else bad "the permission read encodes [bot]"; fi
+
+new_repo
+collaborator mona-cat_octo write
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z mona-cat_octo
+lr --run r1
+expect_ready 1 "filter 3: a managed user's underscore is in the login alphabet"
+if grep -q 'collaborators/mona-cat_octo/permission' "$FIX/calls.log"; then ok; else bad "an underscore login was not sent to the permission endpoint"; fi
+
+new_repo
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z '../owner1'
+lr --run r1
+expect_excluded 1 3 "filter 3: an actor login outside the login alphabet never reaches the forge" "permission is none"
+if grep -q 'collaborators/' "$FIX/calls.log"; then bad "a rejected login was sent to the permission endpoint"; else ok; fi
+
+new_repo
+collaborator writer write
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z writer
+pr_add 2 feat/two "$H2"; ci_run feat/two 2026-10-01T01:00:00Z "$H2"; reviewed 2 "$H2"
+labeled 2 2026-10-02T00:00:00Z writer
+lr --run r1
+expect_ready 1,2 "filter 3: one actor's role is read once per run"
+if [ "$(grep -c 'collaborators/writer/permission' "$FIX/calls.log")" -eq 1 ]; then ok; else bad "the role cache made $(grep -c 'collaborators/writer/permission' "$FIX/calls.log") permission reads"; fi
 
 new_repo
 pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
@@ -703,9 +791,13 @@ new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed '/Mechanism/s/`label`/`review`
 lr --run r1
 expect_stop unsupported-mechanism "only the label mechanism is implemented"
 
-new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed '/Approver/s/`owner1`/`own er`/')"
+new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed '/Approver permission/s/`write`/`triage`/')"
 lr --run r1
-expect_stop bad-record "an approver that is not a login is refused"
+expect_stop bad-record "an Approver permission below write is refused"
+
+new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed 's/\*\*Approver permission:\*\* `write`/**Approver:** `owner1`/')"
+lr --run r1
+expect_stop bad-record "a record naming one Approver login predates this version and stops"
 
 new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed '/completion marker/d')"
 lr --run r1
@@ -733,12 +825,13 @@ ready_pr 1 feat/one "$H1"
 lr --run r1
 expect_stop bad-record "a Stale lock age without backticks stops rather than default"
 
-new_repo
+new_repo "$(printf '%s\n' "$RECORD_DEFAULT" | sed '/Approver permission/s/`write`/`maintain`/')"
+collaborator writer write
 pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
-labeled 1 2026-10-02T00:00:00Z intruder
-sed -i.bak 's/`owner1`/`intruder`/' "$WORK/AGENTS.md"
+labeled 1 2026-10-02T00:00:00Z writer
+sed -i.bak 's/`maintain`/`write`/' "$WORK/AGENTS.md"
 lr --run r1
-expect_excluded 1 3 "the record comes from the default-branch tip, not the working tree" "not the recorded approver owner1"
+expect_excluded 1 3 "the record comes from the default-branch tip, not the working tree" "below the recorded maintain"
 
 new_repo
 ready_pr 1 feat/one "$H1"
@@ -759,6 +852,15 @@ if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED timeline "* ]]; then ok; else
 expect_stderr 'gh: Service Unavailable (HTTP 503)' "a timeline read failure quotes gh's error"
 case "$LAST" in *SECRET-313*) bad "a GH_DEBUG header reached the excerpt: $LAST" ;; *) ok ;; esac
 expect_remote_lock absent "a read failure takes no lock"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+echo collaborators/ > "$FIX/fail-permission"
+printf 'gh: Not Found (HTTP 404)\n' > "$FIX/gh-stderr"
+GH_DEBUG=api lr --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED permission "* ]]; then ok; else bad "a permission read failure is LOOKUP_FAILED: $LAST"; fi
+expect_stderr 'gh: Not Found (HTTP 404)' "a permission read failure quotes gh's error"
+case "$LAST" in *SECRET-313*) bad "a GH_DEBUG header reached the permission excerpt: $LAST" ;; *) ok ;; esac
 
 new_repo
 ready_pr 1 feat/one "$H1"
