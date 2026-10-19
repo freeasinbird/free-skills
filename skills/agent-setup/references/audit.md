@@ -182,8 +182,15 @@ repository's remote, whatever that remote's host. Every consumer prefers the
 record over the remote, so a transfer or a switch to a canonical URL can leave
 a stale record routing them.
 
-Validation compares only the record's host and slug with the host and slug
-derived from the base remote. A clone's remote may use a different remote
+Validation compares the record's host and slug with the host and slug
+derived from the base remote. It also compares Consumers with the template's
+list: `await-pr-review`, `land-approved-prs`, `merge-cleanup`, and
+`visual-evidence`. Any other consumer, such as the retired `self-merge`, or
+any missing member of that list is drift. Show the exact correction and
+offer to change only the Consumers bullet, keeping Host, Slug, and all other
+content verbatim unless separately approved for correction.
+
+A clone's remote may use a different remote
 name, protocol, or local SSH host alias, which changes neither, so none of
 those is a disagreement. Two contributors whose clones use different remote
 URLs get the same result. The local remote is input only: read it to derive
