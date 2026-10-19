@@ -132,10 +132,11 @@ workspace outside the repo.
       an ordinary update and offers no record or width for it.
   59. `reassessment-retires-width-one-record`: proposes removing an older
       width-one record whose only basis is the missing check.
-  60. `init-offers-landing-record`: asks for the Approver and shows the exact
-      record before including it in the single init write on acceptance.
+  60. `init-offers-landing-record`: shows the exact record, asking for no
+      approver, before including it in the single init write on acceptance.
   61. `missing-approval-label-reports-gap`: reports a missing `approved` label
-      without creating or applying labels or changing valid project records.
+      and offers to create it, without applying labels or changing valid
+      project records.
   62. `stale-forge-consumers-flagged`: offers and applies an accepted correction
       limited to the forge record's Consumers bullet.
 
@@ -287,9 +288,8 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
 51. For eval 59, add valid managed blocks and an unmanaged shape 1 record at a
     width of one unit that names the missing landing check as its evidence.
 52. For eval 60, omit AGENTS.md and any reviewer record. Give the fixture a
-    base remote naming `example/widgets` on `github.com`. Answer the Approver
-    question with `release-owner`, only after the agent asks. Accept the exact
-    record only after the agent shows it. Save both exchanges and the write
+    base remote naming `example/widgets` on `github.com`. Accept the exact
+    record only after the agent shows it. Save the exchange and the write
     transcript to check the single-write requirement.
 53. For eval 61, add current Standard blocks and complete unmanaged forge,
     reviewer, and landing records with the values in its prompt. Add the

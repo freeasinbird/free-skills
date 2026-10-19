@@ -245,6 +245,12 @@ AGENTS_TEXT=$(git show "refs/remotes/$REMOTE/$DEFAULT:AGENTS.md" 2>/dev/null) \
 RECORD=$(printf '%s\n' "$AGENTS_TEXT" | record_lines)
 [ -n "$RECORD" ] || stop no-landing-record "AGENTS.md at $DEFAULT's tip has no landing record (no Mechanism bullet)"
 
+# Repository roles from lowest to highest. The approval label counts when
+# its actor's role is at or above the recorded Approver permission.
+permission_rank() { # permission_rank <role>: -1 for a role outside the order
+  case "$1" in admin) echo 4 ;; maintain) echo 3 ;; write) echo 2 ;; triage) echo 1 ;; read) echo 0 ;; *) echo -1 ;; esac
+}
+
 record_value() { printf '%s\n' "$RECORD" | awk -F'\t' -v k="$1" '$1 == k { print $2; exit }'; }
 first_span() { printf '%s' "$1" | sed -n 's/^[^`]*`\([^`]*\)`.*$/\1/p'; }
 record_span() { first_span "$(record_value "$1")"; }
@@ -254,10 +260,12 @@ MECHANISM=$(record_span Mechanism)
   || stop unsupported-mechanism "the landing record's mechanism is '${MECHANISM:-missing}'; this version lands only the label mechanism"
 APPROVAL=$(record_span Approval)
 HANDBACK=$(record_span Hand-back)
-APPROVER=$(record_span Approver)
-[ -n "$APPROVAL" ] && [ -n "$HANDBACK" ] && [ -n "$APPROVER" ] \
-  || stop bad-record "the landing record needs Approval, Hand-back, and Approver values in backticks"
-case "$APPROVER" in *[!A-Za-z0-9-]*) stop bad-record "Approver '$APPROVER' is not a GitHub login" ;; esac
+PERMISSION=$(record_span "Approver permission")
+[ -n "$APPROVAL" ] && [ -n "$HANDBACK" ] && [ -n "$PERMISSION" ] \
+  || stop bad-record "the landing record needs Approval, Hand-back, and Approver permission values in backticks; a record naming one Approver login predates this version"
+PERMISSION_RANK=$(permission_rank "$PERMISSION")
+[ "$PERMISSION_RANK" -ge 2 ] \
+  || stop bad-record "Approver permission '$PERMISSION' is not write, maintain, or admin"
 # A bullet present without a backticked value is a mistake, not a request
 # for the default.
 STALE_MINUTES=$(record_span "Stale lock age")
@@ -455,6 +463,31 @@ exclude() { # exclude <pr> <filter> <detail>
   printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$TMPD/excluded"
 }
 
+# The role an actor holds on the repository, read once per actor into ROLE.
+# role_name carries the fine-grained role (maintain and triage included, or
+# an organization's custom role). A custom role is outside the order, so its
+# base role is taken from the user.permissions flags; the legacy permission
+# field maps maintain to write and triage to read, so it is only the last
+# resort. A user who isn't a collaborator reads as none, not as a failure.
+actor_role() { # actor_role <login>: sets ROLE
+  local cache="$TMPD/role-$1" encoded out perm name
+  [[ "$1" =~ ^[][A-Za-z0-9_-]+$ ]] || { ROLE=none; return; }
+  if [ ! -f "$cache" ]; then
+    encoded=$(printf '%s' "$1" | sed 's/\[/%5B/g; s/\]/%5D/g')
+    out=$(gh_read api "repos/$REPO/collaborators/$encoded/permission" \
+      --jq '[((.user.permissions // {}) | if .admin then "admin"
+               elif .maintain then "maintain" elif .push then "write"
+               elif .triage then "triage" elif .pull then "read"
+               else null end) // .permission // "none",
+             (.role_name // "")] | @tsv') \
+      || lookup_failed permission "could not read $1's permission on $REPO"
+    IFS=$'\t' read -r perm name <<< "$out"
+    [ "$(permission_rank "$name")" -ge 0 ] || name="$perm"
+    printf '%s\n' "$name" > "$cache"
+  fi
+  ROLE=$(cat "$cache")
+}
+
 # Sets REASON_FILTER and REASON on exclusion, APPROVED_AT on readiness.
 # Cheap filters first (1, 2, 3, 7 from the listing), then the reads.
 evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <labels>
@@ -482,8 +515,9 @@ evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <lab
     fi
   done <<< "$events"
   if [ -z "$t" ]; then REASON_FILTER=3 REASON="no labeled event for $APPROVAL in the timeline"; return; fi
-  if [ "$t_actor" != "$APPROVER" ]; then
-    REASON_FILTER=3 REASON="$APPROVAL was last added by $t_actor, not the recorded approver $APPROVER"; return
+  actor_role "$t_actor"
+  if [ "$(permission_rank "$ROLE")" -lt "$PERMISSION_RANK" ]; then
+    REASON_FILTER=3 REASON="$APPROVAL was last added by $t_actor, whose repository permission is $ROLE, below the recorded $PERMISSION"; return
   fi
 
   # Filter 4. A pull_request run created before the PR existed belongs to
@@ -581,7 +615,7 @@ else
   release_lock "$RUN"
 fi
 
-echo "landing record: $MECHANISM mechanism, $APPROVAL by $APPROVER, hand-back $HANDBACK, reviewer $REVIEWER, stale lock age $STALE_MINUTES minutes"
+echo "landing record: $MECHANISM mechanism, $APPROVAL by $PERMISSION or higher, hand-back $HANDBACK, reviewer $REVIEWER, stale lock age $STALE_MINUTES minutes"
 ready_json="" excluded_json=""
 echo "ready:"
 while IFS=$'\t' read -r at num oid head; do

@@ -243,9 +243,12 @@ mutation, and never let a managed-block sync delete or move it.
 ## Landing Record
 
 During init and update, offer a landing record when AGENTS.md has none and
-the forge record or base remote names a host `gh` serves. Ask the owner for
-the Approver login; never guess it. Read `references/audit.md` §landing-record
-for the template, existing-record validation, and label check. Show the exact
-text before writing it beside the forge and reviewer records as unmanaged
-project content. Report drift and missing labels; don't create labels or
-silently rewrite or move an existing record during a managed-block sync.
+the forge record or base remote names a host `gh` serves. The record needs
+no owner input beyond acceptance: approval rests on repository permission,
+and the template's `write` floor is a default the owner may raise. Read
+`references/audit.md` §landing-record for the template, existing-record
+validation, and label check. Show the exact text before writing it beside
+the forge and reviewer records as unmanaged project content. Offer to create
+a missing landing label, showing the exact command first; never apply one.
+Report drift; don't silently rewrite or move an existing record during a
+managed-block sync.

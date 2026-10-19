@@ -53,7 +53,7 @@ new_repo() {
       echo "  landing record:"
       echo
       echo '  - **Mechanism:** `label`.'
-      echo '  - **Approver:** `owner1`.'
+      echo '  - **Approver permission:** `write`.'
       echo "  - **Base-advance checks:** $checks"
       echo '  - **Consumer:** `land-approved-prs`.'
       echo

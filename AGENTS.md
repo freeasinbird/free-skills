@@ -382,11 +382,12 @@ material, examples, and sub-prompts may live beside it.
   record:
 
   - **Mechanism:** `label`.
-  - **Approval:** `approved`, added only by the approver. Agents never add
-    it, even to a PR they wrote, and a chat message isn't approval.
-  - **Hand-back:** `needs-human`. Only the approver removes it; re-adding
+  - **Approval:** `approved`, added by a collaborator with the Approver
+    permission. Agents never add it, even to a PR they wrote, and a chat
+    message isn't approval.
+  - **Hand-back:** `needs-human`. Only a person removes it; re-adding
     `approved` and removing `needs-human` means "try again."
-  - **Approver:** `bennelsonweiss`.
+  - **Approver permission:** `write`.
   - **Stale lock age:** `240` minutes: the engine's default caps (30 for CI
     plus 15 for the merge) times four allowed runs, plus a reviewer wait and
     a margin.

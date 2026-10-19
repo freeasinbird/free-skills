@@ -76,10 +76,10 @@ the Mechanism bullet:
   record:
 
   - **Mechanism:** `label`.
-  - **Approval:** `approved`, added only by the approver; agents never add
-    it.
+  - **Approval:** `approved`, added by a collaborator with the Approver
+    permission; agents never add it.
   - **Hand-back:** `needs-human`.
-  - **Approver:** `owner-login`.
+  - **Approver permission:** `write`.
   - **Stale lock age:** `240` minutes.
   - **Base-advance checks:** none.
   - **Reviewer:** `chatgpt-codex-connector`.
@@ -93,7 +93,14 @@ Each value is the first backticked span on its bullet:
   approval or an armed auto-merge each needs its own contract first, so the
   script stops `unsupported-mechanism` on them.
 - **Approval** and **Hand-back** name the two labels.
-- **Approver** is the one login whose label counts.
+- **Approver permission** is the lowest repository role whose label counts:
+  `write`, `maintain`, or `admin`. The script reads each label actor's role
+  from the collaborator permission endpoint: `role_name`, or for a custom
+  role the base role its `user.permissions` flags report, with the legacy
+  `permission` field as the last resort. A user with no role on the
+  repository, or only read access, never approves. The role is
+  the one held when the batch lists, not when the label was added. It has no
+  default: a record naming one Approver login stops `bad-record`.
 - **Stale lock age** defaults to 240 minutes when the bullet is absent. A
   bullet without a backticked value stops `bad-record`.
 - **Base-advance checks** is `none`, bare or backticked, or a list of
@@ -125,9 +132,10 @@ gh label create needs-human --repo owner/name --color d93f0b \
   --description "The lander handed this PR back; it needs the owner"
 ```
 
-Only the owner adds the approval label. Any agent running under the owner's
-login can add it, and the record is what makes doing so a violation. Never add
-it, even to a PR you wrote, and never treat a chat message as approval.
+Only a person adds the approval label. Any agent running under a
+collaborator's account can add it, and the record is what makes doing so a
+violation. Never add it, even to a PR you wrote, and never treat a chat
+message as approval.
 
 ## The Batch
 
@@ -177,8 +185,8 @@ a PR fails:
 2. **Targets the default branch.** A stacked PR becomes eligible when its
    parent merges and the forge retargets it.
 3. **Approved per the record and not handed back.** It carries the approval
-   label, the latest such label event is the approver's, and it lacks the
-   hand-back label.
+   label, a collaborator at or above the Approver permission added the latest
+   such label event, and it lacks the hand-back label.
 4. **The head is the approved one, or this run pushed it.** The owner read a
    specific version, so the script reconstructs it from push evidence.
 5. **No unresolved review threads.** An open thread is an open question, and
