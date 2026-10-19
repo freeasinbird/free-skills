@@ -173,6 +173,12 @@ else
   echo "FIX=\"$FIX\""
   cat <<'SHIMEOF'
 echo "$*" >> "$FIX/calls.log"
+# Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
+# Go under GODEBUG=http2debug, write request headers to stderr on every call.
+if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
+   || [[ ",${GODEBUG:-}," == *,http2debug=* ]]; then
+  echo "> Authorization: token SECRET-313" >&2
+fi
 sub='' verb='' api='' jqval='' prev='' branch='' cursor='' prnum=''
 for a in "$@"; do
   case "$prev" in
@@ -211,13 +217,19 @@ elif [ "$sub" = pr ] && [ "$verb" = list ]; then
 fi
 for f in "$FIX"/fail-*; do
   [ -e "$f" ] || continue
-  case "$api$verb" in *"$(cat "$f")"*) exit 1 ;; esac
+  case "$api$verb" in *"$(cat "$f")"*)
+    [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
+    exit 1 ;;
+  esac
 done
 if [ -z "$fixture" ]; then exit 1; fi
 if [ ! -f "$fixture" ]; then
   [ -n "$default" ] || exit 1
   printf '%s\n' "$default" > "$FIX/default.json"; fixture="$FIX/default.json"
 fi
+# A read that works can still write to stderr; none of it may reach a
+# later failure's excerpt.
+echo "gh: notice from a read that worked" >&2
 if [ -n "$jqval" ]; then exec jq -r "$jqval" "$fixture"; fi
 exec cat "$fixture"
 SHIMEOF
@@ -294,6 +306,10 @@ lr() { # lr <args...>: run from the work clone with the fixture shim
   RC=$?
   LAST=$(tail -n 1 "$TMP/out")
   JSON="${LAST#* }"; JSON="${JSON#* }"
+}
+expect_stderr() { # expect_stderr <text> <desc>
+  if [ "$(printf '%s' "$JSON" | jq -j '.stderr // empty' 2>/dev/null)" = "$1" ]; then ok
+  else bad "$2: stderr is not '$1': $LAST"; fi
 }
 expect_rc() { if [ "$RC" -eq "$1" ]; then ok; else bad "$2: exit $RC, want $1: $LAST"; fi; }
 expect_ready() { # expect_ready <csv> <desc>
@@ -737,29 +753,47 @@ expect_stop no-landing-record "the record is read from the fetched tip, which no
 new_repo
 ready_pr 1 feat/one "$H1"
 echo timeline > "$FIX/fail-timeline"
-lr --run r1
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+GH_DEBUG=api lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED timeline "* ]]; then ok; else bad "a timeline read failure is LOOKUP_FAILED: $LAST"; fi
+expect_stderr 'gh: Service Unavailable (HTTP 503)' "a timeline read failure quotes gh's error"
+case "$LAST" in *SECRET-313*) bad "a GH_DEBUG header reached the excerpt: $LAST" ;; *) ok ;; esac
 expect_remote_lock absent "a read failure takes no lock"
 
 new_repo
 ready_pr 1 feat/one "$H1"
 lr --run r1
 echo graphql > "$FIX/fail-threads"
+echo 'GraphQL: API rate limit exceeded' > "$FIX/gh-stderr"
 lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED review-threads "* ]]; then ok; else bad "a thread read failure is LOOKUP_FAILED: $LAST"; fi
+expect_stderr 'GraphQL: API rate limit exceeded' "a thread read failure quotes gh's error"
 expect_remote_lock r1 "a read failure mid-batch neither releases nor moves the lock"
 
 new_repo
 ready_pr 1 feat/one "$H1"
 echo actions/runs > "$FIX/fail-runs"
+printf 'gh: "quoted" failure\nline two %0400d\n' 0 > "$FIX/gh-stderr"
 lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED actions-runs "* ]]; then ok; else bad "a CI-run read failure is LOOKUP_FAILED: $LAST"; fi
+case "$LAST" in *'"stderr":"gh: \"quoted\" failure\u000aline two 000'*) ok ;; *) bad "the excerpt is not JSON-escaped: $LAST" ;; esac
+expect_stderr "$(head -c 300 "$FIX/gh-stderr")" "the excerpt is cut to 300 bytes"
 
 new_repo
 echo list > "$FIX/fail-list"
+echo 'gh: Bad credentials (HTTP 401)' > "$FIX/gh-stderr"
 lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED pr-list "* ]]; then ok; else bad "a PR-list failure is LOOKUP_FAILED, not an empty list: $LAST"; fi
+expect_stderr 'gh: Bad credentials (HTTP 401)' "a PR-list failure quotes gh's error"
 expect_remote_lock absent "a failed listing never reads as empty"
+
+# A lookup failure after reads that worked carries no excerpt, even though
+# every one of those reads wrote to stderr.
+new_repo
+ready_pr 1 feat/one "not-an-oid"
+GH_DEBUG=api lr --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED pr-list "* ]]; then ok; else bad "an unparseable head is LOOKUP_FAILED: $LAST"; fi
+case "$LAST" in *'"stderr"'*) bad "a failure past successful reads carries an excerpt: $LAST" ;; *) ok ;; esac
 
 fi
 

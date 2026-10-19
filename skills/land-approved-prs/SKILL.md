@@ -373,9 +373,14 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
 - **Any other `STOP`:** Hand back naming the guard.
 
 A read failure isn't a guard stop. `LOOKUP_FAILED` means a script couldn't
-read the forge or the remote. Check that both are reachable, then rerun the
-same script once. Never act on your own reading in place of the script's
-result. If it fails again, end the batch as "Ending Early" says.
+read the forge or the remote. Read its `stderr` key first, when present. A
+timeout, an HTTP 5xx, or a rate limit is transient: check that the forge and
+remote are reachable, then rerun the same script once. A 404, a permission
+error, or an authentication error won't clear on a rerun, so end the batch as
+"Ending Early" says and quote the error. With no `stderr` key, the failed read
+was git's or gh said nothing; check reachability and rerun once. Never act on
+your own reading in place of the script's result. If the rerun fails, end the
+batch as "Ending Early" says.
 
 ### Ending Early
 
@@ -532,6 +537,10 @@ and on the exit code, never on the prose above it:
 | 4    | `LOOKUP_FAILED <what> {json}` | A read failed; unknown is never absence      |
 | 64   | Usage on stderr               | Bad or missing flags; fix the call           |
 | 69   | Note on stderr                | No `gh` on PATH; hand the batch to the owner |
+
+A `LOOKUP_FAILED` from a failed forge read adds a `stderr` key: the first 300
+bytes of gh's error output. The scripts turn off gh's and Go's debug output
+for these reads, so no request header reaches it.
 
 `list-ready.sh` reports `OK list` with `ready` and `excluded` arrays and the
 lock's state: `acquired`, `refreshed`, `released`, or `absent`. It reports

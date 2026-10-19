@@ -48,7 +48,9 @@
 #   STOP <guard> <json>          a guard fired: surface it, never work
 #                                around it; the guard names are stable
 #   LOOKUP_FAILED <what> <json>  a read failed; unknown is not absence, so
-#                                nothing was decided from the empty result
+#                                nothing was decided from the empty result;
+#                                a failed forge read adds "stderr", the first
+#                                300 bytes of gh's error output
 # Exit codes: 0 OK; 2 STOP; 4 LOOKUP_FAILED; 64 usage error; 69 gh
 # (GitHub CLI) not found on PATH.
 set -u
@@ -213,8 +215,27 @@ stop() { # stop <guard> <detail>
   exit 2
 }
 lookup_failed() { # lookup_failed <what> <detail>
-  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"}"
+  local excerpt="" extra=""
+  [ -s "${GH_ERR:-}" ] && excerpt=$(tr -d '\0' < "$GH_ERR" | head -c 300)
+  [ -z "$excerpt" ] || extra=",\"stderr\":\"$(json_escape "$excerpt")\""
+  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"$extra}"
   exit 4
+}
+
+# Forge reads keep gh's stderr here so lookup_failed can quote why a read
+# failed. head, not tail: gh's summary line comes first, before any body.
+GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
+trap 'rm -f -- "$GH_ERR"' EXIT
+# Go's http2debug trace prints the Authorization header unredacted. Drop
+# that one setting and keep any other GODEBUG setting gh may rely on.
+GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)http2debug=[^,]*//g; s/^,//')
+# Run one forge read, keeping its stderr only when it fails, so a warning
+# from a read that worked can't attach to a later failure. GH_DEBUG is set
+# empty, not unset: gh falls back to the legacy DEBUG variable when
+# GH_DEBUG is unset, and debug output carries headers and response bodies.
+gh_read() {
+  GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" 2>"$GH_ERR" || return
+  : > "$GH_ERR"
 }
 
 # Percent-encode one URL path segment or query value. Forge-sourced branch
@@ -246,10 +267,10 @@ urlencode() {
 # The ~ sentinel keeps a null field (a deleted fork's owner or repo) from
 # collapsing out of the tab-separated read and shifting every later field:
 # tabs are IFS whitespace, so consecutive tabs read as one separator.
-pr_fields=$(gh pr view "$PR" --repo="$REPO" \
+pr_fields=$(gh_read pr view "$PR" --repo="$REPO" \
   --json state,headRefName,baseRefName,headRefOid,isCrossRepository,headRepositoryOwner,headRepository,url \
-  --jq '[.state,.headRefName,.baseRefName,.headRefOid,(.isCrossRepository|tostring),(.headRepositoryOwner.login // "~"),(.headRepository.name // "~"),.url] | @tsv' \
-  2>/dev/null) || lookup_failed pr-view "could not read PR $PR from $REPO"
+  --jq '[.state,.headRefName,.baseRefName,.headRefOid,(.isCrossRepository|tostring),(.headRepositoryOwner.login // "~"),(.headRepository.name // "~"),.url] | @tsv') \
+  || lookup_failed pr-view "could not read PR $PR from $REPO"
 IFS=$'\t' read -r PR_STATE BRANCH BASE FORGE_HEAD_OID IS_FORK HEAD_OWNER HEAD_REPO_NAME PR_URL <<< "$pr_fields"
 [ -n "$BRANCH" ] && [ -n "$BASE" ] || lookup_failed pr-view "PR $PR returned empty branch fields"
 if [ "$HEAD_OWNER" != "~" ]; then
@@ -365,9 +386,8 @@ REPO_FACTS_LOADED=""
 load_repo_facts() {
   [ -n "$REPO_FACTS_LOADED" ] && return 0
   local facts rn
-  facts=$(gh api "repos/$REPO" \
-    --jq '[.default_branch, (.fork|tostring), (.forks_count|tostring), (.delete_branch_on_merge|tostring), (.parent.full_name // "~"), (.source.full_name // "~"), (.clone_url // "~"), (.ssh_url // "~"), (.merge_commit_title // "~"), (.merge_commit_message // "~")] | @tsv' \
-    2>/dev/null) \
+  facts=$(gh_read api "repos/$REPO" \
+    --jq '[.default_branch, (.fork|tostring), (.forks_count|tostring), (.delete_branch_on_merge|tostring), (.parent.full_name // "~"), (.source.full_name // "~"), (.clone_url // "~"), (.ssh_url // "~"), (.merge_commit_title // "~"), (.merge_commit_message // "~")] | @tsv') \
     || lookup_failed repo-facts "could not read repository facts for $REPO"
   IFS=$'\t' read -r DEFAULT_BRANCH REPO_IS_FORK FORKS_COUNT DELETE_BRANCH_ON_MERGE PARENT_REPO SOURCE_REPO REPO_CLONE_URL REPO_SSH_URL MERGE_COMMIT_TITLE_SETTING MERGE_COMMIT_MESSAGE_SETTING <<< "$facts"
   [ -n "$DEFAULT_BRANCH" ] || lookup_failed repo-facts "empty default branch for $REPO"
@@ -504,12 +524,12 @@ consumer_checks() {
   load_repo_facts
   local shared stacked target seen="" n
   if [ "$IS_FORK" = true ]; then
-    shared=$(gh api "repos/$REPO/pulls?state=open&head=$HEAD_OWNER:$ENC_BRANCH" \
-      --jq "[.[] | select(.number != $PR) | .number] | length" 2>/dev/null) \
+    shared=$(gh_read api "repos/$REPO/pulls?state=open&head=$HEAD_OWNER:$ENC_BRANCH" \
+      --jq "[.[] | select(.number != $PR) | .number] | length") \
       || lookup_failed shared-head "could not list open PRs sharing head $HEAD_OWNER:$BRANCH"
   else
-    shared=$(gh pr list --repo="$REPO" --head="$BRANCH" --state=open --json=number \
-      --jq "[.[] | select(.number != $PR) | .number] | length" 2>/dev/null) \
+    shared=$(gh_read pr list --repo="$REPO" --head="$BRANCH" --state=open --json=number \
+      --jq "[.[] | select(.number != $PR) | .number] | length") \
       || lookup_failed shared-head "could not list open PRs sharing head $BRANCH"
   fi
   case "$shared" in ''|*[!0-9]*) lookup_failed shared-head "unparseable shared-head listing" ;; esac
@@ -519,8 +539,8 @@ consumer_checks() {
   # same-repository child onto the base first. A cross-repository head's
   # children live in the head's repository, where neither the forge nor
   # merge-cleanup can retarget them onto this base, so they still stop.
-  stacked=$(gh pr list --repo="$HEAD_REPO" --base="$BRANCH" --state=open --json=number \
-    --jq '[.[].number] | tojson' 2>/dev/null) \
+  stacked=$(gh_read pr list --repo="$HEAD_REPO" --base="$BRANCH" --state=open --json=number \
+    --jq '[.[].number] | tojson') \
     || lookup_failed stacked-prs "could not list open PRs based on $BRANCH"
   n=${stacked#\[}; n=${n%\]}
   case "$stacked" in '['*']') ;; *) lookup_failed stacked-prs "unparseable stacked-PR listing" ;; esac
@@ -542,7 +562,7 @@ consumer_checks() {
       [ "$target" != "$REPO" ] || continue
       case " $seen " in *" $target "*) continue ;; esac
       seen="$seen $target"
-      n=$(gh api "repos/$target/pulls?state=open&head=${REPO%%/*}:$ENC_BRANCH" --jq length 2>/dev/null) \
+      n=$(gh_read api "repos/$target/pulls?state=open&head=${REPO%%/*}:$ENC_BRANCH" --jq length) \
         || lookup_failed shared-head "could not list open PRs in $target sharing head $BRANCH"
       case "$n" in ''|*[!0-9]*) lookup_failed shared-head "unparseable listing from $target" ;; esac
       [ "$n" -eq 0 ] || stop shared-head "$n open PR(s) in $target use $BRANCH as their head; deleting or auto-deleting it closes them"
@@ -584,9 +604,8 @@ queue_message_check() {
 # read does not recognize: the payload belongs to the forge.
 queue_check() {
   local methods row method="" count=0
-  methods=$(gh api --paginate "repos/$REPO/rules/branches/$ENC_BASE" \
-    --jq '.[] | select(.type == "merge_queue") | (.parameters.merge_method // "unidentified")' \
-    2>/dev/null) \
+  methods=$(gh_read api --paginate "repos/$REPO/rules/branches/$ENC_BASE" \
+    --jq '.[] | select(.type == "merge_queue") | (.parameters.merge_method // "unidentified")') \
     || lookup_failed queue-rules "could not read branch rules for $BASE"
   while IFS= read -r row; do
     [ -n "$row" ] || continue
@@ -1025,8 +1044,8 @@ urlencode_ref_path() {
 }
 
 forge_base_tip() { # sets FORGE_BASE_TIP to the forge's current tip of $BASE
-  FORGE_BASE_TIP=$(gh api "repos/$REPO/git/ref/heads/$(urlencode_ref_path "$BASE")" \
-    --jq '.object.sha' 2>/dev/null) \
+  FORGE_BASE_TIP=$(gh_read api "repos/$REPO/git/ref/heads/$(urlencode_ref_path "$BASE")" \
+    --jq '.object.sha') \
     || lookup_failed base-ref "could not read the tip of $BASE from $REPO"
   case "$FORGE_BASE_TIP" in *[!0-9a-f]*|'')
     lookup_failed base-ref "unexpected tip for $BASE: $FORGE_BASE_TIP" ;;
@@ -1042,9 +1061,8 @@ forge_base_tip() { # sets FORGE_BASE_TIP to the forge's current tip of $BASE
 # missing, never green: CI that has not reported has not passed.
 ci_read() { # ci_read <oid>
   local oid="$1" runs status st concl name total=0 bad="" waiting="" s_state s_total
-  runs=$(gh api --paginate "repos/$REPO/commits/$oid/check-runs?per_page=100" \
-    --jq '.check_runs[] | [.status, (.conclusion // "none"), .name] | @tsv' \
-    2>/dev/null) \
+  runs=$(gh_read api --paginate "repos/$REPO/commits/$oid/check-runs?per_page=100" \
+    --jq '.check_runs[] | [.status, (.conclusion // "none"), .name] | @tsv') \
     || lookup_failed check-runs "could not read check runs for $oid"
   while IFS=$'\t' read -r st concl name; do
     [ -n "$st" ] || continue
@@ -1058,8 +1076,8 @@ ci_read() { # ci_read <oid>
       esac
     fi
   done <<< "$runs"
-  status=$(gh api "repos/$REPO/commits/$oid/status" \
-    --jq '[.state, (.total_count|tostring)] | @tsv' 2>/dev/null) \
+  status=$(gh_read api "repos/$REPO/commits/$oid/status" \
+    --jq '[.state, (.total_count|tostring)] | @tsv') \
     || lookup_failed commit-status "could not read the combined status for $oid"
   IFS=$'\t' read -r s_state s_total <<< "$status"
   case "$s_total" in ''|*[!0-9]*)
@@ -1185,7 +1203,8 @@ land_rebase() {
     rm -rf -- "$LAND_TMP_WT"; LAND_TMP_WT=""
     lookup_failed rebase "could not add a temporary worktree at $HEAD_OID"
   fi
-  trap remove_land_worktree EXIT
+  # This replaces the startup EXIT trap, so it keeps removing GH_ERR too.
+  trap 'remove_land_worktree; rm -f -- "$GH_ERR"' EXIT
   err=$(mktemp) || lookup_failed rebase "mktemp failed"
   # Pin the settings that would let a rebase touch more than this commit:
   # autostash stashes and reapplies work, and updateRefs moves branches.
@@ -1250,8 +1269,8 @@ land_await_forge_head() {
   local deadline remaining sleep_for fields state oid
   deadline=$(( SECONDS + CI_CAP_MINUTES * 60 ))
   while :; do
-    fields=$(gh pr view "$PR" --repo="$REPO" --json state,headRefOid \
-      --jq '[.state,.headRefOid] | @tsv' 2>/dev/null) \
+    fields=$(gh_read pr view "$PR" --repo="$REPO" --json state,headRefOid \
+      --jq '[.state,.headRefOid] | @tsv') \
       || lookup_failed pr-view "could not reread PR $PR after the push"
     IFS=$'\t' read -r state oid <<< "$fields"
     [ "$state" = OPEN ] || stop pr-not-open "PR $PR is $state after land pushed $NEW_HEAD"
@@ -1400,8 +1419,8 @@ phase_land() {
 
   # The CI wait can be long; merge's own guards need the PR as it is now.
   local base_now
-  fields=$(gh pr view "$PR" --repo="$REPO" --json state,headRefOid,baseRefName \
-    --jq '[.state,.headRefOid,.baseRefName] | @tsv' 2>/dev/null) \
+  fields=$(gh_read pr view "$PR" --repo="$REPO" --json state,headRefOid,baseRefName \
+    --jq '[.state,.headRefOid,.baseRefName] | @tsv') \
     || lookup_failed pr-view "could not reread PR $PR before the merge"
   IFS=$'\t' read -r PR_STATE FORGE_HEAD_OID base_now <<< "$fields"
   [ "$base_now" = "$BASE" ] \
@@ -1416,7 +1435,7 @@ phase_merge() {
   # Read the title before the last-moment destructive guards. No forge API
   # call sits between their final repository-settings refresh and merge.
   local title
-  title=$(gh pr view "$PR" --repo="$REPO" --json title --jq .title 2>/dev/null) \
+  title=$(gh_read pr view "$PR" --repo="$REPO" --json title --jq .title) \
     || lookup_failed title "could not read the PR title"
   { [ -n "$title" ] && [ "$title" != null ]; } \
     || lookup_failed title "the PR title read back empty"
@@ -1459,8 +1478,8 @@ phase_merge() {
   local deadline state merged_at remaining sleep_for
   deadline=$(( SECONDS + CAP_MINUTES * 60 ))
   while :; do
-    if pr_fields=$(gh pr view "$PR" --repo="$REPO" --json state,mergedAt \
-        --jq '[.state,(.mergedAt // "null")] | @tsv' 2>/dev/null); then
+    if pr_fields=$(gh_read pr view "$PR" --repo="$REPO" --json state,mergedAt \
+        --jq '[.state,(.mergedAt // "null")] | @tsv'); then
       IFS=$'\t' read -r state merged_at <<< "$pr_fields"
       if [ "$state" = MERGED ] && [ "$merged_at" != null ]; then
         if [ "$PHASE" = land ]; then

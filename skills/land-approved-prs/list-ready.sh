@@ -32,7 +32,9 @@
 # Last line on stdout is the machine-readable result:
 #   OK <list|pushed|release> <json>
 #   STOP <guard> <json>          a guard fired; the guard names are stable
-#   LOOKUP_FAILED <what> <json>  a read failed; unknown is not absence
+#   LOOKUP_FAILED <what> <json>  a read failed; unknown is not absence; a
+#                                failed forge read adds "stderr", the first
+#                                300 bytes of gh's error output
 # Exit codes: 0 OK; 2 STOP; 4 LOOKUP_FAILED; 64 usage error; 69 gh
 # (GitHub CLI) not found on PATH.
 set -u
@@ -133,8 +135,27 @@ stop() { # stop <guard> <detail> [extra-json-fields]
   exit 2
 }
 lookup_failed() { # lookup_failed <what> <detail>
-  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"}"
+  local excerpt="" extra=""
+  [ -s "${GH_ERR:-}" ] && excerpt=$(tr -d '\0' < "$GH_ERR" | head -c 300)
+  [ -z "$excerpt" ] || extra=",\"stderr\":\"$(json_escape "$excerpt")\""
+  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"$extra}"
   exit 4
+}
+
+# Forge reads keep gh's stderr here so lookup_failed can quote why a read
+# failed. head, not tail: gh's summary line comes first, before any body.
+GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
+trap 'rm -f -- "$GH_ERR"' EXIT
+# Go's http2debug trace prints the Authorization header unredacted. Drop
+# that one setting and keep any other GODEBUG setting gh may rely on.
+GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)http2debug=[^,]*//g; s/^,//')
+# Run one forge read, keeping its stderr only when it fails, so a warning
+# from a read that worked can't attach to a later failure. GH_DEBUG is set
+# empty, not unset: gh falls back to the legacy DEBUG variable when
+# GH_DEBUG is unset, and debug output carries headers and response bodies.
+gh_read() {
+  GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" 2>"$GH_ERR" || return
+  : > "$GH_ERR"
 }
 
 # --- repository and record -------------------------------------------------
@@ -194,7 +215,7 @@ else
   resolve_remote
 fi
 
-DEFAULT=$(gh api "repos/$REPO" --jq .default_branch 2>/dev/null) \
+DEFAULT=$(gh_read api "repos/$REPO" --jq .default_branch) \
   || lookup_failed repo "could not read $REPO's default branch"
 [ -n "$DEFAULT" ] || lookup_failed repo "$REPO reported no default branch"
 git fetch -q --no-tags -- "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$DEFAULT" 2>/dev/null \
@@ -404,14 +425,14 @@ REPO_LC=$(printf '%s' "$REPO" | tr 'A-Z' 'a-z')
 open_threads() { # open_threads <pr>: prints the unresolved thread count
   local q n more cursor t_open total
   q='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}'
-  read -r n more cursor <<< "$(gh api graphql -f query="$q" -F o="$OWNER" -F r="$NAME" -F n="$1" \
-    --jq '.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved == false)] | length) \(.pageInfo.hasNextPage) \(.pageInfo.endCursor // "none")"' 2>/dev/null)"
+  read -r n more cursor <<< "$(gh_read api graphql -f query="$q" -F o="$OWNER" -F r="$NAME" -F n="$1" \
+    --jq '.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved == false)] | length) \(.pageInfo.hasNextPage) \(.pageInfo.endCursor // "none")"')"
   case "${n:-x}" in *[!0-9]*) return 1 ;; esac
   total="$n"
   q='query($o:String!,$r:String!,$n:Int!,$c:String!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100,after:$c){pageInfo{hasNextPage endCursor} nodes{isResolved}}}}}'
   while [ "$more" = true ]; do
-    read -r t_open more cursor <<< "$(gh api graphql -f query="$q" -F o="$OWNER" -F r="$NAME" -F n="$1" -f c="$cursor" \
-      --jq '.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved == false)] | length) \(.pageInfo.hasNextPage) \(.pageInfo.endCursor // "none")"' 2>/dev/null)"
+    read -r t_open more cursor <<< "$(gh_read api graphql -f query="$q" -F o="$OWNER" -F r="$NAME" -F n="$1" -f c="$cursor" \
+      --jq '.data.repository.pullRequest.reviewThreads | "\([.nodes[] | select(.isResolved == false)] | length) \(.pageInfo.hasNextPage) \(.pageInfo.endCursor // "none")"')"
     case "${t_open:-x}" in *[!0-9]*) return 1 ;; esac
     total=$((total + t_open))
   done
@@ -419,12 +440,13 @@ open_threads() { # open_threads <pr>: prints the unresolved thread count
 }
 
 TMPD=$(mktemp -d) || lookup_failed tmp "mktemp failed"
-trap 'rm -rf "$TMPD"' EXIT
+# This replaces the EXIT trap that removes GH_ERR, so it removes both.
+trap 'rm -rf "$TMPD" "$GH_ERR"' EXIT
 
-gh pr list --repo "$REPO" --state open --limit 1000 \
+gh_read pr list --repo "$REPO" --state open --limit 1000 \
   --json number,isDraft,baseRefName,headRefName,headRefOid,isCrossRepository,createdAt,labels \
   --jq '.[] | [(.number|tostring), (.isDraft|tostring), .baseRefName, .headRefName, .headRefOid, (.isCrossRepository|tostring), .createdAt, ([.labels[].name] | join("\u001f"))] | @tsv' \
-  > "$TMPD/prs" 2>/dev/null \
+  > "$TMPD/prs" \
   || lookup_failed pr-list "could not list $REPO's open PRs"
 
 : > "$TMPD/ready"; : > "$TMPD/excluded"; : > "$TMPD/open"
@@ -447,8 +469,8 @@ evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <lab
   case "$oid" in *[!0-9a-f]*|'') lookup_failed pr-list "PR $num reported head '$oid'" ;; esac
   [ "${#oid}" -eq 40 ] || lookup_failed pr-list "PR $num reported head '$oid'"
 
-  events=$(gh api --paginate "repos/$REPO/issues/$num/timeline?per_page=100" \
-    --jq '.[] | select(.event == "labeled" or .event == "head_ref_force_pushed") | [.event, .created_at, (.label.name // "-"), (.actor.login // "-"), (.commit_id // "-")] | @tsv' 2>/dev/null) \
+  events=$(gh_read api --paginate "repos/$REPO/issues/$num/timeline?per_page=100" \
+    --jq '.[] | select(.event == "labeled" or .event == "head_ref_force_pushed") | [.event, .created_at, (.label.name // "-"), (.actor.login // "-"), (.commit_id // "-")] | @tsv') \
     || lookup_failed timeline "could not read PR $num's timeline"
   : > "$TMPD/evidence"
   while IFS=$'\t' read -r kind at name actor sha; do
@@ -467,9 +489,9 @@ evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <lab
   # Filter 4. A pull_request run created before the PR existed belongs to
   # an earlier PR that reused the branch name, and one whose head lives in
   # another repository belongs to a fork's PR from a same-named branch.
-  runs=$(gh api -X GET --paginate "repos/$REPO/actions/runs" -f event=pull_request \
+  runs=$(gh_read api -X GET --paginate "repos/$REPO/actions/runs" -f event=pull_request \
     -f branch="$head" -f per_page=100 \
-    --jq ".workflow_runs[] | select((.head_repository.full_name // \"\" | ascii_downcase) == \"$REPO_LC\") | [.created_at, .head_sha] | @tsv" 2>/dev/null) \
+    --jq ".workflow_runs[] | select((.head_repository.full_name // \"\" | ascii_downcase) == \"$REPO_LC\") | [.created_at, .head_sha] | @tsv") \
     || lookup_failed actions-runs "could not read PR $num's CI runs"
   while IFS=$'\t' read -r at sha; do
     [ -n "$at" ] || continue
@@ -499,8 +521,8 @@ evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <lab
   if [ "$n_open" -gt 0 ]; then REASON_FILTER=5 REASON="$n_open unresolved review thread(s)"; return; fi
 
   if [ "$REVIEWER" != none ]; then
-    sums=$(gh api --paginate "repos/$REPO/issues/$num/comments?per_page=100" \
-      --jq ".[] | select(.user.type == \"Bot\" and (.user.login == \"$REVIEWER\" or .user.login == \"${REVIEWER}[bot]\") and (.body | contains(\"$MARKER\"))) | .body | split(\"\\n\")[] | select(contains(\"**Completed**\") and test(\"\`[0-9a-f]{7,40}\`\")) | capture(\"\`(?<sha>[0-9a-f]{7,40})\`\").sha" 2>/dev/null) \
+    sums=$(gh_read api --paginate "repos/$REPO/issues/$num/comments?per_page=100" \
+      --jq ".[] | select(.user.type == \"Bot\" and (.user.login == \"$REVIEWER\" or .user.login == \"${REVIEWER}[bot]\") and (.body | contains(\"$MARKER\"))) | .body | split(\"\\n\")[] | select(contains(\"**Completed**\") and test(\"\`[0-9a-f]{7,40}\`\")) | capture(\"\`(?<sha>[0-9a-f]{7,40})\`\").sha") \
       || lookup_failed reviewer "could not read PR $num's comments for the reviewer's summary"
     local done_on_head=false
     while IFS= read -r s; do
