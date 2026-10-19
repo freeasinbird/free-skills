@@ -283,10 +283,12 @@ with no repository identity, report that no record is offered: the label
 mechanism and its audit need a host `gh` serves.
 
 Treat this as **detect → report → offer to write**, never a silent mutation.
-Ask the owner for the Approver login. Don't derive it from the `gh` login,
-a commit author, or the remote's owner. Approver must be nonempty and contain
-only letters, digits, and hyphens. If the owner hasn't supplied a compatible login, report
-the gap, leave the offer pending, and continue independent setup work.
+The record names no person. Approval rests on repository permission: the
+landing parser counts an approval label when the collaborator who added it
+holds the Approver permission or a higher role. Offer the template's `write`
+floor and raise it to `maintain` or `admin` only when the owner asks. A
+user-owned repository has no `maintain` role, so `write` is the floor that
+lets every collaborator approve there.
 
 Read the project's reviewer record before filling the template below. Copy
 its login without a `[bot]` suffix and its completion marker. With no reviewer
@@ -311,10 +313,10 @@ reviewer records in the unmanaged project-specific conventions section:
   record:
 
   - **Mechanism:** `label`.
-  - **Approval:** `approved`, added only by the approver; agents never add
-    it.
+  - **Approval:** `approved`, added by a collaborator with the Approver
+    permission; agents never add it.
   - **Hand-back:** `needs-human`.
-  - **Approver:** `owner-login`.
+  - **Approver permission:** `write`.
   - **Stale lock age:** `240` minutes.
   - **Base-advance checks:** none.
   - **Reviewer:** `chatgpt-codex-connector`.
@@ -334,8 +336,10 @@ Validate an existing record without replacing its project choices with the
 template's defaults:
 
 - Mechanism is `label`. Approval and Hand-back have distinct, nonempty
-  backticked values. Approver is an owner-supplied login in backticks, using
-  only letters, digits, and hyphens.
+  backticked values. Approver permission is `write`, `maintain`, or `admin`
+  in backticks. A record with an `Approver` login bullet predates
+  permission-based approval: report it as drift and offer to replace that
+  bullet with `Approver permission` at `write`, showing the exact text first.
 - Reviewer is present as a backticked login or `none`. A named login uses only
   letters, digits, and hyphens, with no `[bot]` suffix. It matches the login
   in the project's reviewer record after removing that suffix, and its marker
