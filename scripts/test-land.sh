@@ -123,6 +123,12 @@ else
   echo "FIX=\"$FIX\""
   cat <<'SHIMEOF'
 echo "$*" >> "$FIX/calls.log"
+# Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
+# Go under GODEBUG=http2debug, write request headers to stderr on every call.
+if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
+   || [[ ",${GODEBUG:-}," == *,http2debug=* ]]; then
+  echo "> Authorization: token SECRET-313" >&2
+fi
 jsonval='' jqval='' prev='' sub='' api='' paginate=''
 for a in "$@"; do
   case "$prev" in
@@ -181,7 +187,10 @@ if [ "$fixture" = "$FIX/pr-full.json" ] && [ -f "$FIX/pr-next-armed" ]; then
   if [ -f "$FIX/pr-read-once" ]; then fixture="$FIX/pr-next.json"
   else : > "$FIX/pr-read-once"; fi
 fi
-[ -n "$fixture" ] && [ -f "$fixture" ] || exit 1
+if [ -z "$fixture" ] || [ ! -f "$fixture" ]; then
+  [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
+  exit 1
+fi
 # A live head: report the scratch remote's current head OID, as the forge
 # would after a push.
 if [ "$fixture" = "$FIX/pr-full.json" ] && [ -f "$FIX/live-remote" ]; then
@@ -190,6 +199,9 @@ if [ "$fixture" = "$FIX/pr-full.json" ] && [ -f "$FIX/live-remote" ]; then
   jq --arg o "$live" '.headRefOid = $o' "$fixture" > "$FIX/pr-live.json"
   fixture="$FIX/pr-live.json"
 fi
+# A read that works can still write to stderr; none of it may reach a
+# later failure's excerpt.
+echo "gh: notice from a read that worked" >&2
 if [ -n "$jqval" ]; then
   if [ -n "$paginate" ] \
      && [ "$fixture" = "$FIX/rules.json" ] \
@@ -214,7 +226,7 @@ scenario() {
   SCENARIO="$1"
   rm -f "$FIX"/*.json "$FIX"/calls.log "$FIX"/merge-rc \
     "$FIX"/repo-read-once "$FIX"/rules-page2-fail "$FIX"/live-remote \
-    "$FIX"/pr-next-armed "$FIX"/pr-read-once
+    "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr
   SCEN="$TMP/scen-$((pass + fail))"
   mkdir -p "$SCEN"
 }
@@ -233,6 +245,7 @@ run_sm_with_git_shim() { # run_sm_with_git_shim <shim-dir> <args...>
 want_rc() { if [ "$RC" -eq "$1" ]; then ok; else bad "exit $RC, want $1 (out: $OUT; err: $(tail -c 200 "$FIX/stderr" 2>/dev/null))"; fi; }
 want_out() { case "$OUT" in *"$1"*) ok ;; *) bad "stdout lacks '$1' (got: $OUT)" ;; esac; }
 want_err() { grep -qF -- "$1" "$FIX/stderr" && ok || bad "stderr lacks '$1' (got: $(tail -c 200 "$FIX/stderr"))"; }
+want_no_out() { case "$OUT" in *"$1"*) bad "stdout has '$1' (got: $OUT)" ;; *) ok ;; esac; }
 want_call() {
   if grep -qF -- "$1" "$FIX/calls.log" 2>/dev/null; then ok; else
     bad "no gh call contained '$1' (log: $(cat "$FIX/calls.log" 2>/dev/null | tr '\n' ';'))"
@@ -938,6 +951,19 @@ printf '{"state":"OPEN","mergedAt":null}' > "$FIX/pr-state.json"
 run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID" --cap-minutes 0 --interval 1
 want_rc 4
 want_out 'LOOKUP_FAILED merge-pending'
+want_no_out '"stderr"'
+
+# A poll failure is tolerated and retried, so a cap reached right after one
+# reports that poll's error: the latest word from the forge.
+scenario "a merge wait that caps out after a failed poll quotes its error"
+std_setup; std_fixtures
+printf '{"title":"T"}' > "$FIX/title.json"
+rm -f "$FIX/pr-state.json"
+echo 'gh: Bad Gateway (HTTP 502)' > "$FIX/gh-stderr"
+run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID" --cap-minutes 0 --interval 1
+want_rc 4
+want_out 'LOOKUP_FAILED merge-pending'
+want_out '"stderr":"gh: Bad Gateway (HTTP 502)"}'
 
 # ---- land phase ----
 
@@ -1145,10 +1171,43 @@ want_no_call 'pr merge'
 scenario "an unreadable check list is unknown, not green"
 land_setup; land_fixtures
 rm -f "$FIX/checks.json"
-run_sm "${LAND[@]}" --head "$FEAT_OID"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+GH_DEBUG=api run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 4
 want_out 'LOOKUP_FAILED check-runs'
+want_out '"stderr":"gh: Service Unavailable (HTTP 503)"}'
+want_no_out 'SECRET-313'
 want_no_call 'pr merge'
+
+scenario "the legacy DEBUG variable cannot put headers in the excerpt"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+unset GH_DEBUG
+DEBUG=api run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out '"stderr":"gh: Service Unavailable (HTTP 503)"}'
+want_no_out 'SECRET-313'
+
+scenario "a GODEBUG http2 trace cannot put headers in the excerpt"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+GODEBUG=netdns=go,http2debug=2 run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out '"stderr":"gh: Service Unavailable (HTTP 503)"}'
+want_no_out 'SECRET-313'
+
+scenario "the excerpt is JSON-escaped and cut to 300 bytes"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+printf 'gh: "quoted" failure\nline two %0400d\n' 0 > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out '"stderr":"gh: \"quoted\" failure\nline two 000'
+got=$(printf '%s' "${OUT#*LOOKUP_FAILED check-runs }" | jq -j .stderr 2>/dev/null)
+if [ "$got" = "$(head -c 300 "$FIX/gh-stderr")" ]; then ok
+else bad "stderr is not the first 300 bytes of gh's error output (got ${#got} chars)"; fi
 
 scenario "a base that moved after the fetch stops land before the merge"
 land_setup; land_fixtures
@@ -1482,9 +1541,10 @@ scenario "auto-resolution skips an origin with the wrong SSH user"
 land_setup behind; land_fixtures
 G "$WORK" remote set-url origin deploy@github.invalid:owner/name.git
 G "$WORK" remote add forge git@github.invalid:owner/name.git
-run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
+GH_DEBUG=api run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 4
 want_out 'LOOKUP_FAILED base-fetch'
+want_no_out '"stderr"'   # a git failure; the forge reads before it worked
 want_land_untouched "the remote head was pushed before the selected base remote failed"
 
 scenario "a second configured push URL still stops the split"

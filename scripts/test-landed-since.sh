@@ -158,6 +158,12 @@ else
   echo "FIX=\"$FIX\""
   cat <<'SHIMEOF'
 echo "$*" >> "$FIX/calls.log"
+# Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
+# Go under GODEBUG=http2debug, write request headers to stderr on every call.
+if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
+   || [[ ",${GODEBUG:-}," == *,http2debug=* ]]; then
+  echo "> Authorization: token SECRET-313" >&2
+fi
 sub='' verb='' api='' jqval='' prev=''
 for a in "$@"; do
   case "$prev" in --jq) jqval="$a" ;; esac
@@ -178,7 +184,13 @@ if [ "$sub" = api ]; then
     repos/*/*) fixture="$FIX/repo.json" ;;
   esac
 fi
-[ -n "$fixture" ] && [ -f "$fixture" ] || exit 1
+if [ -z "$fixture" ] || [ ! -f "$fixture" ]; then
+  [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
+  exit 1
+fi
+# A read that works can still write to stderr; none of it may reach a
+# later failure's excerpt.
+echo "gh: notice from a read that worked" >&2
 if [ -n "$jqval" ]; then exec jq -r "$jqval" "$fixture"; fi
 exec cat "$fixture"
 SHIMEOF
@@ -341,13 +353,27 @@ expect_lookup force-pushes "a failed force-push read is a lookup failure"
 new_repo
 force_pushed "$B1"
 pr_commit "$A1" "$C0"
+echo 'gh: Not Found (HTTP 404)' > "$FIX/gh-stderr"
+GH_DEBUG=api ls_run
+expect_lookup compare "a failed compare read is a lookup failure"
+expect_out '"stderr":"gh: Not Found (HTTP 404)"}' "a failed compare read quotes gh's error"
+expect_no_out SECRET-313 "a GH_DEBUG header never reaches the excerpt"
+
+new_repo
+force_pushed "$B1"
+pr_commit "$A1" "$C0"
+printf 'gh: "quoted" failure\nline two %0400d\n' 0 > "$FIX/gh-stderr"
 ls_run
 expect_lookup compare "a failed compare read is a lookup failure"
+expect_out '"stderr":"gh: \"quoted\" failure\u000aline two 000' "the excerpt is JSON-escaped"
+if [ "$(printf '%s' "$JSON" | jq -j .stderr 2>/dev/null)" = "$(head -c 300 "$FIX/gh-stderr")" ]; then ok
+else bad "the excerpt is not the first 300 bytes of gh's error output: $LAST"; fi
 
 new_repo
 pr_commit "$A1" "$X1"
-ls_run
+GH_DEBUG=api ls_run
 expect_lookup merge-base "a fork point missing from the fetched branch is a lookup failure"
+expect_no_out '"stderr"' "a git failure after reads that worked carries no excerpt"
 
 # A commit this checkout has that isn't on main: being an object is not
 # being on the default branch.
@@ -474,6 +500,7 @@ if grep -q 'pulls/\|graphql' "$FIX/calls.log" 2>/dev/null; then bad "--since rea
 new_repo
 ls_run --since "$X1"
 expect_lookup since "an unknown --since commit is a lookup failure"
+expect_no_out '"stderr"' "a git failure carries no excerpt"
 
 # --- base-advance checks ---
 

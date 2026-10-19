@@ -33,7 +33,8 @@
 # Last line on stdout is the machine-readable result:
 #   OK landed-since <json>
 #   STOP <guard> <json>
-#   LOOKUP_FAILED <what> <json>
+#   LOOKUP_FAILED <what> <json>   a failed forge read adds "stderr", the
+#                                 first 300 bytes of gh's error output
 # Exit codes: 0 OK; 2 STOP; 4 LOOKUP_FAILED; 64 usage error; 69 gh
 # (GitHub CLI) not found on PATH.
 set -u
@@ -101,8 +102,27 @@ stop() {
   exit 2
 }
 lookup_failed() {
-  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"}"
+  local excerpt="" extra=""
+  [ -s "${GH_ERR:-}" ] && excerpt=$(tr -d '\0' < "$GH_ERR" | head -c 300)
+  [ -z "$excerpt" ] || extra=",\"stderr\":\"$(json_escape "$excerpt")\""
+  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"$extra}"
   exit 4
+}
+
+# Forge reads keep gh's stderr here so lookup_failed can quote why a read
+# failed. head, not tail: gh's summary line comes first, before any body.
+GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
+trap 'rm -f -- "$GH_ERR"' EXIT
+# Go's http2debug trace prints the Authorization header unredacted. Drop
+# that one setting and keep any other GODEBUG setting gh may rely on.
+GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)http2debug=[^,]*//g; s/^,//')
+# Run one forge read, keeping its stderr only when it fails, so a warning
+# from a read that worked can't attach to a later failure. GH_DEBUG is set
+# empty, not unset: gh falls back to the legacy DEBUG variable when
+# GH_DEBUG is unset, and debug output carries headers and response bodies.
+gh_read() {
+  GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" 2>"$GH_ERR" || return
+  : > "$GH_ERR"
 }
 
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) \
@@ -142,7 +162,7 @@ else
   resolve_remote
 fi
 
-DEFAULT=$(gh api "repos/$REPO" --jq .default_branch 2>/dev/null) \
+DEFAULT=$(gh_read api "repos/$REPO" --jq .default_branch) \
   || lookup_failed repo "could not read $REPO's default branch"
 [ -n "$DEFAULT" ] || lookup_failed repo "$REPO reported no default branch"
 git fetch -q --no-tags -- "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$DEFAULT" 2>/dev/null \
@@ -209,7 +229,7 @@ if [ -n "$SINCE" ]; then
   git cat-file -e "$FROM^{commit}" 2>/dev/null \
     || lookup_failed since "--since $FROM is not a commit in this repository; fetch it or read from the original base"
 else
-  fields=$(gh api "repos/$REPO/pulls/$PR" --jq '[.head.sha, .commits] | @tsv' 2>/dev/null) \
+  fields=$(gh_read api "repos/$REPO/pulls/$PR" --jq '[.head.sha, .commits] | @tsv') \
     || lookup_failed pr-view "could not read PR $PR"
   IFS=$'\t' read -r head_oid head_count <<< "$fields"
   case "$head_oid" in *[!0-9a-f]*|'') lookup_failed pr-view "unparseable head '$head_oid'" ;; esac
@@ -220,7 +240,7 @@ else
   # The REST timeline's force-push commit_id is the after-commit, so the
   # before-commits come from GraphQL. Page on pageInfo, never totalCount:
   # with the type filter, totalCount can count events the filter drops.
-  before=$(gh api graphql --paginate -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$PR" -f query='
+  before=$(gh_read api graphql --paginate -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$PR" -f query='
     query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
       repository(owner: $owner, name: $name) {
         pullRequest(number: $number) {
@@ -230,7 +250,7 @@ else
           }
         }
       }
-    }' --jq '.data.repository.pullRequest.timelineItems.nodes[] | select(has("beforeCommit")) | .beforeCommit.oid // "-"' 2>/dev/null) \
+    }' --jq '.data.repository.pullRequest.timelineItems.nodes[] | select(has("beforeCommit")) | .beforeCommit.oid // "-"') \
     || lookup_failed force-pushes "could not read PR $PR's force pushes"
   before=$(printf '%s\n' "$before" | sed '/^$/d')
   pushes=0 heads=""
@@ -246,8 +266,8 @@ else
 
   points=""
   if [ "$head_count" -gt 0 ]; then
-    got=$(gh api --paginate "repos/$REPO/pulls/$PR/commits?per_page=100" \
-      --jq '.[] | "C \(.sha)", "P \(.parents[].sha)"' 2>/dev/null) \
+    got=$(gh_read api --paginate "repos/$REPO/pulls/$PR/commits?per_page=100" \
+      --jq '.[] | "C \(.sha)", "P \(.parents[].sha)"') \
       || lookup_failed pr-commits "could not read PR $PR's commits"
     got=$(printf '%s\n' "$got" | lineage_points "$head_count" "$head_oid") \
       || lookup_failed pr-commits "PR $PR's commits: ${got#ERR }"
@@ -261,8 +281,8 @@ else
   # candidate is reachable from the tip this run reads up to.
   while IFS= read -r h; do
     [ -n "$h" ] || continue
-    got=$(gh api --paginate "repos/$REPO/compare/$TIP...$h?per_page=250" \
-      --jq '"T \(.total_commits)", "M \(.merge_base_commit.sha)", (.commits[] | "C \(.sha)", "P \(.parents[].sha)")' 2>/dev/null) \
+    got=$(gh_read api --paginate "repos/$REPO/compare/$TIP...$h?per_page=250" \
+      --jq '"T \(.total_commits)", "M \(.merge_base_commit.sha)", (.commits[] | "C \(.sha)", "P \(.parents[].sha)")') \
       || lookup_failed compare "could not read the compare of $DEFAULT with $h"
     got=$(printf '%s\n' "$got" | lineage_points "" "$h") \
       || lookup_failed compare "the compare of $DEFAULT with $h: ${got#ERR }"
