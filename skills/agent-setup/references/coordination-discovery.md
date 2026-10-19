@@ -36,8 +36,7 @@ Weigh the evidence before choosing a shape:
 - **Record the disagreement.** When a coordination record exists or the owner
   requests one, put the disagreement in its reassessment trigger. Otherwise
   report the disagreement and an observable reassessment trigger in the setup
-  result, and persist no record unless the project has no landing check
-  (§record).
+  result, and persist no record (§record).
 - **Never turn a tentative layout into structure.** A directory layout or
   roadmap heading is not a lane, ownership map, graph, or claim mechanism.
 
@@ -46,8 +45,8 @@ project can review and integrate without building an unowned queue. Weigh
 reviewer and integrator availability, CI throughput, and shared-contract
 bottlenecks, not just the number of workers or isolated checkouts. When capacity
 is unknown, make no width recommendation and ask the owner for a credible limit.
-Until then, the owner's authorizations set how many units run, except that a
-project without a landing check runs one at a time (§shapes).
+Until then, the owner's authorizations set how many units run, whether or not
+the project has a landing check (§shapes).
 
 ## §shapes
 
@@ -66,9 +65,13 @@ combined with the tip it lands on. Any of these provides one:
   and merges only if the base has not moved since.
 
 The baseline presumes a landing check. When a project has none, report the gap
-as a setup finding, and run one unit at a time until the check exists. Write
-that width in the coordination record (§record) so the project's own agents
-see it. That fallback follows from the missing check; it is not a default.
+as a setup finding and offer the check the forge supports, such as the
+up-to-date rule. Never narrow concurrency to compensate: serializing starts
+throttles all work to guard a race that happens only at merge. Until the check
+exists, each merge repeats the base-moved recheck by hand, as the managed
+pull-requests block requires, and the owner's authorizations still set width.
+Merges run one at a time until then: start a merge's recheck only after the
+previous merge finishes, while development and PR starts stay parallel.
 
 Shapes 3 through 5 may combine: typed relations, stable named streams, and an
 integration spine solve different problems. A richer primary shape keeps any
@@ -82,9 +85,9 @@ that fully represents the project, not the highest label it could claim.
   the evidence conflicts.
 - **Do:** let authorized units proceed in isolated checkouts, and resolve
   conflicts at landing. After a rebase that conflicted, the author reads what
-  the resolution changed. With a landing check, no coordination record is
-  required, because its absence means this baseline. Do not invent lanes,
-  owners, graphs, claims, or ordering.
+  the resolution changed. No coordination record is required, because its
+  absence means this baseline. Do not invent lanes, owners, graphs, claims,
+  or ordering.
 - **Reassess when:** rebase conflicts or landing failures concentrate in a few
   files, units repeatedly need a recorded start order, or work is discarded at
   landing because a dependency was missed.
@@ -116,7 +119,8 @@ that fully represents the project, not the highest label it could claim.
   a local notation.
 - **Record an unknown or materially ambiguous relation** as a question for the
   owner or designated integrator in the work contract. The unit proceeds under
-  the landing check while the question is open.
+  the landing check, or the by-hand base-moved recheck when the project has
+  none, while the question is open.
 - **Reassess when:** the relations repeatedly cluster into stable work
   boundaries.
 
@@ -175,10 +179,10 @@ Record rules:
 
 - **Omit the record for the landing baseline** unless the owner explicitly
   wants it stated. No record means the landing baseline, not missing content.
-- **Write the record when the project has no landing check.** Record the
-  shape the evidence supports, shape 1 when nothing richer, at a width of one
-  unit until a landing check exists. Keep that shape's mechanics, name the
-  missing check as the evidence, and reassess when the check exists.
+- **Never write a record because a landing check is missing.** The gap is a
+  setup finding, not a coordination model. A record whose only basis is a
+  missing check, such as an older width-one fallback, is obsolete. Evidence
+  for a richer model still gets its record.
 - **For shape 2,** the **Detailed mechanics** field may point to
   repository-local work-contract documentation instead of a dedicated
   coordination document.
@@ -327,9 +331,9 @@ report:
 - Start-order, merge-order, and mutual-exclusion constraints.
 - Documented manual scheduling friction, plus the people or agents available to
   review and integrate concurrent work.
-- Whether the project has a landing check (§shapes). Without one, keep or
-  propose the width-one fallback record (§record); simplification never
-  removes it.
+- Whether the project has a landing check (§shapes). Without one, report the
+  gap and offer the check. Propose removing a record whose only basis is the
+  missing check (§record).
 
 Report unavailable sources and ambiguous meanings as uncertainty. Separate
 observations from inferences, and cite the path, work unit, issue relation,

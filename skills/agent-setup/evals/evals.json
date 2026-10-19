@@ -848,33 +848,30 @@
     },
     {
       "id": 57,
-      "eval_name": "missing-landing-check-writes-width-one",
+      "eval_name": "missing-landing-check-reports-gap",
       "prompt": "You are working in the project at <fixture-repo>. It has a README with build, test, lint, and format commands, a CI workflow, and required status checks on main, but no AGENTS.md, implementation plan, or work-unit history. Initialize it with the agent-setup skill using the Standard profile. When asked about a landing check, the owner says branches need not be up to date with main before merging, the project has no merge queue or land command, and the owner declines to change repository settings now. The owner has not requested a coordination record. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A Standard-profile setup that reports the missing landing check as a setup finding, offers to enable the up-to-date rule without changing settings, and writes an unmanaged shape 1 coordination record at a width of one unit in the same init, inventing no richer coordination.",
+      "expected_output": "A Standard-profile setup that reports the missing landing check as a setup finding, offers to enable the up-to-date rule without changing settings, and writes no coordination record and no concurrency width for the gap, inventing no richer coordination.",
       "files": [],
       "expectations": [
         "The setup looks for a landing check before its AGENTS.md write, using the stated required-check rule and the owner's merge-queue and land-command answers",
         "The missing landing check is reported as a setup finding",
         "The setup offers to require branches to be up to date before merging and changes no repository settings",
-        "AGENTS.md contains an unmanaged Coordination model record near the Agent-setup profile line, outside every managed block, although the owner did not request one",
-        "The record's Current shape is the landing baseline (shape 1) at a width of one unit until a landing check exists",
-        "The record's Evidence basis names the missing landing check, and its Reassess when field names the check existing",
-        "The Detailed mechanics field points to no mechanics document and holds no placeholder",
+        "AGENTS.md contains no Coordination model record, because the owner did not request one and a missing landing check alone never warrants one",
+        "No concurrency width or one-at-a-time limit on units, development, or PR starts is written or recommended because of the missing check",
+        "The setup finding says that, until the check exists, merges repeat the base-moved recheck by hand one at a time",
         "No lane, ownership map, dependency graph, claim mechanism, or ordering is invented"
       ]
     },
     {
       "id": 58,
-      "eval_name": "update-offers-width-one-fallback",
+      "eval_name": "update-reports-missing-landing-check",
       "prompt": "You are updating agent-setup in the agent-ready project at <fixture-repo>. Its AGENTS.md has valid managed markers, one managed block that has drifted from the canonical source, unmanaged project guidance, and no coordination record. Main has required status checks. Branches need not be up to date with main before merging, and the project has no merge queue or land command. Run an ordinary update. The owner approves the exact managed-block refresh you show, and accepts any coordination change you offer. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "An ordinary update that shows the drifted managed block's diff and refreshes it on approval, reports the missing landing check, offers a width-one shape 1 coordination record, writes it only after the owner accepts, preserves all other unmanaged content verbatim, and does not reassess the topology.",
+      "expected_output": "An ordinary update that shows the drifted managed block's diff and refreshes it on approval, reports the missing landing check and offers to enable it, offers and writes no coordination record or width for the gap, preserves all other unmanaged content verbatim, and does not reassess the topology.",
       "files": [],
       "expectations": [
         "The drifted managed block's diff is shown, and the block is refreshed from the canonical source after the owner approves",
-        "The missing landing check is reported as a finding",
-        "The width-one shape 1 coordination record is offered to the owner rather than written silently",
-        "The record is written only after the owner accepts, as an owner-requested coordination model in unmanaged content near the Agent-setup profile line",
-        "The written record has all four fixed fields, a width of one unit until a landing check exists, the missing check as its evidence basis, and the check existing as its reassessment trigger",
+        "The missing landing check is reported as a finding, with an offer to require branches to be up to date before merging",
+        "No coordination record, width, or one-at-a-time limit on units, development, or PR starts is offered or written for the missing check, although the owner would accept one",
         "All other unmanaged project guidance is preserved verbatim",
         "No topology reassessment runs and no richer shape is proposed",
         "No repository settings change"
@@ -882,17 +879,17 @@
     },
     {
       "id": 59,
-      "eval_name": "reassessment-keeps-width-one-record",
+      "eval_name": "reassessment-retires-width-one-record",
       "prompt": "You are reassessing coordination in the agent-ready project at <fixture-repo>. Its AGENTS.md has valid managed boundaries and one unmanaged coordination record with all four fixed fields: Current shape is the landing baseline at a width of one unit until a landing check exists, Evidence basis names the missing landing check, and Reassess when names the check existing. The project still has no landing check. Branches need not be up to date with main before merging, and the project has no merge queue or land command. Current evidence supports no richer coordination model. The owner has requested reassessment but has not approved any edit. Work only in the fixture; do not call the network or change repository settings.",
-      "expected_output": "A no-change reassessment that keeps the width-one record because the landing check is still missing, does not treat it as an obsolete record to remove, restates the missing check as the reassessment trigger, and leaves AGENTS.md unchanged.",
+      "expected_output": "A reassessment that reports the still-missing landing check and offers to enable it, identifies the width-one record as obsolete because a missing check alone never warrants a record, proposes its removal with an exact diff, and leaves AGENTS.md unchanged because the owner approved no edit.",
       "files": [],
       "expectations": [
         "The record passes the four-field validation and is read as the effective model",
-        "The report states that the project still has no landing check, citing the stated settings",
-        "The width-one record is kept and is not proposed for removal as obsolete, because simplification never removes the fallback while the check is missing",
-        "No richer shape or wider concurrency is proposed",
-        "The report restates the landing check existing as the observable reassessment trigger",
-        "AGENTS.md remains unchanged"
+        "The report states that the project still has no landing check, citing the stated settings, and offers to require branches to be up to date before merging",
+        "The width-one record is identified as obsolete because its only basis is the missing landing check",
+        "The report shows an exact diff that removes the record, as a proposal",
+        "No richer shape is proposed, and no other width limit replaces the record",
+        "AGENTS.md remains unchanged because the owner approved no edit"
       ]
     }
   ]
