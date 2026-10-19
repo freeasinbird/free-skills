@@ -135,7 +135,8 @@ workspace outside the repo.
   60. `init-offers-landing-record`: shows the exact record, asking for no
       approver, before including it in the single init write on acceptance.
   61. `missing-approval-label-reports-gap`: reports a missing `approved` label
-      without creating or applying labels or changing valid project records.
+      and offers to create it, without applying labels or changing valid
+      project records.
   62. `stale-forge-consumers-flagged`: offers and applies an accepted correction
       limited to the forge record's Consumers bullet.
 

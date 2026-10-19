@@ -369,8 +369,18 @@ gh api --hostname <host> --paginate 'repos/<slug>/labels' --jq '.[].name'
 
 Compare the result with the record's Approval and Hand-back values, or the
 proposed values when the offer is pending. Report each missing label by its
-exact name. Don't create either label: agents never apply the approval label,
-and this setup leaves creation of both labels to the owner.
+exact name and offer to create it, showing the exact command first. Creating
+a label grants nobody approval; applying the approval label to a PR is the
+act agents never perform, so never add either label to a PR here. Keep a
+project's existing colors. These defaults match the `land-approved-prs`
+skill; substitute the record's names when they differ:
+
+```sh
+gh label create approved --repo <host>/<slug> --color 0e8a16 \
+  --description "The owner approved this PR to land; the lander may take it"
+gh label create needs-human --repo <host>/<slug> --color d93f0b \
+  --description "The lander handed this PR back; it needs the owner"
+```
 
 If the read fails, including on a later page, report that the labels couldn't
 be checked instead of inferring they're missing. Without `gh` or a supported
