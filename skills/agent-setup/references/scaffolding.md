@@ -207,12 +207,17 @@ follow this full sequence:
    Verification section.
 
    Record the base commit in the PR's Verification section or in the handoff.
-   If the base moves again before merge, the landing check reruns CI. Under a
-   required check that must pass on the branch updated to the tip (on GitHub,
-   the up-to-date rule), refresh again and the check reruns on the push. A
-   merge queue or land command refreshes and reruns for you. Don't repeat CI
-   by hand; read `git range-diff` only when a rebase conflicts. A project
-   without a landing check needs another integration pass by hand.
+   If the base moves before approval, the landing check decides who refreshes.
+   A merge queue or land command tests the PR combined with the tip it selects
+   and reruns CI there, so leave the PR waiting. Refresh only when the lander
+   hands it back (a merge queue does so by removing it) or the owner asks. With
+   only a required check that must pass on the branch updated to the tip (on
+   GitHub, the up-to-date rule), nobody else pushes that update, so refresh
+   again and the check reruns on the push.
+
+   Don't repeat CI by hand; read `git range-diff` only when a rebase conflicts.
+   A project without a landing check needs another integration pass by hand.
+   After approval, step 7 applies, and whoever lands the PR updates the branch.
 
    A landing check reruns CI, not review. A clean rebase can still change the
    diff, for example by following an upstream rename. When you push a refresh,
