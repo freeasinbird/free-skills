@@ -80,13 +80,12 @@ Run the watcher from the checkout as a bounded foreground command:
 ```sh
 <skill-dir>/watch-review.sh --pr <N> --baseline <event-time> \
   --login <reviewer> --head <expected-head> --repo <owner/name> \
-  --interval 75 --cap-minutes 4
+  --interval 75 --cap-minutes <run-cap>
 ```
 
-Keep `--cap-minutes` under the prompt cache a Claude Code subagent gets, about
-5 minutes (4 by default), so each re-run lands on a warm cache; the host's
-10-minute command limit is the outer bound. Re-run with the same baseline,
-head, and `--request-artifacts` token until the 20-30 minute exchange cap.
+Choose the run cap and tool waits using
+[Cadence and Cap](detection.md#cadence-and-cap). Keep the same baseline, head,
+`--request-artifacts` token, and overall deadline across runs.
 
 `<skill-dir>` is the skill directory above this file's `references/` folder.
 Take `--repo` from the project's forge record and set `GH_HOST` when the

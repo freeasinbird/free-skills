@@ -121,10 +121,10 @@ poll. An unrecorded reviewer never delays the spawn; the conductor discovers it.
 ## 3. Wait for New Activity
 
 **Conductor-owned exchange.** Run `watch-review.sh` as a bounded foreground
-command inside the conductor when a shell and host CLI exist. Each run is
-bounded by the host's command timeout, so re-run it on the same baseline,
-head, and request token until the exchange cap. Otherwise run an equivalent
-bounded foreground API or connector polling loop over the same frozen
+command inside the conductor when a shell and host CLI exist. Choose run caps
+and waits using [Cadence and Cap](references/detection.md#cadence-and-cap).
+Otherwise run an equivalent bounded foreground API or connector polling loop
+over the same frozen
 baseline, expected head, sources, and completion signals
 (`references/detection.md` §connector-or-api-polling). When that loop cannot
 delay in-turn, use the scheduled same-conductor wake from grant 2. Either

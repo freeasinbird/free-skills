@@ -54,11 +54,17 @@ tokens came from full rewrites after waits of 5 to 10 minutes under the old
 minutes, and those ten calls were 90 percent of its cost. The watcher's one-line
 output is not what grows the conductor's context; fix rounds are.
 
-Codex behaves differently. Its cache decays gradually: the cached share stays at
-99 percent median under 10 minutes idle, then 31 percent of calls come back cold
-at 10 to 30 minutes and 66 percent past an hour. One cold read after a long
-`wait_agent` still costs less than the ticks it would replace, so the Codex
-payload's wait-once rule stands and no cap applies there.
+The September 2026 Codex sample showed a 99 percent median cached share under
+10 minutes idle. At 10 to 30 minutes, 31 percent of calls returned cold; past
+an hour, 66 percent did. That sample neither establishes current retention nor
+proves one cold call always costs less than repeated cached calls. Choose waits
+using [Cadence and Cap](detection.md#cadence-and-cap).
+
+Measure parent and conductor together: calls after empty waits, cached and
+uncached input, cache writes, output, and detection latency.
+Check missed or duplicated actions and cancellation responsiveness too.
+Input volume alone doesn't measure compute or billing savings. Compare matched
+workloads before claiming either or adding turns to keep a cache warm.
 
 The multipliers above are list prices as of 2026-09. Re-derive the wake counts
 when they change.

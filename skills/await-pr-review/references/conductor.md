@@ -132,17 +132,19 @@ costs the whole exchange in main context.
   subagent ends, or exposes a blocking wait on the subagent's completion.
 - **Claude Code:** a background subagent's completion arrives as a task
   notification.
-- **Codex:** `wait_agent` blocks until the agent reaches a final status, and
-  the host also sends a notification message carrying that status.
+- **Codex:** check the tool's contract. `wait_agent` may also return on a
+  message, user input, or timeout. Handle the event and wait again if needed.
 - **Other hosts:** any completion callback or blocking wait a listed tool
   describes.
 - **Default:** a listed spawn tool grants it. It fails only when a listed
   tool's own description says completion is not surfaced.
 - **After the spawn:** the exchange is not done. End the main agent's turn
-  only where this signal re-enters it when the conductor finishes, and say in
-  one line that the conductor owns the exchange. In a headless or single-turn
+  only where the host resumes it when the conductor finishes, and say in one
+  line that the conductor owns the exchange. In a headless or single-turn
   run, block on the conductor (Codex `wait_agent`, or the host's blocking
   wait) instead of yielding, because yielding ends the session.
+
+Choose wait durations using [Cadence and Cap](detection.md#cadence-and-cap).
 
 ### Grant 4: Checkout Isolation or Exclusivity
 
