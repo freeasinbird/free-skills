@@ -939,6 +939,34 @@
         "Only the Consumers bullet changes; Host, Slug, the landing record, and all unrelated content remain byte-for-byte unchanged",
         "The update neither creates or applies labels nor calls the network"
       ]
+    },
+    {
+      "id": 63,
+      "eval_name": "declared-no-reviewer-preserved",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks, unrelated unmanaged guidance, a current forge record for example/widgets on github.com, and an unmanaged reviewer record whose only bullet sets Reviewer to `none` as an owner decision that only the owner changes. It has no landing record. The fixture's PR history, supplied as data, shows chatgpt-codex-connector reviews on PRs from last year. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls and work only in the fixture; the owner has approved no changes.",
+      "expected_output": "An update that reports the reviewer record as the owner's declared absence rather than a missing record, keeps it byte-for-byte, and neither suggests recording the reviewer seen in old PRs nor proposes replacing the record.",
+      "files": [],
+      "expectations": [
+        "The report identifies the reviewer record as the owner's decision that the project has no automated reviewer, not as a missing record",
+        "The report does not suggest adding a reviewer record once a reviewer is configured",
+        "The report does not offer to record chatgpt-codex-connector or replace the `none` record because of the old PR history",
+        "The reviewer record, forge record, and unrelated unmanaged guidance remain byte-for-byte unchanged",
+        "No network calls occur"
+      ]
+    },
+    {
+      "id": 64,
+      "eval_name": "no-reviewer-record-not-inferred",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks, unrelated unmanaged guidance, and a current forge record for example/widgets on github.com. It has no reviewer record and no landing record. The fixture's last twenty PRs, supplied as data, show no review from any bot account. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls and work only in the fixture; the owner has said nothing about automated reviewers.",
+      "expected_output": "An update that reports no reviewer record, notes one should be added once a reviewer is configured, and writes or offers no `none` record, because only the owner declares that the project has no automated reviewer.",
+      "files": [],
+      "expectations": [
+        "The report says the project has no reviewer record and that one should be added once a reviewer is configured",
+        "The agent does not write a reviewer record whose reviewer is `none`",
+        "The agent does not offer a `none` record on the strength of the quiet PR history; it may mention that only the owner can declare one",
+        "AGENTS.md remains byte-for-byte unchanged",
+        "No network calls occur"
+      ]
     }
   ]
 }

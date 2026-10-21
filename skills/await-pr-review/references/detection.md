@@ -3,9 +3,9 @@
 `watch-review.sh`, bundled beside `SKILL.md`, is the canonical executable
 detector where a shell and host CLI are available. An API or repository
 connector can implement the same detector contract when they can't. Read this
-reference when capturing a baseline, detecting an unrecorded reviewer, invoking
-the watcher, scheduling repeated wakes, or polling through a connector because
-the script can't run.
+reference when checking for a declared absence before routing, capturing a
+baseline, detecting an unrecorded reviewer, invoking the watcher, scheduling
+repeated wakes, or polling through a connector because the script can't run.
 
 The skill assumes an open PR, an automated reviewer that can be identified,
 access to the host's reviews, comments, and reactions through either the
@@ -19,6 +19,7 @@ watch.
 
 - [Event-anchored baselines](#event-anchored-baselines)
 - [Snapshot sources and paging](#snapshot-sources-and-paging)
+- [Declared no reviewer](#declared-no-reviewer)
 - [Reviewer identity and trigger](#reviewer-identity-and-trigger)
 - [Signals and login forms](#signals-and-login-forms)
 - [Watcher invocation](#watcher-invocation)
@@ -183,6 +184,35 @@ If any value differs, discard both mixed-time scans and restart until two
 complete scans match. Individual page sequences or a partial boundary
 fingerprint do not prove coherent state.
 
+## §declared-no-reviewer
+
+A project's owner may record that the project has no automated reviewer. The
+record is a reviewer record whose reviewer is `none`, kept in an unmanaged
+AGENTS.md section, for example:
+
+```markdown
+- **Reviewer:** `none`, an owner decision. Only the owner changes it.
+```
+
+Read the project's reviewer record before routing. When it says `none`:
+
+1. Report exactly:
+
+   ```text
+   No automated reviewer: the project's reviewer record is none.
+   ```
+
+2. Spawn no conductor and start no watcher. Don't scan past PRs, reviews, or
+   reactions for a reviewer.
+3. Record no reviewer you notice on older PRs or a manual run. Tell the owner
+   what you saw; only the owner replaces or removes the record.
+4. Return to the project's handoff, where the human reviewer reviews the PR.
+
+A `none` record differs from no record. With no reviewer record, detect and
+record a reviewer per §reviewer-identity-and-trigger as before. A landing
+record's `Reviewer: none` alone means only that no reviewer is recorded, so
+it doesn't stop the skill.
+
 ## §reviewer-identity-and-trigger
 
 Establish identity in this order:
@@ -216,7 +246,8 @@ conventions section as one procedure on the PR branch:
    open.
 2. Edit the conventions record with the reviewer's name, login forms,
    trigger, and observed signals. Augment an existing record that lacks a
-   newly observed signal. Never record that no reviewer exists.
+   newly observed signal. Never record that no reviewer exists; only the
+   owner writes a `none` record (§declared-no-reviewer).
 3. Commit the record as its own commit on the PR branch.
 4. Push it under the pinned lease,
    `--force-with-lease=<branch>:<last-pushed-sha>`.

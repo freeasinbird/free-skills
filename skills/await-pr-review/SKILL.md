@@ -18,7 +18,8 @@ description: >-
 Watch an open pull request for its automated reviewer, address the feedback,
 and converge without asking the user to babysit the polling loop. This skill
 owns the waiting and orchestration; the project's review-response conventions
-still govern commits, replies, resolution, and handoff.
+still govern commits, replies, resolution, and handoff. A `none` reviewer
+record stops the skill first (`references/detection.md` §declared-no-reviewer).
 
 ## Authorization
 
@@ -114,7 +115,7 @@ Prefer the project's recorded reviewer identity, trigger, and status signals;
 otherwise detect per `references/detection.md` §reviewer-identity-and-trigger.
 If several bot reviewers appear, or the trigger cannot be established, ask
 rather than burning the wait cap. Record a newly observed reviewer or signal
-in the project's designated conventions section; never record an absence.
+in the project's designated conventions section; only the owner records none.
 Request a command-triggered reviewer once, via `--request-comment`, never per
 poll. An unrecorded reviewer never delays the spawn; the conductor discovers it.
 
