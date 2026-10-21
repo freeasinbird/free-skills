@@ -104,7 +104,10 @@ def derive_grants(probes):
     }
 
 
-NO_REVIEWER_REPORT = "No automated reviewer: the project's reviewer record is none."
+NO_REVIEWER_REPORT = (
+    "No automated reviewer: the project's reviewer record is none.\n"
+    "Waiting on CI checks only."
+)
 NO_REVIEWER_FORBIDDEN = {
     "spawn_conductor", "start_watcher", "scan_pr_history", "record_reviewer",
 }
@@ -125,25 +128,31 @@ for case in cases:
             raise SystemExit(f"{case['id']}: {grant} must be boolean")
 
     expected = case.get("expected_owner")
-    if expected not in {"conductor", "main", "stopped"}:
+    if expected not in {"conductor", "main", "checks_only"}:
         raise SystemExit(f"{case['id']}: invalid expected_owner {expected!r}")
 
-    # An owner's `none` reviewer record stops the skill before the gate
-    # (detection.md §declared-no-reviewer), whatever the grants say; nothing
-    # else stops it, so a missing record still routes as before.
+    # An owner's `none` reviewer record skips the review exchange before the
+    # gate (detection.md §declared-no-reviewer), whatever the grants say, and
+    # leaves only the required-checks wait; nothing else skips it, so a
+    # missing record still routes as before.
     declared_none = case.get("declared_no_reviewer", False)
     if not isinstance(declared_none, bool):
         raise SystemExit(f"{case['id']}: declared_no_reviewer must be boolean")
-    if declared_none != (expected == "stopped"):
+    if declared_none != (expected == "checks_only"):
         raise SystemExit(
-            f"{case['id']}: only a declared_no_reviewer case may stop, and it must"
+            f"{case['id']}: only a declared_no_reviewer case may wait on checks "
+            "only, and it must"
         )
-    if expected == "stopped":
+    if expected == "checks_only":
         if case.get("expected_report") != NO_REVIEWER_REPORT:
-            raise SystemExit(f"{case['id']}: stopped case must expect the exact report")
+            raise SystemExit(f"{case['id']}: checks-only case must expect the exact report")
+        if case.get("expected_first_action") != "wait_ci_checks":
+            raise SystemExit(
+                f"{case['id']}: checks-only case must first wait on CI checks"
+            )
         if set(case.get("forbidden_actions") or ()) != NO_REVIEWER_FORBIDDEN:
             raise SystemExit(
-                f"{case['id']}: stopped case must forbid {sorted(NO_REVIEWER_FORBIDDEN)}"
+                f"{case['id']}: checks-only case must forbid {sorted(NO_REVIEWER_FORBIDDEN)}"
             )
         continue
 
@@ -185,14 +194,14 @@ for case in cases:
         )
 
 eligible = sum(case["expected_owner"] == "conductor" for case in cases)
-stopped = sum(case["expected_owner"] == "stopped" for case in cases)
-fallback = len(cases) - eligible - stopped
+checks_only = sum(case["expected_owner"] == "checks_only" for case in cases)
+fallback = len(cases) - eligible - checks_only
 
-# The stop must precede the gate: one stopped case has every grant a
+# The skip must precede the gate: one checks-only case has every grant a
 # conductor needs. A landing record's `Reviewer: none` alone is not the
 # owner's declared absence, so that case still spawns.
 if not any(
-    case["expected_owner"] == "stopped"
+    case["expected_owner"] == "checks_only"
     and all(
         case["grants"][grant]
         for grant in ("write_capable_delegation", "wait_and_resume",
@@ -376,7 +385,7 @@ unobserved = [
 if not any(case["expected_owner"] == "conductor" for case in unobserved):
     raise SystemExit("routing eval needs an unobserved-probes conductor case")
 
-print(f"routing eval fixture valid: {len(cases)} cases ({eligible} conductor, {fallback} main, {stopped} stopped)")
+print(f"routing eval fixture valid: {len(cases)} cases ({eligible} conductor, {fallback} main, {checks_only} checks-only)")
 PY
 
 python3 - "$convergence_eval" <<'PY'
@@ -913,7 +922,7 @@ for required in \
   'Its one startup read is `references/conductor-brief.md`' \
   'Rotation arms after every third fix round' \
   'time, idle time, or poll count alone never forces replacement' \
-  'A `none` reviewer record stops the skill first' \
+  'A `none` reviewer record skips routing and review and waits on CI checks only' \
   'only the owner records none'; do
   if ! grep -Fq "$required" <<< "$skill_flat"; then
     printf 'SKILL.md is missing routing contract: %s\n' "$required" >&2
@@ -1060,7 +1069,13 @@ for required in \
   'apply the watcher'"'"'s request rule by hand' \
   '## §declared-no-reviewer' \
   "No automated reviewer: the project's reviewer record is none." \
-  'Spawn no conductor and start no watcher' \
+  'Waiting on CI checks only.' \
+  'Spawn no conductor and start no review watcher' \
+  'gh pr checks <n> --repo <slug> --watch --fail-fast --interval 60' \
+  'conventions. Push under a lease pinned to the head that gate verified,' \
+  'on two consecutive reads that list the same checks, all passing.' \
+  'gh pr view <n> --repo <slug> --json headRefOid' \
+  'Fix a red check this PR caused.' \
   'Record no reviewer you notice on older PRs or a manual run' \
   'A `none` record differs from no record' \
   "record's \`Reviewer: none\` alone means only that no reviewer is recorded"; do

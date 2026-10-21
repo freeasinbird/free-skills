@@ -78,5 +78,9 @@
   {
     "query": "my teammate left a bunch of comments on PR 61 overnight, go through and respond to each of them",
     "should_trigger": false
+  },
+  {
+    "query": "I just opened PR #12. Our AGENTS.md records the reviewer as none, so there's no bot, but run await-pr-review anyway so it waits for CI to go green.",
+    "should_trigger": true
   }
 ]
