@@ -287,11 +287,13 @@ date before merging. Before editing workflows or branch protection, read
 - **Edit free-skills-only sections here.** Architecture Invariants,
   Conventions, and Build sit outside the managed markers.
 
-- **Expect no automated reviewer.** The owner turned off automatic Codex
-  reviews, so skip the review watch in step 1 of Handing Off the PR. Codex
-  activity on older PRs or a manual run doesn't make it this project's
-  reviewer; don't record it again. Only the owner re-enables a reviewer. See
-  the 2026-10-21 devlog.
+- **Expect no automated reviewer.** This project has the following reviewer
+  record:
+
+  - **Reviewer:** `none`, an owner decision. Only the owner changes it. The
+    owner turned off automatic Codex reviews, so Codex activity on older PRs
+    or a manual run doesn't make it this project's reviewer. See the
+    2026-10-21 devlog.
 
 - **Use `freeasinbird/free-skills` on GitHub for forge calls.** This project
   has the following forge record:
