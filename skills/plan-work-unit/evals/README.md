@@ -42,6 +42,9 @@ repository.
   while the checkout contains A. Ground the contract, plan, and identifier in B.
 - `selected-revision-tree-unreadable`: Report the B source-access gap as
   planning blocked. Invalidate the prior A plan without publishing a replacement.
+- `planner-records-contract-assessment`: Record a missing pairwise assessment
+  on both issues when the project names the planner as an assessor, then
+  finish planning.
 
 ## Revision-Tree Setup
 
@@ -137,8 +140,8 @@ claiming the fixture's repeated-run target was met.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 14 unique planning IDs match the inventory above: the original
-12 plus the two new revision-access cases.
+files. Confirm 15 unique planning IDs match the inventory above: the original
+12, the two revision-access cases, and the coordination-record case.
 
 JSON parsing and inventory checks only validate fixture structure. They do not
 grade model behavior, source reads, or persisted output. Report structural

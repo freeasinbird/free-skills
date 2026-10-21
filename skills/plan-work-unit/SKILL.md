@@ -33,7 +33,7 @@ Follow this procedure:
 3. Retire and verify any stale plan before changing the contract.
 4. Complete the authoritative work-contract record, written plainly.
 5. Post one current plan, written plainly.
-6. Verify both writes, report the handoff, and stop.
+6. Verify the writes, report the handoff, and stop.
 
 ## Hold the Routing Boundary
 
@@ -60,8 +60,13 @@ unit. The issue plan is an implementation aid. It cannot silently change the
 contract's policy, scope, dependencies, or authorization.
 
 Planning-only writes have a fixed mutation surface: the contract, one plan
-comment, and any required invalidation or retirement edit. The planning
-handoff ends without a branch or pull request.
+comment, and any required invalidation or retirement edit. The surface also
+includes a coordination record when two conditions hold. The project's
+instructions require that record before a unit is reserved or planned, and
+they name the planner as a permitted writer. That record sits on the assigned
+issue or on a partner issue the project's rule identifies, such as the active
+unit it pairs with. Whether it is part of the surface comes from project
+instructions alone; inspection only finds the partner issue. The planning handoff ends without a branch or pull request.
 
 A project restriction governs when it does any of the following:
 
@@ -114,10 +119,22 @@ After preconditions pass:
 5. Discover the coordination model from project instructions, records, code
    boundaries, architecture, and recent work-unit evidence. Plans show intent,
    not proof of safe concurrency or order. Name conflicting evidence and use
-   the project's safe default.
+   the project's safe default. Project instructions may require a pairwise
+   assessment against active units, and the assigned unit may lack one. If
+   they name the planner as a writer, record the assessment on both issues in
+   the project's form, then reread the conflict set. Otherwise name the
+   missing record and the role the project says writes it. Report planning
+   blocked when the record must exist before planning. When it must exist
+   only before reservation, record it as a start blocker instead.
 6. Confirm the operation, repository, issue state, write capability,
    dependencies, and authorization blockers. Do not claim the issue, create an
    implementation branch, edit implementation files, or open a pull request.
+
+A coordination record written in step 5 is a planning write like the others.
+On a partner issue, change only the record: append it or edit that one field,
+and leave the rest of the issue as it was. Follow Use Safe Write Hygiene, and
+confirm both issues by reread. When the record lands in the selected contract record and a
+stale plan exists, retire that plan first, as Replan requires.
 
 Current forge records supply issue state, authorization, and coordination
 evidence. Source-based claims about those boundaries still come from the
@@ -193,7 +210,9 @@ When a blocker prevents a truthful replacement plan:
 A complete contract may describe a unit whose implementation is blocked. A
 known dependency or ordering blocker does not stop the planning handoff. Record
 it in the contract and plan. Stop planning only when missing information or an
-owner decision prevents a truthful contract or code-grounded plan.
+owner decision prevents a truthful contract or code-grounded plan. A
+coordination record the project requires before planning, but reserves to
+another role, is such missing information.
 
 ## Post One Current Plan
 
@@ -269,8 +288,8 @@ tool.
 1. Verify that the selected authoritative record contains the complete
    contract.
 2. Separately verify that the issue has one unambiguous current plan.
-3. Report both locations, any implementation blocker, and the grounding
-   revision.
+3. Report both locations, any coordination record written and the issues it
+   is on, any implementation blocker, and the grounding revision.
 4. If the default branch has advanced, say so and recommend verification or a
    replan. Do not reinspect and republish here.
 5. State that planning is finished and implementation was not started or
