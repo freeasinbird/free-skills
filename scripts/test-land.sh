@@ -150,7 +150,15 @@ done
 fixture=''
 if [ "$sub" = api ]; then
   case "$api" in
-    */rules/branches/*) fixture="$FIX/rules.json" ;;
+    */rules/branches/*)
+      # A failed read as real gh reports it: the error body on stdout, the
+      # message and status on stderr, exit 1.
+      if [ -f "$FIX/rules-error.json" ]; then
+        cat "$FIX/rules-error.json"
+        cat "$FIX/gh-stderr" >&2
+        exit 1
+      fi
+      fixture="$FIX/rules.json" ;;
     */commits/*/check-runs*) fixture="$FIX/checks.json" ;;
     */commits/*/status) fixture="$FIX/status.json" ;;
     */git/ref/heads/*) fixture="$FIX/base-ref.json" ;;
@@ -289,6 +297,16 @@ repo_fx() { # repo_fx <default-branch> [parent-full-name] [delete-on-merge] [for
   fi
 }
 rules_fx() { printf '%s' "$1" > "$FIX/rules.json"; }
+rules_err_fx() { # rules_err_fx <error-body> <gh-stderr>: the rules read fails
+  rm -f "$FIX/rules.json"
+  printf '%s' "$1" > "$FIX/rules-error.json"
+  printf '%s\n' "$2" > "$FIX/gh-stderr"
+}
+# GitHub's reply on a private repository whose plan lacks rulesets,
+# captured from gh 2.99.0 on 2026-10-21.
+PLAN_MSG='Upgrade to GitHub Pro or make this repository public to enable this feature.'
+PLAN_BODY="{\"message\":\"$PLAN_MSG\",\"documentation_url\":\"https://docs.github.com/rest/repos/rules#get-rules-for-a-branch\",\"status\":\"403\"}"
+plan_gated_fx() { rules_err_fx "$PLAN_BODY" "gh: $PLAN_MSG (HTTP 403)"; }
 lists_empty() { echo '[]' > "$FIX/shared.json"; echo '[]' > "$FIX/stacked.json"; echo '[]' > "$FIX/fork-shared.json"; }
 merged_fx() { printf '{"state":"MERGED","mergedAt":"2026-07-25T12:00:00Z"}' > "$FIX/pr-state.json"; }
 
@@ -571,6 +589,46 @@ rm "$FIX/rules.json"
 run_sm "${CHECK[@]}"
 want_rc 4
 want_out 'LOOKUP_FAILED queue-rules'
+
+scenario "a plan-gated rules read on a private repository means no queue"
+std_setup; std_fixtures
+plan_gated_fx
+run_sm "${CHECK[@]}"
+want_rc 0
+want_out '"queue":"absent"'
+
+scenario "a 403 with another message is unknown, not queue-free"
+std_setup; std_fixtures
+rules_err_fx '{"message":"Resource not accessible by personal access token","status":"403"}' \
+  'gh: Resource not accessible by personal access token (HTTP 403)'
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED queue-rules'
+want_out '"stderr":"gh: Resource not accessible by personal access token (HTTP 403)'
+
+scenario "the plan-limit message with more stderr is unknown, not queue-free"
+std_setup; std_fixtures
+rules_err_fx "$PLAN_BODY" "gh: $PLAN_MSG (HTTP 403)
+gh: This API operation needs the \"admin:org\" scope."
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED queue-rules'
+
+scenario "a 404 rules read is unknown, not queue-free"
+std_setup; std_fixtures
+rules_err_fx '{"message":"Not Found","status":"404"}' 'gh: Not Found (HTTP 404)'
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED queue-rules'
+want_out '"stderr":"gh: Not Found (HTTP 404)'
+
+scenario "a 5xx rules read is unknown, not queue-free"
+std_setup; std_fixtures
+rules_err_fx '{"message":"Server Error","status":"500"}' 'gh: Server Error (HTTP 500)'
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED queue-rules'
+want_out '"stderr":"gh: Server Error (HTTP 500)'
 
 scenario "a hash-bearing base branch is percent-encoded in the rules path"
 std_setup feat 'release#1'
@@ -924,6 +982,15 @@ run_sm "${CHECK[@]}"
 want_rc 4
 want_out 'LOOKUP_FAILED repo-facts'
 
+scenario "merge proceeds with no queue on a plan-gated private repository"
+std_setup; std_fixtures
+printf '{"title":"T"}' > "$FIX/title.json"
+plan_gated_fx
+run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
+want_rc 0
+want_out 'OK merge'
+want_call "--match-head-commit=$FEAT_OID"
+
 scenario "a retarget onto a squash queue after check still stops the merge"
 std_setup; std_fixtures
 printf '{"title":"T"}' > "$FIX/title.json"
@@ -1042,6 +1109,24 @@ want_call "commits/$FEAT_OID/status"
 want_call "git/ref/heads/main"
 want_call "--match-head-commit=$FEAT_OID"
 [ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "an on-tip land rewrote the remote branch"
+
+scenario "land merges with no queue on a plan-gated private repository"
+land_setup; land_fixtures
+plan_gated_fx
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out "OK land {\"head_oid\":\"$FEAT_OID\",\"merged_at\":"
+want_call "--match-head-commit=$FEAT_OID"
+
+scenario "a plan-gated rules read lends no stderr to a later git failure"
+land_setup behind; land_fixtures
+plan_gated_fx
+G "$WORK" remote set-url origin deploy@github.invalid:owner/name.git
+G "$WORK" remote add forge git@github.invalid:owner/name.git
+run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_no_out '"stderr"'
 
 scenario "land rebases a behind head, lease-pushes it, and stops for its range-diff"
 land_setup behind; land_fixtures

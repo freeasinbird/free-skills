@@ -602,11 +602,31 @@ queue_message_check() {
 # is enqueued, from the branch-rules API (the CLI's ruleset commands have no
 # JSON output and cannot report the method). Fail closed on any shape this
 # read does not recognize: the payload belongs to the forge.
+#
+# One failure is an answer, not an unknown: GitHub refuses the read with a
+# plan-limit 403 on a private repository whose plan lacks rulesets.
+# GitHub's docs give rulesets on private repositories only to paid plans,
+# and merge queues on private repositories only to Enterprise Cloud
+# organizations, so no queue can apply there. See "Who can use this
+# feature?" on
+# https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets
+# https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue
+# The match is gh's whole stderr, status and message together, so any
+# other 403 (token scope, SSO, permission), 404, or 5xx stays a failure.
+QUEUE_PLAN_GATED_ERR='gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)'
 queue_check() {
   local methods row method="" count=0
-  methods=$(gh_read api --paginate "repos/$REPO/rules/branches/$ENC_BASE" \
-    --jq '.[] | select(.type == "merge_queue") | (.parameters.merge_method // "unidentified")') \
-    || lookup_failed queue-rules "could not read branch rules for $BASE"
+  if ! methods=$(gh_read api --paginate "repos/$REPO/rules/branches/$ENC_BASE" \
+    --jq '.[] | select(.type == "merge_queue") | (.parameters.merge_method // "unidentified")'); then
+    if [ "$(cat "$GH_ERR")" = "$QUEUE_PLAN_GATED_ERR" ]; then
+      # Clear it as gh_read does after a read that worked: an answered read
+      # must not lend its stderr to a later failure's excerpt.
+      : > "$GH_ERR"
+      QUEUE=absent
+      return
+    fi
+    lookup_failed queue-rules "could not read branch rules for $BASE"
+  fi
   while IFS= read -r row; do
     [ -n "$row" ] || continue
     count=$((count + 1))

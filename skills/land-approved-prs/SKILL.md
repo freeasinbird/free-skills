@@ -308,6 +308,12 @@ and base names don't collide, no other open PR shares the head branch, and
 any merge queue uses merge commits. Its `OK` result lists the open PRs
 stacked on the head branch as `stacked_prs`; see "Stacks."
 
+A private repository whose plan lacks rulesets, such as GitHub Free, counts
+as having no queue. GitHub refuses its branch-rules read with a plan-limit
+403, and that plan can't run a merge queue there. `check`, `land`, and
+`merge` all read the rules, and any other failed read still stops with
+`LOOKUP_FAILED queue-rules`.
+
 One `land` run is one round of three checks, and it merges only when all
 three pass:
 
