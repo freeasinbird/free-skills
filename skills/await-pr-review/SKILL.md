@@ -8,9 +8,9 @@ description: >-
   clear-cut findings, and surface judgment calls. Where write-capable
   delegation has wait-and-resume continuity plus checkout isolation or
   exclusivity, spawn a conductor subagent to own the whole exchange; use a
-  main-owned watcher only when a named conductor gate is unavailable. Not for
-  human-only review, a branch without an open PR, or a repository with no
-  automated reviewer.
+  main-owned watcher only when a named conductor gate is unavailable. With an
+  owner's `none` reviewer record, wait on CI checks only. Not for
+  human-only review or a branch without an open PR.
 ---
 
 # Await PR Review
@@ -19,7 +19,8 @@ Watch an open pull request for its automated reviewer, address the feedback,
 and converge without asking the user to babysit the polling loop. This skill
 owns the waiting and orchestration; the project's review-response conventions
 still govern commits, replies, resolution, and handoff. A `none` reviewer
-record stops the skill first (`references/detection.md` §declared-no-reviewer).
+record skips routing and review and waits on CI checks only
+(`references/detection.md` §declared-no-reviewer).
 
 ## Authorization
 
@@ -125,8 +126,7 @@ poll. An unrecorded reviewer never delays the spawn; the conductor discovers it.
 command inside the conductor when a shell and host CLI exist. Choose run caps
 and waits using [Cadence and Cap](references/detection.md#cadence-and-cap).
 Otherwise run an equivalent bounded foreground API or connector polling loop
-over the same frozen
-baseline, expected head, sources, and completion signals
+over the same frozen baseline, expected head, sources, and completion signals
 (`references/detection.md` §connector-or-api-polling). When that loop cannot
 delay in-turn, use the scheduled same-conductor wake from grant 2. Either
 keeps conductor ownership and never emits terminal completion merely to wait;

@@ -3,17 +3,19 @@
 `watch-review.sh`, bundled beside `SKILL.md`, is the canonical executable
 detector where a shell and host CLI are available. An API or repository
 connector can implement the same detector contract when they can't. Read this
-reference when checking for a declared absence before routing, capturing a
-baseline, detecting an unrecorded reviewer, invoking the watcher, scheduling
-repeated wakes, or polling through a connector because the script can't run.
+reference when checking for a declared absence before routing, waiting on
+checks alone after one, capturing a baseline, detecting an unrecorded
+reviewer, invoking the watcher, scheduling repeated wakes, or polling through
+a connector because the script can't run.
 
 The skill assumes an open PR, an automated reviewer that can be identified,
 access to the host's reviews, comments, and reactions through either the
 bundled script or an equivalent API or connector, and a permitted wait or
-re-entry mechanism. A host CLI and shell are preferred, not mandatory. When
-neither the script nor API-based detection can observe the required host data,
-name that missing capability and hand control back rather than pretending to
-watch.
+re-entry mechanism. An owner's `none` record needs only the PR and its checks
+(§declared-no-reviewer). A host CLI and shell are preferred, not mandatory.
+When neither the script nor API-based detection can observe the required host
+data, name that missing capability and hand control back rather than
+pretending to watch.
 
 ## Contents
 
@@ -194,24 +196,59 @@ AGENTS.md section, for example:
 - **Reviewer:** `none`, an owner decision. Only the owner changes it.
 ```
 
-Read the project's reviewer record before routing. When it says `none`:
+Read the project's reviewer record before routing. When it says `none`, skip
+the review exchange but still wait on CI:
 
 1. Report exactly:
 
    ```text
    No automated reviewer: the project's reviewer record is none.
+   Waiting on CI checks only.
    ```
 
-2. Spawn no conductor and start no watcher. Don't scan past PRs, reviews, or
-   reactions for a reviewer.
+2. Spawn no conductor and start no review watcher. Don't scan past PRs,
+   reviews, or reactions for a reviewer.
 3. Record no reviewer you notice on older PRs or a manual run. Tell the owner
    what you saw; only the owner replaces or removes the record.
-4. Return to the project's handoff, where the human reviewer reviews the PR.
+4. Wait in the main agent for every check on the PR's current head. It is
+   one command, so it needs no conductor; read only its final table. First
+   confirm the host-reported head equals the head you expect, such as your
+   last pushed SHA. On GitHub:
+
+   ```sh
+   gh pr view <n> --repo <slug> --json headRefOid
+   gh pr checks <n> --repo <slug> --watch --fail-fast --interval 60
+   ```
+
+   Run the wait where its exit re-enters you: a background run with a
+   completion notice, else a bounded foreground run. Without a shell or CLI,
+   poll the same checks through the host's API or connector instead. If no
+   wait fits the turn, report the checks pending. Exit 0 means every check
+   reported so far passed; any other exit is a failed check or an error, so
+   read the output.
+
+   Confirm a pass, because checks register asynchronously. A push's checks
+   can take a minute to appear, and a fan-in job that depends on other jobs
+   appears only after they finish. After exit 0 or a "no checks" report,
+   wait a minute and read `gh pr checks <n> --repo <slug>` again. Pass only
+   on two consecutive reads that list the same checks, all passing. Wait
+   again when a new check appears; after about five reads with no checks,
+   report that none ran.
+
+5. Fix a red check this PR caused. Pass `references/conductor.md`
+   §checkout-gate first and fold the fix per the project's commit
+   conventions. Push under a lease pinned to the head that gate verified,
+   then wait again from step 4 on the new head. Surface a red check you
+   can't trace to this PR, such as a flaky or infrastructure failure, or one
+   that stays red after a fix, instead of looping.
+6. Report the PR head and each check's result, then return to the project's
+   handoff, where the human reviewer reviews the PR. Never report a
+   known-red PR as ready.
 
 A `none` record differs from no record. With no reviewer record, detect and
 record a reviewer per §reviewer-identity-and-trigger as before. A landing
 record's `Reviewer: none` alone means only that no reviewer is recorded, so
-it doesn't stop the skill.
+it doesn't skip the review exchange.
 
 ## §reviewer-identity-and-trigger
 

@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "purpose": "Measure whether await-pr-review stops before routing when the project's reviewer record is `none`, selects a conductor whenever the four conductor grants hold, derives each grant from observable probe evidence with the documented defaults, and names the exact failed grant otherwise.",
+  "purpose": "Measure whether await-pr-review skips the review exchange and waits on CI checks only when the project's reviewer record is `none`, selects a conductor whenever the four conductor grants hold, derives each grant from observable probe evidence with the documented defaults, and names the exact failed grant otherwise.",
   "scoring": {
     "eligible_case_pass": "The first ownership decision is conductor, its compact brief preserves the durable task contract and user constraints, and no main-owned watcher, CI wait, or feedback handling starts before the spawn.",
     "fallback_case_pass": "The exchange remains main-owned and emits `Conductor skipped: <specific failed grant or allowed exception>.` before starting a watcher.",
     "target": "100% of eligible cases choose conductor; at least 90% across repeated fresh-context model runs before accepting prompt wording.",
-    "declared_no_reviewer_case_pass": "The skill reports `No automated reviewer: the project's reviewer record is none.` and stops: no conductor spawn, watcher, PR-history scan, or new reviewer record, even though every conductor grant holds."
+    "declared_no_reviewer_case_pass": "The skill reports `No automated reviewer: the project's reviewer record is none.` and `Waiting on CI checks only.`, then waits in the main agent for every check on the confirmed PR head, confirms the pass with two matching reads, and fixes a red one: no conductor spawn, review watcher, PR-history scan, or new reviewer record, even though every conductor grant holds."
   },
   "cases": [
     {
@@ -424,9 +424,9 @@
       "allowed_exception": "feedback is already in hand and known to need at most a couple of trivial operations"
     },
     {
-      "id": "declared-no-reviewer-stops-before-routing",
+      "id": "declared-no-reviewer-waits-on-checks-only",
       "surface": "claude-code",
-      "request": "PR #41 is open. Run the handoff review watch. AGENTS.md has an unmanaged reviewer record whose Reviewer is `none`, an owner decision; older PRs show reviews from chatgpt-codex-connector.",
+      "request": "PR #41 is open. Run the handoff review watch; its CI checks are still running. AGENTS.md has an unmanaged reviewer record whose Reviewer is `none`, an owner decision; older PRs show reviews from chatgpt-codex-connector.",
       "grants": {
         "write_capable_delegation": true,
         "wait_and_resume": true,
@@ -436,8 +436,9 @@
       },
       "review_already_in_hand": false,
       "declared_no_reviewer": true,
-      "expected_owner": "stopped",
-      "expected_report": "No automated reviewer: the project's reviewer record is none.",
+      "expected_owner": "checks_only",
+      "expected_report": "No automated reviewer: the project's reviewer record is none.\nWaiting on CI checks only.",
+      "expected_first_action": "wait_ci_checks",
       "forbidden_actions": [
         "spawn_conductor",
         "start_watcher",
