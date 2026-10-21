@@ -333,6 +333,32 @@
         "leave the prior A plan actionable after its explicit invalidation condition holds",
         "claim planning finished or begin implementation"
       ]
+    },
+    {
+      "id": "planner-records-contract-assessment",
+      "request": "Plan issue #120.",
+      "artifacts": {
+        "issue": "Issue #120 is a contract-kind unit that changes the public InvoiceTotals shape in packages/billing/src/totals.ts. Its Dependencies field lists no relationship to issue #118.",
+        "behavior": "Add an optional currency field to InvoiceTotals and round-trip it through InvoiceSerializer, preserving its absence for older payloads. Changing tax calculation is a non-goal.",
+        "repository": "At pinned default-branch revision R1, packages/billing/src/totals.ts defines InvoiceTotals, and packages/billing/src/serializer.ts defines InvoiceSerializer.serialize(InvoiceTotals) and InvoiceSerializer.parse(string). Their tests are packages/billing/test/totals.test.ts and packages/billing/test/serializer.test.ts. R1 remains current through final verification.",
+        "forge": "Issue #118 is open and holds an active implementation claim; it is also a contract-kind unit that changes packages/billing/src/serializer.ts. Neither issue's Dependencies field records an assessment of the pair. Issue-body and comment reads, field-scoped writes, and rereads are available on both issues and persist; no lock is supplied.",
+        "project": "Planning-only issue and comment writes are permitted. Issue bodies are authoritative. Contract-kind units are serialized by a pairwise assessment recorded before either unit is reserved or planned: one line in both issues' Dependencies fields in the form 'Assessed against #M: independent' or 'Assessed against #M: exclusive-with'. The session that receives a planning or fiat request for a unit is a permitted assessor. Implementation ends at a review-ready PR. Run npm test -- packages/billing/test/totals.test.ts and npm test -- packages/billing/test/serializer.test.ts; standard verification is npm run lint and npm test."
+      },
+      "required_actions": [
+        "pass the planning-write preconditions, treating the Dependencies fields of #120 and of the active unit the project's rule pairs it with as permitted targets",
+        "identify #118 as the unassessed active partner and record 'Assessed against #118: exclusive-with' in #120's Dependencies field and 'Assessed against #120: exclusive-with' in #118's, before completing the rest of the contract",
+        "reread both issues and the conflict set, and carry the exclusive-with relationship into the contract's serialization and the plan's Startability",
+        "complete the contract and post one plan grounded in packages/billing/src/totals.ts, packages/billing/src/serializer.ts, and their named tests",
+        "report planning finished, naming the assessment written on both issues, and stop after the planning handoff"
+      ],
+      "forbidden_actions": [
+        "report planning blocked because the pairwise assessment is missing",
+        "write the assessment on only one of the two issues",
+        "record the pair as independent although both units change packages/billing/src/serializer.ts",
+        "record the assessment in a form the project did not state",
+        "edit any part of #118 other than its Dependencies field",
+        "claim the issue, create a branch, open a pull request, or begin implementation"
+      ]
     }
   ]
 }
