@@ -104,6 +104,11 @@ def derive_grants(probes):
     }
 
 
+NO_REVIEWER_REPORT = "No automated reviewer: the project's reviewer record is none."
+NO_REVIEWER_FORBIDDEN = {
+    "spawn_conductor", "start_watcher", "scan_pr_history", "record_reviewer",
+}
+
 for case in cases:
     grants = case.get("grants")
     if not isinstance(grants, dict):
@@ -120,8 +125,27 @@ for case in cases:
             raise SystemExit(f"{case['id']}: {grant} must be boolean")
 
     expected = case.get("expected_owner")
-    if expected not in {"conductor", "main"}:
+    if expected not in {"conductor", "main", "stopped"}:
         raise SystemExit(f"{case['id']}: invalid expected_owner {expected!r}")
+
+    # An owner's `none` reviewer record stops the skill before the gate
+    # (detection.md §declared-no-reviewer), whatever the grants say; nothing
+    # else stops it, so a missing record still routes as before.
+    declared_none = case.get("declared_no_reviewer", False)
+    if not isinstance(declared_none, bool):
+        raise SystemExit(f"{case['id']}: declared_no_reviewer must be boolean")
+    if declared_none != (expected == "stopped"):
+        raise SystemExit(
+            f"{case['id']}: only a declared_no_reviewer case may stop, and it must"
+        )
+    if expected == "stopped":
+        if case.get("expected_report") != NO_REVIEWER_REPORT:
+            raise SystemExit(f"{case['id']}: stopped case must expect the exact report")
+        if set(case.get("forbidden_actions") or ()) != NO_REVIEWER_FORBIDDEN:
+            raise SystemExit(
+                f"{case['id']}: stopped case must forbid {sorted(NO_REVIEWER_FORBIDDEN)}"
+            )
+        continue
 
     known_trivial = bool(
         case.get("review_already_in_hand")
@@ -161,7 +185,29 @@ for case in cases:
         )
 
 eligible = sum(case["expected_owner"] == "conductor" for case in cases)
-fallback = len(cases) - eligible
+stopped = sum(case["expected_owner"] == "stopped" for case in cases)
+fallback = len(cases) - eligible - stopped
+
+# The stop must precede the gate: one stopped case has every grant a
+# conductor needs. A landing record's `Reviewer: none` alone is not the
+# owner's declared absence, so that case still spawns.
+if not any(
+    case["expected_owner"] == "stopped"
+    and all(
+        case["grants"][grant]
+        for grant in ("write_capable_delegation", "wait_and_resume",
+                      "completion_notification", "checkout_isolation")
+    )
+    for case in cases
+):
+    raise SystemExit("routing eval needs a declared-no-reviewer case whose grants all hold")
+if not any(
+    case.get("landing_reviewer") == "none"
+    and not case.get("declared_no_reviewer")
+    and case["expected_owner"] == "conductor"
+    for case in cases
+):
+    raise SystemExit("routing eval needs a landing-record-only `none` case that still spawns")
 
 connector_only = [
     case for case in cases
@@ -330,7 +376,7 @@ unobserved = [
 if not any(case["expected_owner"] == "conductor" for case in unobserved):
     raise SystemExit("routing eval needs an unobserved-probes conductor case")
 
-print(f"routing eval fixture valid: {len(cases)} cases ({eligible} conductor, {fallback} main)")
+print(f"routing eval fixture valid: {len(cases)} cases ({eligible} conductor, {fallback} main, {stopped} stopped)")
 PY
 
 python3 - "$convergence_eval" <<'PY'
@@ -866,7 +912,9 @@ for required in \
   'task-specific user constraints' \
   'Its one startup read is `references/conductor-brief.md`' \
   'Rotation arms after every third fix round' \
-  'time, idle time, or poll count alone never forces replacement'; do
+  'time, idle time, or poll count alone never forces replacement' \
+  'A `none` reviewer record stops the skill first' \
+  'only the owner records none'; do
   if ! grep -Fq "$required" <<< "$skill_flat"; then
     printf 'SKILL.md is missing routing contract: %s\n' "$required" >&2
     exit 1
@@ -1009,7 +1057,13 @@ for required in \
   'created at or after the baseline' \
   'Retain the snapshot across re-armed wakes' \
   'Carry the request-artifact token' \
-  'apply the watcher'"'"'s request rule by hand'; do
+  'apply the watcher'"'"'s request rule by hand' \
+  '## §declared-no-reviewer' \
+  "No automated reviewer: the project's reviewer record is none." \
+  'Spawn no conductor and start no watcher' \
+  'Record no reviewer you notice on older PRs or a manual run' \
+  'A `none` record differs from no record' \
+  "record's \`Reviewer: none\` alone means only that no reviewer is recorded"; do
   if ! grep -Fq -- "$required" "$detection"; then
     printf 'detection.md is missing: %s\n' "$required" >&2
     exit 1
