@@ -474,6 +474,22 @@ want_out '"polls_ok":1'
 want_out '"last_poll_ok":true'
 want_out '"unresolved_threads":0'
 
+# A long run cap must not postpone actionable evidence until that cap expires.
+scenario "long run cap returns immediately for a clean pass"
+counts 0 1; page reviews 1; page comments 1; page issue-comments 1
+page reactions 1 "$(reaction "$BOT" '+1' "$AFTER")"
+run_watch --pr 46 --baseline 2026-07-02T05:07:30Z --login some-bot \
+  --repo owner/name --interval 1 --cap-minutes 25
+want_rc 3
+want_out 'CLEAN_PASS'
+
+scenario "long run cap returns immediately for review findings"
+counts 1 0; page reviews 1 "$(review "$BOT" "$AFTER")"; page comments 1
+run_watch --pr 46 --baseline 2026-07-02T05:07:30Z --login some-bot \
+  --repo owner/name --interval 1 --cap-minutes 25
+want_rc 0
+want_out 'REVIEW_ACTIVITY {"new_reviews":1'
+
 # Unresolved threads ride on every report, whatever ended the wait, and
 # count threads open since before the baseline: the watch reports activity
 # past the baseline, but a round is not clean while any thread stays open.

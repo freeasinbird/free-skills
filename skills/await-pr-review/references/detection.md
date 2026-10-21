@@ -278,16 +278,11 @@ Run the script by path from the PR checkout:
 ```sh
 <skill-dir>/watch-review.sh --pr 46 --baseline 2026-07-02T05:07:30Z \
   --login chatgpt-codex-connector --head 9c346ab \
-  --interval 75 --cap-minutes 4
+  --interval 75 --cap-minutes <run-cap>
 ```
 
-The default `--cap-minutes` is 4. That keeps each run under the prompt cache a
-Claude Code subagent gets, about 5 minutes, so the next run starts on a warm
-cache instead of rewriting the conductor's whole context. The host's 10-minute
-limit on one shell command is the outer bound. Re-run the watcher with the same
-baseline, head, and `--request-artifacts` token until the 20-30 minute
-exchange cap; the wait is one logical watch spread over several bounded runs,
-not one long command.
+Choose `--cap-minutes` using [Cadence and Cap](#cadence-and-cap). It bounds
+the polling window; API reads and the final scan may finish later.
 
 Pass `--repo owner/name` whenever the working directory is not the PR's
 checkout, and whenever the project's forge record names the slug. That record
@@ -434,13 +429,12 @@ time. Normalize the review and reaction login forms, apply the
 completion rules above, and confirm round attribution before accepting a match.
 A progress reaction keeps the loop active; it is not completion.
 
-Keep the loop bounded to the same 20–30 minute overall cap and roughly 60–90
-second cadence when the connector can wait without waking the model. If each
-poll wakes the model, use roughly 4–5 minutes and the scheduled wake that
-resumes the same conductor without releasing exchange ownership. The routing
-gate must establish that blocking wait or scheduled-wake capability before the
-conductor starts; instantaneous connector reads with scheduling only for the
-main agent require a main-owned exchange.
+Keep the loop bounded to the same overall deadline and choose its cadence per
+[Cadence and Cap](#cadence-and-cap). A scheduled wake must resume the same
+conductor without releasing exchange ownership. The routing gate must
+establish that blocking wait or scheduled-wake capability before the conductor
+starts; instantaneous connector reads with scheduling only for the main agent
+require a main-owned exchange.
 
 At the cap, take one final complete snapshot and report the equivalent of script
 coverage: polls or snapshots completed, whether the last one succeeded, whether
@@ -482,15 +476,30 @@ scheduler must be cancellable and must avoid overlapping runs.
 
 ## Cadence and Cap
 
-A no-model poll can check every 60–90 seconds. Any path that wakes a model per
-check should use roughly 4–5 minutes. These are separate layers: a scheduled
-5-minute model wake can run the script every 75 seconds inside a four-minute
-cap.
+Poll every 60–90 seconds when no model call is needed, through a script or
+connector. If each poll wakes the model, use roughly 4–5 minutes within host
+limits. Set one 20–30 minute deadline and keep it, the baseline, head, and
+request token across runs. Choose `--cap-minutes` by host:
 
-Bound the whole wait at roughly 20–30 minutes. A clean-pass signal usually ends
-earlier. A single foreground run defaults to a 4-minute cap, under the 5-minute
-prompt cache a Claude Code subagent gets and its 10-minute command limit. So
-the 20–30 minute wait is several bounded runs re-armed on the same baseline
-and head, not one command.
-See `cost-model.md` only when auditing the cache-cadence tradeoff or
-re-deriving these numbers.
+- **Codex:** Use the whole minutes remaining if the host keeps the process
+  interruptible and its results retrievable. Shorten the cap to fit below any
+  process limit, leaving room for startup and final API reads.
+- **Claude Code and other hosts:** Keep the four-minute default, shortened
+  to fit the host limit and remaining time. Claude's cache behavior motivated
+  this default; it need not govern Codex waits.
+- **Scheduled wakes:** Keep each run shorter than the wake gap. Each wake
+  must resume the same exchange owner.
+
+For agent waits, process polls, and execution-cell waits, use the longest
+interruptible wait allowed by the tool, active host instructions, and deadline.
+A host's short-wait rule applies even if the tool accepts more. Handle events
+and wait again as needed, without messages that only report unchanged state.
+
+Prefer resuming on completion where supported. Otherwise keep waiting in the
+foreground; end the turn only if the host reliably resumes the same agent.
+Longer processes and scheduled wakes can still cause empty model calls.
+Removing mandatory timeout calls or commentary requires an app/runtime change.
+
+When less than a minute remains, wait until the deadline within host limits,
+then take the final snapshot with `--cap-minutes 0`. Report covered expiry,
+pending review, or incomplete coverage. Timeout alone isn't completion.

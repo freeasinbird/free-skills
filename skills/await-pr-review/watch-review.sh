@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # watch-review.sh: poll a GitHub PR for automated-reviewer activity past a
-# baseline, at zero model cost. The backgrounded no-model watcher from the
-# await-pr-review skill (step 3). Four signal sources are scanned each poll:
+# baseline, without model calls inside the polling loop. Host polling of this
+# process can still wake a model. Four signal sources are scanned each poll:
 # submitted reviews, review comments (replies included, regardless of thread
 # age), PR-description reactions, and the reviewer's issue-comment review
 # summary. The first three are paged **until the baseline is crossed**, never
@@ -44,12 +44,11 @@
 #     [--clean-content THUMBS_UP]         # clean-pass reaction constant
 #     [--progress-content EYES]           # in-progress reaction constant
 #     [--interval 75]                     # seconds between checks
-#     [--cap-minutes 4]                   # total wait before giving up; one
-#                                         # run must fit the host's foreground
-#                                         # command limit (10 min on Claude
-#                                         # Code), so re-run with the same
-#                                         # baseline and head until the
-#                                         # 20-30 min exchange cap.
+#     [--cap-minutes 4]                   # polling-window cap; choose within
+#                                         # the remaining overall deadline
+#                                         # and host process limit. Preserve
+#                                         # baseline, head, and deadline when
+#                                         # re-arming shorter runs.
 #     [--head <sha>]                      # expected head (7-40 hex): only
 #                                         # count reviews of this commit and
 #                                         # comments anchored to it (replies
@@ -134,11 +133,9 @@ BASELINE_INCLUSIVE=""
 PREEXISTING_REVIEWS="" PREEXISTING_COMMENTS="" PREEXISTING_REACTIONS=""
 PREEXISTING_SUMMARY=""
 CLEAN_CONTENT="THUMBS_UP" PROGRESS_CONTENT="EYES"
-# CAP_MINUTES stays under the prompt cache a Claude Code subagent gets (about
-# 5 minutes), so a re-run on the same baseline lands on a warm cache instead
-# of rewriting the conductor's whole context. The minute of margin covers
-# preflight and the final poll, a few REST reads each. The host's 10-minute
-# limit on one command is the outer bound.
+# Keep the existing short-run default. Codex callers can pass the remaining
+# overall wait budget explicitly when process lifetime and result collection
+# support it; references/detection.md owns that host-specific policy.
 INTERVAL=75 CAP_MINUTES=4
 
 # The header comment above is the usage text: print it on request to
