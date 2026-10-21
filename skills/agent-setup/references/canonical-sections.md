@@ -41,12 +41,6 @@ it `YYYY-MM-DD-HHMM-slug.md`. Follow the protocol in `devlog/README.md`.
   dependency updates, mechanical syncs, large mechanical changes such as
   renames, and simple fixes need no note unless they reveal a lasting
   decision or discovery.
-- **Record the final reasoning.** Include rejected options, changed
-  assumptions, important verification findings, and a "Revisit when ..."
-  condition where one is useful. Do not include diffs, test logs, chronology,
-  or PR status.
-- **Let an active note evolve.** Update it while its work unit or PR is open.
-  Freeze it when the PR merges.
 - **Find notes from the work first.** Read notes linked from the current issue
   or PR. Otherwise, search by path, topic, contract, or decision name. Read
   the latest note only when resuming the work unit it describes.
@@ -54,9 +48,6 @@ it `YYYY-MM-DD-HHMM-slug.md`. Follow the protocol in `devlog/README.md`.
   explicit owner decision. When new evidence conflicts with one, name the old
   decision, explain which assumption or condition changed, and propose the
   revision.
-- **Track deferred work in issues.** Link the note from an issue that starts
-  there. The note may keep a historical `Follow-up: #N` link, but never a
-  second status record. Put non-actionable observations in "Revisit when ...".
 
 <!-- /agents-md:managed:devlog -->
 
@@ -292,14 +283,9 @@ change.
 - **Self-review the full diff in the PR files view.** Look for stray changes,
   debug code, scope creep, and accidental files. This catches accidental
   changes; it doesn't check whether the solution is correct.
-- **Let the landing check repeat integration checks when the base moves.** A
-  required check that must pass on the branch updated to the tip, a merge
-  queue, or a land command reruns CI on the branch combined with the tip. It
-  doesn't review: a refresh you push restarts the review watch and still needs
-  its diff read, by the recorded automated reviewer's pass or by your
-  self-review. Without a landing check, repeat CI, final diff review, and
-  readiness by hand. After a conflicted rebase, read `git range-diff` as
-  `docs/agent-workflow.md` §handing-off describes.
+- **Repeat integration checks when the base moves.** Before merge, follow
+  `docs/agent-workflow.md` §handing-off step 3. A landing check reruns CI,
+  not review; a refresh you push restarts the review watch.
 - **Use fresh eyes for substantive review.** Reviewing your own work in the
   same conversation shares the author's blind spots. A review in a fresh
   conversation is more independent. A bot from another provider or a human is
@@ -307,8 +293,7 @@ change.
   or any work without a bot reviewer, read `docs/agent-workflow.md`
   §pre-push-review. Risk means a destructive path, a credential-leak
   surface, a returned-object trust boundary, a contract change, or untested
-  behavior, not diff size; a mechanical change that touches none of those
-  relies on CI and the bot reviewer.
+  behavior.
 - **Record an automated reviewer you observe.** If the project has no record
   for that reviewer or signal, read `docs/agent-workflow.md` §reviewer-record
   and update the project record before handoff.
@@ -347,17 +332,7 @@ change.
 
 A PR is ready to hand off when it's open, green, self-reviewed, has no
 unhandled threads, and has no outstanding review activity. After opening the
-PR, read `docs/agent-workflow.md` §handing-off and follow its sequence:
-
-1. First check the installed skills for a review-watch skill, such as
-   `await-pr-review`, and use it when one exists. Start the review watch from
-   the PR open or push event. Only reviewer activity after that event counts
-   as new. After another push, start counting from that push.
-2. Refresh from the current base and record the base commit.
-3. Wait for required checks. Never hand off known-red work.
-4. Self-review the final diff.
-5. Close the watch by handling findings or recording its bounded timeout.
-6. Stop and summarize for the human reviewer.
+PR, read `docs/agent-workflow.md` §handing-off and follow its sequence.
 
 Once the approver approves a PR to land, stop pushing to it unless you are the
 landing batch. Turn off any auto-fix, CI repair, or review watch the platform
