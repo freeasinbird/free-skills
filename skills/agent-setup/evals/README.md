@@ -8,9 +8,9 @@ workspace outside the repo.
 
 - `trigger-eval.json`: eighteen description-only queries, twelve positive and
   six negative, for setup, devlog, sync, reassessment, and standalone scaffolds.
-- `evals.json`: sixty-two task evals for scope routing, factual intake, profiles,
+- `evals.json`: sixty-four task evals for scope routing, factual intake, profiles,
   optional work-unit stages, coordination discovery, reassessment, and landing
-  records.
+  and reviewer records.
   1. `single-stage-init`: initializes a plain project and expects the normal
      single implementation workflow with no stage record.
   2. `planning-implementation-handoff`: initializes a project with separate
@@ -139,6 +139,10 @@ workspace outside the repo.
       project records.
   62. `stale-forge-consumers-flagged`: offers and applies an accepted correction
       limited to the forge record's Consumers bullet.
+  63. `declared-no-reviewer-preserved`: reports a `none` reviewer record as
+      the owner's declared absence, keeps it, and records no old-PR reviewer.
+  64. `no-reviewer-record-not-inferred`: reports a missing reviewer record
+      without writing or offering a `none` record from a quiet history.
 
 ## Re-Running
 
@@ -400,4 +404,5 @@ uniqueness, the existing task fields for presence, and trigger values for
 Boolean type. Verify the counts above from parsed data. The landing-baseline
 update changed evals 5–10, 12, 17, 21, and 28 and added 57–59. The landing-record
 update adds 60–62 without changing earlier task definitions or expectations.
+The declared-no-reviewer update adds 63 and 64 the same way.
 Keep other cases unchanged unless the reference text they grade changes.

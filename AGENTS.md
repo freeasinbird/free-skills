@@ -417,8 +417,9 @@ change.
   surface, a returned-object trust boundary, a contract change, or untested
   behavior.
 - **Record an automated reviewer you observe.** If the project has no record
-  for that reviewer or signal, read `docs/agent-workflow.md` §reviewer-record
-  and update the project record before handoff.
+  for that reviewer or signal, and its reviewer record isn't `none`, read
+  `docs/agent-workflow.md` §reviewer-record and update the project record
+  before handoff.
 - **Judge review comments on their merits.** Fix real findings. Decline
   speculative, contrived, or already-fixed findings with a one-line reason.
   Do not comply automatically.

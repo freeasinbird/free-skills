@@ -222,7 +222,8 @@ automated reviewer so a review-watch can resolve who to wait on without
 re-detecting. During init and update, check whether the project carries such
 a record: read `references/managed-blocks.md` §reviewer-record-audit and
 follow it. Treat this as **detect → report, never fabricate**. A managed-block
-sync must not delete or rewrite the record silently.
+sync must not delete or rewrite the record silently. A record whose reviewer is
+`none` is the owner's declared absence, which only the owner writes.
 
 ## Forge Record
 

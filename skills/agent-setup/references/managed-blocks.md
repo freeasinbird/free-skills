@@ -229,6 +229,12 @@ configured after agent-setup first runs, so absence is expected and fine; do not
 infer or invent one. If none is recorded, note that one should be added once a
 reviewer is configured.
 
+A record whose reviewer is `none` is the owner's decision that the project has
+no automated reviewer, defined in `docs/agent-workflow.md` §reviewer-record.
+Report it as recorded, not missing, and keep it verbatim. Offer to write one
+only when the owner says the project has no automated reviewer; never infer
+it from an absent record or a quiet PR history.
+
 The record is durable project state; a managed-block sync must not delete or
 rewrite it silently. If a record sits inside an `agents-md:managed:*` block,
 flag it before any managed-block refresh and offer, in order:
