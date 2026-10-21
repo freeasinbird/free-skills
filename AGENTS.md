@@ -344,28 +344,11 @@ material, examples, and sub-prompts may live beside it.
 - **Edit free-skills-only sections here.** Architecture Invariants,
   Conventions, and Build sit outside the managed markers.
 
-- **Use Codex as the automated reviewer.** This project has the following
-  reviewer record:
-
-  - **Login:** `chatgpt-codex-connector`. REST uses
-    `chatgpt-codex-connector[bot]`; GraphQL uses that form for reactions too.
-  - **Trigger:** Opening a PR, marking it ready, or pushing starts a review.
-    PR 46 showed a new review after each fix push. Use `@codex review` to
-    trigger one manually.
-  - **Status evidence:** PRs 41–44 showed both reaction signals below.
-  - **In-progress signal:** 👀 on the PR description.
-  - **Clean-pass signal:** 👍 on the PR description. A clean pass may post no
-    review.
-  - **Finding signal:** A posted review. Codex posts one only when it finds a
-    problem.
-  - **Completion signal:** An issue comment by the bot containing the HTML
-    marker `codex-pull-request-review-summary`. Its table lists each review
-    with status, short commit SHA, and trigger; a `Completed` row for the
-    expected head ends the round whether or not a review was posted. PRs
-    216, 218, and 219 showed it, the last two without any reaction.
-  - **Consumer:** `await-pr-review` uses this record to choose the reviewer and
-    detect the end of a round. Update the skill if the login, trigger, or
-    signals change.
+- **Expect no automated reviewer.** The owner turned off automatic Codex
+  reviews, so skip the review watch in step 1 of Handing Off the PR. Codex
+  activity on older PRs or a manual run doesn't make it this project's
+  reviewer; don't record it again. Only the owner re-enables a reviewer. See
+  the 2026-10-21 devlog.
 
 - **Use `freeasinbird/free-skills` on GitHub for forge calls.** This project
   has the following forge record:
@@ -389,11 +372,9 @@ material, examples, and sub-prompts may live beside it.
     `approved` and removing `needs-human` means "try again."
   - **Approver permission:** `write`.
   - **Stale lock age:** `240` minutes: the engine's default caps (30 for CI
-    plus 15 for the merge) times four allowed runs, plus a reviewer wait and
-    a margin.
+    plus 15 for the merge) times four allowed runs, plus a margin.
   - **Base-advance checks:** none.
-  - **Reviewer:** `chatgpt-codex-connector`, from the reviewer record.
-  - **Reviewer completion marker:** `codex-pull-request-review-summary`.
+  - **Reviewer:** `none`. The project has no automated reviewer.
   - **Consumer:** `land-approved-prs` reads this record from the default
     branch's tip. Update the skill if the record's shape changes.
 
