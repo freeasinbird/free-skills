@@ -334,6 +334,7 @@ change.
 A PR is ready to hand off when it's open, green, self-reviewed, has no
 unhandled threads, and has no outstanding review activity. After opening the
 PR, read `docs/agent-workflow.md` §handing-off and follow its sequence.
+End with the report its step 7 defines.
 
 Once the approver approves a PR to land, stop pushing to it unless you are the
 landing batch. Turn off any auto-fix, CI repair, or review watch the platform

@@ -15,8 +15,7 @@ follow this full sequence:
 
    When the project's reviewer record is `none` (§reviewer-record), start no
    watch, so steps 2 and 6 have none to anchor or close. Don't scan past PRs
-   for a reviewer; the human reviewer reviews at handoff. Say in the handoff
-   summary that the record skipped the watch.
+   for a reviewer; the human reviewer reviews at handoff.
 
    Before choosing a method, check whether a review-watch skill is installed,
    such as `await-pr-review`: list the available skills or look in the
@@ -91,9 +90,47 @@ follow this full sequence:
    step 7. A blocker in that review reopens fix rounds. If it has none, defer
    or decline its findings and do not push again.
 
-7. **Stop and summarize.** State that the PR is open and green. Name anything
-   the reviewer should inspect closely. Leave merging, branch cleanup, and
-   `main` resync to the approver.
+7. **Stop and report.** End the turn with this report as its final message.
+   Give the parts below in this order, each with its bold lead words, and use
+   no headings or tables. Aim for 60 to 120 words. Omit a part only where its
+   rule says so.
+
+   1. **Status.** One line: the PR link once, the base commit from step 3,
+      then "open and green, ready to merge." When it isn't, say what is red
+      or conflicting and what you are doing about it; never present a red or
+      conflicting PR as ready. Name any open sibling PR that touches the same
+      files, and the landing order. For a stack, write one Status line per PR.
+   2. **Result.** One or two sentences on what the change does once merged, in
+      behavior terms. List no files, commits, or "what changed" bullets; the
+      PR body carries them.
+   3. **Your call.** Up to three bullets, each a choice the owner can veto,
+      with the default named: a departure from the issue or plan, an
+      assumption, or a finding declined on judgment. Omit when none.
+   4. **Left for you.** Up to three bullets on what the owner must do besides
+      merge. Each is a thread that needs their word, a check only they can
+      run, a follow-up filed as #N or still to file, or a sibling PR to
+      refresh after this one lands. Omit when none.
+   5. **Skipped.** Up to two bullets, each a workflow step not run and why:
+      the review watch a `none` reviewer record skipped (step 1), screenshots
+      not captured or not uploaded (with the error), or a check not run. Omit
+      when none.
+
+   Leave out what the PR, its threads, and CI already show. That covers check
+   names and counts, the review exchange, other SHAs, and head or audit lines.
+   It also covers the worktree path, branch cleanup, the decision note, the
+   fresh-session reminder for review rounds, and "I left it unmerged."
+   Leave merging, branch cleanup, and `main` resync to the approver.
+
+   Three platform gates apply:
+
+   - **Last message.** Where the platform can end a turn on background work,
+     such as a review watch, the report must still be the last message the
+     owner sees.
+   - **Recap box.** Where the platform shows one, its recap is Status and
+     Result compressed to two sentences. Its question is a pending "Your call"
+     or "Left for you" item, or nothing.
+   - **Task cards.** Where the platform offers task or session cards, propose
+     one only for a "Left for you" item that is a task of its own.
 
    Once the approver approves the PR to land, stop pushing to it unless you
    are the landing batch, which records each push it makes. A landing batch
