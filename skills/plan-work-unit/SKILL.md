@@ -278,41 +278,94 @@ tool.
 - Do not invent a lock, reinspect to chase a moving reference, or repair drift
   automatically. Follow any declared serialization or exclusive-ownership
   model.
-- Put the grounding revision in the handoff and the invalidation criteria in
-  the plan.
+- Put the grounding revision in the plan comment and the invalidation
+  criteria in the plan.
 
 ## Report the Handoff
 
+Before a finished report, verify that the selected authoritative record
+contains the complete contract. Separately verify that the issue has one
+unambiguous current plan. If either verification fails, report the unsafe
+state under Blocked instead.
+
 ### Finished
 
-1. Verify that the selected authoritative record contains the complete
-   contract.
-2. Separately verify that the issue has one unambiguous current plan.
-3. Report both locations, any coordination record written and the issues it
-   is on, any implementation blocker, and the grounding revision.
-4. If the default branch has advanced, say so and recommend verification or a
-   replan. Do not reinspect and republish here.
-5. State that planning is finished and implementation was not started or
-   authorized.
-6. End the report with the kickoff prompt for a fresh implementation task,
-   with the real issue number in place of `N`:
+Write the report in this order, with bold lead words and no headings or
+tables. Aim for 120 to 200 words. Omit a part only where its rule says so.
+
+1. **Status.** One line in one of three forms, linking the issue once:
+
+   - Startable: `#N planned, startable now`.
+   - Implementation blocked: `#N planned, blocked on #M until <event>`.
+   - Held: `#N planned, startable but I'd hold: <reason>`.
+
+   Name the contract record here only when it is not the issue body. Status
+   already says planning finished, so add no separate statement that
+   implementation was not started.
+
+2. **Result.** One or two sentences on what the change does once built, in
+   behavior terms, not record terms. Mention size or shape only when it
+   changes a decision, such as a proposed split or a contract unit.
+3. **What planning changed.** Up to four one-line bullets. Cover corrections
+   to the issue's premise, scope added or removed, an approach chosen where
+   the issue left it open, and dependencies reconciled. Also name any
+   coordination record, assessment, or other issue or tracker you edited,
+   with the issues it is on. Write "Nothing beyond completing the contract"
+   when that is true.
+4. **Your call.** Up to three bullets, each a choice you made that the owner
+   can veto, naming the chosen default. Assumptions that don't change the
+   plan stay in the contract. Omit when there are none.
+5. **Not verified.** Up to two bullets of claims the plan rests on that you
+   read but did not run, or write-safety gaps that no reread closes, such as
+   a whole-body write that could lose a concurrent edit. If the default
+   branch advanced during planning, say so in one line and recommend
+   verification or a replan. Do not reinspect and republish here. Omit when
+   there is nothing to report.
+6. **Kickoff.** The kickoff prompt for a fresh implementation task, with the
+   real issue number in place of `N`:
 
    ```text
    Handle #N, implementation plan in comments.
    ```
 
    This prompt is for the user to send; sending it is the separate
-   implementation assignment. If an implementation blocker remains, say the
-   prompt applies once that blocker clears.
+   implementation assignment. If an implementation blocker or hold remains,
+   precede the prompt with one clause saying when it applies, such as "after
+   #M merges" or "once you settle X".
 
-### Blocked
+Leave out the record locations, the grounding revision, the plan's steps, and
+read-back narration. The plan comment carries the grounding revision.
 
-1. Verify any required prior-plan invalidation and report the precise blocker.
-2. State that planning is blocked, not finished.
-3. If the prior plan remains actionable, report its location as an unsafe
-   state.
-4. Never hand off an incomplete authoritative record.
-5. Omit the implementation kickoff prompt.
+### Blocked or Paused
 
-Precondition errors never reach this section. After a finished or blocked
-handoff, do not continue into implementation in the same operation.
+A blocked report keeps **Status** and **What planning changed**. Status says
+planning is blocked, not finished, and names the precise blocker, as in
+`#N planning blocked: <blocker>`. This differs from a finished plan whose
+implementation waits on another unit.
+
+- Add one line on what clears the block.
+- Give the recommended action before any options.
+- Verify any required prior-plan invalidation before reporting.
+- If the prior plan remains actionable, report its location as an unsafe
+  state.
+- Never hand off an incomplete authoritative record.
+- Omit the implementation kickoff prompt.
+
+A mid-planning question leads with your recommendation, then asks the
+question, then stops. Send no partial report with it. Ask it only before any
+planning write persists; after one does, report Blocked instead.
+
+### Platform Gates
+
+- **End on the report.** The report is the final message of the operation.
+  Where the platform can end a turn on background work, the report must
+  still be the last message.
+- **Compress any recap box.** Where the platform shows a recap box, its recap
+  is Status, Result, and What planning changed in three sentences. For a
+  blocked report, it is Status, what clears the block, and the
+  recommendation. Its question is a pending Your call item, or nothing.
+- **Propose no task or session card.** Where the platform offers task or
+  session cards, do not propose one. The kickoff prompt is the only handoff.
+
+Precondition errors never reach this section. After a finished, blocked, or
+paused handoff, do not continue into implementation in the same operation.
