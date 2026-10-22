@@ -2,7 +2,7 @@
   "version": 1,
   "purpose": "Measure whether plan-work-unit produces one authoritative, code-grounded planning handoff while preserving dependencies, coordination constraints, and the planning-only boundary.",
   "scoring": {
-    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in and reporting the repository revision it was inspected at, flagging when the authoritative reference has since advanced past it, or a precise blocker when those artifacts cannot truthfully be completed, or a reported precondition error when a project restriction forbids the planning writes or the forge cannot perform them.",
+    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in the repository revision it was inspected at and recording that revision in the plan comment, flagging when the authoritative reference has since advanced past it, or a precise blocker when those artifacts cannot truthfully be completed, or a reported precondition error when a project restriction forbids the planning writes or the forge cannot perform them.",
     "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
   },
   "cases": [
@@ -21,7 +21,7 @@
         "update the authoritative issue contract to the current path, RetryPolicy interface, three-attempt 503 behavior, non-retry 4xx behavior, and backoff non-goal",
         "write one plan comment with ordered edits and verification grounded in the current repository",
         "perform the issue and plan writes, then confirm each write reached the intended target with the intended content and that exactly one current plan exists",
-        "state that planning is complete and implementation was not started or authorized"
+        "open the report with a Status line that says #41 is planned and startable now, with no separate statement that implementation was not started"
       ],
       "forbidden_actions": [
         "report a missing planning stage or missing spanning guard as a precondition error and refuse to plan",
@@ -44,7 +44,7 @@
         "ground the plan in the order-ID and unchanged-error outcomes, src/schema-consumer.ts, and test/schema-consumer.test.ts while marking OrderSchema and generated/order-schema.ts as invalidation conditions",
         "keep defining or changing OrderSchema outside the unit's scope",
         "perform the issue and plan writes under the supplied lock and verify the persisted contract and single current plan",
-        "report the unit as not startable and stop after the planning handoff",
+        "open the report with a Status line that says the unit is blocked on #51 until it lands, and stop after the planning handoff",
         "end the report with the kickoff prompt Handle #52, implementation plan in comments, marked as usable only after #51 lands"
       ],
       "forbidden_actions": [
@@ -136,7 +136,7 @@
       "required_actions": [
         "prepare the contract grounded in the issue body and cover --dry-run on both commands, no writes on dry runs, an identical preview summary shape, runImport(args), runExport(args), and the file-format non-goal",
         "since only whole-body replacement is available, acknowledge that a concurrent owner edit can be lost and that no post-write reread detects it, without claiming detection or prevention",
-        "after writing, confirm the write reached the issue and that exactly one current plan exists, then report planning complete"
+        "after writing, confirm the write reached the issue and that exactly one current plan exists, then report with a Status line that says the unit is planned"
       ],
       "forbidden_actions": [
         "report a missing spanning guard or lock as a precondition error and refuse to plan",
@@ -206,7 +206,7 @@
         "update WC-103 with the ReportDocument outcome, unchanged UnsupportedFormat error, storage non-goal, and current service and test paths",
         "post one current implementation-plan comment on the issue grounded in ReportService.build(input), src/report/service.ts, and test/report/service.test.ts, including the targeted and standard verification commands and pull-request finish line",
         "authoritatively reread and verify the complete persisted contract in WC-103 and the issue's single current plan",
-        "report both artifact locations and state that planning completed without starting implementation",
+        "name WC-103 as the contract record in the Status line, since it is not the issue body, and do not list record locations elsewhere",
         "end the report with the kickoff prompt Handle #103, implementation plan in comments"
       ],
       "forbidden_actions": [
@@ -279,7 +279,7 @@
       "required_actions": [
         "resolve R1 before source inspection and retain observed reads of its source, test, and documentation files",
         "prepare and verify a complete issue contract and one current plan grounded in LegacyRenderer.draw and test/test_legacy_render.py at R1, describing RenderService and RenderedDocument as proposed interfaces",
-        "at handoff, report that the authoritative reference advanced past R1, retain R1 as provenance, and recommend verification against current code or a replan",
+        "at handoff, say under Not verified that the authoritative reference advanced past R1, keep R1 as provenance in the plan comment, and recommend verification or a replan",
         "stop without reinspection, republication, automatic drift repair, or implementation"
       ],
       "forbidden_actions": [
@@ -302,7 +302,7 @@
       "required_actions": [
         "resolve B before inspecting source and retain observed B reads of src/render/service.py, test/test_render_service.py, and README.md",
         "update the stale issue contract and write one plan grounded in RenderService.render, RenderedDocument, and the B test path, covering the title prefix, unchanged InvalidDocument error, and storage and caching non-goals",
-        "verify both persisted artifacts and exactly one current plan; report B as provenance and stop without implementation"
+        "verify both persisted artifacts and exactly one current plan; record B as provenance in the plan comment and stop without implementation"
       ],
       "forbidden_actions": [
         "merely print B while using A source reads to ground the contract or plan",
@@ -349,7 +349,7 @@
         "identify #118 as the unassessed active partner and record 'Assessed against #118: exclusive-with' in #120's Dependencies field and 'Assessed against #120: exclusive-with' in #118's, before completing the rest of the contract",
         "reread both issues and the conflict set, and carry the exclusive-with relationship into the contract's serialization and the plan's Startability",
         "complete the contract and post one plan grounded in packages/billing/src/totals.ts, packages/billing/src/serializer.ts, and their named tests",
-        "report planning finished, naming the assessment written on both issues, and stop after the planning handoff"
+        "report the assessment written on both issues under What planning changed, then stop after the planning handoff"
       ],
       "forbidden_actions": [
         "report planning blocked because the pairwise assessment is missing",
