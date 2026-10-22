@@ -73,13 +73,27 @@ Target: `.github/pull_request_template.md`
      related-but-unfinished issues with a plain `#N` (e.g. `Refs #N`) and
      leave those for a human. -->
 
+## Scope
+
+<!-- Required. One line naming the areas touched, for example
+     `Scope: skills/agent-setup, scripts/`. -->
+
 ## What
 
-<!-- Bullets required. Describe work-unit outcomes, not file-by-file churn.
-     For multi-commit PRs, include a compact commit map, keyed by commit
-     subject not SHA (folding review fixes rewrites SHAs). Say rejected
-     alternatives live in the decision note when they do; don't duplicate
-     them. -->
+<!-- Bullets required. One outcome bullet per change, in behavior terms:
+     what a user, agent, or caller can now do or see. When the issue has
+     numbered acceptance criteria, write one bullet per criterion, in the
+     issue's order, and add a change bullet only for an outcome no criterion
+     covers. No bullet cap; about 25 words is the shape of a bullet, not a
+     limit. No file lists and no commit map. Say rejected alternatives live
+     in the decision note when they do; don't duplicate them. -->
+
+## Departures
+
+<!-- Required. Up to three bullets, or the single word "None". Each bullet
+     names a change from the issue, plan, or contract and why; an addition
+     beyond it; or a criterion left unmet or work left undone, with the
+     issue that tracks it. -->
 
 ## Screenshots
 
@@ -91,13 +105,24 @@ Target: `.github/pull_request_template.md`
 
 ## Review Notes
 
-<!-- Optional. Delete this section if there is no useful routing guidance. -->
+<!-- Optional; delete it when empty. Up to three bullets, each a place to
+     look (a file to read first, a mechanical commit to skip, a risky edge)
+     or a call the reviewer must make (an assumption to veto, a criterion to
+     judge). Review rounds, folded findings, coordination, and merge-order
+     notes stay in the threads and on the issue. Add a commit map only for four or more
+     commits or a mechanical commit to skip, keyed by commit subject not SHA
+     (folding review fixes rewrites SHAs). -->
 
 ## Verification
 
-<!-- Bullets required. Start each bullet with Passed:, Checked:, Attempted:,
-     or Not run:. Say what was actually run and observed. Facts only, never
-     "should work"; verification gaps are explicit Not run: bullets. -->
+<!-- Bullets required, up to five. Start each bullet with Passed:, Checked:,
+     Attempted:, or Not run:. List only what CI does not show:
+     change-specific checks with counts as deltas ("82 to 86 cases"), manual
+     or device checks, and schema round-trips. Add one Not run: bullet per
+     check the change needs and could not get, never for suites of untouched
+     components. No standard-check inventory, base SHA, or audit command.
+     When CI shows everything, write the single bullet "Passed: required
+     checks." Facts only, never "should work". -->
 ```
 
 ---
