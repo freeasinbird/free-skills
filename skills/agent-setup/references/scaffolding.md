@@ -73,13 +73,27 @@ Target: `.github/pull_request_template.md`
      related-but-unfinished issues with a plain `#N` (e.g. `Refs #N`) and
      leave those for a human. -->
 
+## Scope
+
+<!-- Required. One line naming the areas touched, for example
+     `Scope: skills/agent-setup, scripts/`. -->
+
 ## What
 
-<!-- Bullets required. Describe work-unit outcomes, not file-by-file churn.
-     For multi-commit PRs, include a compact commit map, keyed by commit
-     subject not SHA (folding review fixes rewrites SHAs). Say rejected
-     alternatives live in the decision note when they do; don't duplicate
-     them. -->
+<!-- Bullets required. One outcome bullet per change, in behavior terms:
+     what a user, agent, or caller can now do or see. When the issue has
+     numbered acceptance criteria, write one bullet per criterion, in the
+     issue's order, and add a change bullet only for an outcome no criterion
+     covers. No bullet cap; about 25 words is the shape of a bullet, not a
+     limit. No file lists and no commit map. Say rejected alternatives live
+     in the decision note when they do; don't duplicate them. -->
+
+## Departures
+
+<!-- Required. Up to three bullets, or the single word "None". Each bullet
+     names a change from the issue, plan, or contract and why; an addition
+     beyond it; or a criterion left unmet or work left undone, with the
+     issue that tracks it. -->
 
 ## Screenshots
 
@@ -91,13 +105,24 @@ Target: `.github/pull_request_template.md`
 
 ## Review Notes
 
-<!-- Optional. Delete this section if there is no useful routing guidance. -->
+<!-- Optional; delete it when empty. Up to three bullets, each a place to
+     look (a file to read first, a mechanical commit to skip, a risky edge)
+     or a call the reviewer must make (an assumption to veto, a criterion to
+     judge). Review rounds, folded findings, coordination, and merge-order
+     notes stay in the threads and on the issue. Add a commit map only for four or more
+     commits or a mechanical commit to skip, keyed by commit subject not SHA
+     (folding review fixes rewrites SHAs). -->
 
 ## Verification
 
-<!-- Bullets required. Start each bullet with Passed:, Checked:, Attempted:,
-     or Not run:. Say what was actually run and observed. Facts only, never
-     "should work"; verification gaps are explicit Not run: bullets. -->
+<!-- Bullets required, up to five. Start each bullet with Passed:, Checked:,
+     Attempted:, or Not run:. List only what CI does not show:
+     change-specific checks with counts as deltas ("82 to 86 cases"), manual
+     or device checks, and schema round-trips. Add one Not run: bullet per
+     check the change needs and could not get, never for suites of untouched
+     components. No standard-check inventory, base SHA, or audit command.
+     When CI shows everything, write the single bullet "Passed: required
+     checks." Facts only, never "should work". -->
 ```
 
 ---
@@ -211,7 +236,7 @@ follow this full sequence:
    before and after the rebase. Record what the resolution changed in the PR's
    Verification section.
 
-   Record the base commit in the PR's Verification section or in the handoff.
+   Record the base commit in the handoff, not the PR body.
    If the base moves before approval, the landing check decides who refreshes.
    A merge queue or land command tests the PR combined with the tip it selects
    and reruns CI there, so leave the PR waiting. Refresh only when the lander
@@ -520,16 +545,32 @@ A `none` record differs from having no record:
 
 ## pr-body
 
-Use the sections scaffolded by the PR template:
+Use the sections scaffolded by the PR template, in this order: Why, Scope,
+What, Departures, Screenshots, Review Notes, and Verification. Use bold lead
+words inside bullets and no sub-headings. Aim for 150 to 300 words outside
+Screenshots in a typical PR. A longer What is the expected reason to exceed
+that. When a body passes 400 words and the extra words sit elsewhere, say why
+in Review Notes.
 
 - **Why:** Write one to three short sentences about the problem or motivation.
   Link a decision note instead of repeating it. Follow the template's close
   keyword instructions exactly. Use a close keyword for each fully resolved
   issue. Use plain `Refs #N` for related work a human must close.
-- **What:** Use outcome bullets, not a file list. For a multi-commit PR, add a
-  compact map with one bullet per commit or concern. Refer to commits by
-  subject, not SHA, because folded fixes rewrite SHAs. Point to the decision
-  note for rejected options.
+- **Scope:** Write one line naming the areas touched, such as
+  `Scope: api/, daemon/` or `Scope: skills/agent-setup, scripts/`. Include it
+  in every project. It is the reader's fastest size signal, and a project's
+  CI may read it.
+- **What:** Write one outcome bullet per change, in behavior terms: what a
+  user, agent, or caller can now do or see. When the issue has numbered
+  acceptance criteria, write one bullet per criterion in the issue's order, so
+  the reviewer can check them off. Add a change bullet only for an outcome no
+  criterion covers. The list has no cap and sizes itself to the
+  issue. About 25 words is the shape of a bullet, not a limit. Don't list
+  files or map commits here. Point to the decision note for rejected options.
+- **Departures:** Always include this section. Write up to three bullets, or
+  the single word "None". Each bullet names a change from the issue, plan, or
+  contract and why; an addition beyond it; or a criterion left unmet or work
+  left undone, with the issue that tracks it.
 - **Screenshots:** Keep this section only for visible UI work. Before handoff
   and merge, replace it with forge-hosted images or recordings a reviewer can
   see. Local paths, text descriptions, and "checked locally" don't qualify.
@@ -557,17 +598,36 @@ Use the sections scaffolded by the PR template:
   If you can't attach the images, say at handoff what you tried and the error
   it gave, then ask the user to add or confirm them.
 
-- **Review Notes:** Delete this optional section when it adds no routing value.
-  Otherwise, point to important files, review order, mechanical commits, or
-  risky edges.
-- **Verification:** Use required bullets beginning with `Passed:`, `Checked:`,
-  `Attempted:`, or `Not run:`. State what ran and what happened. Include
-  tests, lint, UI fixture or screenshot checks for every affected theme, and
-  schema round-trips when relevant.
+- **Review Notes:** Delete this optional section when it has nothing to add.
+  Otherwise, write up to three bullets. Each names a place to look, such as a
+  file to read first, a mechanical commit to skip, or a risky edge. Or it
+  names a call the reviewer must make, such as an assumption to veto or a
+  criterion to judge. Keep review rounds, folded findings, coordination, and
+  merge-order notes in the threads and on the issue. Add a commit map only for four or more commits
+  or a mechanical commit to skip. Key it by subject, not SHA, because folded
+  fixes rewrite SHAs.
+- **Verification:** Write up to five bullets beginning with `Passed:`,
+  `Checked:`, `Attempted:`, or `Not run:`. List only what CI doesn't show:
+  change-specific checks with counts as deltas, such as "82 to 86 cases";
+  manual or device checks; UI fixture or screenshot checks for every affected
+  theme; and schema round-trips. Add one `Not run:` bullet per check the
+  change needs and couldn't get, never for suites of untouched components.
+  When CI shows everything, write the single bullet `Passed: required checks.`
 
-  Use facts, never "should work". Mark every gap as `Not run:`. Verify factual
-  documentation claims against the code. Scope counts, flags, behaviors, and
-  runtime guarantees precisely. Avoid marketing and competitor put-downs.
+  Use facts, never "should work". Verify factual documentation claims against
+  the code. Scope counts, flags, behaviors, and runtime guarantees precisely.
+  Avoid marketing and competitor put-downs.
+
+Leave these out of the body:
+
+- The inventory of standard checks CI already runs, such as lint, format, and
+  tests.
+- A merge-result audit line, base-commit bullets, and 40-character SHAs. A
+  green required check carries them.
+- Review-round narration, coordination, and merge-order text. The threads and
+  the issue carry them.
+- A commit map for one to three commits, unless one is a mechanical commit to
+  skip. The forge already shows the commits.
 
 ## refute-first
 

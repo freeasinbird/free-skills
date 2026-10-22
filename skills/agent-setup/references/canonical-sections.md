@@ -274,12 +274,13 @@ change.
   without a type prefix, ticket number, or other tracking text. The title and
   PR number become the whole merge-commit message in the intended setup. Write
   it for `git log --first-parent`.
-- **Use the PR template for the body.** Include Why, What, Screenshots for UI
-  changes, optional Review Notes, and Verification. Key the commit map by
-  subject, not SHA. Start verification bullets with `Passed:`, `Checked:`,
-  `Attempted:`, or `Not run:`. Before writing or updating the body, read
-  `docs/agent-workflow.md` §pr-body. For a UI change, meet its Screenshots
-  requirements.
+- **Use the PR template for the body.** Include Why, Scope, What,
+  Departures, Screenshots for UI changes, optional Review Notes, and
+  Verification. Departures is required; write "None" when nothing departs.
+  Key any commit map by subject, not SHA. Start verification bullets with
+  `Passed:`, `Checked:`, `Attempted:`, or `Not run:`. Before writing or
+  updating the body, read `docs/agent-workflow.md` §pr-body. For a UI change,
+  meet its Screenshots requirements.
 - **Self-review the full diff in the PR files view.** Look for stray changes,
   debug code, scope creep, and accidental files. This catches accidental
   changes; it doesn't check whether the solution is correct.
@@ -320,10 +321,9 @@ change.
   round. Before handoff, mark every finding fixed, declined, deferred, or
   explicitly outstanding.
 - **Keep the PR body current.** When review adds commits or changes scope,
-  update What, the subject-based commit map, and Verification. Mark commits
-  that resolve review findings. Keep each finding's outcome in its inline
-  reply, not a permanent feedback section. Once images are hosted, start a
-  later body edit from the live body.
+  update Scope, What, Departures, and Verification, and any commit map. Keep
+  each finding's outcome in its inline reply, not a permanent feedback
+  section. Once images are hosted, start a later body edit from the live body.
 - **Keep the intended repository rules.** Use merge commits only, disable
   squash and rebase merges, use title-only merge messages, and auto-delete
   merged branches. Do not re-enable a disabled method. Enforce these rules
