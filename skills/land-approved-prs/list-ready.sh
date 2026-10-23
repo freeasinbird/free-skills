@@ -150,8 +150,10 @@ GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
 GH_OUT=$(mktemp) || { rm -f -- "$GH_ERR"; lookup_failed tmp "mktemp failed"; }
 trap 'rm -f -- "$GH_ERR" "$GH_OUT"' EXIT
 # Go's http2debug trace prints the Authorization header unredacted. Drop
-# that one setting and keep any other GODEBUG setting gh may rely on.
-GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)http2debug=[^,]*//g; s/^,//')
+# that one setting and keep any other GODEBUG setting gh may rely on. Go
+# turns the trace on when GODEBUG merely contains http2debug=1 or =2, so
+# drop every element that mentions it, however it is spaced or nested.
+GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)[^,]*http2debug[^,]*//g; s/^,//')
 # Is the failure in GH_ERR an answer rather than a blip? gh exits 1 for
 # every failure and names the HTTP status only in its stderr: gh api as
 # "gh: Not Found (HTTP 404)", gh pr as "HTTP 401: Bad credentials (url)",

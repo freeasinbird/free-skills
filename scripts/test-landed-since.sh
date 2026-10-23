@@ -159,9 +159,10 @@ else
   cat <<'SHIMEOF'
 echo "$*" >> "$FIX/calls.log"
 # Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
-# Go under GODEBUG=http2debug, write request headers to stderr on every call.
+# Go whenever GODEBUG contains http2debug=1 or =2, write request headers to
+# stderr on every call.
 if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
-   || [[ ",${GODEBUG:-}," == *,http2debug=* ]]; then
+   || [[ "${GODEBUG:-}" == *http2debug=[12]* ]]; then
   echo "> Authorization: token SECRET-313" >&2
 fi
 # A fail-* file fails each call whose arguments contain its first line, as

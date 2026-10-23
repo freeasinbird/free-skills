@@ -124,9 +124,10 @@ else
   cat <<'SHIMEOF'
 echo "$*" >> "$FIX/calls.log"
 # Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
-# Go under GODEBUG=http2debug, write request headers to stderr on every call.
+# Go whenever GODEBUG contains http2debug=1 or =2, write request headers to
+# stderr on every call.
 if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
-   || [[ ",${GODEBUG:-}," == *,http2debug=* ]]; then
+   || [[ "${GODEBUG:-}" == *http2debug=[12]* ]]; then
   echo "> Authorization: token SECRET-313" >&2
 fi
 # A fail-* file fails each call whose arguments contain its first line, as
@@ -1403,7 +1404,8 @@ want_calls 3 "$PR_READ"
 
 # The retry line quotes gh's stderr, so it gets the excerpt's guarantee:
 # with debug output asked for every way gh and Go read it, no header.
-for debug in GH_DEBUG=api DEBUG=api GODEBUG=netdns=go,http2debug=2; do
+for debug in GH_DEBUG=api DEBUG=api GODEBUG=netdns=go,http2debug=2 \
+  'GODEBUG=netdns=go, http2debug=1' GODEBUG=x=http2debug=2; do
   scenario "a retried read under $debug logs no request header"
   std_setup; std_fixtures
   printf '%s\n1\n' "$PR_READ" > "$FIX/fail-pr"

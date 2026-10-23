@@ -49,6 +49,12 @@ it.
   a check.** The retry line reads the same debug-off capture as the excerpt.
   test-land.sh runs a retried read under each setting, and its fake gh's
   header line never reaches the script's stderr.
+- **A spaced or nested `http2debug` in `GODEBUG`: confirmed, then fixed.** A
+  fresh-context reviewer found Go turns the trace on whenever `GODEBUG`
+  contains `http2debug=1` or `=2`, so `a=1, http2debug=2` and
+  `x=http2debug=1` passed #313's filter. The gap predates this change, but
+  the retry line is one more place gh's stderr appears. The filter now drops
+  every element that mentions `http2debug`, and test-land.sh runs both forms.
 - **The plan-gated 403 retried or misread: disproved by a check.** It's
   permanent, so `queue_check` sees one call and the same capture; the retry
   line goes to the script's stderr, never into `GH_ERR`.
