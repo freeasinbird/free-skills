@@ -224,18 +224,46 @@ lookup_failed() { # lookup_failed <what> <detail>
 
 # Forge reads keep gh's stderr here so lookup_failed can quote why a read
 # failed. head, not tail: gh's summary line comes first, before any body.
+# GH_OUT holds one attempt's output, so a retry never follows a failed
+# attempt's partial output (a page of a paginated read, an error body).
 GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
-trap 'rm -f -- "$GH_ERR"' EXIT
+GH_OUT=$(mktemp) || { rm -f -- "$GH_ERR"; lookup_failed tmp "mktemp failed"; }
+trap 'rm -f -- "$GH_ERR" "$GH_OUT"' EXIT
 # Go's http2debug trace prints the Authorization header unredacted. Drop
 # that one setting and keep any other GODEBUG setting gh may rely on.
 GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)http2debug=[^,]*//g; s/^,//')
+# Is the failure in GH_ERR an answer rather than a blip? gh exits 1 for
+# every failure and names the HTTP status only in its stderr: gh api as
+# "gh: Not Found (HTTP 404)", gh pr as "HTTP 401: Bad credentials (url)",
+# and a GraphQL lookup of something absent as "GraphQL: Could not resolve
+# to ...". GitHub answers a rate limit with a 403 that names it, so that
+# 403 is transient.
+gh_err_permanent() {
+  grep -qi 'rate limit' "$GH_ERR" && return 1
+  grep -qE '\(HTTP (401|403|404|422)\)|^HTTP (401|403|404|422):|^GraphQL: Could not resolve to ' "$GH_ERR"
+}
 # Run one forge read, keeping its stderr only when it fails, so a warning
 # from a read that worked can't attach to a later failure. GH_DEBUG is set
 # empty, not unset: gh falls back to the legacy DEBUG variable when
 # GH_DEBUG is unset, and debug output carries headers and response bodies.
+# A transient failure (a timeout, a dropped connection, truncated JSON, a
+# 5xx, a rate limit) is retried after 1 s and then 2 s, so one blip
+# doesn't end a batch; a permanent one fails at once. Each attempt
+# overwrites GH_ERR, so lookup_failed quotes the last. A caller that
+# already polls sets GH_READ_ATTEMPTS=1. Writes never come through here.
+GH_READ_ATTEMPTS=3
 gh_read() {
-  GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" 2>"$GH_ERR" || return
-  : > "$GH_ERR"
+  local attempt=1 rc line
+  while :; do
+    GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" >"$GH_OUT" 2>"$GH_ERR" \
+      && { : > "$GH_ERR"; cat -- "$GH_OUT"; return; }
+    rc=$?
+    { [ "$attempt" -lt "$GH_READ_ATTEMPTS" ] && ! gh_err_permanent; } || return "$rc"
+    line=$(tr -d '\0' < "$GH_ERR" | head -n 1 | head -c 300)
+    echo "${0##*/}: forge read failed (attempt $attempt of $GH_READ_ATTEMPTS): ${line:-gh exited $rc}; retrying in ${attempt}s" >&2
+    sleep "$attempt"
+    attempt=$((attempt + 1))
+  done
 }
 
 # Percent-encode one URL path segment or query value. Forge-sourced branch
@@ -1078,12 +1106,17 @@ forge_base_tip() { # sets FORGE_BASE_TIP to the forge's current tip of $BASE
 # missing, and CI_DETAIL to what is not green. Only success, neutral, and
 # skipped pass; every other conclusion (cancelled, timed_out,
 # action_required, stale) fails. No check run and no commit status is
-# missing, never green: CI that has not reported has not passed.
+# missing, never green: CI that has not reported has not passed. A failed
+# read sets CI_STATE to unread, CI_WHAT to the read that failed, and
+# CI_DETAIL to why, then returns 1; the caller decides whether to poll
+# again.
 ci_read() { # ci_read <oid>
   local oid="$1" runs status st concl name total=0 bad="" waiting="" s_state s_total
-  runs=$(gh_read api --paginate "repos/$REPO/commits/$oid/check-runs?per_page=100" \
-    --jq '.check_runs[] | [.status, (.conclusion // "none"), .name] | @tsv') \
-    || lookup_failed check-runs "could not read check runs for $oid"
+  if ! runs=$(gh_read api --paginate "repos/$REPO/commits/$oid/check-runs?per_page=100" \
+    --jq '.check_runs[] | [.status, (.conclusion // "none"), .name] | @tsv'); then
+    CI_STATE=unread CI_WHAT=check-runs CI_DETAIL="could not read check runs for $oid"
+    return 1
+  fi
   while IFS=$'\t' read -r st concl name; do
     [ -n "$st" ] || continue
     total=$((total + 1))
@@ -1096,9 +1129,11 @@ ci_read() { # ci_read <oid>
       esac
     fi
   done <<< "$runs"
-  status=$(gh_read api "repos/$REPO/commits/$oid/status" \
-    --jq '[.state, (.total_count|tostring)] | @tsv') \
-    || lookup_failed commit-status "could not read the combined status for $oid"
+  if ! status=$(gh_read api "repos/$REPO/commits/$oid/status" \
+    --jq '[.state, (.total_count|tostring)] | @tsv'); then
+    CI_STATE=unread CI_WHAT=commit-status CI_DETAIL="could not read the combined status for $oid"
+    return 1
+  fi
   IFS=$'\t' read -r s_state s_total <<< "$status"
   case "$s_total" in ''|*[!0-9]*)
     lookup_failed commit-status "unparseable status count for $oid: $s_total" ;;
@@ -1122,10 +1157,21 @@ ci_read() { # ci_read <oid>
 }
 
 ci_wait() { # ci_wait <oid>: returns only once CI passed on <oid>
-  local oid="$1" deadline remaining sleep_for seen_passing=""
+  local oid="$1" deadline remaining sleep_for seen_passing="" failed_polls=0
   deadline=$(( SECONDS + CI_CAP_MINUTES * 60 ))
   while :; do
-    ci_read "$oid"
+    # The poll loop is the retry and --interval its backoff, so each poll
+    # reads once. A failed poll is no read: it resets the green count below.
+    # A permanent failure, or three failed polls in a row, ends the wait.
+    if GH_READ_ATTEMPTS=1 ci_read "$oid"; then
+      failed_polls=0
+    else
+      ! gh_err_permanent || lookup_failed "$CI_WHAT" "$CI_DETAIL"
+      failed_polls=$((failed_polls + 1))
+      [ "$failed_polls" -lt 3 ] \
+        || lookup_failed "$CI_WHAT" "$CI_DETAIL; 3 CI polls in a row failed"
+      echo "land.sh: CI poll failed ($failed_polls of 3 in a row): $CI_DETAIL" >&2
+    fi
     [ "$CI_STATE" != failed ] \
       || stop checks-failed "CI failed on $oid: $CI_DETAIL; fix the branch, then run check and land again"
     # Workflows register their checks asynchronously after a push, so one
@@ -1140,6 +1186,8 @@ ci_wait() { # ci_wait <oid>: returns only once CI passed on <oid>
     fi
     remaining=$(( deadline - SECONDS ))
     if [ "$remaining" -le 0 ]; then
+      [ "$CI_STATE" != unread ] \
+        || lookup_failed "$CI_WHAT" "$CI_DETAIL; the last CI poll before the $CI_CAP_MINUTES-minute cap failed"
       [ "$CI_STATE" != passed ] \
         || stop checks-pending "CI on $oid read green only once before the $CI_CAP_MINUTES-minute cap, so a slower check may not have registered yet; rerun land to confirm it"
       [ "$CI_STATE" != pending ] \
@@ -1225,8 +1273,9 @@ land_rebase() {
     rm -rf -- "$LAND_TMP_WT"; LAND_TMP_WT=""
     lookup_failed rebase "could not add a temporary worktree at $HEAD_OID"
   fi
-  # This replaces the startup EXIT trap, so it keeps removing GH_ERR too.
-  trap 'remove_land_worktree; rm -f -- "$GH_ERR"' EXIT
+  # This replaces the startup EXIT trap, so it keeps removing GH_ERR and
+  # GH_OUT too.
+  trap 'remove_land_worktree; rm -f -- "$GH_ERR" "$GH_OUT"' EXIT
   err=$(mktemp) || lookup_failed rebase "mktemp failed"
   # Pin the settings that would let a rebase touch more than this commit:
   # autostash stashes and reapplies work, and updateRefs moves branches.
@@ -1313,7 +1362,7 @@ land_await_forge_head() {
 # first; stderr carries all three results either way.
 land_dry_run() { # land_dry_run <on-tip>
   local on_tip="$1" tip_msg ci_msg base_msg summary
-  ci_read "$HEAD_OID"
+  ci_read "$HEAD_OID" || lookup_failed "$CI_WHAT" "$CI_DETAIL"
   forge_base_tip
   if [ "$on_tip" = true ]; then
     tip_msg="head $HEAD_OID contains the fetched $BASE tip $LAND_TIP"
@@ -1500,7 +1549,9 @@ phase_merge() {
   local deadline state merged_at remaining sleep_for
   deadline=$(( SECONDS + CAP_MINUTES * 60 ))
   while :; do
-    if pr_fields=$(gh_read pr view "$PR" --repo="$REPO" --json state,mergedAt \
+    # One attempt per poll: the loop already retries, and a failed poll's
+    # stderr stays for the deadline's excerpt.
+    if pr_fields=$(GH_READ_ATTEMPTS=1 gh_read pr view "$PR" --repo="$REPO" --json state,mergedAt \
         --jq '[.state,(.mergedAt // "null")] | @tsv'); then
       IFS=$'\t' read -r state merged_at <<< "$pr_fields"
       if [ "$state" = MERGED ] && [ "$merged_at" != null ]; then

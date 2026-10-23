@@ -220,12 +220,24 @@ elif [ "$sub" = pr ] && [ "$verb" = list ]; then
   # A one-shot action between the script's lock read and its push.
   if [ -f "$FIX/on-list" ]; then sh "$FIX/on-list" >/dev/null 2>&1; rm -f "$FIX/on-list"; fi
 fi
+# A fail-* file fails each call whose API path or verb contains its first line, as
+# real gh reports a failure: the message on stderr, exit 1. An optional
+# second line fails only that many matching calls, counted down in a
+# .left file, and then the call is served as usual.
 for f in "$FIX"/fail-*; do
   [ -e "$f" ] || continue
-  case "$api$verb" in *"$(cat "$f")"*)
-    [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
-    exit 1 ;;
-  esac
+  case "$f" in *.left) continue ;; esac
+  pat='' times=''
+  { IFS= read -r pat; IFS= read -r times; } < "$f"
+  case "$api$verb" in *"$pat"*) ;; *) continue ;; esac
+  if [ -n "$times" ]; then
+    [ -f "$f.left" ] || echo "$times" > "$f.left"
+    left=$(cat "$f.left")
+    [ "$left" -gt 0 ] || continue
+    echo $((left - 1)) > "$f.left"
+  fi
+  [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
+  exit 1
 done
 if [ -z "$fixture" ]; then exit 1; fi
 if [ ! -f "$fixture" ]; then
@@ -319,6 +331,13 @@ lr() { # lr <args...>: run from the work clone with the fixture shim
   LAST=$(tail -n 1 "$TMP/out")
   JSON="${LAST#* }"; JSON="${JSON#* }"
 }
+expect_calls() { # expect_calls <count> <text> <desc>: exactly <count> gh calls contained <text>
+  local n
+  n=$(grep -cF -- "$2" "$FIX/calls.log" 2>/dev/null)
+  if [ "${n:-0}" -eq "$1" ]; then ok; else bad "$3: ${n:-0} gh calls contained '$2', want $1"; fi
+}
+expect_err() { if grep -qF -- "$1" "$TMP/err"; then ok; else bad "$2: script stderr lacks '$1'"; fi; }
+expect_no_err() { if grep -qF -- "$1" "$TMP/err"; then bad "$2: script stderr has '$1'"; else ok; fi; }
 expect_stderr() { # expect_stderr <text> <desc>
   if [ "$(printf '%s' "$JSON" | jq -j '.stderr // empty' 2>/dev/null)" = "$1" ]; then ok
   else bad "$2: stderr is not '$1': $LAST"; fi
@@ -852,6 +871,18 @@ if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED timeline "* ]]; then ok; else
 expect_stderr 'gh: Service Unavailable (HTTP 503)' "a timeline read failure quotes gh's error"
 case "$LAST" in *SECRET-313*) bad "a GH_DEBUG header reached the excerpt: $LAST" ;; *) ok ;; esac
 expect_remote_lock absent "a read failure takes no lock"
+expect_calls 3 timeline "a timeline read that keeps failing with a 503 stops after three attempts"
+expect_err 'list-ready.sh: forge read failed (attempt 2 of 3): gh: Service Unavailable (HTTP 503); retrying in 2s' "each retry is logged"
+expect_no_err SECRET-313 "a GH_DEBUG header never reaches the retry line"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+printf 'timeline\n2\n' > "$FIX/fail-timeline"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+lr --run r1
+expect_ready 1 "a timeline read that fails twice with a 503 then works"
+expect_calls 3 timeline "the timeline read took three attempts"
+expect_err 'list-ready.sh: forge read failed (attempt 1 of 3): gh: Service Unavailable (HTTP 503); retrying in 1s' "the first retry is logged"
 
 new_repo
 ready_pr 1 feat/one "$H1"
@@ -860,6 +891,8 @@ printf 'gh: Not Found (HTTP 404)\n' > "$FIX/gh-stderr"
 GH_DEBUG=api lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED permission "* ]]; then ok; else bad "a permission read failure is LOOKUP_FAILED: $LAST"; fi
 expect_stderr 'gh: Not Found (HTTP 404)' "a permission read failure quotes gh's error"
+expect_calls 1 collaborators/ "a 404 is not retried"
+expect_no_err 'forge read failed' "a 404 logs no retry"
 case "$LAST" in *SECRET-313*) bad "a GH_DEBUG header reached the permission excerpt: $LAST" ;; *) ok ;; esac
 
 new_repo
@@ -870,6 +903,7 @@ echo 'GraphQL: API rate limit exceeded' > "$FIX/gh-stderr"
 lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED review-threads "* ]]; then ok; else bad "a thread read failure is LOOKUP_FAILED: $LAST"; fi
 expect_stderr 'GraphQL: API rate limit exceeded' "a thread read failure quotes gh's error"
+expect_err 'forge read failed (attempt 2 of 3): GraphQL: API rate limit exceeded' "a rate limit is retried"
 expect_remote_lock r1 "a read failure mid-batch neither releases nor moves the lock"
 
 new_repo
@@ -887,6 +921,7 @@ echo 'gh: Bad credentials (HTTP 401)' > "$FIX/gh-stderr"
 lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED pr-list "* ]]; then ok; else bad "a PR-list failure is LOOKUP_FAILED, not an empty list: $LAST"; fi
 expect_stderr 'gh: Bad credentials (HTTP 401)' "a PR-list failure quotes gh's error"
+expect_calls 1 'pr list' "a 401 is not retried"
 expect_remote_lock absent "a failed listing never reads as empty"
 
 # A lookup failure after reads that worked carries no excerpt, even though

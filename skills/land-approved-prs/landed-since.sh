@@ -111,18 +111,46 @@ lookup_failed() {
 
 # Forge reads keep gh's stderr here so lookup_failed can quote why a read
 # failed. head, not tail: gh's summary line comes first, before any body.
+# GH_OUT holds one attempt's output, so a retry never follows a failed
+# attempt's partial output (a page of a paginated read, an error body).
 GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
-trap 'rm -f -- "$GH_ERR"' EXIT
+GH_OUT=$(mktemp) || { rm -f -- "$GH_ERR"; lookup_failed tmp "mktemp failed"; }
+trap 'rm -f -- "$GH_ERR" "$GH_OUT"' EXIT
 # Go's http2debug trace prints the Authorization header unredacted. Drop
 # that one setting and keep any other GODEBUG setting gh may rely on.
 GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)http2debug=[^,]*//g; s/^,//')
+# Is the failure in GH_ERR an answer rather than a blip? gh exits 1 for
+# every failure and names the HTTP status only in its stderr: gh api as
+# "gh: Not Found (HTTP 404)", gh pr as "HTTP 401: Bad credentials (url)",
+# and a GraphQL lookup of something absent as "GraphQL: Could not resolve
+# to ...". GitHub answers a rate limit with a 403 that names it, so that
+# 403 is transient.
+gh_err_permanent() {
+  grep -qi 'rate limit' "$GH_ERR" && return 1
+  grep -qE '\(HTTP (401|403|404|422)\)|^HTTP (401|403|404|422):|^GraphQL: Could not resolve to ' "$GH_ERR"
+}
 # Run one forge read, keeping its stderr only when it fails, so a warning
 # from a read that worked can't attach to a later failure. GH_DEBUG is set
 # empty, not unset: gh falls back to the legacy DEBUG variable when
 # GH_DEBUG is unset, and debug output carries headers and response bodies.
+# A transient failure (a timeout, a dropped connection, truncated JSON, a
+# 5xx, a rate limit) is retried after 1 s and then 2 s, so one blip
+# doesn't end a batch; a permanent one fails at once. Each attempt
+# overwrites GH_ERR, so lookup_failed quotes the last. A caller that
+# already polls sets GH_READ_ATTEMPTS=1. Writes never come through here.
+GH_READ_ATTEMPTS=3
 gh_read() {
-  GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" 2>"$GH_ERR" || return
-  : > "$GH_ERR"
+  local attempt=1 rc line
+  while :; do
+    GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" >"$GH_OUT" 2>"$GH_ERR" \
+      && { : > "$GH_ERR"; cat -- "$GH_OUT"; return; }
+    rc=$?
+    { [ "$attempt" -lt "$GH_READ_ATTEMPTS" ] && ! gh_err_permanent; } || return "$rc"
+    line=$(tr -d '\0' < "$GH_ERR" | head -n 1 | head -c 300)
+    echo "${0##*/}: forge read failed (attempt $attempt of $GH_READ_ATTEMPTS): ${line:-gh exited $rc}; retrying in ${attempt}s" >&2
+    sleep "$attempt"
+    attempt=$((attempt + 1))
+  done
 }
 
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) \
