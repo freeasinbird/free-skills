@@ -227,26 +227,36 @@ follow this full sequence:
    Do not leave duplicate watchers running.
 
 3. **Validate against the current base.** Resolve the latest base tip and
-   refresh the PR branch from it, preferring rebase so `git range-diff`
-   applies. Push the refreshed branch so the required checks run on it, and
-   self-review the refreshed full diff.
+   check that the PR merges cleanly into it, with the project's merge-result
+   audit when it has one, else `git merge-tree --write-tree`, which builds the
+   merge without a checkout. Record the tip you checked in the handoff, not
+   the PR body.
 
-   After a rebase that conflicted, run `git range-diff` between the branch
-   before and after the rebase. Record what the resolution changed in the PR's
-   Verification section.
+   The landing check decides whether you also refresh the branch:
 
-   Record the base commit in the handoff, not the PR body.
-   If the base moves before approval, the landing check decides who refreshes.
-   A merge queue or land command tests the PR combined with the tip it selects
-   and reruns CI there, so leave the PR waiting. Refresh only when the lander
-   hands it back (a merge queue does so by removing it) or the owner asks. With
-   only a required check that must pass on the branch updated to the tip (on
-   GitHub, the up-to-date rule), nobody else pushes that update, so refresh
-   again and the check reruns on the push.
+   - **A merge queue or land command** tests the PR combined with the tip it
+     selects and reruns CI there, so it integrates the PR with the tip itself.
+     Refresh before handoff only when your merge check finds a conflict, or a
+     change on the base needs a fix in this PR. Otherwise hand the PR off
+     behind the tip: a refresh adds a CI run and a review restart and saves
+     the lander no work. If the base moves before your step 7 report, check
+     again and refresh only for the same reasons. After handoff, leave the PR
+     waiting. Refresh only when the lander hands it back (a merge queue does
+     so by removing it) or the owner asks.
+   - **Only a required check that must pass on the branch updated to the
+     tip** (on GitHub, the up-to-date rule): nobody else pushes that update,
+     so refresh before handoff and again whenever the base moves before
+     approval. The check reruns on each push.
+   - **No landing check:** refresh before handoff, and repeat the integration
+     pass by hand whenever the base moves.
 
-   Don't repeat CI by hand; read `git range-diff` only when a rebase conflicts.
-   A project without a landing check needs another integration pass by hand.
-   After approval, step 7 applies, and whoever lands the PR updates the branch.
+   Refresh from the tip, preferring rebase so `git range-diff` applies. Push
+   the refreshed branch so the required checks run on it. After a rebase that
+   conflicted, run `git range-diff` between the branch before and after the
+   rebase, and record what the resolution changed in the PR's Verification
+   section. Don't repeat CI by hand; read `git range-diff` only when a rebase
+   conflicts. After approval, step 7 applies, and whoever lands the PR updates
+   the branch.
 
    A landing check reruns CI, not review. A clean rebase can still change the
    diff, for example by following an upstream rename. When you push a refresh,
@@ -254,8 +264,8 @@ follow this full sequence:
    without one, self-review the refreshed diff. Either way, the push restarts
    any review watch (step 2), and handoff waits for it to close (step 6).
 
-   If you can't update the branch, report that it's stale. Do not rewrite a
-   branch you don't own.
+   If a refresh is needed and you can't update the branch, report that it's
+   stale. Do not rewrite a branch you don't own.
 
 4. **Wait for required checks.** Poll until they finish. On GitHub, use
    `gh pr checks <n>`. Fix red checks on the branch. Never hand off a known-red
@@ -278,7 +288,7 @@ follow this full sequence:
    no headings or tables. Aim for 60 to 120 words. Omit a part only where its
    rule says so.
 
-   1. **Status.** One line: the PR link once, the base commit from step 3,
+   1. **Status.** One line: the PR link once, the tip step 3 checked,
       then "open and green, ready to merge." When it isn't, say what is red
       or conflicting and what you are doing about it; never present a red or
       conflicting PR as ready. Name any open sibling PR that touches the same
