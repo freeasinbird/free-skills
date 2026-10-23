@@ -106,10 +106,13 @@ follow this full sequence:
    rule says so.
 
    1. **Status.** One line: the PR link once, the tip step 3 checked,
-      then "open and green, ready to merge." When it isn't, say what is red
-      or conflicting and what you are doing about it; never present a red or
-      conflicting PR as ready. Name any open sibling PR that touches the same
-      files, and the landing order. For a stack, write one Status line per PR.
+      then "open and green, ready to merge." For a PR you handed off behind
+      the tip under step 3, write "open and green, behind the tip, waiting for
+      the lander" instead; §merge-and-resync covers a direct merge. When it
+      isn't green, say what is red or conflicting and what you are doing about
+      it; never present a red or conflicting PR as ready. Name any open sibling
+      PR that touches the same files, and the landing order. For a stack,
+      write one Status line per PR.
    2. **Result.** One or two sentences on what the change does once merged, in
       behavior terms. List no files, commits, or "what changed" bullets; the
       PR body carries them.
@@ -143,7 +146,8 @@ follow this full sequence:
      one only for a "Left for you" item that is a task of its own.
 
    Once the approver approves the PR to land, stop pushing to it unless you
-   are the landing batch, which records each push it makes. A landing batch
+   are the landing batch, which records each push it makes, or the user asked
+   you to merge it directly (§merge-and-resync step 1). A landing batch
    merges the head the approval covered, and a push it didn't record keeps the
    PR from landing until the approver approves again. Freeze the PR too when
    the approver only says it's approved, even though only the landing
@@ -156,7 +160,26 @@ follow this full sequence:
 
 Run this procedure only when the user asks you to merge.
 
-1. **Create a real merge commit.** On GitHub, run:
+1. **Check that the forge will accept the merge.** On GitHub, run:
+
+   ```sh
+   gh pr view <n> --json mergeStateStatus --jq .mergeStateStatus
+   ```
+
+   `BEHIND` means the up-to-date rule refuses the merge until the branch
+   contains the tip. `DIRTY` means the branch conflicts with the tip. In
+   either case, refresh from the tip and push as §handing-off step 3
+   describes, and wait for the required checks as its step 4 describes. If
+   the rebase conflicted, report what the resolution changed and wait for the
+   user to confirm it: they asked to merge the PR they saw, not your
+   resolution. Then repeat this step. `UNKNOWN` means the forge is still
+   computing the state; run the command again. Any other state continues to
+   step 2.
+
+   A direct merge request makes you the lander for this PR, so the freeze at
+   the end of §handing-off step 7 doesn't stop this refresh.
+
+2. **Create a real merge commit.** On GitHub, run:
 
    ```sh
    gh pr merge <n> --merge
@@ -169,11 +192,11 @@ Run this procedure only when the user asks you to merge.
    gh pr merge <n> --merge --subject '<PR title> (#<n>)' --body ''
    ```
 
-2. **Choose the checkout that owns the base branch.** If the feature branch
+3. **Choose the checkout that owns the base branch.** If the feature branch
    uses a worktree, resync `main` in the primary checkout. A second worktree
    can't check out a branch already used by the first.
 
-3. **Fetch before landing on the base branch.** Run:
+4. **Fetch before landing on the base branch.** Run:
 
    ```sh
    git fetch <remote> refs/heads/main
@@ -200,7 +223,7 @@ Run this procedure only when the user asks you to merge.
    Do not use a bare checkout for this case. A same-named tag could leave
    `HEAD` detached.
 
-4. **Validate the remote after landing.** Resolve the base remote again under
+5. **Validate the remote after landing.** Resolve the base remote again under
    the configuration now in effect. Confirm its URL still points to the merged
    PR's base repository.
 
@@ -214,7 +237,7 @@ Run this procedure only when the user asks you to merge.
 
    Do not keep a pre-landing upstream or leave the new branch untracked.
 
-5. **Fetch into the remote-tracking branch and fast-forward.** Run:
+6. **Fetch into the remote-tracking branch and fast-forward.** Run:
 
    ```sh
    git fetch <remote> refs/heads/main:refs/remotes/<remote>/main
@@ -226,7 +249,7 @@ Run this procedure only when the user asks you to merge.
    Pull also can't pass `--no-overwrite-ignore`. In a fork, a bare pull may
    follow the fork's stale copy instead of the base repository.
 
-6. **Remove a feature worktree safely.** From the primary checkout, run:
+7. **Remove a feature worktree safely.** From the primary checkout, run:
 
    ```sh
    git worktree remove <path>
@@ -236,7 +259,7 @@ Run this procedure only when the user asks you to merge.
    unlink the current directory and still exit successfully, breaking every
    later command.
 
-7. **Clean up branches and refs.** Delete the remote feature branch if the
+8. **Clean up branches and refs.** Delete the remote feature branch if the
    forge didn't auto-delete it. Delete the local branch with
    `git branch -d <branch>`. Finish with `git fetch --prune`.
 
