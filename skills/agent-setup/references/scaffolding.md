@@ -196,16 +196,19 @@ follow this full sequence:
    or observed automated reviewer before waiting for checks. This prevents the
    checks wait from delaying review.
 
-   When the project's reviewer record is `none` (§reviewer-record), start no
-   watch, so steps 2 and 6 have none to anchor or close. Don't scan past PRs
-   for a reviewer; the human reviewer reviews at handoff.
+   First check whether a review-watch skill is installed, such as
+   `await-pr-review`: list the available skills or look in the platform's
+   skill directories. Check even when you recall none; a skill listing shown
+   at session start can drop out of context once the session is condensed.
+   When one exists, invoke it when the PR opens and after each push it didn't
+   make, whatever the reviewer record says. Let it own the review watch and
+   the checks wait, even when the host offers its own PR or CI monitor. Under
+   a `none` record it waits on CI only.
 
-   Before choosing a method, check whether a review-watch skill is installed,
-   such as `await-pr-review`: list the available skills or look in the
-   platform's skill directories. Check even when you recall none; a skill
-   listing shown at session start can drop out of context once the session is
-   condensed. When one exists, invoke it and let it own the review watch, even
-   when the host offers its own PR or CI monitor.
+   Without such a skill, when the project's reviewer record is `none`
+   (§reviewer-record), start no review watch, so steps 2 and 6 have none to
+   anchor or close; step 4 still applies. Don't scan past PRs for a reviewer;
+   the human reviewer reviews at handoff.
 
    Otherwise, prefer a tool or automation that reports back without manual
    polling, then a permitted background poll or scheduled wake-up when the
@@ -267,9 +270,13 @@ follow this full sequence:
    If a refresh is needed and you can't update the branch, report that it's
    stale. Do not rewrite a branch you don't own.
 
-4. **Wait for required checks.** Poll until they finish. On GitHub, use
-   `gh pr checks <n>`. Fix red checks on the branch. Never hand off a known-red
-   PR.
+4. **Wait for required checks.** Wait until they finish, under any reviewer
+   record. Use the review-watch skill's checks wait when step 1 invoked one.
+   Otherwise use the host's CI monitor when it re-enters you on completion,
+   else a background or bounded foreground wait; on GitHub,
+   `gh pr checks <n> --watch`. Never call a PR with pending checks ready; if
+   no wait fits the turn, report the checks pending in step 7's Status. Fix
+   red checks on the branch. Never hand off a known-red PR.
 
 5. **Self-review the full diff.** Apply the self-review rule under Pull
    requests so the change is ready for another reviewer.
@@ -610,7 +617,8 @@ A `none` record differs from having no record:
 
 - **No record:** detect a reviewer, watch for it, and record it once observed.
 - **A `none` record:** start no review watch and don't scan past PRs for a
-  reviewer. Don't record a reviewer seen on older PRs or a manual run; tell
+  reviewer, but still invoke an installed review-watch skill, which then
+  waits on CI only (§handing-off step 1). Don't record a reviewer seen on older PRs or a manual run; tell
   the owner instead. The human reviewer reviews at handoff.
 
 ## pr-body
