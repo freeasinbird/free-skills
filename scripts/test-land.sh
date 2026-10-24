@@ -124,11 +124,33 @@ else
   cat <<'SHIMEOF'
 echo "$*" >> "$FIX/calls.log"
 # Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
-# Go under GODEBUG=http2debug, write request headers to stderr on every call.
+# Go whenever GODEBUG contains http2debug=1 or =2, write request headers to
+# stderr on every call.
 if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
-   || [[ ",${GODEBUG:-}," == *,http2debug=* ]]; then
+   || [[ "${GODEBUG:-}" == *http2debug=[12]* ]]; then
   echo "> Authorization: token SECRET-313" >&2
 fi
+# A fail-* file fails each call whose arguments contain its first line, as
+# real gh reports a failure: the message on stderr, exit 1. An optional
+# second line fails only that many matching calls, and an optional third
+# line serves that many matching calls first; a .left file counts both
+# down, and every other matching call is served as usual.
+for f in "$FIX"/fail-*; do
+  [ -e "$f" ] || continue
+  case "$f" in *.left) continue ;; esac
+  pat='' times='' after=''
+  { IFS= read -r pat; IFS= read -r times; IFS= read -r after; } < "$f"
+  case "$*" in *"$pat"*) ;; *) continue ;; esac
+  if [ -n "$times" ]; then
+    [ -f "$f.left" ] || echo "${after:-0} $times" > "$f.left"
+    read -r skip left < "$f.left"
+    if [ "$skip" -gt 0 ]; then echo "$((skip - 1)) $left" > "$f.left"; continue; fi
+    [ "$left" -gt 0 ] || continue
+    echo "0 $((left - 1))" > "$f.left"
+  fi
+  [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
+  exit 1
+done
 jsonval='' jqval='' prev='' sub='' api='' paginate=''
 for a in "$@"; do
   case "$prev" in
@@ -214,8 +236,14 @@ if [ -n "$jqval" ]; then
   if [ -n "$paginate" ] \
      && [ "$fixture" = "$FIX/rules.json" ] \
      && [ -f "$FIX/rules-page2-fail" ]; then
-    jq -r "$jqval" "$fixture"
-    exit 1
+    # Page 1's output, then a failure, as gh --paginate streams it. A count
+    # in the file fails only that many reads.
+    left=$(cat "$FIX/rules-page2-fail")
+    if [ -z "$left" ] || [ "$left" -gt 0 ]; then
+      [ -z "$left" ] || echo $((left - 1)) > "$FIX/rules-page2-fail"
+      jq -r "$jqval" "$fixture"
+      exit 1
+    fi
   fi
   if [ -n "$paginate" ] \
      && [ "$fixture" = "$FIX/rules.json" ] \
@@ -234,7 +262,7 @@ scenario() {
   SCENARIO="$1"
   rm -f "$FIX"/*.json "$FIX"/calls.log "$FIX"/merge-rc \
     "$FIX"/repo-read-once "$FIX"/rules-page2-fail "$FIX"/live-remote \
-    "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr
+    "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr "$FIX"/fail-*
   SCEN="$TMP/scen-$((pass + fail))"
   mkdir -p "$SCEN"
 }
@@ -264,6 +292,12 @@ want_no_call() {
     bad "a gh call contained '$1'"
   else ok; fi
 }
+want_calls() { # want_calls <count> <text>: exactly <count> gh calls contained <text>
+  local n
+  n=$(grep -cF -- "$2" "$FIX/calls.log" 2>/dev/null)
+  [ "${n:-0}" -eq "$1" ] && ok || bad "${n:-0} gh calls contained '$2', want $1"
+}
+want_no_err() { grep -qF -- "$1" "$FIX/stderr" && bad "stderr has '$1'" || ok; }
 
 # pr_full <state> <head> <base> <headOid> <fork> <owner> <name>
 # The url's host is what remote auto-resolution matches; .invalid is the
@@ -576,6 +610,17 @@ run_sm "${CHECK[@]}"
 want_rc 4
 want_out 'LOOKUP_FAILED queue-rules'
 
+# A retried paginated read must not repeat the failed attempt's first page:
+# two copies of one queue rule would read as ambiguous.
+scenario "a retried rules read keeps only the attempt that worked"
+std_setup; std_fixtures
+rules_fx '[{"type":"merge_queue","parameters":{"merge_method":"SQUASH"}}]'
+echo 1 > "$FIX/rules-page2-fail"
+run_sm "${CHECK[@]}"
+want_rc 2
+want_out 'integrates by SQUASH'
+want_calls 2 '/rules/branches/'
+
 scenario "unidentifiable queue shape stops rather than guessing"
 std_setup; std_fixtures
 rules_fx '[{"type":"merge_queue","parameters":{"strategy":"who-knows"}}]'
@@ -596,6 +641,7 @@ plan_gated_fx
 run_sm "${CHECK[@]}"
 want_rc 0
 want_out '"queue":"absent"'
+want_calls 1 '/rules/branches/'
 
 scenario "a 403 with another message is unknown, not queue-free"
 std_setup; std_fixtures
@@ -1031,6 +1077,8 @@ run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID" --cap-minutes 0 --inte
 want_rc 4
 want_out 'LOOKUP_FAILED merge-pending'
 want_out '"stderr":"gh: Bad Gateway (HTTP 502)"}'
+want_calls 1 'state,mergedAt'
+want_no_err 'forge read failed'
 
 # ---- land phase ----
 
@@ -1300,6 +1348,139 @@ want_out '"stderr":"gh: \"quoted\" failure\nline two 000'
 got=$(printf '%s' "${OUT#*LOOKUP_FAILED check-runs }" | jq -j .stderr 2>/dev/null)
 if [ "$got" = "$(head -c 300 "$FIX/gh-stderr")" ]; then ok
 else bad "stderr is not the first 300 bytes of gh's error output (got ${#got} chars)"; fi
+
+# ---- transient read retries ----
+
+# Every forge read retries a transient failure up to three attempts; the
+# first PR read stands in for them all.
+PR_READ=headRepositoryOwner
+
+scenario "a forge read that fails twice with a 503 then works"
+std_setup; std_fixtures
+printf '%s\n2\n' "$PR_READ" > "$FIX/fail-pr"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+run_sm "${CHECK[@]}"
+want_rc 0
+want_out 'OK check'
+want_calls 3 "$PR_READ"
+want_err 'land.sh: forge read failed (attempt 1 of 3): gh: Service Unavailable (HTTP 503); retrying in 1s'
+want_err 'land.sh: forge read failed (attempt 2 of 3): gh: Service Unavailable (HTTP 503); retrying in 2s'
+
+scenario "a forge read that keeps failing with a 503 stops after three attempts"
+std_setup; std_fixtures
+echo "$PR_READ" > "$FIX/fail-pr"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED pr-view'
+want_out '"stderr":"gh: Service Unavailable (HTTP 503)"}'
+want_calls 3 "$PR_READ"
+
+# gh api, gh pr, and a GraphQL lookup each word a permanent failure their
+# own way; captured from gh 2.99.0 on 2026-10-23.
+for answer in 'gh: Not Found (HTTP 404)' 'gh: Bad credentials (HTTP 401)' \
+  'gh: Validation Failed (HTTP 422)' \
+  'HTTP 401: Bad credentials (https://api.github.com/graphql)' \
+  'GraphQL: Could not resolve to a PullRequest with the number of 83. (repository.pullRequest)'; do
+  scenario "a forge read answered with '$answer' fails without a retry"
+  std_setup; std_fixtures
+  echo "$PR_READ" > "$FIX/fail-pr"
+  echo "$answer" > "$FIX/gh-stderr"
+  run_sm "${CHECK[@]}"
+  want_rc 4
+  want_out 'LOOKUP_FAILED pr-view'
+  want_calls 1 "$PR_READ"
+  want_no_err 'forge read failed'
+done
+
+scenario "a 403 that names a rate limit is retried"
+std_setup; std_fixtures
+echo "$PR_READ" > "$FIX/fail-pr"
+echo 'gh: API rate limit exceeded for user ID 1. (HTTP 403)' > "$FIX/gh-stderr"
+run_sm "${CHECK[@]}"
+want_rc 4
+want_out 'LOOKUP_FAILED pr-view'
+want_calls 3 "$PR_READ"
+
+# The retry line quotes gh's stderr, so it gets the excerpt's guarantee:
+# with debug output asked for every way gh and Go read it, no header.
+for debug in GH_DEBUG=api DEBUG=api GODEBUG=netdns=go,http2debug=2 \
+  'GODEBUG=netdns=go, http2debug=1' GODEBUG=x=http2debug=2; do
+  scenario "a retried read under $debug logs no request header"
+  std_setup; std_fixtures
+  printf '%s\n1\n' "$PR_READ" > "$FIX/fail-pr"
+  echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+  unset GH_DEBUG DEBUG
+  export "$debug"
+  run_sm "${CHECK[@]}"
+  unset "${debug%%=*}"
+  want_rc 0
+  want_err 'forge read failed (attempt 1 of 3): gh: Service Unavailable (HTTP 503)'
+  want_no_err 'SECRET-313'
+done
+
+# A failed CI poll is no read: the poll loop retries it on --interval.
+scenario "a check-runs read that fails between green reads resets the green count"
+land_setup; land_fixtures
+printf 'check-runs\n1\n1\n' > "$FIX/fail-checks"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out 'OK land'
+want_calls 4 "commits/$FEAT_OID/check-runs"
+want_err 'land.sh: CI poll failed (1 of 3 in a row)'
+
+scenario "a commit-status read that fails once is polled again"
+land_setup; land_fixtures
+printf 'commits/%s/status\n1\n' "$FEAT_OID" > "$FIX/fail-status"
+echo 'gh: unexpected end of JSON input' > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out 'OK land'
+want_calls 3 "commits/$FEAT_OID/check-runs"
+
+scenario "three failed CI polls in a row end the wait"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+echo 'error connecting to api.github.com' > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED check-runs'
+want_out '3 CI polls in a row failed'
+want_out '"stderr":"error connecting to api.github.com'
+want_calls 3 "commits/$FEAT_OID/check-runs"
+want_no_err 'forge read failed'
+want_no_call 'pr merge'
+
+scenario "a 404 in the CI wait ends it at once"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+echo 'gh: Not Found (HTTP 404)' > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED check-runs'
+want_calls 1 "commits/$FEAT_OID/check-runs"
+want_no_call 'pr merge'
+
+scenario "a failed CI poll at the cap is a lookup failure, not pending"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID" --ci-cap-minutes 0
+want_rc 4
+want_out 'LOOKUP_FAILED check-runs'
+want_out 'the last CI poll before the 0-minute cap failed'
+want_calls 1 "commits/$FEAT_OID/check-runs"
+
+scenario "a dry run retries its CI read, then reports it unread"
+land_setup; land_fixtures
+rm -f "$FIX/checks.json"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID" --dry-run
+want_rc 4
+want_out 'LOOKUP_FAILED check-runs'
+want_out 'could not read check runs for'
+want_calls 3 "commits/$FEAT_OID/check-runs"
 
 scenario "a base that moved after the fetch stops land before the merge"
 land_setup; land_fixtures

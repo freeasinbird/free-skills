@@ -159,11 +159,31 @@ else
   cat <<'SHIMEOF'
 echo "$*" >> "$FIX/calls.log"
 # Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
-# Go under GODEBUG=http2debug, write request headers to stderr on every call.
+# Go whenever GODEBUG contains http2debug=1 or =2, write request headers to
+# stderr on every call.
 if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
-   || [[ ",${GODEBUG:-}," == *,http2debug=* ]]; then
+   || [[ "${GODEBUG:-}" == *http2debug=[12]* ]]; then
   echo "> Authorization: token SECRET-313" >&2
 fi
+# A fail-* file fails each call whose arguments contain its first line, as
+# real gh reports a failure: the message on stderr, exit 1. An optional
+# second line fails only that many matching calls, counted down in a
+# .left file, and then the call is served as usual.
+for f in "$FIX"/fail-*; do
+  [ -e "$f" ] || continue
+  case "$f" in *.left) continue ;; esac
+  pat='' times=''
+  { IFS= read -r pat; IFS= read -r times; } < "$f"
+  case "$*" in *"$pat"*) ;; *) continue ;; esac
+  if [ -n "$times" ]; then
+    [ -f "$f.left" ] || echo "$times" > "$f.left"
+    left=$(cat "$f.left")
+    [ "$left" -gt 0 ] || continue
+    echo $((left - 1)) > "$f.left"
+  fi
+  [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
+  exit 1
+done
 sub='' verb='' api='' jqval='' prev=''
 for a in "$@"; do
   case "$prev" in --jq) jqval="$a" ;; esac
@@ -241,6 +261,13 @@ expect_lookup() {
   case "$LAST" in "LOOKUP_FAILED $1 "*) [ "$RC" -eq 4 ] && { ok; return; } ;; esac
   bad "$2: want LOOKUP_FAILED $1, got exit $RC: $LAST"
 }
+expect_calls() { # expect_calls <count> <text> <desc>: exactly <count> gh calls contained <text>
+  local n
+  n=$(grep -cF -- "$2" "$FIX/calls.log" 2>/dev/null)
+  if [ "${n:-0}" -eq "$1" ]; then ok; else bad "$3: ${n:-0} gh calls contained '$2', want $1"; fi
+}
+expect_err() { if grep -qF -- "$1" "$TMP/err"; then ok; else bad "$2: script stderr lacks '$1'"; fi; }
+expect_no_err() { if grep -qF -- "$1" "$TMP/err"; then bad "$2: script stderr has '$1'"; else ok; fi; }
 expect_out() { if grep -qF -- "$1" "$TMP/out"; then ok; else bad "$2: output lacks '$1'"; fi; }
 expect_no_out() { if grep -qF -- "$1" "$TMP/out"; then bad "$2: output has '$1'"; else ok; fi; }
 
@@ -358,6 +385,36 @@ GH_DEBUG=api ls_run
 expect_lookup compare "a failed compare read is a lookup failure"
 expect_out '"stderr":"gh: Not Found (HTTP 404)"}' "a failed compare read quotes gh's error"
 expect_no_out SECRET-313 "a GH_DEBUG header never reaches the excerpt"
+expect_calls 1 /compare/ "a 404 is not retried"
+expect_no_err 'forge read failed' "a 404 logs no retry"
+
+new_repo
+force_pushed "$B1"
+pr_commit "$A1" "$C0"
+echo 'gh: Bad credentials (HTTP 401)' > "$FIX/gh-stderr"
+ls_run
+expect_lookup compare "a 401 compare read is a lookup failure"
+expect_calls 1 /compare/ "a 401 is not retried"
+
+new_repo
+pr_commit "$A1" "$C0"
+printf 'pulls/5/commits\n2\n' > "$FIX/fail-commits"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+GH_DEBUG=api ls_run
+if [ "$RC" -eq 0 ]; then ok; else bad "a commit-list read that fails twice with a 503 then works: exit $RC: $LAST"; fi
+expect_calls 3 pulls/5/commits "the commit-list read took three attempts"
+expect_err 'landed-since.sh: forge read failed (attempt 1 of 3): gh: Service Unavailable (HTTP 503); retrying in 1s' "the first retry is logged"
+expect_err 'landed-since.sh: forge read failed (attempt 2 of 3): gh: Service Unavailable (HTTP 503); retrying in 2s' "the second retry is logged"
+expect_no_err SECRET-313 "a GH_DEBUG header never reaches the retry line"
+
+new_repo
+pr_commit "$A1" "$C0"
+echo pulls/5/commits > "$FIX/fail-commits"
+echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
+ls_run
+expect_lookup pr-commits "a commit-list read that keeps failing is a lookup failure"
+expect_out '"stderr":"gh: Service Unavailable (HTTP 503)"}' "the excerpt quotes the last attempt"
+expect_calls 3 pulls/5/commits "a persistent 503 stops after three attempts"
 
 new_repo
 force_pushed "$B1"
