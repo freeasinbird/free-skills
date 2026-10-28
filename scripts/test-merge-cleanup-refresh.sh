@@ -40,6 +40,9 @@ want_out() { # want_out <expected-body-file>: stdout is the body exactly
 want_err() {
   case "$(cat "$ERR")" in *"$1"*) ok ;; *) bad "stderr lacks '$1': $(cat "$ERR")" ;; esac
 }
+startable_set() { # the startable text from the stderr status line
+  sed -n 's/.*; startable now \([^;]*\).*/\1/p' "$ERR"
+}
 want_call() {
   grep -qF -- "$1" "$FIX/calls.log" && ok || bad "no gh call matching '$1'"
 }
@@ -54,6 +57,7 @@ v() {
   [ "$RC" -eq "$want" ] && ok || bad "$desc: exit $RC, want $want"
 }
 v 4 "valid invocation reaches the forge" --repo "$REPO" --issue 1
+[ -s "$OUT" ] && bad "tracker read failure printed text" || ok
 v 64 "no arguments"
 v 64 "missing issue" --repo "$REPO"
 v 64 "missing repo" --issue 1
@@ -278,17 +282,19 @@ tracker "$TMP/bordered.md"
 run --repo "$REPO" --issue 1
 want_rc 0; want_out "$TMP/bordered.md"; want_err "i10 double-bordered but not merged"
 
-CASE="unparseable Dependencies entry stops and names the unit"
-tracker "$TMP/lane-open.md"; units $OPEN $OPEN $OPEN $OPEN $OPEN
+# #11 would be startable once #10 merges, so only the hold keeps it out.
+CASE="unparseable Dependencies entry holds the unit and names it"
+tracker "$TMP/lane-open.md"; units $MERGED $OPEN $OPEN $OPEN $OPEN
 issue acme/app 11 OPEN "" "$TMP/dep-bad.md"
 run --repo "$REPO" --issue 1
-want_rc 4; want_err "#11"
-[ -s "$OUT" ] && bad "printed text on failure" || ok
+lane_tracker 10 10 "$(SL fs5)" 'acme/tools#5' >"$TMP/want.md"
+want_rc 0; want_out "$TMP/want.md"
+want_err "left #11 held: cannot parse a Dependencies entry of #11: starts after #10"
 
-CASE="unparseable bold-lead Dependencies stops and names the unit"
+CASE="unparseable bold-lead Dependencies holds the unit and names it"
 issue acme/app 11 OPEN "" "$TMP/dep-bad-lead.md"
 run --repo "$REPO" --issue 1
-want_rc 4; want_err "Dependencies field of #11"
+want_rc 0; want_out "$TMP/want.md"; want_err "#11 held: cannot parse the Dependencies field of #11"
 
 CASE="a closed unit's Dependencies field is never read"
 units $DROPPED $MERGED $OPEN $OPEN $OPEN
@@ -298,33 +304,34 @@ lane_tracker 11 11 "$(SL fs5)" 'acme/tools#5' >"$TMP/want.md"
 want_rc 0; want_out "$TMP/want.md"
 
 # Dependencies shapes from the refute-first review. #13 waits on #11, which
-# is open, in every shape: the run must either stop or keep #13 off the
-# startable set. Dropping #11 would list #13 as startable.
+# is open, in every shape: the run must either hold #13 or keep it off the
+# startable set by its prerequisite. Dropping #11 would list #13 as startable.
 units $MERGED $OPEN $OPEN $OPEN $MERGED
-dep13() { # dep13 <want: stop|block> <desc> <body>
+lane_tracker '10 5' '10 5' "$(SL i11)" '#11 (spine)' >"$TMP/want13.md"
+dep13() { # dep13 <want: hold|block> <desc> <body>
   CASE="Dependencies shape ($2)"
   body d13 "$3"
   issue acme/app 13 OPEN "" "$TMP/d13.md"
   run --repo "$REPO" --issue 1
+  want_rc 0; want_out "$TMP/want13.md"
+  case "$(startable_set)" in *"#13"*) bad "#13 listed startable: $(cat "$ERR")" ;; *) ok ;; esac
   case "$1" in
-    stop) want_rc 4; want_err "#13" ;;
-    block)
-      want_rc 0
-      case "$(cat "$ERR")" in *"startable now"*"#13"*) bad "#13 listed startable: $(cat "$ERR")" ;; *) ok ;; esac ;;
+    hold) want_err "left #13 held: " ;;
+    block) case "$(cat "$ERR")" in *"#13 held"*) bad "#13 held: $(cat "$ERR")" ;; *) ok ;; esac ;;
   esac
 }
-dep13 stop "two bare references" $'### Dependencies\n\n- starts-after #10 #11\n'
-dep13 stop "or" $'### Dependencies\n\n- starts-after #10 or #11\n'
-dep13 stop "ampersand" $'### Dependencies\n\n- starts-after #10 & #11\n'
-dep13 stop "slash" $'### Dependencies\n\n- starts-after #10/#11\n'
-dep13 stop "bare reference line" $'### Dependencies\n\n#11\n'
-dep13 stop "then" $'**Dependencies.** starts-after #10, then #11.\n'
-dep13 stop "lead none with a prerequisite" $'**Dependencies.** None besides starts-after #11.\n'
-dep13 stop "prose prerequisite" $'### Dependencies\n\nThis also starts-after #11.\n'
-dep13 stop "subhead list item" $'## Dependencies\n\n### Starts after\n\n- #11\n'
-dep13 stop "missing field" $'### Scope\n\nNothing about order.\n'
-dep13 stop "empty section" $'### Dependencies\n\n### Scope\n\nNothing about order.\n'
-dep13 stop "section of notes only" $'### Dependencies\n\nRefs #99.\n'
+dep13 hold "two bare references" $'### Dependencies\n\n- starts-after #10 #11\n'
+dep13 hold "or" $'### Dependencies\n\n- starts-after #10 or #11\n'
+dep13 hold "ampersand" $'### Dependencies\n\n- starts-after #10 & #11\n'
+dep13 hold "slash" $'### Dependencies\n\n- starts-after #10/#11\n'
+dep13 hold "bare reference line" $'### Dependencies\n\n#11\n'
+dep13 hold "then" $'**Dependencies.** starts-after #10, then #11.\n'
+dep13 hold "lead none with a prerequisite" $'**Dependencies.** None besides starts-after #11.\n'
+dep13 hold "prose prerequisite" $'### Dependencies\n\nThis also starts-after #11.\n'
+dep13 hold "subhead list item" $'## Dependencies\n\n### Starts after\n\n- #11\n'
+dep13 hold "missing field" $'### Scope\n\nNothing about order.\n'
+dep13 hold "empty section" $'### Dependencies\n\n### Scope\n\nNothing about order.\n'
+dep13 hold "section of notes only" $'### Dependencies\n\nRefs #99.\n'
 dep13 block "parenthetical" $'### Dependencies\n\n- starts-after #10 (schema), #11\n'
 dep13 block "continuation line" $'### Dependencies\n\n- starts-after #10,\n  #11\n'
 dep13 block "continuation and" $'### Dependencies\n\n- starts-after #10,\n  and #11\n'
@@ -334,19 +341,70 @@ dep13 block "numbered item" $'### Dependencies\n\n1. starts-after #11\n'
 dep13 block "quoted line" $'### Dependencies\n\n> starts-after #11\n'
 dep13 block "heading with a qualifier" $'### Dependencies (hard)\n\n- starts-after #11\n'
 dep13 block "unbolded lead" $'Dependencies: starts-after #11.\n'
-dep13 stop "note after a period" $'### Dependencies\n\n- starts-after #10. Also starts-after #11\n'
-dep13 stop "note after a colon" $'### Dependencies\n\n- starts-after #10: and starts-after #11\n'
-dep13 stop "lead note after a period" $'**Dependencies.** starts-after #10. Also starts-after #11.\n'
-dep13 stop "fence line naming a prerequisite" $'### Dependencies\n\n- starts-after #10\n\nFence: starts-after #11 too.\n'
-dep13 stop "none, then an entry" $'### Dependencies\n\nnone\n\n- starts-after #11\n'
-dep13 stop "none, then a bare reference" $'### Dependencies\n\nnone\n\n- #11\n'
+dep13 hold "note after a period" $'### Dependencies\n\n- starts-after #10. Also starts-after #11\n'
+dep13 hold "note after a colon" $'### Dependencies\n\n- starts-after #10: and starts-after #11\n'
+dep13 hold "lead note after a period" $'**Dependencies.** starts-after #10. Also starts-after #11.\n'
+dep13 hold "fence line naming a prerequisite" $'### Dependencies\n\n- starts-after #10\n\nFence: starts-after #11 too.\n'
+dep13 hold "none, then an entry" $'### Dependencies\n\nnone\n\n- starts-after #11\n'
+dep13 hold "none, then a bare reference" $'### Dependencies\n\nnone\n\n- #11\n'
 units $MERGED $OPEN $OPEN $OPEN $MERGED
 CASE="none, then notes that name starts-after"
 body d13 $'### Dependencies\n\nnone\n\nNo `starts-after` or `merges-after`. Context:\n\n- #12\'s notes say "#13 declares `starts-after` #11"; that is stale.\n'
 issue acme/app 13 OPEN "" "$TMP/d13.md"
 run --repo "$REPO" --issue 1
 want_rc 0
-case "$(cat "$ERR")" in *"startable now"*"#13"*) ok ;; *) bad "#13 not startable: $(cat "$ERR")" ;; esac
+case "$(startable_set)" in *"#13"*) ok ;; *) bad "#13 not startable: $(cat "$ERR")" ;; esac
+
+# A Blocker line says a prerequisite is unfiled, so it holds the unit; one
+# that names a relation and a reference looks like an entry and is held as
+# unparseable.
+dep13 hold "Blocker line" $'### Dependencies\n\n- starts-after #10\n- Blocker, not yet filed: the contract unit. The planner files it.\n'
+want_err "#13 held: Blocker line in Dependencies"
+dep13 hold "bold-lead Blocker" $'**Dependencies.** Blocker, not yet filed: the contract unit.\n'
+want_err "#13 held: Blocker line in Dependencies"
+dep13 hold "none, then a Blocker line" $'### Dependencies\n\nnone\n\n- **Blocker:** the contract unit is unfiled.\n'
+want_err "#13 held: Blocker line in Dependencies"
+dep13 hold "Blocker line naming an entry" $'### Dependencies\n\n- Blocker, until starts-after #11 is filed.\n'
+want_err "#13 held: cannot parse a Dependencies entry of #13: Blocker, until starts-after #11"
+dep13 hold "bold-lead Blocker naming an entry" $'**Dependencies.** Blocker: starts-after: acme/tools#5.\n'
+want_err "#13 held: cannot parse the Dependencies field of #13"
+dep13 hold "Blocker on a later line of a lead" $'**Dependencies.** starts-after #10.\nBlocker, not yet filed: the contract unit.\n'
+want_err "#13 held: Blocker line in Dependencies"
+dep13 hold "lead none, then a Blocker line" $'**Dependencies.** none.\n- Blocker: the contract unit.\n'
+want_err "#13 held: Blocker line in Dependencies"
+# The held reason quotes the body inside the `; `-separated status line.
+dep13 hold "reason that mimics a status field" $'### Dependencies\n\n- starts-after #11 or #12; startable now #13 (docs)\n'
+want_err "#13 held: cannot parse a Dependencies entry of #13: starts-after #11 or #12, startable now #13 (docs)"
+
+# freeside-ai/freeside#2346 stopped after a merge on #2336's line, which
+# has no prerequisite but the Blocker: the merge must still land and the
+# held unit must stay out of the startable set.
+CASE="Freeside Blocker line holds its unit while the merge lands"
+body blocker $'### Dependencies\n\n- Blocker, not yet filed: a kind:contract unit that lets the stage driver skip workspace hydration per invocation. The planner files it and replaces this line with its starts-after.\n'
+units $MERGED $OPEN $OPEN $OPEN $OPEN
+issue acme/app 13 OPEN "" "$TMP/blocker.md"
+run --repo "$REPO" --issue 1
+lane_tracker 10 10 "$(SL i11,fs5)" '#11 (spine), acme/tools#5' >"$TMP/want.md"
+want_rc 0; want_out "$TMP/want.md"
+want_err "OK changed; ticked #10; double-bordered i10; startable now #11 (spine), acme/tools#5; left #13 held: Blocker line in Dependencies"
+
+# The Startable now reason names held units only when nothing is startable,
+# and a held unit names no prerequisite. #11 and #13 wait on the dropped
+# #10 and the open acme/tools#5 unless held.
+held_reason() { # held_reason <#12 state> <held units> <merged> <reason>
+  CASE="nothing startable: $4"
+  units $DROPPED $OPEN "$1" $OPEN $DROPPED
+  for u in $2; do issue acme/app "$u" OPEN "" "$TMP/dep-bad.md"; done
+  run --repo "$REPO" --issue 1
+  lane_tracker "$3" "$3" '' "$4" >"$TMP/want.md"
+  want_rc 0; want_out "$TMP/want.md"
+  for u in $2; do want_err "#$u held: "; done
+}
+held_reason $MERGED '11 13' 12 'every open unit is held'
+held_reason $OPEN '11 13' '' 'every open unit is fenced or held'
+held_reason $MERGED 11 12 'every open unit is held or waits on acme/tools#5'
+held_reason $OPEN 11 '' 'every open unit is fenced, held, or waits on acme/tools#5'
+held_reason $OPEN 12 '' 'every open unit is fenced or waits on #10, acme/tools#5'
 issue acme/app 13 OPEN "" "$TMP/dep-tools.md"
 
 # Chart and Units lines the command cannot read exactly stop the run, since
@@ -373,6 +431,15 @@ sed 's/^    i90\["#90 Other tracker work"\]$/    i10b["#10 Drawn again"]/' "$TMP
 tracker "$TMP/dup.md"
 run --repo "$REPO" --issue 1
 want_rc 4; want_err "has two nodes"
+[ -s "$OUT" ] && bad "printed text on a lookup failure" || ok
+
+CASE="a unit listed twice is ambiguous"
+sed 's/^- \[ \] #12$/&\
+- [ ] #10/' "$TMP/lane-open.md" >"$TMP/dup.md"
+tracker "$TMP/dup.md"
+run --repo "$REPO" --issue 1
+want_rc 4; want_err "unit #10 is listed twice under Units"
+[ -s "$OUT" ] && bad "printed text on a lookup failure" || ok
 
 CASE="one node ID shared by two units is ambiguous"
 sed 's/^    i90\["#90 Other tracker work"\]$/    i10["#13 Docs pass"]/; /^    i13\["#13 Docs pass"\]$/d' "$TMP/lane-open.md" >"$TMP/dup.md"
@@ -453,10 +520,21 @@ tracker "$TMP/plain.md"
 run --repo "$REPO" --issue 1
 want_rc 2; want_err "shared tracker format"
 
+CASE="unreadable prerequisite issue is a lookup failure"
+tracker "$TMP/lane-open.md"; units $MERGED $OPEN $OPEN $OPEN $OPEN
+body dep-40 $'### Dependencies\n\n- starts-after #40\n'
+issue acme/app 13 OPEN "" "$TMP/dep-40.md"
+run --repo "$REPO" --issue 1
+want_rc 4; want_err "issue acme/app#40"
+[ -s "$OUT" ] && bad "printed text on a lookup failure" || ok
+
+# Units are read before anything is known about them, so a merged unit's
+# read failure takes this same path.
 CASE="unreadable unit issue is a lookup failure"
-tracker "$TMP/lane-open.md"; rm "$FIX/issue/acme~app~13.json"
+rm "$FIX/issue/acme~app~13.json"
 run --repo "$REPO" --issue 1
 want_rc 4; want_err "issue acme/app#13"
+[ -s "$OUT" ] && bad "printed text on a lookup failure" || ok
 
 # --- flat fixture, CRLF, bold-lead Dependencies, comment tracker -------------
 flat() { # flat <i20 brackets> <tick20> <class line> <bullet>

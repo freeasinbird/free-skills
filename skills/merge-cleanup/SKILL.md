@@ -336,16 +336,21 @@ holds both a `flowchart` fence and a `## Units` heading:
   a `noop`. Otherwise write stdout with `gh issue edit --body-file` or a
   `gh api -X PATCH` of the comment's `body`, then run the command again; its
   `OK unchanged` is the `verify` and `recheck fresh` evidence.
-- **Make no write on a stop.** Exit 2 means the tracker is closed or not on the
-  format, and exit 4 names the read, node, or Dependencies entry that failed.
-  Record the item unverified and name the cause to the owner.
+- **Act on the exit code.** Exit 0 always means apply "Write only a change"
+  to stdout, even when the stderr line reports held units. Exit 2 means the
+  tracker is closed or not on the format, and exit 4 names the read or node
+  that failed. On exit 2 or 4, make no write: record the item unverified and
+  name the cause to the owner.
 - **Report what it leaves.** Put its ticks, startable set, and every item it
-  left in place in the owner summary. `--help` prints the full contract.
+  left in place in the owner summary. Name each `held` unit with its reason,
+  so the owner can fix that unit's Dependencies field. `--help` prints the
+  full contract.
 - **It applies the shared rule only.** A project's own additions to
   **Startable now** stay the agent's judgment: apply them to stdout before the
   write; to verify, apply them to the rerun's stdout and compare that with
-  the text written. If the command cannot run, apply the format's refresh
-  section by hand and report that gap.
+  the text written. Only when the command can't run at all (exit 69, or no
+  executable), apply the format's refresh section by hand and report that
+  gap. Never do so after exit 2 or 4.
 
 ## Stop the Review Watch
 

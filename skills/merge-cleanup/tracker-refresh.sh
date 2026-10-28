@@ -22,8 +22,12 @@
 #     tick or a double border; one that issue state does not support is left
 #     and reported.
 #   - A unit is startable when its issue is open, its node is not in the
-#     `fenced` class, and every `starts-after` prerequisite is merged.
-#     `merges-after`, `stacked-on`, and `exclusive-with` do not gate a start.
+#     `fenced` class, its Dependencies field parses and has no `Blocker`
+#     line, and every `starts-after` prerequisite is merged. `merges-after`,
+#     `stacked-on`, and `exclusive-with` do not gate a start.
+#   - An open unit whose Dependencies field is missing or does not parse, or
+#     has a line whose first word is `Blocker`, is held: it is left out of
+#     the startable set, and the stderr line names it and why under `left`.
 #   - Rewrite the `class ... startable` line and the **Startable now** bullet
 #     with that set in Units order. Edges, labels, other classes, and every
 #     other line stay as they are.
@@ -38,11 +42,11 @@
 #   2   STOP: the tracker is closed, the comment is not on it, or the text is
 #       not on the shared tracker format (including a unit line, class line,
 #       or unit node it cannot read exactly)
-#   4   LOOKUP_FAILED: a read failed, a node maps to units ambiguously (a
-#       unit's node ID declared more than once, on its own line or inline on
-#       an edge), or an open unit's Dependencies field is missing or does
-#       not parse. Parsing fails closed: a shape it does not know stops the
-#       run rather than dropping a prerequisite.
+#   4   LOOKUP_FAILED: a read failed, a unit is listed twice, or a node maps
+#       to units ambiguously (a unit's node ID declared more than once, on
+#       its own line or inline on an edge). Dependencies parsing fails closed
+#       per unit: a shape it does not know holds that unit rather than
+#       dropping a prerequisite, and the run goes on.
 #   64  usage on stderr
 #   69  gh or awk missing
 set -u
@@ -118,6 +122,11 @@ function die(code, msg) {
   failed = code
   exit code
 }
+# hold: in deps mode, end the unit's records with one that keeps the unit
+# out of the startable set, so one unreadable field never stops the run.
+# The message quotes the issue body and lands in the `; `-separated status
+# line, so a `;` in it becomes `,` and cannot forge a field there.
+function hold(msg) { gsub(/;/, ",", msg); print "held\t" msg; exit 0 }
 # full_key: canonical lowercase owner/repo#N for `#N` (relative to base) or
 # `owner/repo#N`. A chart's short `repo#N` form returns "" with RP_PRE and
 # RP_NUM set, for the caller to resolve against the Units list.
@@ -353,9 +362,9 @@ function parse_tracker(   i, s0, s1, u0, u1, lane, ref, k, ln, rest, p, dbl, lbl
   for (k in NODE) if (NIDC[NODE[k]] > 1) die(4, "node " NODE[k] " of unit " UD[UIDX[k]] " is declared more than once")
 }
 
-function rewrite(   changed, j, k, i, p, q, fen, ids, s, item, quals, out, anyopen, anyfenced, allmerged, waits, nw, w, wl, ticked, bordered, left, text) {
+function rewrite(   changed, j, k, i, p, q, fen, ids, s, item, quals, out, anyopen, anyfenced, anyheld, allmerged, waits, nw, w, wl, ticked, bordered, left, text) {
   ticked = bordered = left = ids = out = waits = ""
-  anyopen = anyfenced = 0; allmerged = 1
+  anyopen = anyfenced = anyheld = 0; allmerged = 1
   for (j = 1; j <= nu; j++) {
     k = UK[j]
     if (!(k in M)) die(4, "no issue facts for unit " UD[j])
@@ -377,6 +386,10 @@ function rewrite(   changed, j, k, i, p, q, fen, ids, s, item, quals, out, anyop
     if (!M[k]) allmerged = 0
     if (O[k]) anyopen = 1
     if (O[k] && fen) anyfenced = 1
+    if (O[k] && H[k] != "") {
+      left = join(left, UD[j] " held: " H[k])
+      if (!fen) anyheld = 1
+    }
     if (O[k] && !fen && !R[k]) {
       nw = split(W[k], wl, ",")
       for (w = 1; w <= nw; w++) if (!(wl[w] in WSEEN)) { WSEEN[wl[w]] = 1; waits = join(waits, wl[w]) }
@@ -400,9 +413,13 @@ function rewrite(   changed, j, k, i, p, q, fen, ids, s, item, quals, out, anyop
   text = out
   if (text == "") {
     if (!anyopen) text = allmerged ? "all units merged" : "no unit is open"
-    else if (waits == "") text = "every open unit is fenced"
-    else if (anyfenced) text = "every open unit is fenced or waits on " waits
-    else text = "every open unit waits on " waits
+    else if (!anyheld) {
+      if (waits == "") text = "every open unit is fenced"
+      else if (anyfenced) text = "every open unit is fenced or waits on " waits
+      else text = "every open unit waits on " waits
+    }
+    else if (waits == "") text = anyfenced ? "every open unit is fenced or held" : "every open unit is held"
+    else text = (anyfenced ? "every open unit is fenced, held, or waits on " : "every open unit is held or waits on ") waits
   }
   L[b0] = "- **Startable now:** " text "."
   for (i = b0 + 1; i <= bend; i++) DEL[i] = 1
@@ -476,6 +493,19 @@ function reverse_only(t) {
   return 1
 }
 
+# blocker_line: whether line t, past any list marker and emphasis, begins
+# with the word `Blocker`.
+function blocker_line(t) {
+  gsub(/\*\*|`/, "", t); sub(/^[ \t]*(([-*+]|[0-9]+[.)]|>)[ \t]+)?/, "", t)
+  return tolower(t) ~ /^blocker([^a-z]|$)/
+}
+
+# names_entry: whether lowercase t names a relation followed at once by a
+# reference, the shape of a typed entry.
+function names_entry(t) {
+  return t ~ /(starts-after|merges-after|stacked-on|exclusive-with):?[ \t]+([a-z0-9_.-]+\/[a-z0-9_.-]+)?#[0-9]+/
+}
+
 # dep_text: one entry or note from the field. An entry for a relation that
 # gates no start may be prose, such as `exclusive-with other open contract
 # units`, unless it also names `starts-after`.
@@ -483,11 +513,11 @@ function dep_text(t, item,   lt) {
   lt = tolower(t)
   if (lt ~ /^(starts-after|merges-after|stacked-on|exclusive-with)/) {
     if (parse_entry(t)) return
-    if (lt ~ /starts-after/) die(4, "cannot parse a Dependencies entry of " unit ": " t)
+    if (lt ~ /starts-after/) hold("cannot parse a Dependencies entry of " unit ": " t)
     return
   }
   if (item || lt ~ /^([a-z0-9_.-]+\/[a-z0-9_.-]+)?#[0-9]+/ || !reverse_only(t))
-    die(4, "cannot parse a Dependencies entry of " unit ": " t)
+    hold("cannot parse a Dependencies entry of " unit ": " t)
 }
 
 # parse_deps reads a `Dependencies` heading's section, or failing that a
@@ -499,8 +529,12 @@ function dep_text(t, item,   lt) {
 # dependency, and what follows explains it, as Freeside's #2019 does; a line
 # there shaped like an entry contradicts it and fails. A field that is
 # absent, or a section with neither an entry nor `none`, fails, since this
-# runs only for an open unit and its prerequisites cannot be known.
-function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated) {
+# runs only for an open unit and its prerequisites cannot be known. A failure
+# holds the unit. A line whose first word is `Blocker`, such as Freeside's
+# `Blocker, not yet filed: ...`, says a prerequisite is unfiled: it holds the
+# unit as a stated field, and it fails like an entry if it names a relation
+# followed by a reference.
+function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated, blk) {
   for (i = 1; i <= n; i++) if (L[i] ~ /^#+[ \t]+Dependencies([^A-Za-z]|$)/) break
   if (i <= n) {
     match(L[i], /^#+/); lvl = RLENGTH
@@ -517,8 +551,13 @@ function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated) {
       lt = tolower(t)
       if (lt ~ /^(none|_no response_)\.?$/) { if (!seen) nonef = 1; seen = stated = 1; continue }
       seen = 1
+      if (blocker_line(t)) {
+        if (names_entry(lt)) hold("cannot parse a Dependencies entry of " unit ": " t)
+        print "blocker\t" t; stated = 1
+        continue
+      }
       if (lt ~ /^fence[.:]/) {
-        if (!reverse_only(t)) die(4, "cannot parse a Dependencies entry of " unit ": " t)
+        if (!reverse_only(t)) hold("cannot parse a Dependencies entry of " unit ": " t)
         continue
       }
       if (!nonef) {
@@ -527,30 +566,41 @@ function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated) {
         continue
       }
       if (lt ~ /^(starts-after|merges-after|stacked-on|exclusive-with)/ || lt ~ /^(([a-z0-9_.-]+\/[a-z0-9_.-]+)?#[0-9]+[ \t,.]*(and[ \t]+)?)+$/)
-        die(4, "Dependencies of " unit " say none, then: " t)
+        hold("Dependencies of " unit " say none, then: " t)
     }
-    if (!stated) die(4, "the Dependencies section of " unit " has no entry and no none")
+    if (!stated) hold("the Dependencies section of " unit " has no entry and no none")
     return
   }
   for (i = 1; i <= n; i++) if (L[i] ~ /^([-*][ \t]+)?(\*\*)?Dependencies(\*\*)?[:.](\*\*)?/) break
-  if (i > n) die(4, "open unit " unit " has no Dependencies field")
+  if (i > n) hold("open unit " unit " has no Dependencies field")
   para = L[i]
   sub(/^([-*][ \t]+)?(\*\*)?Dependencies(\*\*)?[:.](\*\*)?[ \t]*/, "", para)
-  for (i++; i <= n && L[i] ~ /[^ \t]/; i++) para = para " " L[i]
+  # A Blocker line holds the unit wherever it falls in the paragraph.
+  blk = blocker_line(para) ? para : ""
+  for (i++; i <= n && L[i] ~ /[^ \t]/; i++) {
+    para = para " " L[i]
+    if (blk == "" && blocker_line(L[i])) blk = L[i]
+  }
   gsub(/\*\*|`/, "", para); gsub(/[ \t]+/, " ", para)
   lt = tolower(para)
+  if (blk != "") {
+    gsub(/\*\*|`/, "", blk); gsub(/[ \t]+/, " ", blk)
+    if (names_entry(tolower(blk))) hold("cannot parse the Dependencies field of " unit ": " para)
+    print "blocker\t" blk
+    return
+  }
   if (lt ~ /^(none|_no response_)([^a-z0-9_]|$)/) {
-    if (!reverse_only(para)) die(4, "cannot parse the Dependencies field of " unit ": " para)
+    if (!reverse_only(para)) hold("cannot parse the Dependencies field of " unit ": " para)
     return
   }
   # The lead's paragraph is the field's value, never a note.
   if (lt ~ /^(starts-after|merges-after|stacked-on|exclusive-with)/ && (parse_entry(para) || lt !~ /starts-after/)) return
-  die(4, "cannot parse the Dependencies field of " unit ": " para)
+  hold("cannot parse the Dependencies field of " unit ": " para)
 }
 
 mode == "rewrite" && FILENAME == facts {
   split($0, f, "\t")
-  M[f[1]] = f[2] + 0; O[f[1]] = f[3] + 0; R[f[1]] = f[4] + 0; W[f[1]] = f[5]
+  M[f[1]] = f[2] + 0; O[f[1]] = f[3] + 0; R[f[1]] = f[4] + 0; W[f[1]] = f[5]; H[f[1]] = f[6]
   next
 }
 { line = $0; cr = sub(/\r$/, "", line); n++; L[n] = ORIG[n] = line; CR[n] = cr }
@@ -628,24 +678,31 @@ FACTS="$TMPD/facts"
 while IFS="$(printf '\t')" read -r key shown; do
   issue_state "$key" "$TMPD/unit-body"
   unit_state="$STATE"
-  ready=1 waits=""
+  ready=1 waits="" hold=""
   # Only an open unit can be startable, so a closed unit's Dependencies
   # field, often stale history by then, is never read.
   if [ "$unit_state" = OPEN ]; then
     awk -v mode=deps -v base="${key%#*}" -v self="$key" -v unit="$shown" "$AWK_PROG" \
       "$TMPD/unit-body" >"$TMPD/deps" || exit $?
     while IFS="$(printf '\t')" read -r rel prereq; do
+      # A `held` record comes last and names the parse failure.
+      case "$rel" in
+        held) hold="$prereq"; continue ;;
+        blocker) hold="${hold:-Blocker line in Dependencies}"; continue ;;
+      esac
       [ "$rel" = starts-after ] || continue
       issue_state "$prereq"
       [ "$STATE" = MERGED ] && continue
       ready=0
       waits="${waits:+$waits,}$(display "$prereq")"
     done <"$TMPD/deps"
+    # A held unit's prerequisite list may be incomplete, so it names none.
+    [ -z "$hold" ] || { ready=0; waits=""; }
   fi
   merged=0 open=0
   [ "$unit_state" = MERGED ] && merged=1
   [ "$unit_state" = OPEN ] && open=1
-  printf '%s\t%s\t%s\t%s\t%s\n' "$key" "$merged" "$open" "$ready" "$waits" >>"$FACTS"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$key" "$merged" "$open" "$ready" "$waits" "$hold" >>"$FACTS"
 done <"$TMPD/units"
 
 awk -v mode=rewrite -v repo="$REPO_LC" -v facts="$FACTS" -v report="$TMPD/report" \
