@@ -347,6 +347,24 @@ dep13 hold "lead note after a period" $'**Dependencies.** starts-after #10. Also
 dep13 hold "fence line naming a prerequisite" $'### Dependencies\n\n- starts-after #10\n\nFence: starts-after #11 too.\n'
 dep13 hold "none, then an entry" $'### Dependencies\n\nnone\n\n- starts-after #11\n'
 dep13 hold "none, then a bare reference" $'### Dependencies\n\nnone\n\n- #11\n'
+dep13 hold "none with a note naming starts-after" $'### Dependencies\n\n- none, but starts-after #11\n'
+want_err "Dependencies of #13 say none, then: none, but starts-after #11"
+dep13 hold "none with a note naming merges-after" $'### Dependencies\n\n- none, merges-after #11.\n'
+want_err "Dependencies of #13 say none, then: none, merges-after #11."
+units $MERGED $OPEN $OPEN $OPEN $MERGED
+CASE="none with a note listing empty relations"
+body d13 $'### Dependencies\n\n- none (starts-after, merges-after, stacked-on empty).\n'
+issue acme/app 13 OPEN "" "$TMP/d13.md"
+run --repo "$REPO" --issue 1
+want_rc 0
+case "$(startable_set)" in *"#13"*) ok ;; *) bad "#13 not startable: $(cat "$ERR")" ;; esac
+units $MERGED $OPEN $OPEN $OPEN $MERGED
+CASE="none with a reader reference note"
+body d13 $'### Dependencies\n\nnone. Readers: #12 lists this unit.\n'
+issue acme/app 13 OPEN "" "$TMP/d13.md"
+run --repo "$REPO" --issue 1
+want_rc 0
+case "$(startable_set)" in *"#13"*) ok ;; *) bad "#13 not startable: $(cat "$ERR")" ;; esac
 units $MERGED $OPEN $OPEN $OPEN $MERGED
 CASE="none, then notes that name starts-after"
 body d13 $'### Dependencies\n\nnone\n\nNo `starts-after` or `merges-after`. Context:\n\n- #12\'s notes say "#13 declares `starts-after` #11"; that is stale.\n'
