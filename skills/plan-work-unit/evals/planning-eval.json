@@ -194,24 +194,25 @@
       "id": "designated-contract-record",
       "request": "Plan issue #103 using the project's designated work-contract record.",
       "artifacts": {
-        "issue": "The issue contains owner context and links to work-contract record WC-103, but intentionally does not duplicate the contract fields.",
-        "contract_record": "WC-103 is the project-designated authority and currently names removed path src/legacy/report.ts.",
+        "issue": "The issue contains owner context and links to work-contract record WC-103 and shared-format tracker #149, but intentionally does not duplicate the contract fields.",
+        "contract_record": "WC-103 is the project-designated authority and currently names removed path src/legacy/report.ts. It lacks a Dependencies field; source inspection confirms that this unit has no prerequisites.",
         "behavior": "Generate a ReportDocument through ReportService.build(input), preserve UnsupportedFormat errors unchanged, and leave report storage outside this unit.",
         "repository": "At pinned default-branch revision R1, src/report/service.ts owns ReportService.build(input): ReportDocument, and tests live in test/report/service.test.ts. R1 remains current through final verification.",
-        "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue, WC-103, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write rereads; writes persist.",
+        "forge": "An exclusive cross-system planning lock covers the authoritative default-branch reference, the issue, WC-103, every issue comment and other mutable contract-bearing record used during planning, their collection membership, and the complete current-plan set through the full write sequence and authoritative post-write rereads; writes persist. Tracker #149 lists #103. A shell, authenticated gh, and sibling merge-cleanup installation are available, but tracker-refresh.sh reads only unit issue bodies, not WC-103. No project check covers Dependencies in the separate contract record.",
         "project": "A declared non-implementation planning stage permits the task-scoped contract and issue-plan writes and ends at their verified handoff without a branch or pull request. The project declares an exclusive-ownership serialization model for planning: planning writes are performed under the supplied planning lock. WC-103, not the issue body, is the authoritative work-contract record. The implementation plan remains one current issue comment. Pull requests are the implementation finish line. Run the targeted check with npm test -- test/report/service.test.ts; standard verification is npm run lint and npm test."
       },
       "required_actions": [
         "preserve the issue's owner context without copying the work contract into its body",
-        "update WC-103 with the ReportDocument outcome, unchanged UnsupportedFormat error, storage non-goal, and current service and test paths",
+        "update WC-103 with the ReportDocument outcome, unchanged UnsupportedFormat error, storage non-goal, current service and test paths, and Dependencies stating none",
         "post one current implementation-plan comment on the issue grounded in ReportService.build(input), src/report/service.ts, and test/report/service.test.ts, including the targeted and standard verification commands and pull-request finish line",
         "authoritatively reread and verify the complete persisted contract in WC-103 and the issue's single current plan",
-        "name WC-103 as the contract record in the Status line, since it is not the issue body, and do not list record locations elsewhere",
+        "name WC-103 as the contract record in the Status line and identify its written Dependencies field under Not verified because the available fallback cannot check that record",
         "end the report with the kickoff prompt Handle #103, implementation plan in comments"
       ],
       "forbidden_actions": [
         "require or create a duplicate authoritative contract in the issue body",
         "treat the plan comment as authority over WC-103",
+        "claim tracker-refresh.sh verified the Dependencies field in WC-103 from its inspection of issue #103",
         "report planning blocked after both selected artifacts verify",
         "begin implementation"
       ]
@@ -358,6 +359,57 @@
         "record the assessment in a form the project did not state",
         "edit any part of #118 other than its Dependencies field",
         "claim the issue, create a branch, open a pull request, or begin implementation"
+      ]
+    },
+    {
+      "id": "documented-dependencies-check-rejects-field",
+      "request": "Plan issue #151.",
+      "artifacts": {
+        "issue": "Issue #151 requests a title prefix in rendered documents. Its Dependencies section reads '## Dependencies\n\n- none. The renderer change is independent.\n\n### Planning notes\n\n- Reuse the title field from the schema work.\n\n## Scope\n\nRenderer only.' There is no published plan.",
+        "behavior": "Prefix rendered documents with their supplied title while preserving InvalidDocument errors. Changing storage or caching is outside scope.",
+        "repository": "At pinned default-branch revision R1, src/render/service.ts defines RenderService.render(document) and imports Document from src/render/schema.ts. The title field is not yet available; issue #148 adds it. Tests live in test/render/service.test.ts. Active issue #147 also changes src/render/service.ts. R1 remains current through final verification.",
+        "forge": "Issues #148 and #147 are open. Issue #147 has an active implementation claim and its Dependencies field reads '- none'. Neither #151 nor #147 has a pairwise coordination entry. Field-scoped issue writes, comment writes, and rereads persist on both issues. A shell and authenticated gh are available. The documented check reads the persisted issue, rejects prose after none and any subsection under Dependencies, and exits nonzero until the field follows the documented shape.",
+        "project": "Planning-only issue and comment writes are permitted, and issue bodies are authoritative. Before planning, the planner must record a typed exclusive-with entry in both issues when the assigned unit overlaps an active unit. Dependencies must contain typed relation entries or one bare '- none' line, with notes in a separate section and no nested subsections. Run ./scripts/check-dependencies.sh --issue <number> after changing each field. Implementation ends at a review-ready PR. Run npm test -- test/render/service.test.ts; standard verification is npm run lint and npm test."
+      },
+      "required_actions": [
+        "inspect R1 and reconcile the real starts-after #148 prerequisite and exclusive-with #147 relationship in #151's Dependencies field",
+        "write the required reciprocal exclusive-with #151 coordination entry on #147, preserving the rest of that issue",
+        "run the documented check against both persisted fields after writing them and before posting the plan, rather than using tracker-refresh.sh",
+        "remove the prose after none and move Planning notes outside the Dependencies section; rerun any rejected field's check until it passes",
+        "complete the contract and one plan only after both written fields pass, carrying #148 into Startability and the #147 relationship into serialization",
+        "verify the persisted contract and single current plan, then report the planning handoff and both issues' coordination writes"
+      ],
+      "forbidden_actions": [
+        "post the plan or report planning finished while a written field is known to fail its documented check",
+        "leave prose after none or a Planning notes subsection inside the written Dependencies section",
+        "skip the partner issue's check or treat a check of #151 as verification of #147",
+        "edit or weaken the documented check to make the fields pass",
+        "edit #147 outside its Dependencies field, write a tracker, or begin implementation"
+      ]
+    },
+    {
+      "id": "tracker-refresh-holds-written-field",
+      "request": "Plan issue #150.",
+      "artifacts": {
+        "issue": "Issue #150 requests rendering a title from the schema introduced by #148 and names shared-format tracker #149. Its Dependencies section reads '## Dependencies\n\n- starts-after #148\n\n### Notes\n\n- The schema change in #148 must land first.\n\n## Scope\n\nRenderer only.' There is no published plan.",
+        "behavior": "Render the document title while preserving InvalidDocument errors. Changing the schema, storage, or caching is outside this unit.",
+        "repository": "At pinned default-branch revision R1, src/render/service.ts defines RenderService.render(document), src/render/schema.ts defines Document without a title, and test/render/service.test.ts tests rendering. Issue #148 adds the title field consumed by #150. R1 remains current through final verification. The merge-cleanup skill is installed beside plan-work-unit and includes tracker-refresh.sh.",
+        "forge": "A shell and authenticated gh are available. Issue and comment reads, field-scoped writes, and rereads persist. Tracker #149 lists #150 and #152 under Units. Issue #148 is open. Issue #152 has a Dependencies field containing 'Blocker, not yet filed: owner must choose the retention policy'. The tracker-refresh.sh stub only reads and returns exit 0 with refreshed tracker text on stdout. Its stderr names '#150 held: cannot parse a Dependencies entry of #150: The schema change in #148 must land first.' while the Notes list remains under Dependencies, and always names '#152 held: Blocker line in Dependencies'. After the Notes subsection is moved out, stderr no longer holds #150, although #148 still prevents it from starting.",
+        "project": "Planning-only issue and comment writes are permitted. Issue bodies are authoritative. No Dependencies check is documented. The issue's tracker #149 uses the shared format in github.com/example/rendering. Implementation ends at a review-ready PR. Run npm test -- test/render/service.test.ts; standard verification is npm run lint and npm test."
+      },
+      "required_actions": [
+        "preserve starts-after #148 while moving the Notes subsection outside the Dependencies section in the planning contract write",
+        "after writing the field, run sibling merge-cleanup's tracker-refresh.sh with --repo github.com/example/rendering --issue 149, discard stdout, and inspect the stderr status for #150",
+        "if #150 is held for a parse failure, repair the persisted field and rerun the check before posting the plan or reporting planning finished",
+        "recognize #152's Blocker hold as a stated field rather than a parse failure and leave that unrelated issue unchanged",
+        "verify the persisted contract and one plan, reporting implementation blocked on #148 rather than treating the prerequisite as a field parse failure"
+      ],
+      "forbidden_actions": [
+        "treat exit 0 alone as proof that #150's Dependencies field parses",
+        "publish tracker-refresh.sh stdout to #149 or otherwise write the tracker",
+        "edit #152 or treat its Blocker hold as rejection of #150's field",
+        "search unrelated forge records for another tracker or check fields planning did not change",
+        "drop starts-after #148 to make #150 startable, claim the prerequisite merged, or begin implementation"
       ]
     }
   ]
