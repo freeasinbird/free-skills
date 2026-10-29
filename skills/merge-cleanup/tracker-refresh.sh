@@ -525,10 +525,13 @@ function dep_text(t, item,   lt) {
 # `**Dependencies.**` lead and its paragraph. In a section, every list item
 # and every line that begins with a relation or a reference is an entry; a
 # list item's indented continuation lines join it. `Fence:` lines and
-# other prose, such as Freeside's `Refs` lines, are notes. A
-# section that opens with a bare `none` or `_No response_` line declares no
-# dependency, and what follows explains it, as Freeside's #2019 does; a line
-# there shaped like an entry contradicts it and fails. A field that is
+# other prose, such as Freeside's `Refs` lines, are notes. A section that
+# opens with a line leading with `none` or `_No response_` declares no
+# dependency. The rest of that line is a note; it holds the unit if it names
+# a relation followed by a reference. Unlike reverse_only, this permits bare
+# relation names, as in `none (starts-after, merges-after, stacked-on empty)`.
+# Later lines explain the none, as Freeside's #2019 does; a line there shaped
+# like an entry contradicts it and fails. A field that is
 # absent, or a section with neither an entry nor `none`, fails, since this
 # runs only for an open unit and its prerequisites cannot be known. A failure
 # holds the unit. A line whose first word is `Blocker`, such as Freeside's
@@ -550,7 +553,10 @@ function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated, blk) {
       gsub(/[ \t]+/, " ", t); sub(/[ \t]+$/, "", t)
       if (t == "") continue
       lt = tolower(t)
-      if (lt ~ /^(none|_no response_)\.?$/) { if (!seen) nonef = 1; seen = stated = 1; continue }
+      if (lt ~ /^(none|_no response_)([^a-z0-9_]|$)/) {
+        if (names_entry(lt)) hold("Dependencies of " unit " say none, then: " t)
+        if (!seen) nonef = 1; seen = stated = 1; continue
+      }
       seen = 1
       if (blocker_line(t)) {
         if (names_entry(lt)) hold("cannot parse a Dependencies entry of " unit ": " t)
