@@ -16,8 +16,9 @@
 # its label, and a node that maps to no unit is left alone.
 #
 # The refresh, from each unit issue's state and Dependencies field:
-#   - A unit is merged when its issue is closed as completed. Closed as not
-#     planned, or open, is not merged.
+#   - A unit is merged when its issue is closed as completed or its pull
+#     request is merged. An issue closed as not planned, an unmerged closed
+#     pull request, or an open issue or pull request is not merged.
 #   - Tick every merged unit's line and double-border its node. Never remove a
 #     tick or a double border; one that issue state does not support is left
 #     and reported.
@@ -637,6 +638,7 @@ issue_state() {
     "CLOSED COMPLETED") STATE=MERGED ;;
     "OPEN "*) STATE=OPEN ;;
     "CLOSED "*) STATE=CLOSED ;;
+    "MERGED ") STATE=MERGED ;;
     *) lookup_failed "issue $key: unrecognized state" ;;
   esac
   printf '%s' "$STATE" >"$cache"
