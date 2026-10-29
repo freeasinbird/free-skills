@@ -32,6 +32,7 @@ repository.
   the stale plan, and report blocked publication without leaving it actionable.
 - `designated-contract-record`: Update the designated record without
   duplicating its authority in the issue body. Verify it and one issue plan.
+  Report its Dependencies field as unverified when the fallback cannot read it.
 - `pr-routing-forbids-direct-writes`: Report a precondition error before
   source inspection, artifact preparation, or any planning mutation.
 - `partial-planning-stage-permission`: Refuse the entire operation when the
@@ -45,6 +46,11 @@ repository.
 - `planner-records-contract-assessment`: Record a missing pairwise assessment
   on both issues when the project names the planner as an assessor, then
   finish planning.
+- `documented-dependencies-check-rejects-field`: Check written fields on the
+  assigned and partner issues. Fix prose after `none` and a nested subsection
+  before posting the plan.
+- `tracker-refresh-holds-written-field`: Run the read-only fallback, fix the
+  written field's parse failure, and leave another unit's stated Blocker alone.
 
 ## Revision-Tree Setup
 
@@ -140,8 +146,9 @@ claiming the fixture's repeated-run target was met.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 15 unique planning IDs match the inventory above: the original
-12, the two revision-access cases, and the coordination-record case.
+files. Confirm 17 unique planning IDs match the inventory above: the original
+12, the two revision-access cases, the coordination-record case, and the two
+Dependencies-check cases.
 
 JSON parsing and inventory checks only validate fixture structure. They do not
 grade model behavior, source reads, or persisted output. Report structural
