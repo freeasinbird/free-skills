@@ -520,9 +520,40 @@ tracker "$TMP/plain.md"
 run --repo "$REPO" --issue 1
 want_rc 2; want_err "shared tracker format"
 
-CASE="unreadable prerequisite issue is a lookup failure"
-tracker "$TMP/lane-open.md"; units $MERGED $OPEN $OPEN $OPEN $OPEN
 body dep-40 $'### Dependencies\n\n- starts-after #40\n'
+
+CASE="merged pull request prerequisite allows a start"
+tracker "$TMP/lane-open.md"; units $MERGED $OPEN $OPEN $OPEN $OPEN
+issue acme/app 13 OPEN "" "$TMP/dep-40.md"
+issue acme/app 40 MERGED "" "$TMP/dep-none.md"
+run --repo "$REPO" --issue 1
+lane_tracker 10 10 "$(SL i11,i13,fs5)" '#11 (spine), #13 (docs), acme/tools#5' >"$TMP/want.md"
+want_rc 0; want_out "$TMP/want.md"
+
+CASE="pull request closed unmerged does not allow a start"
+issue acme/app 40 CLOSED "" "$TMP/dep-none.md"
+run --repo "$REPO" --issue 1
+lane_tracker 10 10 "$(SL i11,fs5)" '#11 (spine), acme/tools#5' >"$TMP/want.md"
+want_rc 0; want_out "$TMP/want.md"
+
+for state_reason in MERGED:COMPLETED MERGED:NOT_PLANNED MERGED:REOPENED UNKNOWN:; do
+  CASE="unrecognized prerequisite state fails closed ($state_reason)"
+  issue acme/app 40 "${state_reason%%:*}" "${state_reason#*:}" "$TMP/dep-none.md"
+  run --repo "$REPO" --issue 1
+  want_rc 4; want_err "issue acme/app#40: unrecognized state"
+  [ -s "$OUT" ] && bad "printed text on a lookup failure" || ok
+done
+
+CASE="merged pull request unit is ticked and double-bordered"
+tracker "$TMP/lane-open.md"; units MERGED: $OPEN $OPEN $OPEN $OPEN
+run --repo "$REPO" --issue 1
+lane_tracker 10 10 "$(SL i11,fs5)" '#11 (spine), acme/tools#5' >"$TMP/want.md"
+want_rc 0; want_out "$TMP/want.md"
+want_err "OK changed; ticked #10; double-bordered i10"
+
+CASE="unreadable prerequisite issue is a lookup failure"
+rm "$FIX/issue/acme~app~40.json"
+tracker "$TMP/lane-open.md"; units $MERGED $OPEN $OPEN $OPEN $OPEN
 issue acme/app 13 OPEN "" "$TMP/dep-40.md"
 run --repo "$REPO" --issue 1
 want_rc 4; want_err "issue acme/app#40"
