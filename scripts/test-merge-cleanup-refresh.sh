@@ -249,6 +249,88 @@ CASE="fenced unit never gains startable"
 grep -q 'i12' "$OUT" && ! grep -q 'class .*i12.* startable' "$OUT" && ok \
   || bad "i12 gained startable"
 
+# No fixture draws an owner node, so this adds one to lane_tracker output.
+owned() { awk -v line="    class $1 owner" '{ print } /^    class i12 fenced$/ { print line }'; }
+
+# owner_case <name> <owner node> <#5 state> <merged> <startable> <bullet>
+# <listed startable> <listed bullet>: a tracker without the owner unit stays
+# as it is, a tracker that lists it loses it, and the rerun changes nothing.
+owner_case() {
+  CASE="owner unit, $1: stays out of the startable set"
+  lane_tracker "$4" "$4" "$(SL "$5")" "$6" | owned "$2" >"$TMP/owner.md"
+  tracker "$TMP/owner.md"; units $OPEN $OPEN $OPEN $OPEN "$3"
+  run --repo "$REPO" --issue 1
+  want_rc 0; want_out "$TMP/owner.md"; want_err "OK unchanged; ticked none"
+
+  CASE="owner unit, $1: a tracker that lists it loses it"
+  lane_tracker "$4" "$4" "$(SL "$7")" "$8" | owned "$2" >"$TMP/owner-listed.md"
+  tracker "$TMP/owner-listed.md"
+  run --repo "$REPO" --issue 1
+  want_rc 0; want_out "$TMP/owner.md"; want_err "OK changed; ticked none"
+
+  CASE="owner unit, $1: a second refresh reports unchanged"
+  retracker
+  run --repo "$REPO" --issue 1
+  want_rc 0; want_out "$TMP/owner.md"; want_err "OK unchanged; ticked none"
+}
+owner_case 'no prerequisites' fs5 $OPEN '' i10 '#10 (spine, contract)' \
+  i10,fs5 '#10 (spine, contract), acme/tools#5'
+owner_case 'merged prerequisites' i13 $MERGED 5 i10 '#10 (spine, contract)' \
+  i10,i13 '#10 (spine, contract), #13 (docs)'
+
+# owner_reason <#11> <#12> <#13> <merged> <reason> [held unit]: #10 and
+# acme/tools#5 are open and owner-run, so neither is listed nor waited on by
+# name unless another unit needs it.
+owner_reason() {
+  CASE="nothing startable: $5"
+  lane_tracker "$4" "$4" "$(SL i10,fs5)" '#10 (spine, contract), acme/tools#5' \
+    | owned i10,fs5 >"$TMP/owner-listed.md"
+  tracker "$TMP/owner-listed.md"; units $OPEN "$1" "$2" "$3" $OPEN
+  [ -z "${6:-}" ] || issue acme/app "$6" OPEN "" "$TMP/dep-bad.md"
+  run --repo "$REPO" --issue 1
+  lane_tracker "$4" "$4" '' "$5" | owned i10,fs5 >"$TMP/want.md"
+  want_rc 0; want_out "$TMP/want.md"
+}
+owner_reason $DROPPED $DROPPED $DROPPED '' 'every open unit is owner-run'
+owner_reason $DROPPED $OPEN $DROPPED '' 'every open unit is fenced or owner-run'
+owner_reason $OPEN $DROPPED $DROPPED '' 'every open unit is held or owner-run' 11
+owner_reason $OPEN $MERGED $OPEN 12 'every open unit is owner-run or waits on #10, acme/tools#5'
+owner_reason $OPEN $OPEN $OPEN '' 'every open unit is fenced, owner-run, or waits on #10, acme/tools#5'
+owner_reason $OPEN $OPEN $OPEN '' 'every open unit is fenced, held, owner-run, or waits on acme/tools#5' 11
+
+CASE="owner unit adds nothing to the waits list"
+lane_tracker '' '' '' 'every open unit is owner-run' | owned i11 >"$TMP/owner.md"
+tracker "$TMP/owner.md"; units $DROPPED $OPEN $DROPPED $DROPPED $DROPPED
+run --repo "$REPO" --issue 1
+want_rc 0; want_out "$TMP/owner.md"; want_err "OK unchanged; ticked none"
+
+CASE="merged owner unit adds no reason"
+lane_tracker 11 11 '' 'every open unit waits on acme/tools#5' | owned i11 >"$TMP/owner.md"
+tracker "$TMP/owner.md"; units $DROPPED $MERGED $DROPPED $OPEN $DROPPED
+run --repo "$REPO" --issue 1
+want_rc 0; want_out "$TMP/owner.md"; want_err "OK unchanged; ticked none"
+
+# Owner-run is an owner unit's normal state, so only the field an owner can
+# repair is named under left, and the reason does not call the unit held.
+CASE="owner unit with held Dependencies is named under left"
+lane_tracker '' '' '' 'every open unit is owner-run' | owned i10,fs5 >"$TMP/owner.md"
+tracker "$TMP/owner.md"; units $OPEN $DROPPED $DROPPED $DROPPED $OPEN
+issue acme/app 10 OPEN "" "$TMP/dep-bad.md"
+run --repo "$REPO" --issue 1
+want_rc 0; want_out "$TMP/owner.md"; want_err "; left #10 held: "
+units $OPEN $DROPPED $DROPPED $DROPPED $OPEN
+run --repo "$REPO" --issue 1
+want_rc 0; want_out "$TMP/owner.md"
+if grep -q '; left' "$ERR"; then bad "owner-run alone was named under left"; else ok; fi
+
+CASE="non-unit owner node keeps its own startable class"
+lane_tracker '' '' "$(SL i10,i90,fs5)" '#10 (spine, contract), acme/tools#5' | owned i90 >"$TMP/nonunit.md"
+tracker "$TMP/nonunit.md"; units $OPEN $OPEN $OPEN $OPEN $OPEN
+run --repo "$REPO" --issue 1
+lane_tracker '' '' "$(SL i10,fs5,i90)" '#10 (spine, contract), acme/tools#5' | owned i90 >"$TMP/want.md"
+want_rc 0; want_out "$TMP/want.md"
+tracker "$TMP/lane-open.md"
+
 CASE="all merged drops the startable line"
 units $MERGED $MERGED $MERGED $MERGED $MERGED
 run --repo "$REPO" --issue 1

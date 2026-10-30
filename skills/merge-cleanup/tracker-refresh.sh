@@ -22,10 +22,10 @@
 #   - Tick every merged unit's line and double-border its node. Never remove a
 #     tick or a double border; one that issue state does not support is left
 #     and reported.
-#   - A unit is startable when its issue is open, its node is not in the
-#     `fenced` class, its Dependencies field parses and has no `Blocker`
-#     line, and every `starts-after` prerequisite is merged. `merges-after`,
-#     `stacked-on`, and `exclusive-with` do not gate a start.
+#   - A unit is startable when its issue is open, its node is in neither the
+#     `fenced` nor the `owner` class, its Dependencies field parses and has
+#     no `Blocker` line, and every `starts-after` prerequisite is merged.
+#     `merges-after`, `stacked-on`, and `exclusive-with` do not gate a start.
 #   - An open unit whose Dependencies field is missing or does not parse, or
 #     has a line whose first word is `Blocker`, is held: it is left out of
 #     the startable set, and the stderr line names it and why under `left`.
@@ -363,9 +363,9 @@ function parse_tracker(   i, s0, s1, u0, u1, lane, ref, k, ln, rest, p, dbl, lbl
   for (k in NODE) if (NIDC[NODE[k]] > 1) die(4, "node " NODE[k] " of unit " UD[UIDX[k]] " is declared more than once")
 }
 
-function rewrite(   changed, j, k, i, p, q, fen, ids, s, item, quals, out, anyopen, anyfenced, anyheld, allmerged, waits, nw, w, wl, ticked, bordered, left, text) {
+function rewrite(   changed, j, k, i, p, q, fen, own, ids, s, item, quals, out, anyopen, anyfenced, anyowner, anyheld, allmerged, waits, nw, w, wl, why, nwhy, ticked, bordered, left, text) {
   ticked = bordered = left = ids = out = waits = ""
-  anyopen = anyfenced = anyheld = 0; allmerged = 1
+  anyopen = anyfenced = anyowner = anyheld = 0; allmerged = 1
   for (j = 1; j <= nu; j++) {
     k = UK[j]
     if (!(k in M)) die(4, "no issue facts for unit " UD[j])
@@ -384,18 +384,20 @@ function rewrite(   changed, j, k, i, p, q, fen, ids, s, item, quals, out, anyop
       } else if (ND[k] && !M[k]) left = join(left, NODE[k] " double-bordered but not merged")
     }
     fen = (k in NODE) && ((NODE[k], "fenced") in CLS)
+    own = (k in NODE) && ((NODE[k], "owner") in CLS)
     if (!M[k]) allmerged = 0
     if (O[k]) anyopen = 1
     if (O[k] && fen) anyfenced = 1
+    if (O[k] && own) anyowner = 1
     if (O[k] && H[k] != "") {
       left = join(left, UD[j] " held: " H[k])
-      if (!fen) anyheld = 1
+      if (!fen && !own) anyheld = 1
     }
-    if (O[k] && !fen && !R[k]) {
+    if (O[k] && !fen && !own && !R[k]) {
       nw = split(W[k], wl, ",")
       for (w = 1; w <= nw; w++) if (!(wl[w] in WSEEN)) { WSEEN[wl[w]] = 1; waits = join(waits, wl[w]) }
     }
-    if (!(O[k] && R[k] && !fen)) continue
+    if (!(O[k] && R[k] && !fen && !own)) continue
     quals = ULANE[k]
     if ((k in NODE) && ((NODE[k], "contract") in CLS)) quals = (quals == "" ? "contract" : quals ", contract")
     out = join(out, UD[j] (quals == "" ? "" : " (" quals ")"))
@@ -414,13 +416,17 @@ function rewrite(   changed, j, k, i, p, q, fen, ids, s, item, quals, out, anyop
   text = out
   if (text == "") {
     if (!anyopen) text = allmerged ? "all units merged" : "no unit is open"
-    else if (!anyheld) {
-      if (waits == "") text = "every open unit is fenced"
-      else if (anyfenced) text = "every open unit is fenced or waits on " waits
-      else text = "every open unit waits on " waits
+    else {
+      # An open unit left out of the set is fenced, owner-run, held, or
+      # waiting, so at least one reason applies.
+      nwhy = 0
+      if (anyfenced) why[++nwhy] = "fenced"
+      if (anyheld) why[++nwhy] = "held"
+      if (anyowner) why[++nwhy] = "owner-run"
+      if (waits != "") why[++nwhy] = "waits on " waits
+      text = "every open unit " (nwhy == 1 && waits != "" ? "" : "is ") why[1]
+      for (s = 2; s <= nwhy; s++) text = text (nwhy == 2 ? " or " : (s == nwhy ? ", or " : ", ")) why[s]
     }
-    else if (waits == "") text = anyfenced ? "every open unit is fenced or held" : "every open unit is held"
-    else text = (anyfenced ? "every open unit is fenced, held, or waits on " : "every open unit is held or waits on ") waits
   }
   L[b0] = "- **Startable now:** " text "."
   for (i = b0 + 1; i <= bend; i++) DEL[i] = 1
