@@ -7,6 +7,12 @@
 # flat fixture has no lanes, no startable line, and CRLF line endings.
 #
 # Usage: test-merge-cleanup-refresh.sh
+#
+# To run it under macOS /bin/bash 3.2, put a `bash` symlink to /bin/bash
+# first on PATH; the shebang and the `bash "$SUT"` call both resolve `bash`
+# from PATH, so the suite, the script, and the shims all run under 3.2:
+#   d=$(mktemp -d) && ln -s /bin/bash "$d/bash" &&
+#     PATH="$d:$PATH" ./scripts/test-merge-cleanup-refresh.sh
 # Exit codes: 0 all passed, 1 a case failed.
 set -u
 

@@ -55,14 +55,14 @@ follow this full sequence:
    The landing check decides whether you also refresh the branch:
 
    - **A merge queue or land command** tests the PR combined with the tip it
-     selects and reruns CI there, so it integrates the PR with the tip itself.
-     Refresh before handoff only when your merge check finds a conflict, or a
-     change on the base needs a fix in this PR. Otherwise hand the PR off
-     behind the tip: a refresh adds a CI run and a review restart and saves
-     the lander no work. If the base moves before your step 7 report, check
-     again and refresh only for the same reasons. After handoff, leave the PR
-     waiting. Refresh only when the lander hands it back (a merge queue does
-     so by removing it) or the owner asks.
+     selects and reruns CI there, so it integrates the PR with a moving base.
+     Verify against the current tip in this step, and again each time you
+     change the PR and hand it off. Never recheck or refresh because the base
+     moved, before or after handoff. Refresh only when this check finds a
+     conflict or a base change that needs a fix in this PR, when the lander
+     hands the PR back (a merge queue removes it), or when the owner asks.
+     Otherwise hand the PR off behind the tip: a refresh adds a CI run and a
+     review restart and saves the lander no work.
    - **Only a required check that must pass on the branch updated to the
      tip** (on GitHub, the up-to-date rule): nobody else pushes that update,
      so refresh before handoff and again whenever the base moves before
