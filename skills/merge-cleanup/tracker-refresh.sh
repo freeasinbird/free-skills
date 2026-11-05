@@ -50,6 +50,8 @@
 #       dropping a prerequisite, and the run goes on.
 #   64  usage on stderr
 #   69  gh or awk missing
+#
+# Runs under bash 3.2 (macOS /bin/bash) and BWK awk, as well as newer bash.
 set -u
 
 ISSUE="" REPO_SPEC="" COMMENT=""
@@ -117,7 +119,10 @@ lookup_failed() { echo "tracker-refresh.sh: LOOKUP_FAILED $1" >&2; exit 4; }
 # One awk program serves three modes, so the reference grammar is defined
 # once. scan: list the Units lines. deps: list one unit body's dependency
 # entries. rewrite: apply the refresh from a facts file.
-AWK_PROG=$(cat <<'AWK'
+# Read with `read`, not `$(cat <<'AWK' ...)`: bash 3.2 (macOS /bin/bash)
+# misparses a heredoc inside `$(...)` whose body has unbalanced parentheses.
+# `read -d ''` returns 1 at end of input, so `|| true` marks that as success.
+IFS= read -r -d '' AWK_PROG <<'AWK' || true
 function die(code, msg) {
   print "tracker-refresh.sh: " (code == 2 ? "STOP " : "LOOKUP_FAILED ") msg > "/dev/stderr"
   failed = code
@@ -625,7 +630,6 @@ END {
   rewrite()
 }
 AWK
-)
 
 # issue_state <key>: set STATE to MERGED, OPEN, or CLOSED and, when a body
 # path is given, save the issue body there. Cached per key, so a
