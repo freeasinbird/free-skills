@@ -54,13 +54,17 @@ want_call() {
 }
 
 # --- validation: no forge needed ---------------------------------------------
-printf '#!/bin/sh\nexit 1\n' >"$SHIMD/gh"
+printf '#!/bin/sh\necho "$*" >>"$FIX/calls.log"\nexit 1\n' >"$SHIMD/gh"
 chmod +x "$SHIMD/gh"
 CASE=validation
 v() {
   want="$1" desc="$2"; shift 2
   run "$@"
   [ "$RC" -eq "$want" ] && ok || bad "$desc: exit $RC, want $want"
+}
+v_nogh() { # v_nogh <want> <desc> <args...>: also asserts no gh call
+  v "$@"
+  [ -s "$FIX/calls.log" ] && bad "$2: called gh" || ok
 }
 v 4 "valid invocation reaches the forge" --repo "$REPO" --issue 1
 [ -s "$OUT" ] && bad "tracker read failure printed text" || ok
@@ -75,6 +79,10 @@ v 64 "extra repo segment" --repo "$REPO/x" --issue 1
 v 64 "invalid host" --repo .invalid/acme/app --issue 1
 v 64 "unknown option" --repo "$REPO" --issue 1 --bogus x
 v 64 "trailing bare option" --repo "$REPO" --issue 1 --comment
+# An unset variable passed as a value: `--comment "$ID"` with ID unset.
+v_nogh 64 "empty repo value" --repo "" --issue 1
+v_nogh 64 "empty issue value" --repo "$REPO" --issue ""
+v_nogh 64 "empty comment value" --repo "$REPO" --issue 1 --comment ""
 run --help
 [ "$RC" -eq 0 ] && grep -q -- '--comment ID' "$OUT" && ok || bad "--help failed"
 

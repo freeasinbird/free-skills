@@ -78,6 +78,8 @@ while [ $# -gt 0 ]; do
   esac
   [ $# -ge 2 ] || { echo "tracker-refresh.sh: $opt requires a value" >&2; usage; }
   val="$2"; shift 2
+  # An unset variable passed as a value must not drop the flag silently.
+  [ -n "$val" ] || { echo "tracker-refresh.sh: $opt requires a non-empty value" >&2; usage; }
   case "$opt" in
     --repo) REPO_SPEC="$val" ;;
     --issue) ISSUE="$val" ;;
