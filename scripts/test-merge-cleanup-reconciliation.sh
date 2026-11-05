@@ -4,8 +4,9 @@
 # The cases enumerate every deterministic project-reconciliation exit class:
 # successful single and multiple writes, zero work, no-op and report-only work,
 # every freshness failure position, source/tool/input-reread stops, mutation
-# and verification failures, rejected attempts, partial fields, and malformed
-# traces that try to bypass the ordering or complete-disposition invariants.
+# and verification failures, rejected attempts, unguarded attempts, partial
+# fields, and malformed traces that try to bypass the ordering or
+# complete-disposition invariants.
 # The skeleton cases pin the generated trace for every policy status and plan
 # kind, and prove each printed skeleton passes the checker unchanged.
 #
@@ -325,6 +326,109 @@ final	A
 EOF
 want 'RESULT incomplete'
 want 'freshly reread every selector and computation input'
+
+run_case "an attempt after a failed input reread fails closed" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:refresh	write	T1	unit-10
+pre	A
+guard	unavailable
+attempt	accepted	T1:refresh
+verify	T1:refresh	changed
+recheck	fresh	T1	unit-10
+post	A
+final	A
+EOF
+want 'RESULT incomplete'
+want 'UNKNOWN T1:refresh: attempted after guard unavailable'
+want 'OWNER ACTION T1:refresh: inspect the tracker edit history first'
+want 'freshly reread every selector and computation input'
+reject 'COMPLETED'
+reject 'preserve every verified write'
+
+run_case "an unguarded attempt after a completed write is partial" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:refresh	write	T1
+plan	T2:refresh	write	T2
+pre	A
+guard	complete	T1
+attempt	accepted	T1:refresh
+verify	T1:refresh	changed
+recheck	fresh	T1
+post	A
+pre	A
+guard	unavailable
+attempt	failed	T2:refresh
+verify	T2:refresh	unknown
+recheck	unverifiable	T2
+post	A
+final	A
+EOF
+want 'RESULT partial'
+want 'COMPLETED T1:refresh (changed)'
+want 'UNKNOWN T2:refresh: attempted after guard unavailable'
+want 'OWNER ACTION T2:refresh: inspect the tracker edit history first'
+
+run_case "an unguarded write is never a restart after a moved tip" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:refresh	write	T1
+pre	A
+guard	unavailable
+attempt	accepted	T1:refresh
+verify	T1:refresh	changed
+recheck	fresh	T1
+post	A
+final	B
+EOF
+want 'RESULT incomplete'
+want 'UNKNOWN T1:refresh: attempted after guard unavailable'
+want 're-establish current base identity'
+reject 'RESULT restart'
+
+# The trace rows SKILL.md maps each tracker-write.sh result to.
+run_case "tracker-write noop and changed-since-read map to post-reread skips" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:refresh	write	T1	unit-10
+plan	T2:refresh	write	T2
+pre	A
+guard	complete	T1	unit-10
+skip	T1:refresh	already current at write time	remaining
+pre	A
+guard	complete	T2
+skip	T2:refresh	tracker changed since read	remaining
+final	A
+EOF
+want 'RESULT incomplete'
+want 'SKIPPED T1:refresh: already current at write time'
+want 'SKIPPED T2:refresh: tracker changed since read'
+
+run_case "tracker-write refused and lookup-failed map to blocked skips" 0 <<'EOF'
+policy	A	complete	initial
+plan	T1:refresh	write	T1
+pre	A
+guard	unavailable
+skip	T1:refresh	STOP tracker #1 is closed	ambiguity
+final	A
+EOF
+want 'RESULT incomplete'
+
+run_case "an unguarded attempt's recheck must name its planned inputs" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:refresh	write	T1	unit-10
+pre	A
+guard	unavailable
+attempt	accepted	T1:refresh
+verify	T1:refresh	changed
+recheck	fresh	T1
+EOF
+want 'recheck input set differs from guard complete'
+
+run_case "an attempt after a pre-write freshness block is invalid" 2 <<'EOF'
+policy	A	complete	initial
+plan	T1:refresh	write	T1
+pre	B
+attempt	accepted	T1:refresh
+EOF
+want 'attempt must immediately follow guard complete'
 
 run_case "a final policy move supersedes a failed input reread" 0 <<'EOF'
 policy	A	complete	initial

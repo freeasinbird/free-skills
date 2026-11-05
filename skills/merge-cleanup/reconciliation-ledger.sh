@@ -22,7 +22,10 @@
 # execution. `guard complete` records every named input freshly reread
 # immediately before the attempt; `guard unavailable` means an input could not
 # be freshly reread. A write is exactly pre, guard, attempt, one verify per
-# attempted field, recheck, post. `recheck fresh` records that the same external
+# attempted field, recheck, post. An `attempt` may follow `guard unavailable`
+# only to record a write that ran anyway; its recheck names the attempted
+# items' planned inputs, and each such item prints UNKNOWN with the guard
+# owner action, so the run cannot complete. `recheck fresh` records that the same external
 # inputs were readable and still support the post-write computation, including
 # intended target changes; `changed` or `unverifiable` cannot yield completion.
 # The attempt status records the interface result separately from what the
@@ -237,6 +240,7 @@ BEGIN {
     if (writes_stopped) invalid("no write may begin after a stop condition")
     stop_writes_for_freshness($2)
     phase = freshness_failed ? "blocked" : "pre"
+    guard_blocked = 0
     next
   }
   if (event == "guard") {
@@ -258,12 +262,17 @@ BEGIN {
       if (NF != 2) invalid("an unavailable guard takes no input list")
       writes_stopped = 1
       phase = "blocked"
+      # Only a failed guard, never a failed pre, lets an attempt be recorded.
+      guard_blocked = 1
     } else invalid("guard status must be complete or unavailable")
     next
   }
   if (event == "attempt") {
     require_at_least(3)
-    if (phase != "guarded") invalid("attempt must immediately follow guard complete")
+    unguarded = (phase == "blocked" && guard_blocked)
+    if (phase != "guarded" && !unguarded)
+      invalid("attempt must immediately follow guard complete or guard unavailable")
+    guard_blocked = 0
     if ($2 != "accepted" && $2 != "failed" && $2 != "rejected")
       invalid("attempt status must be accepted, failed, or rejected")
     attempt_status = $2
@@ -279,7 +288,10 @@ BEGIN {
         covered = 0
         for (guard_no = 1; guard_no <= guard_count; guard_no++)
           if (guard_input[guard_no] == dep) covered = 1
-        if (!covered) invalid("guard complete omits freshly reread input " dep " for " $field)
+        # An unguarded attempt named no reread inputs, so its recheck covers
+        # the union of the planned inputs of the attempted items instead.
+        if (!covered && unguarded) guard_input[++guard_count] = dep
+        else if (!covered) invalid("guard complete omits freshly reread input " dep " for " $field)
       }
       attempt_count++
       attempt_index[attempt_count] = idx
@@ -342,7 +354,14 @@ BEGIN {
     for (attempt_no = 1; attempt_no <= attempt_count; attempt_no++) {
       idx = attempt_index[attempt_no]
       if (!verified[idx]) invalid("attempted item has no verification: " plan_item[idx])
-      if (verification[idx] == "changed" && input_recheck == "fresh") {
+      if (unguarded) {
+        # Even a verified write may have overwritten text the missing guard
+        # would have caught, so it is never preserved as completed.
+        disposition[idx] = "unknown"
+        detail[idx] = "attempted after guard unavailable"
+        action_class[idx] = "guard"
+        unguarded_count++
+      } else if (verification[idx] == "changed" && input_recheck == "fresh") {
         disposition[idx] = "completed"
         detail[idx] = "changed"
         changed_count++
@@ -380,6 +399,7 @@ BEGIN {
       delete guard_input[guard_no]
     guard_count = 0
     input_recheck = ""
+    unguarded = 0
     phase = "idle"
     next
   }
@@ -461,6 +481,7 @@ BEGIN {
       guard_count = 0
     }
     if (phase == "blocked" || phase == "guarded") phase = "idle"
+    guard_blocked = 0
     next
   }
   if (event == "final") {
@@ -501,12 +522,13 @@ END {
 
   if (freshness_failed) {
     if (changed_count || unknown_count) result = "partial"
+    else if (unguarded_count) result = "incomplete"
     else if (trace_origin == "replacement") result = "unstable"
     else result = "restart"
   } else if (source_failed) {
     if (changed_count || unknown_count) result = "partial"
     else result = "incomplete"
-  } else if (unknown_count || skipped_count || attempt_problem) {
+  } else if (unknown_count || skipped_count || attempt_problem || unguarded_count) {
     if (changed_count || unknown_count) result = "partial"
     else result = "incomplete"
   } else result = "complete"
@@ -532,12 +554,15 @@ END {
     if (unknown_count)
       print "OWNER ACTION inspect every unknown write before rediscovery or recomputation"
   }
-  if (freshness_failed && result == "partial")
+  if (freshness_failed && (result == "partial" || result == "incomplete"))
     print "OWNER ACTION re-establish current base identity, rediscover policy, and reacquire every affected input before recomputing; do not replay or roll back a prior write"
   if (attempt_problem)
     print "OWNER ACTION reconcile the verified tracker state with the failed or rejected interface result, then reacquire current inputs before recomputing; do not retry blindly"
+  guard_action = "restore access, then freshly reread every selector and computation input and recompute before applying; do not use a precomputed edit"
   for (idx = 1; idx <= plan_count; idx++) {
-    if (disposition[idx] == "unknown")
+    if (disposition[idx] == "unknown" && action_class[idx] == "guard")
+      print "OWNER ACTION " plan_item[idx] ": inspect the tracker edit history first, because this write ran without a fresh guard and may have overwritten newer text; then " guard_action
+    else if (disposition[idx] == "unknown")
       print "OWNER ACTION " plan_item[idx] ": establish the actual tracker state, then rediscover current policy and recompute remaining work; do not retry or roll back blindly"
     else if (disposition[idx] == "skipped" && !freshness_failed) {
       if (action_class[idx] == "source")
@@ -547,7 +572,7 @@ END {
       else if (action_class[idx] == "tooling")
         action = "use the documented tracker interface, then freshly reread every input and recompute; do not improvise a mutation mechanism"
       else if (action_class[idx] == "guard")
-        action = "restore access, then freshly reread every selector and computation input and recompute before applying; do not use a precomputed edit"
+        action = guard_action
       else if (action_class[idx] == "policy")
         action = "re-establish current base identity, then rediscover policy and reacquire every input before recomputing; do not use a precomputed edit"
       else if (action_class[idx] == "closing")
