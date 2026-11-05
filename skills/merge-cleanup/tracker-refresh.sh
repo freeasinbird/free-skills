@@ -2,9 +2,10 @@
 # tracker-refresh.sh: compute the merge-time refresh of one tracker on the
 # shared tracker format (agent-setup's references/tracker-format.md §refresh)
 # and print the refreshed Markdown. Read-only by construction: it reads the
-# tracker and its units with gh and writes nothing to the forge, because the
-# whole-body write belongs to the reconciliation protocol, which rereads every
-# input right before it writes and reruns this command to verify the write.
+# tracker and its units with gh and writes nothing to the forge. The
+# whole-body write belongs to tracker-write.sh, which runs this command,
+# rereads the tracker right before it writes, and reruns this command to
+# verify the write.
 #
 # Usage:
 #   tracker-refresh.sh --repo host/owner/name --issue N [--comment ID]

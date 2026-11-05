@@ -74,6 +74,7 @@ jobs:
           - test-merge-cleanup-reconciliation.sh
           - test-merge-cleanup-refresh.sh
           - test-merge-cleanup-sweep.sh
+          - test-merge-cleanup-write.sh
           - test-merge-cleanup.sh
           - test-prompt-verification.sh
           - test-watch-review.sh

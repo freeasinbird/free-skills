@@ -47,7 +47,8 @@ cleanup, establish support through read-only project records and tool checks:
   another forge CLI or reconstruct the destructive sequence from prose.
 
 These requirements apply to the cleanup executor. The separate reconciliation
-checker and the tracker refresh command also need `awk`; their manual
+checker and the tracker commands (`tracker-refresh.sh` and
+`tracker-write.sh`) also need `awk`; their manual
 fallbacks are described in Reconcile Project Obligations and do not replace
 the executor.
 
@@ -319,38 +320,69 @@ Run it as `<skill-dir>/reconciliation-ledger.sh '<trace-file>'`; `--help`, or
 `-h`, prints the trace contract. If the executable check cannot run, apply the
 referenced state machine manually and report that verification gap.
 
-**Shared-format trackers.** Compute the refresh of a known containing tracker
-on the shared tracker format with the bundled command, not by hand. Run it
-immediately before the write, once for the body and once for each comment that
-holds both a `flowchart` fence and a `## Units` heading:
+**Shared-format trackers.** Write the refresh of a known containing tracker
+on the shared tracker format only with the bundled `tracker-write.sh`, never
+with `gh issue edit` or `gh api -X PATCH`. Plan the body and each comment that
+holds both a `flowchart` fence and a `## Units` heading with the read-only
+`tracker-refresh.sh`, which takes the same `--repo`, `--issue`, and
+`--comment`. `OK unchanged` plans a `noop`, and `OK changed` plans a `write`.
+Run the write command only for a planned `write`:
 
 ```sh
-<skill-dir>/tracker-refresh.sh --repo <host/owner/name> --issue <N> > '<body-file>'
-<skill-dir>/tracker-refresh.sh --repo <host/owner/name> --issue <N> --comment <ID> > '<comment-file>'
+<skill-dir>/tracker-write.sh --repo <host/owner/name> --issue <N>
+<skill-dir>/tracker-write.sh --repo <host/owner/name> --issue <N> --comment <ID>
 ```
 
-- **The run is the fresh reread.** It reads the tracker and every unit and
-  prerequisite it consults, so record those as the write's inputs. It never
-  writes to the forge.
-- **Write only a change.** When its stderr line begins `OK unchanged`, record
-  a `noop`. Otherwise write stdout with `gh issue edit --body-file` or a
-  `gh api -X PATCH` of the comment's `body`, then run the command again; its
-  `OK unchanged` is the `verify` and `recheck fresh` evidence.
-- **Act on the exit code.** Exit 0 always means apply "Write only a change"
-  to stdout, even when the stderr line reports held units. Exit 2 means the
-  tracker is closed or not on the format, and exit 4 names the read or node
-  that failed. On exit 2 or 4, make no write: record the item unverified and
-  name the cause to the owner.
-- **Report what it leaves.** Put its ticks, startable set, and every item it
-  left in place in the owner summary. Name each `held` unit with its reason,
-  so the owner can fix that unit's Dependencies field. `--help` prints the
-  full contract.
-- **It applies the shared rule only.** A project's own additions to
-  **Startable now** stay the agent's judgment: apply them to stdout before the
-  write; to verify, apply them to the rerun's stdout and compare that with
-  the text written. Only when the command can't run at all (exit 69, or no
-  executable), apply the format's refresh section by hand and report that
-  gap. Never do so after exit 2 or 4.
+- **Pass the arguments literally.** Type each flag and value in the command,
+  never through an unquoted variable such as `$ARGS`. The agent's shell may
+  be zsh, which passes that variable as one argument.
+- **It guards its own write.** It runs `tracker-refresh.sh` and writes nothing
+  when that run fails or prints nothing. It rereads the tracker right before
+  the write and writes nothing when the text changed. After the write, it
+  rereads the tracker and reruns the refresh to verify.
+- **Record the refresh's reads as the inputs.** The refresh reads the tracker
+  and every unit and prerequisite it consults. Name those in the guard and
+  recheck rows.
+- **The race is narrowed, not closed.** GitHub updates are unconditional, so
+  an edit that lands between the last reread and the write is still
+  overwritten. The tracker's edit history is the recovery path.
+- **Copy its result line into the trace.** Stdout is one line:
+  `tracker-write.sh: RESULT <result> guard=<g> attempt=<a> verify=<v> recheck=<r>`.
+  Each field is that ledger row's value, and `none` means the row is absent.
+  Then dispose of the item by its result:
+
+| Result (exit)                    | Trace after the `guard` row                                     |
+| -------------------------------- | --------------------------------------------------------------- |
+| `written` (0)                    | The attempt, verify, and recheck rows as printed                |
+| `write-failed`, `unverified` (5) | The attempt, verify, and recheck rows as printed                |
+| `noop` (0)                       | `skip` with reason `already current at write time`, `remaining` |
+| `changed-since-read` (3)         | `skip` with reason `tracker changed since read`, `remaining`    |
+| `lookup-failed` (4)              | `skip` naming the failed read, `guard`                          |
+| `refused` (2)                    | `skip` naming the stderr cause, `ambiguity`                     |
+
+- **Report what it leaves.** Stderr carries the refresh's status line and any
+  reason for stopping. Put its ticks, startable set, and every item it left in
+  place in the owner summary. Name each `held` unit with its reason, so the
+  owner can fix that unit's Dependencies field. `--help` prints the full
+  contract.
+- **Pass a project's own Startable now rule as `--edited`.** That rule stays
+  the agent's judgment. Save `tracker-refresh.sh` output to one file and copy
+  it to another. In the copy, change only the `class ... startable` line and
+  the **Startable now** bullet. Pass
+  `--edited '<copy>' --base '<refresh-file>'`. The command refuses any other
+  change, including an added or removed line, and reports
+  `changed-since-read` when its own refresh differs from the base. When the
+  rule would add or remove the class line, report that instead of writing.
+- **Record any unguarded write honestly.** If a tracker write ever ran without
+  a complete guard, record `guard unavailable` and then its attempt, verify,
+  and recheck. The ledger prints the item `UNKNOWN` with the guard owner
+  action.
+- **Fix the call on exit 64.** It printed usage, called no gh, and wrote
+  nothing; correct the arguments and run it again.
+- **Fall back by hand only on exit 69.** Only when the command can't run at
+  all (exit 69, which prints no result line, or no executable), apply the
+  format's refresh section by hand and report that gap. Never do so after any
+  other exit.
 
 ## Stop the Review Watch
 
