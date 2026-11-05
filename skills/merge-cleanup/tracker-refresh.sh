@@ -29,6 +29,10 @@
 #   - An open unit whose Dependencies field is missing or does not parse, or
 #     has a line whose first word is `Blocker`, is held: it is left out of
 #     the startable set, and the stderr line names it and why under `left`.
+#     A body with more than one Dependencies field, as a heading or a lead
+#     line such as `**Dependencies.**`, is held too. A heading or lead inside
+#     a fenced code block or an HTML comment is an example, not a field; one
+#     inside a block whose end the scan cannot place holds the unit.
 #   - Rewrite the `class ... startable` line and the **Startable now** bullet
 #     with that set in Units order. Edges, labels, other classes, and every
 #     other line stay as they are.
@@ -527,6 +531,67 @@ function dep_text(t, item,   lt) {
     hold("cannot parse a Dependencies entry of " unit ": " t)
 }
 
+# mark_hidden: set HID[i] for each body line inside a fenced code block or an
+# HTML comment block, by CommonMark's block rules, so the rendered page and
+# this scan agree on which headings are real. A fence opens on a line of up
+# to three spaces, then three or more backticks or tildes, with no backtick
+# after a backtick run. It closes on a line of up to three spaces, then at
+# least as many of the same character, then only blanks. A comment opens on
+# a line of up to three spaces, then `<!--`, and closes on the first line
+# with `-->`, the opening line included. Every line of either block is
+# hidden, and markers inside the other block are text. A mid-line `<!--`
+# hides nothing, since on the page it cannot hide a heading.
+#
+# A scan that hides a real field can leave a visible decoy `none` to read,
+# so a block whose end the scan cannot place sets HID_DOUBT to the first
+# heading or Dependencies lead it hides, and parse_deps holds on it. Those
+# are a block opened by an indented line, which ends early on the page when
+# it sits in a list item; a comment that a `<!--` reopens on its `-->` line,
+# which on GitHub hides the rest of the body; a block opened inside raw HTML,
+# where the page shows its marker as text; and a block still open at the end
+# of the body. Raw HTML runs from a line that starts with a tag to the next
+# blank line, or for `pre`, `script`, `style`, and `textarea` to the closing
+# tag. Reading too much as raw HTML only adds holds.
+function mark_hidden(   i, t, k, run, kind, len, unsure, shown, html) {
+  kind = ""
+  for (i = 1; i <= n; i++) {
+    t = L[i]; HID[i] = 0
+    match(t, /^ */); k = RLENGTH
+    run = substr(t, k + 1); sub(/[ \t]+$/, "", run)
+    if (kind != "") {
+      HID[i] = 1
+      if (shown == "" && (t ~ /^#+[ \t]/ || t ~ /^([-*][ \t]+)?(\*\*)?Dependencies(\*\*)?[:.]/)) shown = t
+      if (kind == "comment") {
+        if (index(t, "-->")) { if (open_comment(t)) unsure = 1; else kind = "" }
+      } else if (k <= 3 && run ~ /^(`+|~+)$/ && substr(run, 1, 1) == kind && length(run) >= len) kind = ""
+      if (kind == "" && unsure && shown != "" && HID_DOUBT == "") HID_DOUBT = shown
+      continue
+    }
+    if (html == "pre") { if (tolower(t) ~ /<\/(pre|script|style|textarea)>/) html = "" }
+    else if (t !~ /[^ \t]/) html = ""
+    if (k > 3) continue
+    if (match(run, /^(```+|~~~+)/)) {
+      len = RLENGTH; kind = substr(run, 1, 1)
+      if (kind == "`" && index(substr(run, len + 1), "`")) { kind = ""; continue }
+    } else if (substr(run, 1, 4) == "<!--") {
+      HID[i] = 1
+      if (!open_comment(t)) continue
+      kind = "comment"
+    } else {
+      if (html == "" && run ~ /^<[A-Za-z\/?!]/) {
+        html = tolower(run) ~ /^<(pre|script|style|textarea)([ \t>]|$)/ ? "pre" : "raw"
+        if (html == "pre" && tolower(run) ~ /<\/(pre|script|style|textarea)>/) html = ""
+      }
+      continue
+    }
+    HID[i] = 1; shown = ""; unsure = k > 0 || index(t, "-->") > 0 || html != ""
+  }
+  if (kind != "" && shown != "" && HID_DOUBT == "") HID_DOUBT = shown
+}
+# open_comment: whether a comment is open after line t: its last `<!--`
+# follows its last `-->`.
+function open_comment(t) { return last_index(t, "<!--") > last_index(t, "-->") }
+
 # parse_deps reads a `Dependencies` heading's section, or failing that a
 # `**Dependencies.**` lead and its paragraph. In a section, every list item
 # and every line that begins with a relation or a reference is an entry; a
@@ -544,13 +609,28 @@ function dep_text(t, item,   lt) {
 # `Blocker, not yet filed: ...`, says a prerequisite is unfiled: it holds the
 # unit as a stated field, and it fails like an entry if it names a relation
 # followed by a reference.
-function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated, blk) {
-  for (i = 1; i <= n; i++) if (L[i] ~ /^#+[ \t]+Dependencies([^A-Za-z]|$)/) break
-  if (i <= n) {
+#
+# Only lines outside fenced code blocks and HTML comments can be a field's
+# heading or lead, or end its section; a hidden line inside the section still
+# parses as an entry or note. More than one field, in any mix of the two
+# forms, holds the unit, since parsing either one alone could drop the
+# other's prerequisite. So does a hidden heading or lead that mark_hidden
+# cannot place.
+function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated, blk, c, hd, ld) {
+  mark_hidden()
+  if (HID_DOUBT != "") hold("cannot tell whether a line of " unit " is in a code block or comment: " HID_DOUBT)
+  for (i = 1; i <= n; i++) {
+    if (HID[i]) continue
+    if (L[i] ~ /^#+[ \t]+Dependencies([^A-Za-z]|$)/) { c++; if (!hd) hd = i }
+    else if (L[i] ~ /^([-*][ \t]+)?(\*\*)?Dependencies(\*\*)?[:.](\*\*)?/) { c++; if (!ld) ld = i }
+  }
+  if (c > 1) hold("the body of " unit " has " c " Dependencies fields")
+  if (hd) {
+    i = hd
     match(L[i], /^#+/); lvl = RLENGTH
     for (i++; i <= n; i++) {
       t = L[i]
-      if (t ~ /^#+[ \t]/) { match(t, /^#+/); if (RLENGTH <= lvl) break; continue }
+      if (!HID[i] && t ~ /^#+[ \t]/) { match(t, /^#+/); if (RLENGTH <= lvl) break; continue }
       item = (t ~ /^[ \t]*([-*+]|[0-9]+[.)]|>)[ \t]+/)
       if (item)
         while (i < n && L[i + 1] ~ /^[ \t]+[^ \t]/ && L[i + 1] !~ /^[ \t]*([-*+]|[0-9]+[.)]|>)[ \t]+/)
@@ -584,8 +664,8 @@ function parse_deps(   i, lvl, t, lt, item, para, seen, nonef, stated, blk) {
     if (!stated) hold("the Dependencies section of " unit " has no entry and no none")
     return
   }
-  for (i = 1; i <= n; i++) if (L[i] ~ /^([-*][ \t]+)?(\*\*)?Dependencies(\*\*)?[:.](\*\*)?/) break
-  if (i > n) hold("open unit " unit " has no Dependencies field")
+  if (!ld) hold("open unit " unit " has no Dependencies field")
+  i = ld
   para = L[i]
   sub(/^([-*][ \t]+)?(\*\*)?Dependencies(\*\*)?[:.](\*\*)?[ \t]*/, "", para)
   # A Blocker line holds the unit wherever it falls in the paragraph.
