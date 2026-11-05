@@ -253,13 +253,16 @@ follow this full sequence:
    - **No landing check:** refresh before handoff, and repeat the integration
      pass by hand whenever the base moves.
 
-   Refresh from the tip, preferring rebase so `git range-diff` applies. Push
-   the refreshed branch so the required checks run on it. After a rebase that
-   conflicted, run `git range-diff` between the branch before and after the
-   rebase, and record what the resolution changed in the PR's Verification
-   section. Don't repeat CI by hand; read `git range-diff` only when a rebase
-   conflicts. After approval, step 7 applies, and whoever lands the PR updates
-   the branch.
+   Refresh only by rebasing onto the tip, never by merging the base into the
+   branch. A merge inside the branch breaks the linear history under the PR's
+   merge commit, and `git range-diff` can't read it. Push the rebase with
+   `--force-with-lease` so the required checks run on it. If the forge
+   refuses that push, stop and report the refusal and its error; don't fall
+   back to a merge. After a rebase that conflicted, run `git range-diff`
+   between the branch before and after the rebase, and record what the
+   resolution changed in the PR's Verification section. Don't repeat CI by
+   hand; read `git range-diff` only when a rebase conflicts. After approval,
+   step 7 applies, and whoever lands the PR updates the branch.
 
    A landing check reruns CI, not review. A clean rebase can still change the
    diff, for example by following an upstream rename. When you push a refresh,
