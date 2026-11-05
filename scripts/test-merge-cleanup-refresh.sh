@@ -482,6 +482,55 @@ want_err "#13 held: Blocker line in Dependencies"
 dep13 hold "reason that mimics a status field" $'### Dependencies\n\n- starts-after #11 or #12; startable now #13 (docs)\n'
 want_err "#13 held: cannot parse a Dependencies entry of #13: starts-after #11 or #12, startable now #13 (docs)"
 
+# More than one Dependencies field, in any mix of heading and lead, holds the
+# unit: reading only the first would drop the second's prerequisite (#356).
+dep13 hold "two headings" $'### Dependencies\n\nnone\n\n### Dependencies\n\n- starts-after #11\n'
+want_err "left #13 held: the body of #13 has 2 Dependencies fields"
+dep13 hold "heading, then a lead" $'### Dependencies\n\nnone\n\n**Dependencies.** starts-after #11.\n'
+want_err "#13 held: the body of #13 has 2 Dependencies fields"
+dep13 hold "two leads" $'**Dependencies.** none.\n\n**Dependencies.** starts-after #11.\n'
+want_err "#13 held: the body of #13 has 2 Dependencies fields"
+dep13 hold "two headings with no open prerequisite" $'### Dependencies\n\nnone\n\n### Dependencies\n\n- starts-after #10\n'
+want_err "#13 held: the body of #13 has 2 Dependencies fields"
+# A heading inside a code fence or HTML comment neither starts nor ends the
+# field, and a hidden line inside the real section still parses.
+dep13 block "backtick-fenced none above the field" $'```markdown\n### Dependencies\n\nnone\n```\n\n### Dependencies\n\n- starts-after #11\n'
+dep13 block "tilde-fenced none above the field" $'~~~\n### Dependencies\n\nnone\n~~~\n\n### Dependencies\n\n- starts-after #11\n'
+dep13 block "commented none above the field" $'<!--\n### Dependencies\n\nnone\n-->\n\n### Dependencies\n\n- starts-after #11\n'
+dep13 block "commented heading inside the field" $'### Dependencies\n\n- starts-after #10\n\n<!--\n## Notes\n-->\n\n- starts-after #11\n'
+# The scan follows CommonMark's fence and comment-block rules, so a marker
+# that GitHub renders as text neither hides the real field nor reveals a
+# decoy. These shapes came from the refute-first review.
+dep13 block "closing fence shorter than the opener" $'`````\n```\n**Dependencies.** none\n`````\n\n## Dependencies\n\n- starts-after #11\n'
+dep13 block "closing tildes shorter than the opener" $'~~~~~\n~~~\n**Dependencies.** none\n~~~~~\n\n## Dependencies\n\n- starts-after #11\n'
+dep13 block "closing fence indented four spaces" $'```\n    ```\n**Dependencies.** none\n```\n\n## Dependencies\n\n- starts-after #11\n'
+dep13 hold "fence indented four spaces" $'**Dependencies.** none\n\n    ```\n\n## Dependencies\n\n- starts-after #11\n'
+want_err "#13 held: the body of #13 has 2 Dependencies fields"
+dep13 hold "backtick in a backtick info string" $'**Dependencies.** none\n\n```x`y\n\n## Dependencies\n\n- starts-after #11\n'
+want_err "#13 held: the body of #13 has 2 Dependencies fields"
+dep13 hold "mid-line comment opener" $'**Dependencies.** none\n\nSee the plan <!-- draft\n## Dependencies\n\n- starts-after #11\n'
+want_err "#13 held: the body of #13 has 2 Dependencies fields"
+# A block whose end the scan cannot place holds when it hides a heading.
+dep13 hold "unclosed fence in a list item" $'**Dependencies.** none\n\n- example\n  ```\n\n## Dependencies\n\n- starts-after #11\n'
+want_err "#13 held: cannot tell whether a line of #13 is in a code block or comment: ## Dependencies"
+dep13 hold "comment reopened on its closing line" $'### Dependencies\n\n- starts-after #10\n\n<!-- a\n--> <!-- b\n## Notes\n-->\n\n- starts-after #11\n'
+want_err "#13 held: cannot tell whether a line of #13 is in a code block or comment: ## Notes"
+dep13 hold "fence marker inside a div" $'<div>\n```\n</div>\n\n## Dependencies\n\n- starts-after #11\n\n```\n\n## Dependencies\n\nnone\n```\n'
+want_err "#13 held: cannot tell whether a line of #13 is in a code block or comment: ## Dependencies"
+dep13 hold "fence marker inside a pre past a blank line" $'<pre>\n\n```\n</pre>\n\n## Dependencies\n\n- starts-after #11\n\n```\n\n**Dependencies.** none\n'
+want_err "#13 held: cannot tell whether a line of #13 is in a code block or comment: ## Dependencies"
+dep13 hold "only a fenced field" $'```\n### Dependencies\n\n- starts-after #11\n```\n'
+want_err "#13 held: open unit #13 has no Dependencies field"
+dep13 hold "only a commented field" $'<!--\n### Dependencies\n\n- starts-after #11\n-->\n'
+want_err "#13 held: open unit #13 has no Dependencies field"
+units $MERGED $OPEN $OPEN $OPEN $MERGED
+CASE="fenced example above a none field"
+body d13 $'```\n### Dependencies\n\n- starts-after #11\n```\n\n### Dependencies\n\nnone\n'
+issue acme/app 13 OPEN "" "$TMP/d13.md"
+run --repo "$REPO" --issue 1
+want_rc 0
+case "$(startable_set)" in *"#13"*) ok ;; *) bad "#13 not startable: $(cat "$ERR")" ;; esac
+
 # freeside-ai/freeside#2346 stopped after a merge on #2336's line, which
 # has no prerequisite but the Blocker: the merge must still land and the
 # held unit must stay out of the startable set.
