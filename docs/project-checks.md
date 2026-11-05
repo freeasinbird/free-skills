@@ -45,6 +45,10 @@ from GitHub Actions, and requires branches to be up to date before merging.
 Adding a script test matrix therefore needs no protection change. Keep the
 fan-in job's `if: always()`: a skipped required check counts as passing.
 
+To update a branch with GitHub's **Update branch** button, choose **Update
+with rebase**. Its default merges the base in, and `check` then fails on that
+merge commit.
+
 ## Commit Messages
 
 Pull-request CI runs
@@ -52,8 +56,11 @@ Pull-request CI runs
 `bash scripts/check-commit-messages.sh origin/main HEAD`.
 
 The script resolves the merge base and checks every non-merge commit in
-`merge-base..head`. It exempts merge commits and mainline commits from a
-base-freshness merge. One run reports every offending commit and rule.
+`merge-base..head`. Mainline commits before the merge base stay out of the
+checked set. One run reports every offending commit and rule.
+
+The range must hold no merge commit. A branch is refreshed only by rebasing
+onto its base, so a merge of the base or any other branch into it fails.
 
 Every checked commit must satisfy all of these mechanical rules:
 

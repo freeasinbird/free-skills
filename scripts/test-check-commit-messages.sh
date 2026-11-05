@@ -193,7 +193,7 @@ assert_not_contains "$good_one"
 assert_not_contains "$good_two"
 assert_contains "[sentence-case]"
 
-begin_case "merge commits are exempt"
+begin_case "merge commit in the branch fails without a message check"
 repo=$(new_repo "case$case_number")
 base=$(git -C "$repo" rev-parse HEAD)
 git -C "$repo" switch -q -c side
@@ -203,10 +203,11 @@ commit_message "$repo" $'Add valid feature work\n\nGive the feature branch a val
 git -C "$repo" merge -q --no-ff -m 'Merge side without a body' side
 head=$(git -C "$repo" rev-parse HEAD)
 run_check "$repo" "$base" "$head"
-assert_rc 0
-assert_contains "PASS: checked 2 non-merge commit(s)"
+assert_rc 1
+assert_contains '"Merge side without a body": [merge-commit]'
+assert_contains "FAIL: 1 violation(s) across 2 non-merge commit(s)"
 
-begin_case "base-freshness merge excludes mainline commits"
+begin_case "base-freshness merge fails and leaves mainline commits unchecked"
 repo=$(new_repo "case$case_number")
 git -C "$repo" switch -q -c feature
 commit_message "$repo" $'Add valid feature work\n\nKeep the feature commit inside the checked range.' >/dev/null
@@ -215,6 +216,21 @@ commit_message "$repo" $'fix: simulate accepted mainline history\n\nKeep this kn
 base=$(git -C "$repo" rev-parse HEAD)
 git -C "$repo" switch -q feature
 git -C "$repo" merge -q --no-ff -m 'Merge main without a body' main
+head=$(git -C "$repo" rev-parse HEAD)
+run_check "$repo" "$base" "$head"
+assert_rc 1
+assert_contains '"Merge main without a body": [merge-commit] branch history must be linear'
+assert_contains "FAIL: 1 violation(s) across 1 non-merge commit(s)"
+
+begin_case "branch rebased onto the base passes"
+repo=$(new_repo "case$case_number")
+git -C "$repo" switch -q -c feature
+commit_message "$repo" $'Add valid feature work\n\nKeep the feature commit inside the checked range.' >/dev/null
+git -C "$repo" switch -q main
+commit_message "$repo" $'Advance the base\n\nMove main past the feature branch point.' >/dev/null
+base=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" switch -q feature
+git -C "$repo" rebase -q main
 head=$(git -C "$repo" rev-parse HEAD)
 run_check "$repo" "$base" "$head"
 assert_rc 0

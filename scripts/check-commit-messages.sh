@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# check-commit-messages.sh — mechanical commit-message policy check.
+# check-commit-messages.sh — mechanical commit-message and linear-branch check.
 #
 # Usage: check-commit-messages.sh <base-ref> <head-ref>
 #
-# Resolves both refs, finds their merge base, and checks every non-merge
-# commit in <merge-base>..<head-ref>. This keeps mainline commits brought
-# into a feature branch by a base-freshness merge out of the checked set.
+# Resolves both refs, finds their merge base, and checks the message of every
+# non-merge commit in <merge-base>..<head-ref>. Any merge commit in that range
+# fails: a branch is refreshed only by rebasing onto its base.
 # The script performs no network I/O and does not mutate the repository.
 #
 # Local example:
 #   bash scripts/check-commit-messages.sh origin/main HEAD
 #
 # Exit codes:
-#   0  every checked commit satisfies the mechanical policy
-#   1  one or more commit messages violate the policy
+#   0  the range has no merge commit and every checked message satisfies the
+#      mechanical policy
+#   1  a commit message violates the policy, or the range has a merge commit
 #   2  usage/environment error or git could not check the requested range
 set -euo pipefail
 
@@ -72,6 +73,10 @@ MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA") \
   || fail_git "no merge base between $BASE_SHA and $HEAD_SHA; fetch complete history"
 COMMITS=$(git rev-list --reverse --no-merges "$MERGE_BASE..$HEAD_SHA") \
   || fail_git "cannot enumerate commits in $MERGE_BASE..$HEAD_SHA"
+# A branch is refreshed only by rebasing onto its base, so its history must
+# be linear: the PR's own merge commit is the one merge the work unit adds.
+MERGES=$(git rev-list --reverse --merges "$MERGE_BASE..$HEAD_SHA") \
+  || fail_git "cannot enumerate merge commits in $MERGE_BASE..$HEAD_SHA"
 
 MESSAGE_FILE=$(mktemp)
 trap 'rm -f "$MESSAGE_FILE"' EXIT
@@ -166,6 +171,13 @@ for sha in $COMMITS; do
     report_violation "$sha" "$subject" body-required \
       "body must contain a non-blank line after the separator"
   fi
+done
+
+for sha in $MERGES; do
+  subject=$(git log -1 --format=%s "$sha") \
+    || fail_git "cannot read commit object $sha"
+  report_violation "$sha" "$subject" merge-commit \
+    "branch history must be linear; rebase onto the base instead of merging"
 done
 
 if [ "$violations" -ne 0 ]; then
