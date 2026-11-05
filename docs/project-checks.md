@@ -136,3 +136,5 @@ Run each suite when its stated trigger applies.
   `merge-cleanup.sh` changed (`./scripts/test-merge-cleanup.sh`)
 - Refresh validation matrix green when merge-cleanup's
   `tracker-refresh.sh` changed (`./scripts/test-merge-cleanup-refresh.sh`)
+- Write validation matrix green when merge-cleanup's `tracker-write.sh` or
+  `tracker-refresh.sh` changed (`./scripts/test-merge-cleanup-write.sh`)
