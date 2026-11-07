@@ -927,75 +927,23 @@ if grep -q 'pr merge' "$FIX/calls.log" 2>/dev/null; then
   bad "the merge command ran despite the shared head"
 else ok; fi
 
-scenario "fork-base auto-delete stops before the merge"
-std_setup; std_fixtures
-repo_fx "$BB" upstream/name true
-rules_fx '[{"type":"merge_queue","parameters":{"merge_method":"MERGE"}}]'
-printf '{"title":"T"}' > "$FIX/title.json"
-run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP fork-auto-delete'
-if grep -q 'pr merge' "$FIX/calls.log" 2>/dev/null; then
-  bad "the merge ran despite unenumerable fork-network consumers"
-else ok; fi
-
-scenario "a last-moment auto-delete change still stops the merge"
-std_setup; std_fixtures
-repo_fx "$BB" upstream/name false
-jq '.delete_branch_on_merge = true' "$FIX/repo.json" > "$FIX/repo-next.json"
-printf '{"title":"T"}' > "$FIX/title.json"
-run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP fork-auto-delete'
-if grep -q 'pr merge' "$FIX/calls.log" 2>/dev/null; then
-  bad "the merge ran after auto-delete changed between repository reads"
-else ok; fi
-
-scenario "a fork base without auto-delete can still merge"
-std_setup; std_fixtures
-repo_fx "$BB" upstream/name false
-printf '{"title":"T"}' > "$FIX/title.json"
-run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
-want_rc 0
-want_out 'OK merge'
-
-scenario "a non-fork base with auto-delete can still merge"
-std_setup; std_fixtures
-repo_fx "$BB" "" true
-printf '{"title":"T"}' > "$FIX/title.json"
-run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
-want_rc 0
-want_out 'OK merge'
-
-scenario "a root repository with forks and auto-delete stops the merge"
+scenario "a root repository with forks and auto-delete merges"
 std_setup; std_fixtures
 repo_fx "$BB" "" true 1
 printf '{"title":"T"}' > "$FIX/title.json"
 run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP fork-auto-delete'
+want_rc 0
+want_out 'OK merge'
 
-scenario "a last-moment first fork still stops auto-delete"
+scenario "a fork base with auto-delete merges"
 std_setup; std_fixtures
-repo_fx "$BB" "" true 0
-jq '.forks_count = 1' "$FIX/repo.json" > "$FIX/repo-next.json"
-printf '{"title":"T"}' > "$FIX/title.json"
-run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
-want_rc 2
-want_out 'STOP fork-auto-delete'
-if grep -q 'pr merge' "$FIX/calls.log" 2>/dev/null; then
-  bad "the merge ran after the first fork appeared between repository reads"
-else ok; fi
-
-scenario "a root repository with forks can merge when auto-delete is off"
-std_setup; std_fixtures
-repo_fx "$BB" "" false 1
+repo_fx "$BB" upstream/name true
 printf '{"title":"T"}' > "$FIX/title.json"
 run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
 want_rc 0
 want_out 'OK merge'
 
-scenario "a cross-repository head is outside the base auto-delete guard"
+scenario "a cross-repository head on a fork base with auto-delete merges"
 std_setup; std_fixtures
 pr_full OPEN "$HB" "$BB" "$FEAT_OID" true forker name
 repo_fx "$BB" upstream/name true
@@ -1003,30 +951,6 @@ printf '{"title":"T"}' > "$FIX/title.json"
 run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
 want_rc 0
 want_out 'OK merge'
-
-scenario "a missing auto-delete field is unknown"
-std_setup; std_fixtures
-jq 'del(.delete_branch_on_merge)' "$FIX/repo.json" > "$FIX/repo.new"
-mv "$FIX/repo.new" "$FIX/repo.json"
-run_sm "${CHECK[@]}"
-want_rc 4
-want_out 'LOOKUP_FAILED repo-facts'
-
-scenario "a missing forks count is unknown"
-std_setup; std_fixtures
-jq 'del(.forks_count)' "$FIX/repo.json" > "$FIX/repo.new"
-mv "$FIX/repo.new" "$FIX/repo.json"
-run_sm "${CHECK[@]}"
-want_rc 4
-want_out 'LOOKUP_FAILED repo-facts'
-
-scenario "a negative forks count is unknown"
-std_setup; std_fixtures
-jq '.forks_count = -1' "$FIX/repo.json" > "$FIX/repo.new"
-mv "$FIX/repo.new" "$FIX/repo.json"
-run_sm "${CHECK[@]}"
-want_rc 4
-want_out 'LOOKUP_FAILED repo-facts'
 
 scenario "merge proceeds with no queue on a plan-gated private repository"
 std_setup; std_fixtures

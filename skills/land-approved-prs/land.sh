@@ -410,25 +410,20 @@ ref_names_alias() { # ref_names_alias <ref-name> <ref-name>
 }
 
 # Facts about the base repository, loaded once per run: the default branch
-# for the collision guard, the fork lineage and count for the consumer
-# guards, and whether the forge auto-deletes a merged PR's head branch.
+# for the collision guard, the fork lineage for the consumer guards, the
+# clone endpoints for remote identity, and the merge-commit settings for the
+# queue message guard.
 REPO_FACTS_LOADED=""
 load_repo_facts() {
   [ -n "$REPO_FACTS_LOADED" ] && return 0
   local facts rn
   facts=$(gh_read api "repos/$REPO" \
-    --jq '[.default_branch, (.fork|tostring), (.forks_count|tostring), (.delete_branch_on_merge|tostring), (.parent.full_name // "~"), (.source.full_name // "~"), (.clone_url // "~"), (.ssh_url // "~"), (.merge_commit_title // "~"), (.merge_commit_message // "~")] | @tsv') \
+    --jq '[.default_branch, (.fork|tostring), (.parent.full_name // "~"), (.source.full_name // "~"), (.clone_url // "~"), (.ssh_url // "~"), (.merge_commit_title // "~"), (.merge_commit_message // "~")] | @tsv') \
     || lookup_failed repo-facts "could not read repository facts for $REPO"
-  IFS=$'\t' read -r DEFAULT_BRANCH REPO_IS_FORK FORKS_COUNT DELETE_BRANCH_ON_MERGE PARENT_REPO SOURCE_REPO REPO_CLONE_URL REPO_SSH_URL MERGE_COMMIT_TITLE_SETTING MERGE_COMMIT_MESSAGE_SETTING <<< "$facts"
+  IFS=$'\t' read -r DEFAULT_BRANCH REPO_IS_FORK PARENT_REPO SOURCE_REPO REPO_CLONE_URL REPO_SSH_URL MERGE_COMMIT_TITLE_SETTING MERGE_COMMIT_MESSAGE_SETTING <<< "$facts"
   [ -n "$DEFAULT_BRANCH" ] || lookup_failed repo-facts "empty default branch for $REPO"
   case "$REPO_IS_FORK" in true|false) ;; *)
     lookup_failed repo-facts "unexpected fork flag: $REPO_IS_FORK" ;;
-  esac
-  case "$DELETE_BRANCH_ON_MERGE" in true|false) ;; *)
-    lookup_failed repo-facts "unexpected delete_branch_on_merge flag: $DELETE_BRANCH_ON_MERGE" ;;
-  esac
-  case "$FORKS_COUNT" in ''|*[!0-9]*)
-    lookup_failed repo-facts "unexpected forks_count: $FORKS_COUNT" ;;
   esac
   [ "$REPO_CLONE_URL" != "~" ] && [ "$REPO_SSH_URL" != "~" ] \
     || lookup_failed repo-facts "repository clone endpoints are missing"
@@ -597,20 +592,6 @@ consumer_checks() {
       case "$n" in ''|*[!0-9]*) lookup_failed shared-head "unparseable listing from $target" ;; esac
       [ "$n" -eq 0 ] || stop shared-head "$n open PR(s) in $target use $BRANCH as their head; deleting or auto-deleting it closes them"
     done
-  fi
-}
-
-# A same-repository head on a base repository that is itself a fork can
-# also head PRs to sibling forks, which no repository-scoped query can
-# enumerate. If this repository auto-deletes heads on merge, merge-cleanup's
-# consumer guards run too late: the forge already removed the branch. Stop
-# before both direct merges and queue enqueueing.
-fork_auto_delete_check() {
-  load_repo_facts
-  if [ "$IS_FORK" != true ] && [ "$DELETE_BRANCH_ON_MERGE" = true ]; then
-    if [ "$REPO_IS_FORK" = true ] || [ "$FORKS_COUNT" -gt 0 ]; then
-      stop fork-auto-delete "$REPO participates in a fork network and auto-deletes merged head branches; $BRANCH may have unenumerable fork consumers, so merging could delete it before merge-cleanup can check its consumers"
-    fi
   fi
 }
 
@@ -1401,7 +1382,6 @@ phase_check() {
   workspace_preflight
   layout_check
   consumer_checks
-  fork_auto_delete_check
   queue_check
   # The verified head is the tip this session pushed: the local branch is
   # primary because a forge-reported head can move with a third party's
@@ -1520,20 +1500,19 @@ phase_merge() {
   queue_check
   consumer_checks
   # land's last refusal: the base tip it fetched and waited on must
-  # still be the forge's tip. Only the auto-delete refresh, which keeps its
-  # own zero-read window, sits between this read and the merge. The read and
-  # the merge are still not atomic; the landing design accepts that while
-  # one person starts every merge.
+  # still be the forge's tip. Only queue_message_check's settings reload,
+  # which reads only under a merge queue, sits between this read and the
+  # merge. The read and the merge are still not atomic; the landing design
+  # accepts that while one person starts every merge.
   if [ -n "$LAND_TIP" ]; then
     forge_base_tip
     [ "$FORGE_BASE_TIP" = "$LAND_TIP" ] \
       || stop base-moved "$BASE moved from $LAND_TIP to $FORGE_BASE_TIP after land fetched it; $HEAD_OID was not checked against the new tip, so run check and land again"
   fi
   # consumer_checks loads repository facts for its lineage queries. Reload
-  # them at the final boundary so an auto-delete setting changed while the
-  # other guards ran cannot pass from the stale cache.
+  # them at the final boundary so a merge-commit setting changed while the
+  # other guards ran cannot pass queue_message_check from the stale cache.
   REPO_FACTS_LOADED=""
-  fork_auto_delete_check
   queue_message_check
   local err
   err=$(mktemp) || lookup_failed merge "mktemp failed"
