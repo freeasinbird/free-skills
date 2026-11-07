@@ -395,10 +395,10 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
   checkout or the invocation is wrong, not the PR, so don't hand the PR back.
   Fix the invocation if you can. Otherwise end the batch as "Ending Early"
   says.
-- **`no-landing-record`, `bad-record`, `fork-auto-delete`, `queue-method`, or
-  `queue-message`:** The landing record or a repository setting is wrong, not
-  the PR, and it would stop every PR alike, so don't hand the PR back. End the
-  batch as "Ending Early" says, naming the guard and its detail.
+- **`no-landing-record`, `bad-record`, `queue-method`, or `queue-message`:**
+  The landing record or a repository setting is wrong, not the PR, and it
+  would stop every PR alike, so don't hand the PR back. End the batch as
+  "Ending Early" says, naming the guard and its detail.
 - **Any other `STOP`:** Hand back naming the guard.
 
 A read failure isn't a guard stop. `LOOKUP_FAILED` means a script couldn't
