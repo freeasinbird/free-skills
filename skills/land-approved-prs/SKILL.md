@@ -48,7 +48,8 @@ contains it:
 - `landed-since.sh` prints what landed since a PR diverged and runs the
   project's base-advance checks.
 - `land.sh` is the landing engine. It checks a PR, updates it onto the tip,
-  waits for CI on the exact commit, and merges.
+  waits for CI on the exact commit, and merges. Its `rerun` phase retries a
+  flaky CI failure once.
 
 ## Three Words
 
@@ -235,8 +236,8 @@ ref's absence succeeds for exactly one lander.
 - **Release** on an empty fresh list. `--release <id>` ends a batch early.
 - **Stale** means a heartbeat older than the record's stale age. That age
   must exceed the longest a live lander goes without listing: the engine's CI
-  and merge caps times the number of allowed runs, plus a reviewer wait and a
-  margin.
+  and merge caps times the number of allowed runs, plus two CI caps for a
+  `rerun` phase's two waits, a reviewer wait, and a margin.
 - **Never take over.** A lock held by another run stops the list as
   `lock-held`, or `lock-stale` when it is past the stale age. Report its run
   id, machine, and age, and stop.
@@ -295,6 +296,7 @@ returns the verified head OID that `land` pins with `--head`:
 ```sh
 <skill-dir>/land.sh check --pr <n> --repo <owner/name>
 <skill-dir>/land.sh land  --pr <n> --repo <owner/name> --head <oid>
+<skill-dir>/land.sh rerun --pr <n> --repo <owner/name> --head <oid>
 ```
 
 Pin the head the list gave. The PR's pinned head is the `head_oid` from the
@@ -334,21 +336,34 @@ The engine's options:
 
 - `--base-remote <name>` and `--head-remote <name>` name the base or head
   remote when several point at the repository.
-- `--interval <seconds>` spaces the CI and merged-state polls (default 10).
+- `--interval <seconds>` spaces the CI, merged-state, and `rerun` polls
+  (default 10).
 - `--cap-minutes <n>` caps the wait for the merged state (default 15).
-- `--ci-cap-minutes <n>` caps the CI wait in `land` (default 30).
+- `--ci-cap-minutes <n>` caps the CI wait in `land` and each of `rerun`'s
+  two waits (default 30).
 - `--dry-run` reports `land`'s decision without rebasing, pushing, or
   merging.
 
-Run `land` in the background with a completion wake where the platform offers
-one. Otherwise pass `--ci-cap-minutes` and `--cap-minutes` that sum to less
-than the platform's limit on a single command. Either way, rerun on
+`rerun` runs only after `land` stops `checks-failed`; see that stop below. It
+waits for every workflow run on the head to finish, because GitHub refuses to
+rerun a running one. It then reruns the failed jobs of each GitHub Actions run
+that owns a failing check and waits until the new jobs replace the failed
+check runs. It never merges.
+
+Run `land` and `rerun` in the background with a completion wake where the
+platform offers one. Otherwise keep each command under the platform's limit
+on a single command: for `land`, `--ci-cap-minutes` plus `--cap-minutes`; for
+`rerun`, twice `--ci-cap-minutes`. Either way, run the engine again on
 `checks-pending` or `checks-missing` at most three times before handing back.
+A `rerun` phase and the `land` run after it each count as one of those three.
 
 ### Acting on Each Stop
 
 Rerun the engine only where a bullet below says to. Never rerun it to get past
 any other stop, and never bypass a guard with force, reset, or a manual merge.
+The one CI rerun is the `checks-failed` exception below: it retries a
+classified flake, and `land` still merges only after every check passes on
+the same commit.
 
 - **`rebased`:** The default branch moved after your read, and the engine
   pushed a rebased head. Record the `head_oid` from the `STOP rebased` result
@@ -373,10 +388,44 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
 - **`base-moved`:** Another merge landed, or the PR was retargeted. If the
   PR's base changed, list again and let filter 2 decide. Otherwise run
   `check` and `land` again.
-- **`checks-failed`:** Diagnose. Fix only under the rework rule; otherwise
-  hand back.
-- **`checks-pending` or `checks-missing`:** Rerun within the bound above, then
-  hand back.
+- **`checks-failed`:** Read the failed jobs' logs and name the failing tests
+  or steps. The result's `failed` array names each failed check; for an entry
+  with a `run_id`, run
+  `gh run view <run_id> --job <job_id> --log-failed --repo <owner/name>`.
+  Then classify the failure:
+
+  - **Infrastructure:** The runner was lost or cancelled, a setup step
+    failed, the network or a registry failed, or the forge returned a 5xx.
+    Rerun.
+  - **Known flake:** Every failing test is named as flaky in an open issue in
+    the project. Rerun, and comment on that issue with the run link.
+  - **Suspected flake:** The failure is outside the PR's diff paths and in no
+    package the diff touches, and the same check passed on the PR's previous
+    head. That head is the `old_head_oid` from this batch's `STOP rebased`,
+    or else the head before the pinned one in the PR's push history. Rerun.
+    If the rerun passes, file a flake issue naming the test and both runs, and
+    link it in the batch report.
+  - **Otherwise:** The failure is in the PR's paths, or no previous green run
+    exists. Treat it under the rework rule, or hand back.
+
+  Rerun with `land.sh rerun` on the pinned head, then run `land` again on the
+  same head. The budget is one rerun per pinned head, and the engine enforces
+  it. A second failure on that head hands back, with both runs and the
+  classification in the comment, because a failure that repeats is evidence
+  against a flake. A rebase onto a new tip gets a fresh budget.
+
+- **`rerun-spent`, `rerun-unsupported`, `rerun-refused`, or
+  `rerun-unconfirmed`:** `rerun` retried nothing `land` can use. Hand back
+  naming the guard, with the classification and any run links. `rerun-spent`
+  means a failed run on the head was already rerun, by a lander or by hand.
+  `rerun-unsupported` means a failure can't be traced to a failed GitHub
+  Actions run: a check from another app, a commit status, or a check an
+  Actions workflow posted without a job link.
+- **`nothing-to-rerun`:** No GitHub Actions job on the head is failing any
+  more, so the failure cleared, for example after someone reran it. Run `land` again on the same
+  head; if it stops `checks-failed`, hand back.
+- **`checks-pending` or `checks-missing`:** Run the same phase again within
+  the bound above, then hand back.
 - **`stacked-prs`:** The PR is the parent of a stack on a cross-repository
   head. Hand back naming the guard; see "Stacks."
 - **`lease-failed`:** Someone else pushed to the branch after approval. Hand
@@ -590,6 +639,13 @@ lock's state: `acquired`, `refreshed`, `released`, or `absent`. It reports
 - `remote-unresolved`, `remote-ambiguous`, or `not-a-repo`: fix the
   invocation.
 
+`land.sh`'s `STOP checks-failed` adds a `failed` array beside `detail`. Each
+entry names a failed check with `name`, `run_id`, `job_id`, and `url`. The
+IDs are `null` for a check that isn't a GitHub Actions job, and a failing
+commit status appears under its context name. `land.sh rerun` reports
+`OK rerun` with the `head_oid` and a `runs` array; each entry gives a rerun
+`run_id` and its `failed_jobs`.
+
 `landed-since.sh` reports `OK landed-since` with the range, the number of
 heads it examined, the commit count, and each check's exit status. It stops
 `original-base-unknown` when the original fork point can't be found.
@@ -608,6 +664,7 @@ End every batch with a report:
 - What landed, with each merged head.
 - What changed beyond a clean rebase, and why.
 - What was handed back, and the reason for each.
+- Each CI rerun: its classification, any flake issue, and the result.
 - Every excluded PR that still carries the approval label, with its filter
   and detail.
 - Which worktrees were kept, with their paths.

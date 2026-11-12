@@ -13,11 +13,13 @@
 #   land.sh check   --pr N --repo owner/name
 #   land.sh land    --pr N --repo owner/name --head <40-hex-oid>
 #   land.sh merge   --pr N --repo owner/name --head <40-hex-oid>
+#   land.sh rerun   --pr N --repo owner/name --head <40-hex-oid>
 #     [--base-remote NAME]   # override remote resolution for the base repo
 #     [--head-remote NAME]   # override remote resolution for the head repo
-#     [--interval 10]        # land/merge: seconds between CI and MERGED polls
+#     [--interval 10]        # land/merge/rerun: seconds between polls
 #     [--cap-minutes 15]     # land/merge: total wait for MERGED
-#     [--ci-cap-minutes 30]  # land phase: total wait for CI on the head
+#     [--ci-cap-minutes 30]  # land: total wait for CI on the head; rerun:
+#                            # each of its two waits
 #     [--dry-run]            # land phase only: report, never rebase or merge
 #
 # Run each phase from the base-branch checkout, the one merge-cleanup will
@@ -42,6 +44,14 @@
 # merge    Merges pinned to --head with an explicit title-only message,
 #          then polls until the forge reports the PR MERGED (a zero exit
 #          from the merge command proves enqueueing, not merging).
+# rerun    Reruns the failed jobs of the head's failed GitHub Actions runs
+#          once, after land stopped checks-failed. Waits for every workflow
+#          run on --head to finish (GitHub refuses to rerun a running one),
+#          refuses when a failure is not an Actions job or its run was
+#          already rerun, and reruns only the runs that own a failing
+#          latest check run. It then waits until the rerun jobs replace the
+#          failed check runs, so the next land reads the new attempt rather
+#          than the old failure. It never merges.
 #
 # Last line on stdout is the machine-readable result:
 #   OK <phase> <json>            phase completed; json carries the facts
@@ -64,8 +74,8 @@ usage() {
 }
 
 case "${1:-}" in
-  check|land|merge) PHASE="$1"; shift ;;
-  *) echo "land.sh: first argument must be check, land, or merge" >&2; usage ;;
+  check|land|merge|rerun) PHASE="$1"; shift ;;
+  *) echo "land.sh: first argument must be check, land, merge, or rerun" >&2; usage ;;
 esac
 
 # Recognize the option, then require its value, before reading $2: a
@@ -212,6 +222,12 @@ remote_urls_newline_free() { # remote_urls_newline_free <remote>
 }
 stop() { # stop <guard> <detail>
   echo "STOP $1 {\"detail\":\"$(json_escape "$2")\"}"
+  exit 2
+}
+# checks-failed also names each failed check, so the agent can fetch a
+# failed job's log without searching for it. CI_FAILED_JSON is ci_read's.
+stop_failed() { # stop_failed <detail>
+  echo "STOP checks-failed {\"detail\":\"$(json_escape "$1")\",\"failed\":$CI_FAILED_JSON}"
   exit 2
 }
 lookup_failed() { # lookup_failed <what> <detail>
@@ -1093,14 +1109,36 @@ forge_base_tip() { # sets FORGE_BASE_TIP to the forge's current tip of $BASE
 # read sets CI_STATE to unread, CI_WHAT to the read that failed, and
 # CI_DETAIL to why, then returns 1; the caller decides whether to poll
 # again.
+#
+# Each failed check also becomes a JSON entry in CI_FAILED_JSON, built by
+# gh's jq so any check name stays escaped: {name, run_id, job_id, url}. A
+# GitHub Actions job's check-run id is its job id, and its details URL
+# names its workflow run; any other check, and every failing commit
+# status, gets null ids, and CI_UNRERUNNABLE turns true because
+# `gh run rerun` cannot retry it. CI_FAILED_JOBS lists "<run> <job>" for
+# each failed Actions job.
 ci_read() { # ci_read <oid>
-  local oid="$1" runs status st concl name total=0 bad="" waiting="" s_state s_total
+  local oid="$1" runs status st concl run job entry name line total=0 bad="" waiting=""
+  local s_state="" s_total="" failed="" status_failed="" first=true
+  CI_FAILED_JSON="[]" CI_FAILED_JOBS="" CI_UNRERUNNABLE=false
+  # The entry sits before the name: every field before the name is never
+  # empty, and an empty field would vanish from a tab-separated read.
+  # tojson never emits a raw tab or newline, so the entry stays one field.
   if ! runs=$(gh_read api --paginate "repos/$REPO/commits/$oid/check-runs?per_page=100" \
-    --jq '.check_runs[] | [.status, (.conclusion // "none"), .name] | @tsv'); then
+    --jq '.check_runs[]
+      | (if .app.slug == "github-actions"
+         then ((.details_url // "") | capture("/actions/runs/(?<run>[0-9]+)/job/[0-9]+$") | .run) // null
+         else null end) as $run
+      | ([.status, (.conclusion // "none"), ($run // "-"),
+          (if $run then (.id | tostring) else "-" end)] | @tsv)
+        + "\t" + ({name, run_id: ($run | if . then tonumber else null end),
+                   job_id: (if $run then .id else null end),
+                   url: (.details_url // .html_url)} | tojson)
+        + "\t" + ([.name] | @tsv)'); then
     CI_STATE=unread CI_WHAT=check-runs CI_DETAIL="could not read check runs for $oid"
     return 1
   fi
-  while IFS=$'\t' read -r st concl name; do
+  while IFS=$'\t' read -r st concl run job entry name; do
     [ -n "$st" ] || continue
     total=$((total + 1))
     if [ "$st" != completed ]; then
@@ -1108,16 +1146,31 @@ ci_read() { # ci_read <oid>
     else
       case "$concl" in
         success|neutral|skipped) ;;
-        *) bad+=", $name ($concl)" ;;
+        *)
+          bad+=", $name ($concl)"
+          failed+=",$entry"
+          if [ "$run" = - ]; then CI_UNRERUNNABLE=true
+          else CI_FAILED_JOBS+="$run $job"$'\n'
+          fi ;;
       esac
     fi
   done <<< "$runs"
-  if ! status=$(gh_read api "repos/$REPO/commits/$oid/status" \
-    --jq '[.state, (.total_count|tostring)] | @tsv'); then
+  # The combined status lists only the latest status per context. Its
+  # first line is the state and count; each failing status follows as an
+  # entry.
+  if ! status=$(gh_read api "repos/$REPO/commits/$oid/status?per_page=100" \
+    --jq '([.state, (.total_count|tostring)] | @tsv),
+      (.statuses[]? | select(.state == "failure" or .state == "error")
+       | {name: .context, run_id: null, job_id: null, url: .target_url} | tojson)'); then
     CI_STATE=unread CI_WHAT=commit-status CI_DETAIL="could not read the combined status for $oid"
     return 1
   fi
-  IFS=$'\t' read -r s_state s_total <<< "$status"
+  while IFS= read -r line; do
+    if [ "$first" = true ]; then
+      IFS=$'\t' read -r s_state s_total <<< "$line"; first=false; continue
+    fi
+    [ -z "$line" ] || status_failed+=",$line"
+  done <<< "$status"
   case "$s_total" in ''|*[!0-9]*)
     lookup_failed commit-status "unparseable status count for $oid: $s_total" ;;
   esac
@@ -1128,10 +1181,14 @@ ci_read() { # ci_read <oid>
     case "$s_state" in
       success) ;;
       pending) waiting+=", commit statuses (pending)" ;;
-      failure|error) bad+=", commit statuses ($s_state)" ;;
+      failure|error)
+        bad+=", commit statuses ($s_state)"
+        failed+="$status_failed"
+        CI_UNRERUNNABLE=true ;;
       *) lookup_failed commit-status "unexpected combined state for $oid: $s_state" ;;
     esac
   fi
+  CI_FAILED_JSON="[${failed#,}]"
   if [ -n "$bad" ]; then CI_STATE=failed; CI_DETAIL="${bad#, }"
   elif [ -n "$waiting" ]; then CI_STATE=pending; CI_DETAIL="${waiting#, }"
   elif [ "$total" -eq 0 ]; then CI_STATE=missing; CI_DETAIL="no check runs or commit statuses"
@@ -1156,7 +1213,7 @@ ci_wait() { # ci_wait <oid>: returns only once CI passed on <oid>
       echo "land.sh: CI poll failed ($failed_polls of 3 in a row): $CI_DETAIL" >&2
     fi
     [ "$CI_STATE" != failed ] \
-      || stop checks-failed "CI failed on $oid: $CI_DETAIL; fix the branch, then run check and land again"
+      || stop_failed "CI failed on $oid: $CI_DETAIL; fix the branch, then run check and land again"
     # Workflows register their checks asynchronously after a push, so one
     # green read can be a fast check finishing before a slow one exists.
     # Pass only on the second consecutive green read with the same check
@@ -1365,13 +1422,97 @@ land_dry_run() { # land_dry_run <on-tip>
   summary="dry run, nothing changed. tip: $tip_msg. checks: $ci_msg. base: $base_msg"
   [ "$on_tip" = true ] || stop not-on-tip "$summary"
   case "$CI_STATE" in
-    failed) stop checks-failed "$summary" ;;
+    failed) stop_failed "$summary" ;;
     pending) stop checks-pending "$summary; a real run waits up to $CI_CAP_MINUTES minute(s)" ;;
     missing) stop checks-missing "$summary; a real run waits up to $CI_CAP_MINUTES minute(s)" ;;
   esac
   [ "$FORGE_BASE_TIP" = "$LAND_TIP" ] || stop base-moved "$summary"
   echo "OK land {\"dry_run\":true,\"head_oid\":\"$HEAD_OID\",\"base_tip\":\"$LAND_TIP\",\"checks\":\"$CI_STATE\",\"would\":\"merge\"}"
   exit 0
+}
+
+# --- rerun ------------------------------------------------------------------
+
+# Wait until every workflow run on HEAD_OID has finished: GitHub refuses
+# to rerun a run that is still going, and land stops checks-failed at the
+# first failed check. Sets RERUN_FAILED to "<run_id> <run_attempt>" lines
+# for each run whose conclusion would fail ci_read. Polls like ci_wait: one
+# attempt per poll, ending at a permanent error or three failed polls.
+rerun_await_runs() {
+  local deadline remaining sleep_for runs id st concl attempt busy="" unread failed_polls=0
+  deadline=$(( SECONDS + CI_CAP_MINUTES * 60 ))
+  while :; do
+    if runs=$(GH_READ_ATTEMPTS=1 gh_read api --paginate \
+        "repos/$REPO/actions/runs?head_sha=$HEAD_OID&per_page=100" \
+        --jq '.workflow_runs[] | [(.id | tostring), .status, (.conclusion // "none"), (.run_attempt | tostring)] | @tsv'); then
+      unread=false failed_polls=0 busy="" RERUN_FAILED=""
+      while IFS=$'\t' read -r id st concl attempt; do
+        [ -n "$id" ] || continue
+        case "$id:$attempt" in *[!0-9:]*|:*|*:)
+          lookup_failed workflow-runs "unexpected workflow run fields on $HEAD_OID: $id, attempt $attempt" ;;
+        esac
+        if [ "$st" != completed ]; then
+          busy+=", run $id ($st)"
+        else
+          case "$concl" in
+            success|neutral|skipped) ;;
+            *) RERUN_FAILED+="$id $attempt"$'\n' ;;
+          esac
+        fi
+      done <<< "$runs"
+      [ -n "$busy" ] || return 0
+    else
+      ! gh_err_permanent || lookup_failed workflow-runs "could not read the workflow runs on $HEAD_OID"
+      unread=true failed_polls=$((failed_polls + 1))
+      [ "$failed_polls" -lt 3 ] \
+        || lookup_failed workflow-runs "could not read the workflow runs on $HEAD_OID; 3 polls in a row failed"
+      echo "land.sh: workflow-run poll failed ($failed_polls of 3 in a row)" >&2
+    fi
+    remaining=$(( deadline - SECONDS ))
+    if [ "$remaining" -le 0 ]; then
+      [ "$unread" = false ] \
+        || lookup_failed workflow-runs "could not read the workflow runs on $HEAD_OID; the last poll before the $CI_CAP_MINUTES-minute cap failed"
+      stop checks-pending "workflow runs on $HEAD_OID are still running after $CI_CAP_MINUTES minute(s): ${busy#, }; nothing was rerun"
+    fi
+    sleep_for="$INTERVAL"
+    [ "$sleep_for" -le "$remaining" ] || sleep_for="$remaining"
+    sleep "$sleep_for"
+  done
+}
+
+# Wait until no check run in <job-ids> is still the latest for its name on
+# HEAD_OID. Until GitHub registers the rerun jobs, the head's latest check
+# runs still show the old failure, and a land run in that gap would stop
+# checks-failed on a flake that was never retried. Sets RERUN_STALE to the
+# ids still listed.
+rerun_await_registration() { # rerun_await_registration <job-ids>
+  local ids="$1" listed id deadline remaining sleep_for unread failed_polls=0
+  deadline=$(( SECONDS + CI_CAP_MINUTES * 60 ))
+  while :; do
+    if listed=$(GH_READ_ATTEMPTS=1 gh_read api --paginate \
+        "repos/$REPO/commits/$HEAD_OID/check-runs?per_page=100" --jq '.check_runs[].id'); then
+      unread=false failed_polls=0 RERUN_STALE=""
+      for id in $ids; do
+        ! grep -qxF -- "$id" <<< "$listed" || RERUN_STALE+=" $id"
+      done
+      [ -n "$RERUN_STALE" ] || return 0
+    else
+      ! gh_err_permanent || lookup_failed check-runs "could not read check runs for $HEAD_OID after the rerun request"
+      unread=true failed_polls=$((failed_polls + 1))
+      [ "$failed_polls" -lt 3 ] \
+        || lookup_failed check-runs "could not read check runs for $HEAD_OID after the rerun request; 3 polls in a row failed"
+      echo "land.sh: check-run poll failed ($failed_polls of 3 in a row)" >&2
+    fi
+    remaining=$(( deadline - SECONDS ))
+    if [ "$remaining" -le 0 ]; then
+      [ "$unread" = false ] \
+        || lookup_failed check-runs "could not read check runs for $HEAD_OID after the rerun request; the last poll before the $CI_CAP_MINUTES-minute cap failed"
+      stop rerun-unconfirmed "the reruns were requested, but after $CI_CAP_MINUTES minute(s) the failed check run(s)$RERUN_STALE are still the latest on $HEAD_OID, so land would read the old failure"
+    fi
+    sleep_for="$INTERVAL"
+    [ "$sleep_for" -le "$remaining" ] || sleep_for="$remaining"
+    sleep "$sleep_for"
+  done
 }
 
 # --- phases -----------------------------------------------------------------
@@ -1557,8 +1698,65 @@ phase_merge() {
   done
 }
 
+# One rerun of the head's failed Actions jobs. It touches no local ref, so
+# it needs neither the repository facts nor a checkout guard. The budget
+# lives in the forge, not in the caller's memory: a failed run whose
+# run_attempt is above 1 was already rerun, by this skill or by hand.
+phase_rerun() {
+  [ "$PR_STATE" = OPEN ] || stop pr-not-open "PR $PR is $PR_STATE, not OPEN"
+  [ "$FORGE_HEAD_OID" = "$HEAD_OID" ] \
+    || stop oid-mismatch "the forge reports head $FORGE_HEAD_OID but --head pinned $HEAD_OID; something was pushed since check"
+  rerun_await_runs
+  ci_read "$HEAD_OID" || lookup_failed "$CI_WHAT" "$CI_DETAIL"
+  [ "$CI_UNRERUNNABLE" = false ] \
+    || stop rerun-unsupported "a failure on $HEAD_OID is not a check traced to a GitHub Actions job, so gh run rerun cannot retry it: $CI_DETAIL; nothing was rerun"
+  [ -n "$CI_FAILED_JOBS" ] \
+    || stop nothing-to-rerun "no GitHub Actions job is failing on $HEAD_OID; CI is $CI_STATE ($CI_DETAIL)"
+  # Rerun only the runs that own a failing latest check run. An older failed
+  # run on the same commit (from a reopened PR, another branch, or a manual
+  # dispatch) no longer decides CI: rerunning it could turn CI red again, and
+  # its attempt count says nothing about this failure.
+  local id a attempt run job targets="" orphan="" spent="" done_ids="" detail
+  local runs_json="" jobs job_ids=""
+  while read -r run job; do
+    [ -n "$run" ] || continue
+    case " $targets $orphan " in *" $run "*) continue ;; esac
+    attempt=""
+    while read -r id a; do
+      [ "$id" != "$run" ] || attempt="$a"
+    done <<< "$RERUN_FAILED"
+    if [ -z "$attempt" ]; then orphan+=" $run"; continue; fi
+    [ "$attempt" -le 1 ] || spent+=", run $run (attempt $attempt)"
+    targets+=" $run"
+  done <<< "$CI_FAILED_JOBS"
+  [ -z "$orphan" ] \
+    || stop rerun-unsupported "failing jobs on $HEAD_OID belong to workflow run(s)$orphan, which did not fail, so rerunning failed jobs cannot retry them; nothing was rerun"
+  [ -z "$spent" ] \
+    || stop rerun-spent "a failed run on $HEAD_OID was already rerun: ${spent#, }; a failure that repeats is evidence against a flake, so nothing was rerun"
+  # A write, not a read: one attempt, and its stderr is quoted in the stop,
+  # so gh's and Go's debug output stays off as for every forge read.
+  for id in $targets; do
+    if ! GH_DEBUG= GODEBUG="$GH_GODEBUG" gh run rerun "$id" --failed --repo="$REPO" \
+        </dev/null >&2 2>"$GH_ERR"; then
+      detail=$(tr -d '\0' < "$GH_ERR" | tail -c 300)
+      stop rerun-refused "gh run rerun $id --failed failed: $detail; already rerun: ${done_ids:-none}"
+    fi
+    : > "$GH_ERR"
+    done_ids+="${done_ids:+, }$id"
+    jobs=""
+    while read -r run job; do
+      [ "$run" = "$id" ] || continue
+      jobs+=",$job" job_ids+=" $job"
+    done <<< "$CI_FAILED_JOBS"
+    runs_json+=",{\"run_id\":$id,\"failed_jobs\":[${jobs#,}]}"
+  done
+  rerun_await_registration "$job_ids"
+  echo "OK rerun {\"head_oid\":\"$HEAD_OID\",\"runs\":[${runs_json#,}]}"
+}
+
 case "$PHASE" in
   check) phase_check ;;
   land) phase_land ;;
   merge) phase_merge ;;
+  rerun) phase_rerun ;;
 esac
