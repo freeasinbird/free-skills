@@ -46,6 +46,7 @@ OID=0123456789abcdef0123456789abcdef01234567
 
 t 4 "valid check reaches the forge read" check --pr 83 --repo owner/name
 t 4 "valid merge reaches the forge read" merge --pr 83 --repo owner/name --head "$OID"
+t 4 "valid rerun reaches the forge read" rerun --pr 83 --repo owner/name --head "$OID"
 t 64 "cleanup is no longer a phase" cleanup --pr 83 --repo owner/name --head "$OID"
 t 4 "uppercase head normalized" merge --pr 83 --repo owner/name --head "$(printf '%s' "$OID" | tr 'a-f' 'A-F')"
 t 4 "valid land reaches the forge read" land --pr 83 --repo owner/name --head "$OID"
@@ -67,8 +68,10 @@ t 64 "repo query injection" check --pr 83 --repo 'a/b?x=1'
 t 64 "repo missing name" check --pr 83 --repo a/
 t 64 "merge without head" merge --pr 83 --repo owner/name
 t 64 "land without head" land --pr 83 --repo owner/name
+t 64 "rerun without head" rerun --pr 83 --repo owner/name
 t 64 "dry run takes no value" land --pr 83 --repo owner/name --head "$OID" --dry-run yes
 t 64 "dry run outside land never merges" merge --pr 83 --repo owner/name --head "$OID" --dry-run
+t 64 "dry run is not a rerun option" rerun --pr 83 --repo owner/name --head "$OID" --dry-run
 t 64 "ci cap non-numeric" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes xyz
 t 64 "ci cap leading zeros" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes 08
 t 64 "ci cap beyond arithmetic bound" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes 10000000
@@ -160,7 +163,7 @@ for a in "$@"; do
   case "$a" in
     --json=*) jsonval="${a#--json=}" ;;
     --jq=*) jqval="${a#--jq=}" ;;
-    pr|api) [ -z "$sub" ] && sub="$a" ;;
+    pr|api|run) [ -z "$sub" ] && sub="$a" ;;
     view|list|merge) [ "$sub" = pr ] && [ -z "${verb:-}" ] && verb="$a" ;;
     repos/*) api="$a" ;;
     --paginate) paginate=1 ;;
@@ -181,8 +184,25 @@ if [ "$sub" = api ]; then
         exit 1
       fi
       fixture="$FIX/rules.json" ;;
-    */commits/*/check-runs*) fixture="$FIX/checks.json" ;;
-    */commits/*/status) fixture="$FIX/status.json" ;;
+    */commits/*/check-runs*)
+      fixture="$FIX/checks.json"
+      # A rerun that registers late: this read still sees the old check
+      # runs, and every later read sees the rerun jobs.
+      if [ -f "$FIX/swap-armed" ]; then
+        cp "$FIX/checks.json" "$FIX/checks-stale.json"
+        fixture="$FIX/checks-stale.json"
+        cp "$FIX/checks-after-rerun.json" "$FIX/checks.json"
+        rm -f "$FIX/swap-armed"
+      fi ;;
+    */commits/*/status*) fixture="$FIX/status.json" ;;
+    */actions/runs\?*)
+      # The head's workflow runs: runs.json on the first read, then
+      # runs-next.json when present, as runs finish between polls.
+      fixture="$FIX/runs.json"
+      if [ -f "$FIX/runs-next.json" ]; then
+        [ -f "$FIX/runs-read-once" ] && fixture="$FIX/runs-next.json"
+        : > "$FIX/runs-read-once"
+      fi ;;
     */git/ref/heads/*) fixture="$FIX/base-ref.json" ;;
     */pulls\?*) fixture="$FIX/fork-shared.json" ;;
     repos/*/*)
@@ -207,6 +227,19 @@ elif [ "$sub" = pr ] && [ "${verb:-}" = view ]; then
 elif [ "$sub" = pr ] && [ "${verb:-}" = list ]; then
   if [ -n "${headflag:-}" ]; then fixture="$FIX/shared.json"
   elif [ -n "${baseflag:-}" ]; then fixture="$FIX/stacked.json"; fi
+elif [ "$sub" = run ]; then
+  # gh run rerun: record the debug settings it ran under, exit with the
+  # fixture's code, and on success let the rerun jobs replace the failed
+  # check runs when the scenario supplies them.
+  printf 'GH_DEBUG=%s GODEBUG=%s\n' "${GH_DEBUG-<unset>}" "${GODEBUG-<unset>}" >> "$FIX/rerun-env.log"
+  rc=0
+  [ -f "$FIX/rerun-rc" ] && rc=$(cat "$FIX/rerun-rc")
+  if [ "$rc" -ne 0 ]; then echo "rerun refused by fixture" >&2; exit "$rc"; fi
+  if [ -f "$FIX/rerun-registers-late" ]; then : > "$FIX/swap-armed"
+  elif [ -f "$FIX/checks-after-rerun.json" ]; then
+    cp "$FIX/checks-after-rerun.json" "$FIX/checks.json"
+  fi
+  exit 0
 elif [ "$sub" = pr ] && [ "${verb:-}" = merge ]; then
   rc=0
   [ -f "$FIX/merge-rc" ] && rc=$(cat "$FIX/merge-rc")
@@ -262,7 +295,9 @@ scenario() {
   SCENARIO="$1"
   rm -f "$FIX"/*.json "$FIX"/calls.log "$FIX"/merge-rc \
     "$FIX"/repo-read-once "$FIX"/rules-page2-fail "$FIX"/live-remote \
-    "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr "$FIX"/fail-*
+    "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr "$FIX"/fail-* \
+    "$FIX"/runs-read-once "$FIX"/rerun-rc "$FIX"/rerun-env.log \
+    "$FIX"/rerun-registers-late "$FIX"/swap-armed
   SCEN="$TMP/scen-$((pass + fail))"
   mkdir -p "$SCEN"
 }
@@ -1041,6 +1076,35 @@ checks_fx() { # checks_fx <status> <conclusion-json>
     '{total_count:1, check_runs:[{name:"ci", status:$s, conclusion:$c}]}' \
     > "$FIX/checks.json"
 }
+# actions_check <conclusion-json> <run-id> <job-id> [name] [status]: one
+# check run as GitHub Actions reports it, its details URL naming the run.
+actions_check() {
+  jq -n --argjson c "$1" --argjson r "$2" --argjson j "$3" \
+        --arg n "${4:-test}" --arg s "${5:-completed}" \
+    '{id:$j, name:$n, status:$s, conclusion:$c, app:{slug:"github-actions"},
+      details_url:"https://github.invalid/owner/name/actions/runs/\($r)/job/\($j)"}'
+}
+checks_list_fx() { # checks_list_fx <file> <check-run-json>...
+  local f="$1"; shift
+  printf '%s\n' "$@" | jq -s '{total_count:length, check_runs:.}' > "$f"
+}
+runs_fx() { # runs_fx <file> <id:status:conclusion:attempt>...
+  local f="$1"; shift
+  printf '%s\n' "$@" \
+    | jq -R 'split(":") | {id:(.[0] | tonumber), status:.[1],
+        conclusion:(if .[2] == "null" then null else .[2] end),
+        run_attempt:(.[3] | tonumber)}' \
+    | jq -s '{total_count:length, workflow_runs:.}' > "$f"
+}
+# want_json <jq-test>: the result line's JSON, after its two leading words,
+# passes the test. gh's jq sorts object keys and jq keeps them, so compare
+# values, not text.
+want_json() {
+  local json="${OUT##*$'\n'}"
+  json="${json#* }"; json="${json#* }"
+  if printf '%s' "$json" | jq -e "$1" >/dev/null 2>&1; then ok
+  else bad "result JSON fails $1 (got: $json)"; fi
+}
 status_fx() { # status_fx <state> <count>
   jq -n --arg s "$1" --argjson n "$2" '{state:$s, total_count:$n}' > "$FIX/status.json"
 }
@@ -1201,6 +1265,40 @@ run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP checks-failed'
 want_no_call 'pr merge'
+
+scenario "checks-failed names each failed Actions job by run and job"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)" \
+  "$(actions_check '"success"' 102 502 lint)"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+want_json '.failed == [{name:"test", run_id:101, job_id:501,
+  url:"https://github.invalid/owner/name/actions/runs/101/job/501"}]'
+want_no_call 'pr merge'
+
+scenario "a failed check's name stays escaped in the failed array"
+land_setup; land_fixtures
+odd_name=$'say "hi" \\ \tnow'
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501 "$odd_name")"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+got=$(printf '%s' "${OUT#*STOP checks-failed }" | jq -j '.failed[0].name' 2>/dev/null)
+[ "$got" = "$odd_name" ] && ok || bad "the failed check's name did not survive (got: $got)"
+
+scenario "a dry run's checks-failed gives null ids to other apps and statuses"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" \
+  '{"id":777,"name":"external","status":"completed","conclusion":"failure","app":{"slug":"circleci"},"details_url":"https://ci.invalid/build/9"}'
+echo '{"state":"failure","total_count":2,"statuses":[{"context":"deploy/preview","state":"error","target_url":"https://ci.invalid/9"},{"context":"docs","state":"success","target_url":null}]}' \
+  > "$FIX/status.json"
+run_sm "${LAND[@]}" --head "$FEAT_OID" --dry-run
+want_rc 2
+want_out 'STOP checks-failed'
+want_out 'dry run'
+want_json '.failed == [
+  {name:"external", run_id:null, job_id:null, url:"https://ci.invalid/build/9"},
+  {name:"deploy/preview", run_id:null, job_id:null, url:"https://ci.invalid/9"}]'
 
 scenario "a green read waits for a second read before it passes"
 land_setup; land_fixtures
@@ -1632,6 +1730,170 @@ run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP not-on-tip'
 [ "$(remote_feat)" = "$FEAT_OID" ] && ok || bad "land pushed a fork's branch"
+
+# ---- rerun phase ----
+
+RERUN=(rerun --pr 83 --repo owner/name --interval 1)
+# A failed job 501 in run 101 beside a green run 102, as land's
+# checks-failed leaves them, and the rerun job 601 that replaces 501 once
+# the rerun is requested.
+rerun_fixtures() {
+  land_fixtures
+  checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)" \
+    "$(actions_check '"success"' 102 502 lint)"
+  runs_fx "$FIX/runs.json" 101:completed:failure:1 102:completed:success:1
+  checks_list_fx "$FIX/checks-after-rerun.json" \
+    "$(actions_check null 101 601 test in_progress)" \
+    "$(actions_check '"success"' 102 502 lint)"
+}
+
+scenario "rerun waits for a running workflow run, then reruns only the failed one"
+land_setup; rerun_fixtures
+runs_fx "$FIX/runs.json" 101:in_progress:null:1 102:completed:success:1
+runs_fx "$FIX/runs-next.json" 101:completed:failure:1 102:completed:success:1
+GH_DEBUG=api GODEBUG=netdns=go,http2debug=2 run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out "OK rerun {\"head_oid\":\"$FEAT_OID\",\"runs\":[{\"run_id\":101,\"failed_jobs\":[501]}]}"
+want_calls 2 "actions/runs?head_sha=$FEAT_OID"
+want_calls 1 'run rerun'
+want_call 'run rerun 101 --failed --repo=owner/name'
+grep -qxF 'GH_DEBUG= GODEBUG=netdns=go' "$FIX/rerun-env.log" && ok \
+  || bad "the rerun request ran with debug output on ($(cat "$FIX/rerun-env.log" 2>/dev/null))"
+want_no_call 'pr merge'
+
+scenario "rerun stops checks-pending at the cap and reruns nothing"
+land_setup; rerun_fixtures
+runs_fx "$FIX/runs.json" 101:in_progress:null:1 102:completed:success:1
+run_sm "${RERUN[@]}" --head "$FEAT_OID" --ci-cap-minutes 0
+want_rc 2
+want_out 'STOP checks-pending'
+want_out 'run 101 (in_progress)'
+want_no_call 'run rerun'
+
+scenario "a failed run already rerun stops rerun-spent"
+land_setup; rerun_fixtures
+runs_fx "$FIX/runs.json" 101:completed:failure:2 102:completed:success:1
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rerun-spent'
+want_out 'run 101 (attempt 2)'
+want_no_call 'run rerun'
+
+scenario "a failed check from another app stops rerun-unsupported"
+land_setup; rerun_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)" \
+  '{"id":777,"name":"external","status":"completed","conclusion":"failure","app":{"slug":"circleci"},"details_url":"https://ci.invalid/build/9"}'
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rerun-unsupported'
+want_out 'external (failure)'
+want_no_call 'run rerun'
+
+scenario "a failing commit status stops rerun-unsupported"
+land_setup; rerun_fixtures
+echo '{"state":"failure","total_count":1,"statuses":[{"context":"deploy/preview","state":"failure","target_url":"https://ci.invalid/9"}]}' \
+  > "$FIX/status.json"
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rerun-unsupported'
+want_out 'commit statuses (failure)'
+want_no_call 'run rerun'
+
+scenario "a head with no failing Actions job stops nothing-to-rerun"
+land_setup; land_fixtures
+# Run 103 failed earlier on the same commit, but no latest check run is
+# its, so it no longer decides CI.
+runs_fx "$FIX/runs.json" 101:completed:success:2 103:completed:failure:1
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP nothing-to-rerun'
+want_no_call 'run rerun'
+
+scenario "an older failed run on the same commit is neither rerun nor spent"
+land_setup; rerun_fixtures
+runs_fx "$FIX/runs.json" 101:completed:failure:1 102:completed:success:1 \
+  103:completed:failure:2
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out '"runs":[{"run_id":101,"failed_jobs":[501]}]}'
+want_calls 1 'run rerun'
+want_no_call 'run rerun 103'
+
+scenario "a failing job whose run did not fail stops rerun-unsupported"
+land_setup; rerun_fixtures
+runs_fx "$FIX/runs.json" 101:completed:success:1 102:completed:success:1
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rerun-unsupported'
+want_out 'workflow run(s) 101, which did not fail'
+want_no_call 'run rerun'
+
+scenario "rerun maps each failed job to its own run"
+land_setup; rerun_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)" \
+  "$(actions_check '"timed_out"' 101 503 build)" \
+  "$(actions_check '"failure"' 102 502 lint)"
+runs_fx "$FIX/runs.json" 101:completed:failure:1 102:completed:failure:1
+checks_list_fx "$FIX/checks-after-rerun.json" \
+  "$(actions_check null 101 601 test in_progress)" \
+  "$(actions_check null 101 603 build in_progress)" \
+  "$(actions_check null 102 602 lint in_progress)"
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out '"runs":[{"run_id":101,"failed_jobs":[501,503]},{"run_id":102,"failed_jobs":[502]}]}'
+want_call 'run rerun 101 --failed'
+want_call 'run rerun 102 --failed'
+
+scenario "rerun waits for rerun jobs that register late"
+land_setup; rerun_fixtures
+: > "$FIX/rerun-registers-late"
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 0
+want_out 'OK rerun'
+# One read to decide, one that still lists job 501, one that does not.
+want_calls 3 "commits/$FEAT_OID/check-runs"
+
+scenario "a refused rerun quotes gh's error without debug output"
+land_setup; rerun_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)" \
+  "$(actions_check '"failure"' 102 502 lint)"
+runs_fx "$FIX/runs.json" 101:completed:failure:1 102:completed:failure:1
+echo 'run rerun 102' > "$FIX/fail-rerun"
+echo 'HTTP 403: Must have admin rights to Repository.' > "$FIX/gh-stderr"
+GH_DEBUG=api GODEBUG=http2debug=1 run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP rerun-refused'
+want_out 'Must have admin rights to Repository.'
+want_out 'already rerun: 101'
+want_no_out 'SECRET-313'
+want_call 'run rerun 101'
+
+scenario "a rerun whose jobs never register stops rerun-unconfirmed"
+land_setup; rerun_fixtures
+rm -f "$FIX/checks-after-rerun.json"
+run_sm "${RERUN[@]}" --head "$FEAT_OID" --ci-cap-minutes 0
+want_rc 2
+want_out 'STOP rerun-unconfirmed'
+want_out 'check run(s) 501 are still the latest'
+want_call 'run rerun 101'
+
+scenario "rerun refuses a head the forge no longer reports"
+land_setup; rerun_fixtures
+run_sm "${RERUN[@]}" --head "$OID"
+want_rc 2
+want_out 'STOP oid-mismatch'
+want_no_call 'actions/runs'
+want_no_call 'run rerun'
+
+scenario "rerun refuses a closed PR"
+land_setup; rerun_fixtures
+rm -f "$FIX/live-remote"
+pr_full MERGED feat main "$FEAT_OID" false owner name
+run_sm "${RERUN[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP pr-not-open'
+want_no_call 'actions/runs'
+want_no_call 'run rerun'
 
 # ---- remote identity on the land push ----
 # Each case configures a remote whose identity land must refuse (or accept)
