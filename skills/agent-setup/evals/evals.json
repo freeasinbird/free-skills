@@ -895,14 +895,14 @@
     {
       "id": 60,
       "eval_name": "init-offers-landing-record",
-      "prompt": "Initialize agent-setup with the Standard profile in <fixture-repo>. Its README supplies the build, test, lint, and format commands. The base remote names example/widgets on github.com. There is no AGENTS.md or reviewer record. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. The repository has approved and needs-human labels. The owner will decide on the exact record you show. Work only in the fixture; use these supplied forge facts without network calls, and do not create or apply labels.",
+      "prompt": "Initialize agent-setup with the Standard profile in <fixture-repo>. Its README supplies the build, test, lint, and format commands. The base remote names example/widgets on github.com. There is no AGENTS.md or reviewer record. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. The repository has approved and needs-rework labels. The owner will decide on the exact record you show. Work only in the fixture; use these supplied forge facts without network calls, and do not create or apply labels.",
       "expected_output": "A Standard init that offers a landing record, asks for no approver login, shows the filled record with the write Approver permission for acceptance, and includes it beside the forge record in the single AGENTS.md write after acceptance. With no reviewer record, Reviewer is none and no marker is invented.",
       "files": [],
       "expectations": [
         "The agent offers the landing record without asking for or deriving an approver login, and its Approver permission is write",
         "The exact offered text is shown before the owner accepts it",
         "After acceptance, the single AGENTS.md write includes the landing record beside the forge record in unmanaged project content",
-        "Mechanism is label, Approval is approved, Hand-back is needs-human, Stale lock age is 240, Base-advance checks is none, and Consumer is land-approved-prs",
+        "Mechanism is label, Approval is approved, Hand-back is needs-rework, Stale lock age is 240, Base-advance checks is none, and Consumer is land-approved-prs",
         "Reviewer is backticked none and the Reviewer completion marker bullet is omitted because the project has no reviewer record",
         "The record starts at the Mechanism bullet, keeps its indented bullets together, and uses first backticked values except for bare none in Base-advance checks",
         "No labels are created or applied, and no network calls occur"
@@ -921,6 +921,7 @@
         "No label is created or applied, and no network calls occur",
         "The existing landing, reviewer, and forge records and unrelated unmanaged guidance remain byte-for-byte unchanged",
         "The agent does not ask for an approver or replace the existing record with template defaults",
+        "The existing needs-human Hand-back is preserved and not reported as drift from the template's needs-rework default",
         "In the separate copy, the agent reports that Approval and Hand-back must differ",
         "In the separate copy, the agent reports the triage Approver permission, the bot suffix in Reviewer, and the leading zeros in Stale lock age as incompatible with the landing parser",
         "The separate copy remains unchanged because the owner approved no correction"
