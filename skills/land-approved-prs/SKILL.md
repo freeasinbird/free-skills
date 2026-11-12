@@ -7,9 +7,9 @@ description: >-
   landing batch". Scripts list the ready PRs, take the lock, and gather what
   landed; the agent reads each PR against what landed, reworks it only when
   a landed change dictates the fix, lands it with the bundled engine, runs
-  merge-cleanup, and hands back everything else with needs-human. Not for
-  approving a PR (only the owner approves), merging one unapproved PR, or
-  post-merge cleanup alone.
+  merge-cleanup, and hands back everything else with the record's hand-back
+  label. Not for approving a PR (only the owner approves), merging one
+  unapproved PR, or post-merge cleanup alone.
 ---
 
 # Land Approved PRs
@@ -78,7 +78,7 @@ the Mechanism bullet:
   - **Mechanism:** `label`.
   - **Approval:** `approved`, added by a collaborator with the Approver
     permission; agents never add it.
-  - **Hand-back:** `needs-human`.
+  - **Hand-back:** `needs-rework`.
   - **Approver permission:** `write`.
   - **Stale lock age:** `240` minutes.
   - **Base-advance checks:** none.
@@ -118,18 +118,18 @@ The record ends at the first line that is neither a bullet of this shape nor
 its four-space continuation, so keep its bullets together.
 
 Both labels must exist on the forge before a batch. Use `#0e8a16` as the
-default color for `approved` and `#d93f0b` for `needs-human`. Keep a project's
-existing colors unless it wants these defaults. Replace `owner/name` with the
-project's repository and use the record's Approval and Hand-back names if
-they differ from the examples. Run the commands for missing labels. Add
-`--force` only to replace an existing label's color and description with the
-defaults below.
+default color for `approved` and `#d93f0b` for `needs-rework`. Keep a
+project's existing colors unless it wants these defaults. Replace
+`owner/name` with the project's repository and use the record's Approval and
+Hand-back names if they differ from the examples. Run the commands for
+missing labels. Add `--force` only to replace an existing label's color and
+description with the defaults below.
 
 ```sh
 gh label create approved --repo owner/name --color 0e8a16 \
   --description "The owner approved this PR to land; the lander may take it"
-gh label create needs-human --repo owner/name --color d93f0b \
-  --description "The lander handed this PR back; it needs the owner"
+gh label create needs-rework --repo owner/name --color d93f0b \
+  --description "Lander hand-back: this pull request could not land; rework it, then re-approve"
 ```
 
 Only a person adds the approval label. Any agent running under a
@@ -460,11 +460,11 @@ on a merged head; read whatever posted when the batch ends.
 
 Hand back when the rework rule says stop, when a finding can't be resolved
 under it, when CI stays red, or when anything else needs a person. Comment
-why, then swap the labels the record names (here, the defaults):
+why, then swap the labels the record names:
 
 ```sh
 gh pr comment <n> --repo <owner/name> --body-file <comment-file>
-gh pr edit <n> --repo <owner/name> --remove-label approved --add-label needs-human
+gh pr edit <n> --repo <owner/name> --remove-label <approval label> --add-label <hand-back label>
 ```
 
 The label is the record, because the owner gets no notification for comments

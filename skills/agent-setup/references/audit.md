@@ -315,7 +315,7 @@ reviewer records in the unmanaged project-specific conventions section:
   - **Mechanism:** `label`.
   - **Approval:** `approved`, added by a collaborator with the Approver
     permission; agents never add it.
-  - **Hand-back:** `needs-human`.
+  - **Hand-back:** `needs-rework`.
   - **Approver permission:** `write`.
   - **Stale lock age:** `240` minutes.
   - **Base-advance checks:** none.
@@ -378,8 +378,8 @@ skill; substitute the record's names when they differ:
 ```sh
 gh label create approved --repo <host>/<slug> --color 0e8a16 \
   --description "The owner approved this PR to land; the lander may take it"
-gh label create needs-human --repo <host>/<slug> --color d93f0b \
-  --description "The lander handed this PR back; it needs the owner"
+gh label create needs-rework --repo <host>/<slug> --color d93f0b \
+  --description "Lander hand-back: this pull request could not land; rework it, then re-approve"
 ```
 
 If the read fails, including on a later page, report that the labels couldn't
