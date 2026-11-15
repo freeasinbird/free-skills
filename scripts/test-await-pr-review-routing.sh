@@ -1074,6 +1074,8 @@ for required in \
   'gh pr checks <n> --repo <slug> --watch --fail-fast --interval 60' \
   'conventions. Push under a lease pinned to the head that gate verified,' \
   'on two consecutive reads that list the same checks, all passing.' \
+  'Run each delayed read where its exit re-enters you' \
+  'some hosts refuse that call' \
   'gh pr view <n> --repo <slug> --json headRefOid' \
   'Fix a red check this PR caused.' \
   'Record no reviewer you notice on older PRs or a manual run' \
