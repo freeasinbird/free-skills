@@ -235,6 +235,15 @@ the review exchange but still wait on CI:
    again when a new check appears; after about five reads with no checks,
    report that none ran.
 
+   Run each delayed read where its exit re-enters you, as you ran the watch:
+   a background run of `sleep 60; gh pr checks <n> --repo <slug>` with a
+   completion notice, or the host's own wait or scheduled-wake primitive.
+   Don't write the minute as a foreground sleep before the read, because
+   some hosts refuse that call. Don't chain shorter sleeps instead, and
+   don't rerun the watch at once in place of the wait, because a late check
+   isn't listed yet. Use a foreground sleep only when the host offers
+   neither.
+
 5. Fix a red check this PR caused. Pass `references/conductor.md`
    §checkout-gate first and fold the fix per the project's commit
    conventions. Push under a lease pinned to the head that gate verified,
