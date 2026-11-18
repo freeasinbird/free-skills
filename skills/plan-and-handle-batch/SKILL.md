@@ -5,13 +5,15 @@ description: >-
   planner per issue running plan-work-unit, then hand each startable plan to
   its own implementation thread or subagent in an isolated checkout, keep at
   most N implementations running at once, and end with one status table. Use
-  when one request names several issues, or points at a set already listed in
-  the thread, and asks for both planning and handling, such as "plan and
-  handle #3268, #3171, and #3166, five at a time" or "plan and handle those,
-  three at a time". Starts planners and implementation threads or subagents,
-  so it requires background delegation. Not for a single "Plan #N" or a single
-  "Handle #N", a plan-only or implement-only batch, choosing which issues to
-  take (triage), or merging and landing PRs.
+  when one request names several issues, points at a set already listed in
+  the thread, or points at one tracker issue's startable units, and asks for
+  both planning and handling, such as "plan and handle #3268, #3171, and
+  #3166, five at a time", "plan and handle those, three at a time", or "plan
+  and handle the startable units on tracker #835". Starts planners and
+  implementation threads or subagents, so it requires background delegation.
+  Not for a single "Plan #N" or a single "Handle #N", a plan-only or
+  implement-only batch, choosing which issues to take (triage), or merging and
+  landing PRs.
 ---
 
 # Plan and Handle Batch
@@ -76,14 +78,15 @@ Never fall back to planning or implementing in your own context.
 ## Authorization
 
 Invoking this skill is the owner's assignment of `Plan #N` and `Handle #N` for
-each listed issue, and of nothing else. It authorizes launching the planners
+each issue in the batch, and of nothing else. For a tracker, the batch is the
+set its rules resolve (see A Tracker). It authorizes launching the planners
 and implementers this file describes, without per-launch confirmation. Where a
 host starts new top-level threads only on the user's request, this invocation
 is that request. If the host still refuses, take the subagent route.
 
-The assignment doesn't cover choosing, adding, or dropping issues, merging or
-landing, restarting an implementer run that ended, or work in another
-repository.
+The assignment doesn't cover choosing, adding, or dropping issues beyond
+those rules, merging or landing, restarting an implementer run that ended, or
+work in another repository.
 
 Don't route around an approval prompt the platform shows. If a launch is
 refused or fails, record the issue as not dispatched with the error, free its
@@ -93,8 +96,9 @@ slot, and continue with the rest.
 
 Read four things from the request's plain words:
 
-- **Issues.** An ordered list of issue numbers. The order is the dispatch
-  priority. Drop exact duplicates and keep the first position.
+- **Issues.** An ordered list of issue numbers, or one tracker issue whose
+  units become the list (see A Tracker). The order is the dispatch priority.
+  Drop exact duplicates and keep the first position.
 - **Window.** The most implementations from this batch running at once. Read
   it from words like "five at a time", "3 in parallel", "window of 4", or "one
   at a time". With no number, use 3 and mark it as the default. If the window
@@ -126,6 +130,49 @@ Examples:
   "plan and handle those". Ask which list.
 - **Criteria.** "Plan and handle the open bugs." Ask for the issue numbers.
 
+### A Tracker
+
+The request may point at one tracker issue instead of listing issues, such as
+"plan and handle the startable units on #835, three at a time". Treat an issue
+as a tracker only when the request calls it one or asks for its units. The
+batch is the tracker's startable units that no one is working on yet.
+
+Resolve the set in three steps:
+
+1. **Compute the startable units.** Where you have a shell, `gh`, `awk`, and
+   `merge-cleanup` installed beside this skill, run its read-only
+   `tracker-refresh.sh` with `--repo <host/owner/name>` and `--issue <N>`. Add
+   `--comment <ID>` when the owner points at a tracker kept in a comment. The
+   `startable now` part of its stderr `OK` line is the set, and its `left`
+   part names held units. Where the script can't run, read the tracker's
+   **Startable now** bullet, and say in the opening message that it may be
+   stale.
+2. **Drop units that can't start here.** A tracker keeps a unit startable
+   until its PR merges, and the script doesn't check every condition. Leave
+   out a unit that:
+   - Is closed.
+   - Has an open PR that links it, or a live claim in the form the project
+     records.
+   - Belongs to another repository.
+   - Is stacked on a PR that is neither open nor merged.
+3. **Put the critical path first.** Units whose nodes a thick arrow (`==>`)
+   joins in the tracker's diagram go first, then the rest. Keep the tracker's
+   Units order within each group.
+
+Every remaining unit gets a planner, including one that already has a plan.
+Its planner's report still decides whether it dispatches.
+
+Launch nothing, and say why, when:
+
+- **The tracker isn't readable as one.** It is closed, isn't on the shared
+  tracker format, or the script exits with a stop or a failed lookup. Report
+  the script's error, and ask for issue numbers where the format is the
+  problem.
+- **Nothing remains.** Report the tracker's reason and each unit left out.
+- **The source is unclear.** The request names a tracker without its number
+  or link, names two trackers, or adds listed issues to one. Ask which set is
+  meant.
+
 ## Opening Message
 
 Write the state file first (see Keep a State File). Then send one short
@@ -143,13 +190,22 @@ List the issue numbers in dispatch order, even when the request already gave
 them, so the owner can stop a wrong set at once. Mark a default as a default.
 This holds for a set named earlier, once it resolves to one list.
 
+For a tracker, name it in the first line and add a line for the units left
+out, each with its reason:
+
+```text
+Plan and handle batch: tracker #835, #897, #901, #910 (3 startable units,
+critical path first, in dispatch order).
+Left out: #899 (open PR #930), #905 (held: Blocker line in Dependencies).
+```
+
 ## Plan Every Issue
 
 Start one background planner per issue, all at once. Planners don't count
 against the window. If the platform caps how many delegates run at once, start
 the rest as earlier planners finish. Brief each planner with this text. Fill in
-`N`, the project's branch-naming rule, and the owner's request, with a set
-named earlier written out as its issue numbers:
+`N`, the project's branch-naming rule, and the owner's request. Write a set
+named earlier, or a tracker's resolved units, out as its issue numbers:
 
 ```text
 Plan #N
@@ -311,6 +367,7 @@ at every launch, every report, and every relayed question.
 Record for the batch:
 
 - The repository, the ordered issue list, the window, and model choices.
+- For a tracker, its number and the units left out, with their reasons.
 
 Record for each issue:
 
@@ -327,6 +384,8 @@ Then follow these rules:
   as launched.
 - **A planner only for an answer.** Relaunch a recorded planner only to carry
   the owner's answer to its question.
+- **The recorded set stands.** Never resolve a tracker again. A unit that
+  became startable since then waits for a later batch.
 - **Unknown stays unknown.** If the platform can't tell you whether a
   recorded run is still going, report it as unknown rather than starting
   another.
@@ -346,4 +405,5 @@ End with one table, one row per listed issue, in dispatch order:
 Use these states: ready for review, blocked (with the blocker), waiting on
 owner (with the question), queued (behind a held slot), not dispatched (with
 the reason), ended without a report, and unknown. Below the table, list any
-question still waiting on the owner.
+question still waiting on the owner. For a tracker, repeat the line of units
+left out.

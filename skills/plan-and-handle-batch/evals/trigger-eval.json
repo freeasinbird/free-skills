@@ -28,6 +28,14 @@
     "should_trigger": true
   },
   {
+    "query": "Plan and handle the startable units on tracker #835, three at a time",
+    "should_trigger": true
+  },
+  {
+    "query": "Work through wave tracker #1204: plan each startable unit and hand every startable plan to an implementer, two at a time",
+    "should_trigger": true
+  },
+  {
     "query": "Plan #125",
     "should_trigger": false
   },
@@ -53,6 +61,10 @@
   },
   {
     "query": "Land the approved PRs",
+    "should_trigger": false
+  },
+  {
+    "query": "What's startable on tracker #835 right now?",
     "should_trigger": false
   }
 ]
