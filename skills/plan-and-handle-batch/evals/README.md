@@ -34,6 +34,8 @@ repository.
   prerequisite in the batch awaits a human merge.
 - `threads-before-subagents`: Use threads where offered; otherwise brief
   subagents with the branch setup.
+- `stacked-unit-branch-base`: Keep the brief's rule that a unit stacked on an
+  open PR branches from that PR's branch and targets it.
 - `run-ends-without-report`: Free the slot and never restart the run.
 - `resumed-session`: Read the state file first and relaunch nothing.
 - `final-table-every-issue`: Report every listed issue in one table.
@@ -63,5 +65,5 @@ two-presentation case in its own fresh context.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 14 unique orchestration IDs match the inventory above. Parsing
+files. Confirm 15 unique orchestration IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.

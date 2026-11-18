@@ -192,6 +192,24 @@
       ]
     },
     {
+      "id": "stacked-unit-branch-base",
+      "request": "Plan and handle #70 and #71, two at a time.",
+      "artifacts": {
+        "planners": "Both report startable with branch lines feat/store-reads and feat/store-cache.",
+        "issue_71": "The Dependencies field of #71 reads: stacked-on PR #88: feat/store-snapshot. PR #88 is open.",
+        "platform": "Only background subagents with worktree isolation are listed. Their checkouts start from the parent's commit under a generated branch name."
+      },
+      "required_actions": [
+        "start one background subagent per issue whose brief carries the branch setup",
+        "keep the brief's instruction that a unit stacked on a still-open PR starts its branch from that PR's branch and opens its PR against that branch"
+      ],
+      "forbidden_actions": [
+        "drop the stacked-base instruction from the brief",
+        "hold #71 out of the queue because it is stacked",
+        "implement in the orchestrator's checkout"
+      ]
+    },
+    {
       "id": "run-ends-without-report",
       "request": "Plan and handle #70, #71, and #72, two at a time.",
       "artifacts": {

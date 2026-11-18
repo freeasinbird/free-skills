@@ -207,12 +207,14 @@ planning.
 ### Start Each Implementer
 
 Each implementer works in its own checkout on the plan's branch. That branch
-starts from the freshly fetched default-branch tip. Use the first route the
-platform offers:
+starts from the freshly fetched default-branch tip. A unit whose Dependencies
+field stacks it on a PR that is still open starts from that PR's branch
+instead. Use the first route the platform offers:
 
 1. **A new top-level thread** with its own worktree on the plan's branch, when
    you can also wait on that thread's end. Send the kickoff sentence alone,
-   unless the checkout needs the branch setup.
+   unless the checkout needs the branch setup. A stacked unit needs it when
+   the thread's worktree starts from the default branch.
 2. **A background subagent,** with worktree isolation where the platform
    offers it. Send the kickoff sentence and the brief below.
 
@@ -233,9 +235,12 @@ On the subagent route, and on a thread that needs the branch setup, add:
 The owner assigned this in their request: "<the owner's request>".
 
 Before you edit anything, fetch the default branch from its remote and create
-branch <branch> from that exact tip, in your own checkout. If you have no
-checkout of your own, create one with git worktree add on that branch. Work
-only in that checkout.
+branch <branch> from that exact tip, in your own checkout. If the issue's
+Dependencies field stacks it on a PR that is still open, start <branch> from
+that PR's branch instead, and open your PR against that branch. Where
+<branch> already exists with no commits of its own, reset it there. If you
+have no checkout of your own, create one with git worktree add on that
+branch. Work only in that checkout.
 
 If you need an owner decision, stop and return the question with your
 recommendation. When you finish, return the PR link and your handoff report,
