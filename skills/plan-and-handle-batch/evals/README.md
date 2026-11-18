@@ -29,6 +29,9 @@ repository.
 - `tracker-script-unavailable`: Fall back to the **Startable now** bullet, drop
   a closed unit it still lists, and say it may be stale.
 - `tracker-not-shared-format`: Ask for numbers; launch nothing.
+- `occupied-issue-left-out`: Read the project's claim rules, leave out an
+  issue with an active claim, plan one whose claim expired, and brief
+  implementers to claim.
 - `window-from-words-and-default`: Read "one at a time" as 1; state the
   default of 3 when no number is given.
 - `window-never-exceeded`: Keep at most the window running and start the next
@@ -72,5 +75,5 @@ two-presentation case in its own fresh context.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 18 unique orchestration IDs match the inventory above. Parsing
+files. Confirm 19 unique orchestration IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.

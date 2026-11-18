@@ -20,8 +20,15 @@ there.
   startable until its PR merges, so the set includes work already under way.
   The script also doesn't apply Freeside's `stacked-on` condition, and it
   accepts units from other repositories. The skill leaves out closed units,
-  units with an open PR or a live claim, units in another repository, and
-  units stacked on a PR that is neither open nor merged.
+  units in another repository, and units stacked on a PR that is neither open
+  nor merged.
+- **Chose checking occupancy for every batch, under the project's own claim
+  rules, before any planner starts.** Planning an occupied issue replaces the
+  plan its holder is working from, and the implementer's claim comes too late
+  to prevent that. Listed batches get the check too, since a listed issue can
+  be claimed as easily as a tracker unit. Lease expiry, release markers, and
+  planning reservations come from the project, not from this skill, so a
+  project's protocol isn't restated where it can drift.
 - **Chose replanning every unit, an owner decision, over dispatching existing
   plans directly.** Every plan is then grounded on the current default branch.
   The cost is one planner run per unit and a replaced plan where one existed.
@@ -38,10 +45,11 @@ there.
   gets a `starts-after`, and textual conflicts resolve at landing. An
   earlier chat suggestion to brief planners about batch siblings was
   withdrawn for that reason.
-- **Chose not guarding against a second batch on the same tracker.** A
-  running implementer that hasn't opened its PR leaves nothing another
-  session can see, unless the project records claims. The claim record is the
-  project's guard here, as it is for a hand-started `Handle #N`.
+- **Chose not guarding against a second batch on the same tracker beyond
+  claims.** A running implementer that hasn't claimed or opened its PR leaves
+  nothing another session can see. The implementer brief now claims first
+  under the project's rules, which narrows that gap to the minutes before its
+  claim posts.
 
 ## Stacked Units
 

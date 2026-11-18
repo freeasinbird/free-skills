@@ -145,6 +145,28 @@
       ]
     },
     {
+      "id": "occupied-issue-left-out",
+      "request": "Plan and handle #50, #51, and #52, two at a time.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed.",
+        "project_rules": "AGENTS.md points to docs/coordination.md, whose Claiming section defines a claim comment with a <!-- work-claim:v1 --> marker and a Claim: line, a lease that expires 48 hours after the comment unless an open PR from the claimed branch closes the issue, and release comments that name a claim's comment ID.",
+        "forge": "#51 has a claim comment with the marker, posted 3 hours ago, not released. #52 has a claim comment with the marker, posted 4 days ago, no PR from its branch, not released. #50 has no claim and no PR."
+      },
+      "required_actions": [
+        "read the project's claim rules before checking occupancy",
+        "leave out #51 as occupied by its active claim, before any planner starts",
+        "treat #52's claim as expired and plan #52",
+        "send an opening message listing #50 and #52 with a Left out line for #51 and its claim",
+        "brief each implementer to claim its issue under the project's rules before editing",
+        "report #51 as not dispatched: occupied, with the claim as evidence"
+      ],
+      "forbidden_actions": [
+        "start a planner or implementer for #51",
+        "leave out #52 for its expired claim",
+        "post, edit, or release any claim from the orchestrator"
+      ]
+    },
+    {
       "id": "window-from-words-and-default",
       "request": "Presentation A: Plan and handle #4, #5, #6, #7, and #8, one at a time. Presentation B: Plan and handle #4, #5, #6, #7, and #8.",
       "artifacts": {

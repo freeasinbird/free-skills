@@ -84,9 +84,9 @@ and implementers this file describes, without per-launch confirmation. Where a
 host starts new top-level threads only on the user's request, this invocation
 is that request. If the host still refuses, take the subagent route.
 
-The assignment doesn't cover choosing, adding, or dropping issues beyond
-those rules, merging or landing, restarting an implementer run that ended, or
-work in another repository.
+The assignment doesn't cover choosing, adding, or dropping issues beyond the
+rules under Read the Request, merging or landing, restarting an implementer
+run that ended, or work in another repository.
 
 Don't route around an approval prompt the platform shows. If a launch is
 refused or fails, record the issue as not dispatched with the error, free its
@@ -151,8 +151,6 @@ Resolve the set in three steps:
    until its PR merges, and the script doesn't check every condition. Leave
    out a unit that:
    - Is closed.
-   - Has an open PR that links it, or a live claim in the form the project
-     records.
    - Belongs to another repository.
    - Is stacked on a PR that is neither open nor merged.
 3. **Put the critical path first.** Units whose nodes a thick arrow (`==>`)
@@ -173,6 +171,22 @@ Launch nothing, and say why, when:
   or link, names two trackers, or adds listed issues to one. Ask which set is
   meant.
 
+### Occupied Issues
+
+Before anything launches, check every issue in the set for occupancy under
+the project's claim rules. Find those rules in its agent instructions, such as
+a Claiming section in AGENTS.md or the coordination document it points to.
+Read them before you check, and apply their lease expiry, release markers,
+and planning reservations as written.
+
+Leave out an occupied issue: one with an active claim, an active planning
+reservation, or an open PR that links it. Where the project defines no claim
+rules, an open PR that links the issue is the only sign. Planning an occupied
+issue would replace the plan its holder is working from.
+
+A left-out listed issue stays in the report as not dispatched: occupied, with
+the evidence. If nothing remains, launch nothing and say why.
+
 ## Opening Message
 
 Write the state file first (see Keep a State File). Then send one short
@@ -190,8 +204,8 @@ List the issue numbers in dispatch order, even when the request already gave
 them, so the owner can stop a wrong set at once. Mark a default as a default.
 This holds for a set named earlier, once it resolves to one list.
 
-For a tracker, name it in the first line and add a line for the units left
-out, each with its reason:
+When the check leaves issues out, add a line for them, each with its reason.
+For a tracker, also name it in the first line:
 
 ```text
 Plan and handle batch: tracker #835, #897, #901, #910 (3 startable units,
@@ -290,7 +304,9 @@ On the subagent route, and on a thread that needs the branch setup, add:
 ```text
 The owner assigned this in their request: "<the owner's request>".
 
-Before you edit anything, fetch the default branch from its remote and create
+Before you edit anything, claim the issue as the project's claim rules
+require, if it has any. If another claim wins, stop and return a blocked
+report. Then fetch the default branch from its remote and create
 branch <branch> from that exact tip, in your own checkout. If the issue's
 Dependencies field stacks it on a PR that is still open, start <branch> from
 that PR's branch instead, and open your PR against that branch. Where
@@ -367,7 +383,7 @@ at every launch, every report, and every relayed question.
 Record for the batch:
 
 - The repository, the ordered issue list, the window, and model choices.
-- For a tracker, its number and the units left out, with their reasons.
+- The issues left out, with their reasons, and for a tracker its number.
 
 Record for each issue:
 
