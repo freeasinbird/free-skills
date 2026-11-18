@@ -88,6 +88,85 @@
       ]
     },
     {
+      "id": "tracker-resolves-startable-units",
+      "request": "Plan and handle the startable units on tracker #835, two at a time.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed. A shell with gh is available, and merge-cleanup is installed beside this skill.",
+        "tracker_refresh": "tracker-refresh.sh on #835 exits 0. Its stderr line reads: tracker-refresh.sh: OK unchanged; ticked none; double-bordered none; startable now #901, #897, #910, #899, #912, org/web#40; left #905 held: Blocker line in Dependencies.",
+        "tracker_diagram": "The Status diagram joins #897 ==> #950 with a thick arrow; #950 is open and waits on #897. No other thick arrows. The Units section lists #901, #897, #910, #899, #912, org/web#40, #905, #950 in that order.",
+        "forge": "PR #930 is open and its body says Closes #899. The Dependencies field of #912 reads: stacked-on PR #940: feat/cache-keys, and PR #940 was closed unmerged. No other unit has an open PR or a claim. #901 already has a current plan comment."
+      },
+      "required_actions": [
+        "run tracker-refresh.sh read-only with --repo and --issue 835",
+        "leave out #899 for its open PR #930, #912 because its base PR #940 is neither open nor merged, org/web#40 as another repository, and #905 as held",
+        "write the ordered list #897, #901, #910 to the state file before launching anything",
+        "send an opening message naming tracker #835, listing #897, #901, #910 in that order, and a Left out line for #899, #912, org/web#40, and #905 with reasons",
+        "start planners for exactly #897, #901, and #910, including #901 despite its existing plan, without waiting for a reply"
+      ],
+      "forbidden_actions": [
+        "plan or dispatch #899, #905, #912, or org/web#40",
+        "write to the tracker",
+        "skip the planner for #901 because it already has a plan",
+        "ask the owner to confirm the resolved set"
+      ]
+    },
+    {
+      "id": "tracker-script-unavailable",
+      "request": "Plan and handle tracker #835's startable units, three at a time.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed. merge-cleanup isn't installed.",
+        "tracker_body": "#835 is open and on the shared tracker format. Its bullet reads: Startable now: #901, #897 (contract), #903. Its diagram has no thick arrows. #903 was closed as completed yesterday, and merge cleanup hasn't refreshed the tracker. No unit has an open PR or a claim."
+      },
+      "required_actions": [
+        "read the Startable now bullet as the set, in Units order",
+        "leave out #903 because it is closed",
+        "say in the opening message that the set came from the bullet and may be stale",
+        "start planners for exactly #901 and #897"
+      ],
+      "forbidden_actions": [
+        "stop because the script is missing",
+        "compute startability itself from Dependencies fields and add units the bullet doesn't list"
+      ]
+    },
+    {
+      "id": "tracker-not-shared-format",
+      "request": "Plan and handle the startable units on tracker #77.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed. A shell with gh is available, and merge-cleanup is installed beside this skill.",
+        "tracker_refresh": "tracker-refresh.sh on #77 exits 2: not on the shared tracker format: no ## Status or ## Units section. #77's body is a plain task list of seven issues."
+      },
+      "required_actions": [
+        "say that #77 isn't on the shared tracker format and ask for the issue numbers",
+        "launch nothing"
+      ],
+      "forbidden_actions": [
+        "build the set from #77's task list",
+        "start any planner or implementer"
+      ]
+    },
+    {
+      "id": "occupied-issue-left-out",
+      "request": "Plan and handle #50, #51, and #52, two at a time.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed.",
+        "project_rules": "AGENTS.md points to docs/coordination.md, whose Claiming section defines a claim comment with a <!-- work-claim:v1 --> marker and a Claim: line, a lease that expires 48 hours after the comment unless an open PR from the claimed branch closes the issue, and release comments that name a claim's comment ID.",
+        "forge": "#51 has a claim comment with the marker, posted 3 hours ago, not released. #52 has a claim comment with the marker, posted 4 days ago, no PR from its branch, not released. #50 has no claim and no PR."
+      },
+      "required_actions": [
+        "read the project's claim rules before checking occupancy",
+        "leave out #51 as occupied by its active claim, before any planner starts",
+        "treat #52's claim as expired and plan #52",
+        "send an opening message listing #50 and #52 with a Left out line for #51 and its claim",
+        "brief each implementer to claim its issue under the project's rules before editing",
+        "report #51 as not dispatched: occupied, with the claim as evidence"
+      ],
+      "forbidden_actions": [
+        "start a planner or implementer for #51",
+        "leave out #52 for its expired claim",
+        "post, edit, or release any claim from the orchestrator"
+      ]
+    },
+    {
       "id": "window-from-words-and-default",
       "request": "Presentation A: Plan and handle #4, #5, #6, #7, and #8, one at a time. Presentation B: Plan and handle #4, #5, #6, #7, and #8.",
       "artifacts": {
@@ -189,6 +268,24 @@
         "use subagents in A when threads are offered",
         "implement in the orchestrator's checkout",
         "omit the branch setup in B"
+      ]
+    },
+    {
+      "id": "stacked-unit-branch-base",
+      "request": "Plan and handle #70 and #71, two at a time.",
+      "artifacts": {
+        "planners": "Both report startable with branch lines feat/store-reads and feat/store-cache.",
+        "issue_71": "The Dependencies field of #71 reads: stacked-on PR #88: feat/store-snapshot. PR #88 is open.",
+        "platform": "Only background subagents with worktree isolation are listed. Their checkouts start from the parent's commit under a generated branch name."
+      },
+      "required_actions": [
+        "start one background subagent per issue whose brief carries the branch setup",
+        "keep the brief's instruction that a unit stacked on a still-open PR starts its branch from that PR's branch and opens its PR against that branch"
+      ],
+      "forbidden_actions": [
+        "drop the stacked-base instruction from the brief",
+        "hold #71 out of the queue because it is stacked",
+        "implement in the orchestrator's checkout"
       ]
     },
     {

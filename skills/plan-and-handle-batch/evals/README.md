@@ -7,8 +7,9 @@ repository.
 ## Files
 
 - `trigger-eval.json` separates batch plan-and-handle requests from a single
-  plan or handle step, plan-only and implement-only batches, triage, and
-  landing.
+  plan or handle step, plan-only and implement-only batches, triage, a
+  read-only tracker question, and landing. Its positives include a request
+  that points at a tracker.
 - `orchestration-eval.json` describes orchestration inputs and the actions
   each case requires or forbids.
 
@@ -22,6 +23,15 @@ repository.
 - `two-candidate-sets`: Ask which list is meant; launch nothing.
 - `set-described-by-criteria`: Ask for numbers; launch nothing and search
   nothing.
+- `tracker-resolves-startable-units`: Run the refresh script read-only, leave
+  out units in progress, held, in another repository, or stacked on a dead
+  base, put the critical path first, and plan every remaining unit.
+- `tracker-script-unavailable`: Fall back to the **Startable now** bullet, drop
+  a closed unit it still lists, and say it may be stale.
+- `tracker-not-shared-format`: Ask for numbers; launch nothing.
+- `occupied-issue-left-out`: Read the project's claim rules, leave out an
+  issue with an active claim, plan one whose claim expired, and brief
+  implementers to claim.
 - `window-from-words-and-default`: Read "one at a time" as 1; state the
   default of 3 when no number is given.
 - `window-never-exceeded`: Keep at most the window running and start the next
@@ -34,6 +44,8 @@ repository.
   prerequisite in the batch awaits a human merge.
 - `threads-before-subagents`: Use threads where offered; otherwise brief
   subagents with the branch setup.
+- `stacked-unit-branch-base`: Keep the brief's rule that a unit stacked on an
+  open PR branches from that PR's branch and targets it.
 - `run-ends-without-report`: Free the slot and never restart the run.
 - `resumed-session`: Read the state file first and relaunch nothing.
 - `final-table-every-issue`: Report every listed issue in one table.
@@ -63,5 +75,5 @@ two-presentation case in its own fresh context.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 14 unique orchestration IDs match the inventory above. Parsing
+files. Confirm 19 unique orchestration IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.
