@@ -1,0 +1,58 @@
+[
+  {
+    "query": "Plan and handle #3268, #3171, and #3166, five at a time",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan and implement issues 41, 44, 52, and 60, 3 in parallel",
+    "should_trigger": true
+  },
+  {
+    "query": "Take #7 #9 #12 #15 #18 from plan to PR, window of 4",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan and handle #201 and #205, one at a time",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan each of #88, #91, #94 and then hand every startable plan to its own implementation thread",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan and handle those, three at a time",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan and handle the issues from the triage above, then implement each plan once it's ready",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan #125",
+    "should_trigger": false
+  },
+  {
+    "query": "Handle #125, implementation plan in comments",
+    "should_trigger": false
+  },
+  {
+    "query": "Plan #31, #32, and #40",
+    "should_trigger": false
+  },
+  {
+    "query": "Plan #31, #32, and #40, but don't start any implementation",
+    "should_trigger": false
+  },
+  {
+    "query": "Implement #31, #32, and #40 from their existing plan comments, two at a time",
+    "should_trigger": false
+  },
+  {
+    "query": "Which issues should we take next?",
+    "should_trigger": false
+  },
+  {
+    "query": "Land the approved PRs",
+    "should_trigger": false
+  }
+]

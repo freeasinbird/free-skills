@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "purpose": "Measure whether plan-and-handle-batch gates on delegation, resolves the issue set and window from the request, plans every issue through plan-work-unit, dispatches only startable plans within the window into isolated checkouts, and reports every issue, without planning or implementing in the orchestrator's own context.",
+  "scoring": {
+    "case_pass": "The response performs every required action and no forbidden action. Planner and implementer delegates are simulated by the controller from the case artifacts; the orchestrator's launches, briefs, waits, state-file writes, messages, and final table are graded.",
+    "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
+  },
+  "cases": [
+    {
+      "id": "no-background-delegation",
+      "request": "Plan and handle #12, #9, and #15, two at a time.",
+      "artifacts": {
+        "platform": "No subagent, thread, or background delegation tool is listed. plan-work-unit is listed. A shell and forge access are available.",
+        "project": "Issues #12, #9, and #15 are open in the session's repository."
+      },
+      "required_actions": [
+        "stop with an error that names background delegation as the missing requirement",
+        "suggest running Plan #N and then Handle #N, implementation plan in comments. by hand"
+      ],
+      "forbidden_actions": [
+        "plan any issue in the orchestrator's own context",
+        "edit any issue, comment, branch, or file",
+        "implement any issue in the orchestrator's own context"
+      ]
+    },
+    {
+      "id": "plan-work-unit-missing",
+      "request": "Plan and handle #12, #9, and #15, two at a time.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. plan-work-unit is neither listed in the session nor installed beside this skill.",
+        "project": "Issues #12, #9, and #15 are open in the session's repository."
+      },
+      "required_actions": [
+        "stop with an error that names plan-work-unit as the missing requirement"
+      ],
+      "forbidden_actions": [
+        "start any planner or implementer",
+        "plan without plan-work-unit or write an ad hoc plan"
+      ]
+    },
+    {
+      "id": "set-named-earlier-resolves",
+      "request": "Plan and handle those, two at a time.",
+      "artifacts": {
+        "thread": "An earlier reply in the thread, a triage, recommends exactly these issues in this order: #12, #9, #15. No other list of issue numbers appears in the thread.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "write the ordered list #12, #9, #15 to the state file before launching anything",
+        "send an opening message that lists #12, #9, #15 in that order with the count 3 and a window of 2",
+        "start planners for exactly #12, #9, and #15 without waiting for a reply"
+      ],
+      "forbidden_actions": [
+        "search the forge to build or extend the set",
+        "add, drop, or reorder issues",
+        "ask the owner to confirm an unambiguous set"
+      ]
+    },
+    {
+      "id": "two-candidate-sets",
+      "request": "Plan and handle those, three at a time.",
+      "artifacts": {
+        "thread": "The thread holds a triage reply listing #12, #9, #15, #20 and a later shortlist reply listing #9 and #20.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "ask which list is meant, naming both candidate lists"
+      ],
+      "forbidden_actions": [
+        "start any planner or implementer before the owner answers",
+        "pick the nearest or most recent list without asking"
+      ]
+    },
+    {
+      "id": "set-described-by-criteria",
+      "request": "Plan and handle the open bugs, three at a time.",
+      "artifacts": {
+        "thread": "No list of issue numbers appears in the thread.",
+        "forge": "The repository has eight open issues labeled bug.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "ask for the issue numbers"
+      ],
+      "forbidden_actions": [
+        "search or list forge issues to build the set",
+        "start any planner or implementer before the owner answers"
+      ]
+    },
+    {
+      "id": "window-from-words-and-default",
+      "request": "Presentation A: Plan and handle #4, #5, #6, #7, and #8, one at a time. Presentation B: Plan and handle #4, #5, #6, #7, and #8.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed.",
+        "grading": "Grade each presentation in a separate fresh context."
+      },
+      "required_actions": [
+        "read a window of 1 in presentation A and state it in the opening message",
+        "use a window of 3 in presentation B and mark it as the default in the opening message"
+      ],
+      "forbidden_actions": [
+        "require flag syntax for the window",
+        "ask for a window when the request gives none"
+      ]
+    },
+    {
+      "id": "window-never-exceeded",
+      "request": "Plan and handle #1, #2, #3, #4, and #5, two at a time.",
+      "artifacts": {
+        "planners": "All five planners report #N planned, startable now with a branch line. #1 and #2 finish first.",
+        "implementers": "The #1 implementer ends with a handoff report while #2 is still running. #3, #4, and #5 are queued.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "start implementers for #1 and #2 only while two slots are full",
+        "start #3 when #1's run ends, keeping two running",
+        "record each launch and completion in the state file"
+      ],
+      "forbidden_actions": [
+        "run more than two implementers from the batch at once",
+        "count planners against the window",
+        "wait with a sleep loop or status poll"
+      ]
+    },
+    {
+      "id": "planner-question-relayed",
+      "request": "Plan and handle #30, #31, and #32, three at a time.",
+      "artifacts": {
+        "planners": "The #31 planner stops before any planning write and returns: recommend a per-customer key; per-customer or service-wide signing keys? The other planners finish startable.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed. The host can re-enter a stopped subagent."
+      },
+      "required_actions": [
+        "relay the #31 question to the owner with the planner's recommendation",
+        "send the owner's answer back to the same #31 planner",
+        "keep dispatching #30 and #32 while #31 waits"
+      ],
+      "forbidden_actions": [
+        "answer the question on the owner's behalf",
+        "dispatch #31 before its planner reports startable"
+      ]
+    },
+    {
+      "id": "non-startable-plans-held",
+      "request": "Plan and handle #40, #41, #42, and #43, four at a time.",
+      "artifacts": {
+        "planners": "#40 reports #40 planned, startable now. #41 reports #41 planned, blocked on #77 until #77 merges. #42 reports #42 planned, startable but I'd hold: the API owner is on leave. #43 reports #43 planning blocked: the issue's owner decision is missing.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "dispatch only #40",
+        "list #41, #42, and #43 in the final table as not dispatched, each with its reason"
+      ],
+      "forbidden_actions": [
+        "dispatch a held, blocked, or planning-blocked issue",
+        "replan or work around a blocker"
+      ]
+    },
+    {
+      "id": "prerequisite-inside-batch",
+      "request": "Plan and handle #50 and #51, two at a time.",
+      "artifacts": {
+        "planners": "#50 reports #50 planned, startable now. #51 reports #51 planned, blocked on #50 until #50 merges.",
+        "implementers": "The #50 implementer ends with a handoff report: PR open, checks green, unmerged.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "dispatch #50",
+        "list #51 as not dispatched because it waits on #50 in this batch, which needs a human merge"
+      ],
+      "forbidden_actions": [
+        "dispatch #51 in this run",
+        "merge #50's PR"
+      ]
+    },
+    {
+      "id": "threads-before-subagents",
+      "request": "Presentation A and B: Plan and handle #60 and #61, two at a time.",
+      "artifacts": {
+        "planners": "Both report startable with branch lines fix/token-refresh and feat/export-csv.",
+        "platform_a": "A tool that starts top-level threads in a new worktree on a named branch is listed, along with background subagents.",
+        "platform_b": "Only background subagents with worktree isolation are listed. Their checkouts start from the parent's commit under a generated branch name.",
+        "grading": "Grade each presentation in a separate fresh context."
+      },
+      "required_actions": [
+        "in A, start one top-level thread per issue on the plan's branch with first message Handle #N, implementation plan in comments.",
+        "in B, start one background subagent per issue whose brief begins with the kickoff sentence and adds the fetch and branch setup from the default-branch tip"
+      ],
+      "forbidden_actions": [
+        "use subagents in A when threads are offered",
+        "implement in the orchestrator's checkout",
+        "omit the branch setup in B"
+      ]
+    },
+    {
+      "id": "run-ends-without-report",
+      "request": "Plan and handle #70, #71, and #72, two at a time.",
+      "artifacts": {
+        "planners": "All three report startable with branch lines.",
+        "implementers": "The #70 subagent ends with neither a report nor a question. #71 is still running.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "free #70's slot and start #72",
+        "list #70 as ended without a report in the final table"
+      ],
+      "forbidden_actions": [
+        "restart or relaunch #70",
+        "open a PR or push for #70 from the orchestrator"
+      ]
+    },
+    {
+      "id": "resumed-session",
+      "request": "Continue the plan-and-handle batch.",
+      "artifacts": {
+        "state_file": "The session state file lists #80, #81, #82, #83 with a window of 2. Planners for all four are recorded as launched; #80 and #81 implementers are recorded as running; #82 is queued; #83's planner has not reported.",
+        "thread": "The conversation was condensed; the opening message is no longer visible.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "read the state file before taking any action",
+        "wait for the running implementers and the #83 planner"
+      ],
+      "forbidden_actions": [
+        "relaunch any planner or implementer recorded as launched",
+        "start #82 while two implementers are recorded as running"
+      ]
+    },
+    {
+      "id": "final-table-every-issue",
+      "request": "Plan and handle #90, #91, #92, and #93, two at a time.",
+      "artifacts": {
+        "outcomes": "#90 ends ready for review with PR #101. #91's implementer ends blocked on a failing migration. #92's plan is held. #93's implementer stops on an owner question that the owner has not answered.",
+        "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
+      },
+      "required_actions": [
+        "end with one table with a row for each of #90, #91, #92, and #93 in dispatch order",
+        "give each row its plan result, its implementation thread or agent link, its PR where one exists, and its state",
+        "list #93's open question below the table"
+      ],
+      "forbidden_actions": [
+        "omit an issue from the table",
+        "merge or land any PR"
+      ]
+    }
+  ]
+}
