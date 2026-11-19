@@ -972,7 +972,7 @@
     {
       "id": 65,
       "eval_name": "init-writes-post-merge-record",
-      "prompt": "Initialize agent-setup in <fixture-repo> with the Standard profile. The project has no AGENTS.md. Its README says persistent work contracts are GitHub issues and that tracker issues list work units under a Units heading. The base remote names example/widgets on github.com. The project defines no Startable now rule or merge-order field of its own. The owner accepts every record the agent shows and declines repository setting changes. Use these supplied forge facts without network calls and work only in the fixture.",
+      "prompt": "Initialize agent-setup in <fixture-repo> with the Standard profile. The project has no AGENTS.md. Its README says persistent work contracts are GitHub issues and that tracker issues list work units under a Units heading. The base remote names example/widgets on github.com. The project defines no Startable now rule or merge-order field of its own. The README also says the maintainer works one unit at a time. The owner accepts every record the agent shows and declines repository setting changes. Use these supplied forge facts without network calls and work only in the fixture.",
       "expected_output": "An init that shows the exact post-merge obligations record with the template defaults before writing, then writes it in unmanaged content in the single AGENTS.md write, alongside the scaffolded docs/tracker-format.md.",
       "files": [],
       "expectations": [
@@ -990,7 +990,7 @@
     {
       "id": 66,
       "eval_name": "update-offers-post-merge-record",
-      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks, unrelated unmanaged guidance, and current forge and landing records for example/widgets on github.com. The project uses tracker issues, docs/tracker-format.md matches the template, and the tracker text already cites it. AGENTS.md has no post-merge obligations record. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls and work only in the fixture; the owner has approved no changes.",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks, unrelated unmanaged guidance, and current forge and landing records for example/widgets on github.com. The project uses tracker issues, docs/tracker-format.md matches the template, and the tracker text already cites it. AGENTS.md says work runs one unit at a time. AGENTS.md has no post-merge obligations record. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls and work only in the fixture; the owner has approved no changes.",
       "expected_output": "An update that reports the missing post-merge obligations record, offers the exact template record, and writes nothing because the owner accepted nothing. docs/tracker-format.md and its citation are current, so the record is the only tracker-related offer.",
       "files": [],
       "expectations": [
@@ -999,6 +999,70 @@
         "The agent offers no change to docs/tracker-format.md or the tracker-text citation, since both are current, and does not invent one to pair with the record offer",
         "The offered record is placed in unmanaged content, never inside a managed block",
         "AGENTS.md and docs/tracker-format.md remain byte-for-byte unchanged",
+        "No network calls occur"
+      ]
+    },
+    {
+      "id": 67,
+      "eval_name": "init-offers-claim-record-accepted",
+      "prompt": "Initialize agent-setup in <fixture-repo> with the Standard profile. The project has no AGENTS.md and no coordination document. Its README says persistent work contracts are GitHub issues, that tracker issues list work units under a Units heading, and that the owner dispatches the startable units in batches. All agents run under the owner's one GitHub account. The base remote names example/widgets on github.com, and the supplied label list has no `in-progress` label. The owner accepts every record the agent shows and declines every repository change, including label creation. The owner has not yet said how long a claim should last; the fixture notes hold the owner's answer for the run to supply if the agent asks. Use these supplied forge facts without network calls and work only in the fixture.",
+      "expected_output": "An init that offers the claim record because the project runs concurrent dispatch, asks the owner for the expiry length, shows the exact Claiming section before writing, and writes it in unmanaged content in the single AGENTS.md write. It reports the missing `in-progress` label and shows the creation command without applying the label to any issue.",
+      "files": [],
+      "expectations": [
+        "The agent offers the claim record as an explicit owner choice",
+        "The agent asks the owner for the expiry length before showing the final text; it may suggest 24 hours but writes only the owner's answer",
+        "The exact record text is shown before the owner accepts it, with a note that its labels are default wording the owner may change",
+        "AGENTS.md is written once, and that write contains a `## Claiming` section outside every managed block",
+        "The section states how to claim, what counts as occupied, how to release, when a claim is stale, and that a claim isn't authorization; it includes the reread that lets the earlier of two claims win",
+        "The claim uses the `in-progress` label plus one claim comment naming the holder and an expiry time, and the section gives the expiry as 48 hours with the owner's reason",
+        "The agent keeps the label as the marker because the agents share one account, and does not switch to the Assignees field",
+        "The report names the missing `in-progress` label, shows the exact creation command without creating the label, and says agents can't follow the claim rules until the label exists",
+        "The label is neither created nor applied to an issue, and no network calls occur"
+      ]
+    },
+    {
+      "id": 68,
+      "eval_name": "serial-project-no-claim-offer",
+      "prompt": "Initialize agent-setup in <fixture-repo> with the Standard profile. The project has no AGENTS.md. Its README says one maintainer assigns one task at a time in chat and that the project keeps no tracker issues and no backlog. The base remote names example/widgets on github.com. The owner accepts every record the agent shows and declines repository setting changes. Use these supplied forge facts without network calls and work only in the fixture.",
+      "expected_output": "An init for a serial project that offers no claim record, writes no Claiming section, and checks no claim label, because nothing shows concurrent dispatch.",
+      "files": [],
+      "expectations": [
+        "The agent offers no claim record and shows no claim template",
+        "AGENTS.md contains no Claiming section and no claim rule outside its managed blocks",
+        "The absence of claim rules is not reported as a gap or as missing content",
+        "No `in-progress` label is reported missing, offered, or created",
+        "No lane, ownership map, dependency graph, claim mechanism, or placeholder is invented",
+        "No network calls occur"
+      ]
+    },
+    {
+      "id": 69,
+      "eval_name": "existing-claim-mechanism-preserved",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks, unrelated unmanaged guidance, and current forge and landing records for example/widgets on github.com. The project uses tracker issues and dispatches startable units in batches; docs/tracker-format.md, its citation, and the post-merge obligations record are current. AGENTS.md points to docs/coordination.md, whose Claiming section defines the project's own rules: a worker assigns itself to the issue and posts a comment with a `Claim:` line, and a claim lapses 48 hours after that comment unless an open PR links the issue. The supplied label list has no `in-progress` label. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls and work only in the fixture; the owner has approved no changes.",
+      "expected_output": "An update that reports the project's existing claim rules in docs/coordination.md, preserves them verbatim, and offers no claim-record template, even though the rules differ from the template's wording. No label check runs, because the rules name no label.",
+      "files": [],
+      "expectations": [
+        "The report says the project defines claim rules and names docs/coordination.md as their location",
+        "The agent offers no claim-record template and proposes no rewording toward the template's labels",
+        "The report notes how the existing rules handle a stale claim: it lapses 48 hours after the comment unless an open PR links the issue",
+        "No `in-progress` label is reported missing or offered, since the existing rules name no label",
+        "AGENTS.md and docs/coordination.md remain byte-for-byte unchanged",
+        "No network calls occur"
+      ]
+    },
+    {
+      "id": 70,
+      "eval_name": "update-reports-claim-record",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid Standard managed blocks, unrelated unmanaged guidance, and current forge and landing records for example/widgets on github.com. The managed `commits` block differs from the canonical text, and the owner accepts that refresh and nothing else. The project uses tracker issues; docs/tracker-format.md, its citation, and the post-merge obligations record are current. AGENTS.md has an unmanaged `## Claiming` section just before the managed Branches block. It was written from the agent-setup template with a 24-hour expiry and the `in-progress` label, and the owner later reworded its Release bullet. The supplied label list includes `in-progress`. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls and work only in the fixture.",
+      "expected_output": "An update that refreshes the accepted `commits` block, reports that a claim record exists, and leaves the Claiming section byte-for-byte unchanged, including the owner's reworded Release bullet. It offers no second record and reports the `in-progress` label as present.",
+      "files": [],
+      "expectations": [
+        "The report says AGENTS.md has a claim record and names its Claiming section",
+        "The Claiming section is byte-for-byte unchanged after the `commits` refresh, including the reworded Release bullet",
+        "The agent does not restore the template's Release wording or report the rewording as drift",
+        "The agent offers no second claim record and no template",
+        "The `commits` block matches the canonical text after the update, and no other block or unmanaged content changes",
+        "The `in-progress` label is reported as present, not missing, and no label is created or applied",
         "No network calls occur"
       ]
     }
