@@ -110,10 +110,21 @@ follow this full sequence:
    step 7. A blocker in that review reopens fix rounds. If it has none, defer
    or decline its findings and do not push again.
 
-7. **Stop and report.** End the turn with this report as its final message.
-   Give the parts below in this order, each with its bold lead words, and use
-   no headings or tables. Aim for 60 to 120 words. Omit a part only where its
-   rule says so.
+7. **Stop and report.** First check that the PR's worktree holds nothing
+   real: after the final push,
+   `git status --porcelain --untracked-files=all` in it prints nothing. The
+   flag keeps a `status.showUntrackedFiles` setting from hiding files.
+   Scratch files belong outside the checkout, so move or delete your own and
+   leave files you didn't create.
+   A file that belongs in the PR means another commit and push, which
+   restarts the review watch (step 2), unless the approver has already
+   approved the PR: then push nothing, as the freeze below says. Anything
+   you must leave goes under **Left for you**, by path; a clean result needs
+   no mention.
+
+   End the turn with this report as its final message. Give the parts below
+   in this order, each with its bold lead words, and use no headings or
+   tables. Aim for 60 to 120 words. Omit a part only where its rule says so.
 
    1. **Status.** One line: the PR link once, the tip step 3 checked,
       then "open and green, ready to merge." For a PR you handed off behind
@@ -132,7 +143,8 @@ follow this full sequence:
    4. **Left for you.** Up to three bullets on what the owner must do besides
       merge. Each is a thread that needs their word, a check only they can
       run, a follow-up filed as #N or still to file, or a sibling PR to
-      refresh after this one lands. Omit when none.
+      refresh after this one lands. A file left in the worktree goes here
+      too, by path. Omit when none.
    5. **Skipped.** Up to two bullets, each a workflow step not run and why:
       the review watch a `none` reviewer record skipped (step 1), screenshots
       not captured or not uploaded (with the error), or a check not run. Omit
