@@ -18,8 +18,7 @@ description: >-
 Clean up after a merged PR: resync the base, remove the merged branch's clean
 worktree, delete and prune the merged branch, verify that close-keyword issues
 closed, reconcile documented project obligations, and stop any review watch.
-Bundled scripts do the Git and GitHub mechanics; you keep issue-close
-verification, reconciliation, watcher shutdown, and the owner-facing judgment.
+Bundled scripts do the Git and GitHub mechanics; you keep the judgment.
 
 ## Check Prerequisites
 
@@ -93,7 +92,7 @@ The script pins the merged PR's facts, rejects unsafe state, lands on the base
 branch and fully resyncs it, then deletes the remote head under an OID lease,
 retargeting a same-repository stacked PR first. Last, it deletes the local
 head and prunes. The resync finishes before branch deletion, so a later stop
-still leaves a current base (issue #105). It first removes the linked worktree
+still leaves a current base. It first removes the linked worktree
 holding the head branch only when that worktree is clean, at the merged head,
 and doesn't hold your working directory; otherwise it stops
 `head-worktree-present` for the owner. It leaves an absent base branch for
@@ -146,8 +145,7 @@ or when mistyped. Query each issue in the ledger's `closing_refs` separately,
 pinned to its own repository. In one pinned lookup, also read the merged PR's
 body and `closingIssuesReferences`, and check the target of any close keyword
 the forge missed. Plain `Refs #N` is intentionally non-closing. Surface any
-still-open issue for the owner, and don't close it unless they ask: whether
-the work resolves it is their decision. If the lookup can't run, state the
+still-open issue for the owner, and don't close it unless they ask. If the lookup can't run, state the
 verification gap.
 
 ## List the Obligations Found
@@ -220,9 +218,7 @@ variable, which zsh passes as one argument:
 <skill-dir>/tracker-write.sh --repo <host/owner/name> --issue <N> --comment <ID>
 ```
 
-It writes nothing when the refresh fails or the tracker changed since it read
-it, and it verifies the write. GitHub updates are unconditional, so a narrow
-race remains; the edit history recovers from it. Name the refresh's reads in
+Name the refresh's reads in
 the guard and recheck rows. Copy its one stdout line,
 `tracker-write.sh: RESULT <result> guard=<g> attempt=<a> verify=<v> recheck=<r>`,
 into the trace, where `none` means the row is absent. After the `guard` row:
@@ -283,8 +279,7 @@ manual removal while a landing batch runs: its live temporary worktree is a
 candidate too. Removal deletes files, ignored ones included.
 
 1. Fetch the base's remote with `git fetch --prune <remote>`: `origin`, or
-   the remote of the ref `--base` names. The sweep never fetches, so a stale
-   base keeps merged worktrees and still honors a dropped disposables entry.
+   the remote of the ref `--base` names. The sweep never fetches.
 2. From the primary checkout, run the dry run and show the owner its report:
 
    ```sh
