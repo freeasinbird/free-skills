@@ -381,20 +381,10 @@ mechanical change (a rename, move, format, or generated update) that does
 none of those relies on CI and the recorded bot reviewer, or the human
 reviewer when there is none, however many files it touches.
 
-- **Choose the reviewer by risk.** Ordinary code, prompt, or docs changes,
-  including behavior changes without tests, get one reviewer in a fresh
-  context with the brief below. Work on a destructive path, a credential-leak
-  surface, a returned-object trust boundary, or a contract or public interface
-  uses the `council` skill when it is installed.
-- **Treat this section as the standing request for council.** It is the
-  project's request for council on that work, which council's "When to Run"
-  accepts. It is also a parallel-delegate budget the owner set in advance:
-  one council panel per review round, at the rung council picks. That meets
-  the Context Discipline rule to stay within a budget the user already set.
-  Call council in findings mode, report only, with the change at a fixed
-  revision, its intended outcome, and the risk-class flag set. Council picks
-  its rung and panel and states their cost before launching. This procedure,
-  not council's staging, owns fixes and re-review.
+- **Use one fresh-context reviewer.** Every change this section covers,
+  risky or not, gets one reviewer in a fresh context with the brief below.
+  The `council` skill is an escalation, not a default: run it only when the
+  user asks for it.
 - **Give the single reviewer a fixed brief.** Send the same words every
   round, changing only the revision. Give the reviewer no reasoning trail, and
   ask it to work read-only:
@@ -414,17 +404,13 @@ reviewer when there is none, however many files it touches.
   don't count it and don't drop it. Judge reachability and severity as
   §review-convergence says.
 - **Re-review only while blockers remain.** After fixing confirmed blockers,
-  review the new fixed revision through the same route. A round with no
+  review the new fixed revision with the same brief. A round with no
   confirmed blocker ends pre-push review; fix, defer, or decline its
   non-blockers per §review-convergence. There is no round cap and no required
   subagent; after many blocker rounds, reassess as §review-convergence says.
-- **Fall back when a route is missing.** Without council installed, use one
-  fresh-context reviewer with the brief. When council reports rung 3 (no
-  panel), count any confirmed findings it kept from a lone member, labeled a
-  single review, as confirmed findings of this round. Fix their blockers
-  first, then give the fixed revision to the fallback reviewer it names. When
-  delegation is unavailable or needs permission you don't have, skip it and
-  rely on the external bot or human. You may ask the user first.
+- **Fall back when delegation is missing.** When delegation is unavailable
+  or needs permission you don't have, skip it and rely on the external bot or
+  human. You may ask the user first.
 - **Match the review effort to risk.** A same-model delegate is only partly
   independent and costs tokens.
 
