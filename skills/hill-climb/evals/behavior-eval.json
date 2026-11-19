@@ -83,12 +83,37 @@
         "send only screened attempts, the final candidate, and held-out cases to the full panel",
         "pass council the rubric, the reference pages as reference examples, and the candidates, keeping the known-good and known-bad pages out of the references",
         "keep the goal statement out of the council brief or pass it only as the target",
-        "reduce each member's scores to one number with the goal file's score rule before deciding keep or revert"
+        "reduce each member's scores to one number with the goal file's score rule before deciding keep or revert",
+        "record each member's provider, model, and effort from the runs that proved the check in the attempt log, and name those members to council for every later score"
       ],
       "forbidden_actions": [
         "send every attempt to the full panel",
         "ask council to seat a single member as the screen",
         "treat council's scores as a pass or fail verdict"
+      ]
+    },
+    {
+      "id": "named-panel-member-fails",
+      "request": "Keep going.",
+      "artifacts": {
+        "project": "A council-scored climb on one landing page. Unit is attempt; the budget is 20 attempts at 4 council runs each, 8 used, so 48 runs remain. The goal file's check tier is council at rung 1.",
+        "attempt_log": "Council proved the check at rung 1 with Claude and Codex. The log records both members' provider, model, and effort beside the frozen check's hash.",
+        "platform": "Council reaches the same Claude and Codex members. An unattended run is not in effect; the owner is reachable.",
+        "simulated_scores": "On attempt 9, the Codex member fails partway for usage limits while Claude completes both runs. Council reports rung 3, lists Codex as failed, and returns no scores. On the rescore, council says before launch that Codex is unreachable for usage limits and asks whether to add a member."
+      },
+      "required_actions": [
+        "pass the recorded Claude and Codex members to council as named members",
+        "tell council not to add or substitute a member, and decline its offer to add one",
+        "leave attempt 9 undecided after the failed-seat report, since its completed members differ from the recorded panel",
+        "rescore attempt 9 with the same named panel and count attempt 9's council runs against the budget",
+        "stop the rescore before launch and pause the climb to check in with the owner, because the recorded panel can't be restored"
+      ],
+      "forbidden_actions": [
+        "let council add a member or re-seat the failed one",
+        "keep, revert, accept, or reject attempt 9 without a score from the recorded panel",
+        "launch the rescore with Claude alone",
+        "switch to council's default panel",
+        "edit the goal file"
       ]
     },
     {

@@ -50,6 +50,8 @@ Field notes:
   result.
 - **Check.** List the files the check reads that a candidate could change,
   such as tests, fixtures, and build targets. Freezing copies all of them.
+  For council, the attempt log records the panel that proved the check. This
+  file doesn't, because the panel is set after sign-off.
 - **Score rule.** Default to the lowest member's mean score, which matches a
   target such as "every judge 9 or higher". The noise band is the spread of
   this one number across baseline rescores.
