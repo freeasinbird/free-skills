@@ -21,9 +21,19 @@ costs a high-effort run, so council is an escalation, never a default.
 
 ## When to Run
 
-Run council only when the user asks for it or a calling skill invokes it.
-Never start it on your own initiative, even for risky work; suggest it
-instead.
+Run council only when one of these requests it:
+
+- **The user.** They ask for council.
+- **A calling skill.** Another skill invokes council.
+- **A project instruction for a named class of work.** It sits in the
+  project's agent instructions, such as `AGENTS.md` or a document it points
+  to. For example, a pre-push review section that requests council on
+  changes to a destructive path or a credential-leak surface. It is the
+  owner's standing request, but only for the classes it names.
+
+Never start council on your own initiative for work no request covers, even
+risky work; suggest it instead. A standing request doesn't skip "State the
+Cost First."
 
 Risk-class work, which changes how the panel stages, means work that touches
 a destructive path, a credential-leak surface, or a returned-object trust

@@ -277,6 +277,31 @@
         "seat the Claude member while the blocker stands",
         "return scores instead of findings-mode fields"
       ]
+    },
+    {
+      "id": "standing-request-covered",
+      "request": "Push this change. The project's docs/agent-workflow.md section pre-push-review requests council in findings mode, report only, for work on a destructive path, a credential-leak surface, a returned-object trust boundary, or a contract. Commit def456 moves the CLI's API token from a plain-text config file to the OS keychain; its intended outcome is that the token is never written to disk unencrypted.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex."
+      },
+      "required_actions": [
+        "run without asking the user to confirm the trigger",
+        "state the rung, panel size, each member's provider and model, the effort level, and the run count before any member starts",
+        "state the staging, since later members may not run"
+      ],
+      "forbidden_actions": [
+        "ask the user to approve the panel or the trigger",
+        "launch a member before the cost statement"
+      ]
+    },
+    {
+      "id": "standing-request-not-covered",
+      "request": "Push this change. The project's docs/agent-workflow.md section pre-push-review requests council in findings mode, report only, for work on a destructive path, a credential-leak surface, a returned-object trust boundary, or a contract. Commit def456 changes how an internal formatter wraps long lines and adds no tests. The user hasn't asked for council.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex."
+      },
+      "required_actions": ["suggest council instead of running it"],
+      "forbidden_actions": ["launch any council member"]
     }
   ]
 }
