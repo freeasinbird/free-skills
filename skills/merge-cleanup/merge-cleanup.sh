@@ -8,13 +8,17 @@
 #   merge-cleanup.sh --repo host/owner/name --pr N --checkout PATH
 #     [--base-remote NAME]   # explicit base-repository remote
 #     [--head-remote NAME]   # explicit head-repository remote
+#     [--keep-worktree]      # never remove the head branch's linked worktree
 #   merge-cleanup.sh --help
 #
 # The checkout must be the worktree the cleanup may rewrite. The script lands
 # on and fully resyncs the PR base before it reads or deletes the remote head.
-# It stops before mutation when a linked worktree still checks out the head
-# branch, requiring its owner to remove that worktree first. It never closes
-# issues or interprets project post-merge policy.
+# When a linked worktree still checks out the head branch, it first removes
+# that worktree through worktree-sweep.sh --remove-head, which removes it only
+# when it is clean, at the merged head, and doesn't hold the directory this
+# script was started from. Otherwise, or with --keep-worktree, it stops before
+# mutation for the worktree's owner. It never closes issues or interprets
+# project post-merge policy.
 #
 # Last line on stdout is the machine-readable result. Every result payload has
 # the same fields, including dispositions for steps that did not start:
@@ -28,7 +32,7 @@ set -u
 set +x
 
 PR="" REPO_SPEC="" REPO="" FORGE_HOST="" CHECKOUT_INPUT=""
-BASE_REMOTE_OPT="" HEAD_REMOTE_OPT=""
+BASE_REMOTE_OPT="" HEAD_REMOTE_OPT="" KEEP_WORKTREE=false
 HEAD_OID="" BRANCH="" BASE="" HEAD_REPO="" PR_URL="" CLOSING_REFS_JSON='[]'
 MERGE_DISPOSITION=not_checked WORKTREE_DISPOSITION=not_checked
 REMOTE_DISPOSITION=not_started BASE_DISPOSITION=not_started
@@ -51,6 +55,7 @@ esac
 while [ $# -gt 0 ]; do
   opt="$1"
   case "$opt" in
+    --keep-worktree) KEEP_WORKTREE=true; shift; continue ;;
     --pr|--repo|--checkout|--base-remote|--head-remote) ;;
     *) echo "merge-cleanup.sh: unknown option: $opt" >&2; usage ;;
   esac
@@ -119,6 +124,9 @@ SCRIPT_DIR=$(cd -P -- "$SCRIPT_PARENT" 2>/dev/null && pwd -P) || {
 LANDING_PLAN="$SCRIPT_DIR/base-landing-plan.sh"
 [ -x "$LANDING_PLAN" ] \
   || { echo "merge-cleanup.sh: bundled landing guard is not executable" >&2; exit 69; }
+SWEEP="$SCRIPT_DIR/worktree-sweep.sh"
+[ -x "$SWEEP" ] \
+  || { echo "merge-cleanup.sh: bundled worktree sweep is not executable" >&2; exit 69; }
 
 # --- reporting -------------------------------------------------------------
 
@@ -235,6 +243,11 @@ urlencode() {
 # --- pinned checkout and PR facts ------------------------------------------
 
 checkout_top=""
+# The caller's working directory, read before the cd below loses it: the
+# head worktree removal never takes the directory a session stands in.
+out_exact CALLER_DIR physical_dir . || CALLER_DIR=""
+# A deleted working directory reads as "."; only an absolute path names one.
+case "$CALLER_DIR" in /*) ;; *) CALLER_DIR="" ;; esac
 out_exact CHECKOUT_PHYSICAL physical_dir "$CHECKOUT_INPUT" \
   || { echo "merge-cleanup.sh: --checkout is not an accessible directory" >&2; exit 64; }
 cd -- "$CHECKOUT_PHYSICAL" \
@@ -1170,6 +1183,36 @@ check_consumers() {
   done <<<"$numbers"
 }
 
+# Remove the merged head's linked worktree, or stop for its owner. A clean
+# worktree at the forge-verified merged head holds nothing the merge didn't
+# keep, so removing it loses only the checkout. worktree-sweep.sh owns the
+# clean test and rechecks it just before removing.
+remove_head_worktree() { # remove_head_worktree <path>
+  local path="$1" out rc last kept
+  WORKTREE_DISPOSITION=owner_removal_required
+  [ "$KEEP_WORKTREE" != true ] \
+    || stop head-worktree-present "linked head worktree $path was kept: --keep-worktree"
+  [ -n "$CALLER_DIR" ] \
+    || stop head-worktree-present "linked head worktree $path was kept: the caller's working directory could not be read"
+  out=$("$SWEEP" --remove-head "$BRANCH" --head-oid "$HEAD_OID" \
+    --caller-dir "$CALLER_DIR" 2>&1); rc=$?
+  last=$(printf '%s\n' "$out" | tail -n 1)
+  case "$rc:$last" in
+    "0:OK sweep "*) ;;
+    "2:STOP remove-failed "*)
+      stop head-worktree-present "git refused to remove linked head worktree $path: $last" ;;
+    *) lookup_failed head-worktree "worktree-sweep.sh could not judge $path (exit $rc): $last" ;;
+  esac
+  worktree_scan "refs/heads/$BRANCH"
+  printf '%s\n' "$out" | grep -q '^WORKTREE removed ' || WT_MATCH="${WT_MATCH:-$path}"
+  if [ -n "$WT_MATCH" ]; then
+    # The sweep's line for it: its disposition word and its reason.
+    kept=$(printf '%s\n' "$out" | sed -n 's/^WORKTREE \([a-z-]*\) .*"reason":"\(.*\)"}$/\1: \2/p' | tail -n 1)
+    stop head-worktree-present "linked head worktree $WT_MATCH was kept for its owner (${kept:-no reason reported}); worktree-sweep.sh lists what removing it would delete"
+  fi
+  WORKTREE_DISPOSITION=removed_clean
+}
+
 phase_cleanup() {
   local local_tip base_symbolic_rc=0 initial_base_id="" initial_head_id=""
   local head_worktree="" base_wt="" head_target="" head_label="" head_is_remote=false
@@ -1207,7 +1250,6 @@ phase_cleanup() {
   worktree_scan "refs/heads/$BRANCH"; head_worktree="$WT_MATCH"
   if [ -n "$head_worktree" ] && ! [ "$head_worktree" -ef "$WORKTREE_ROOT" ]; then
     WORKTREE_DISPOSITION=owner_removal_required
-    stop head-worktree-present "linked head worktree $head_worktree must be removed by its owner before cleanup"
   elif [ -n "$head_worktree" ]; then
     WORKTREE_DISPOSITION=current
   else
@@ -1227,6 +1269,10 @@ phase_cleanup() {
   load_landing_plan "$BASE_REMOTE"
   [ "$PLAN_CREATE" != true ] \
     || stop base-create-required "local base $BASE is absent; its owner must create it before cleanup"
+  # After every read-only check, so a run that any of them stops has removed
+  # nothing.
+  [ "$WORKTREE_DISPOSITION" != owner_removal_required ] \
+    || remove_head_worktree "$head_worktree"
   case "$PLAN_VERB,$PLAN_CREATE" in
     checkout,false)
       git checkout --no-overwrite-ignore "$BASE" >/dev/null 2>&1 \

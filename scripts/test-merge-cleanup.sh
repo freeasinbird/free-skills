@@ -73,6 +73,7 @@ v 64 "invalid repo" --repo github.invalid/acme/repo/extra --pr 7 --checkout "$VA
 v 64 "invalid host" --repo .invalid/acme/repo --pr 7 --checkout "$VALID"
 v 64 "invalid host character" --repo github_invalid/acme/repo --pr 7 --checkout "$VALID"
 v 64 "unknown option" --repo github.invalid/acme/repo --pr 7 --checkout "$VALID" --bogus x
+v 64 "keep-worktree takes no value" --repo github.invalid/acme/repo --pr 7 --checkout "$VALID" --keep-worktree=yes
 v 64 "remote option shape" --repo github.invalid/acme/repo --pr 7 --checkout "$VALID" --base-remote -x
 if PATH="$SHIMD:$PATH" bash "$SCRIPT" --help >/dev/null 2>&1; then ok
 else bad "--help failed"; fi
@@ -221,8 +222,8 @@ setup_same() { # merge|squash|rebase
   reset_forge
   write_pr acme/repo acme/repo feature "$HEAD_OID" false >"$FIX/pr.json"
 }
-run_cleanup() {
-  if OUT=$(FIX="$FIX" PATH="$SHIMD:$PATH" bash "$SCRIPT" \
+run_cleanup() { # RUN_FROM, when set, is the caller's working directory
+  if OUT=$(cd "${RUN_FROM:-.}" && FIX="$FIX" PATH="$SHIMD:$PATH" bash "$SCRIPT" \
       --repo "github.invalid/$RUN_REPO" --pr 7 --checkout "$WORK" \
       --base-remote origin ${HEAD_REMOTE_ARG:-} 2>"$FIX/stderr"); then
     RC=0
@@ -369,6 +370,23 @@ else
   ok
 fi
 want_ref "$ORIGIN" refs/heads/feature
+
+SCENARIO="a base-creation stop removes no head worktree"
+setup_same merge
+MERGED_OID=$(git --git-dir="$ORIGIN" rev-parse refs/heads/main)
+git --git-dir="$ORIGIN" update-ref refs/heads/-x "$MERGED_OID"
+jq '.baseRefName = "-x"' "$FIX/pr.json" >"$FIX/pr.base"
+mv "$FIX/pr.base" "$FIX/pr.json"
+git -C "$WORK" switch -q main
+git -C "$WORK" branch -f feature origin/feature
+HEAD_WT="$SCEN/head-wt"
+git -C "$WORK" worktree add -q "$HEAD_WT" feature
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 2
+want_out 'STOP base-create-required'
+want_out '"worktree":"owner_removal_required"'
+[ -e "$HEAD_WT" ] && ok || bad "head worktree removed before the base-creation stop"
 
 SCENARIO="failed PR lookup mutates nothing"
 setup_same merge
@@ -680,7 +698,7 @@ run_cleanup
 want_rc 0
 want_out '"number":42'
 
-SCENARIO="linked head worktree requires owner removal before mutation"
+SCENARIO="a clean linked head worktree is removed and cleanup completes"
 setup_same merge
 git -C "$WORK" switch -q main
 git -C "$WORK" branch -f feature origin/feature
@@ -688,10 +706,55 @@ HEAD_WT="$SCEN/head-wt"
 git -C "$WORK" worktree add -q "$HEAD_WT" feature
 RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
 run_cleanup
+want_rc 0
+want_out '"worktree":"removed_clean"'
+want_out '"remote_branch":"deleted"'
+want_no_ref "$ORIGIN" refs/heads/feature
+want_no_ref "$WORK/.git" refs/heads/feature
+[ ! -e "$HEAD_WT" ] && ok || bad "clean linked head worktree survived"
+
+SCENARIO="--keep-worktree keeps a clean linked head worktree before mutation"
+setup_same merge
+git -C "$WORK" switch -q main
+git -C "$WORK" branch -f feature origin/feature
+HEAD_WT="$SCEN/head-wt"
+git -C "$WORK" worktree add -q "$HEAD_WT" feature
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin --keep-worktree"
+run_cleanup
 want_rc 2
 want_out 'STOP head-worktree-present'
+want_out '"worktree":"owner_removal_required"'
+want_out 'was kept: --keep-worktree'
 want_ref "$ORIGIN" refs/heads/feature
-[ -e "$HEAD_WT" ] && ok || bad "linked head worktree was removed"
+[ -e "$HEAD_WT" ] && ok || bad "kept linked head worktree was removed"
+
+SCENARIO="a clean head worktree the caller stands in is kept before mutation"
+setup_same merge
+git -C "$WORK" switch -q main
+git -C "$WORK" branch -f feature origin/feature
+HEAD_WT="$SCEN/head-wt"
+git -C "$WORK" worktree add -q "$HEAD_WT" feature
+mkdir "$HEAD_WT/sub"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+RUN_FROM="$HEAD_WT/sub" run_cleanup
+want_rc 2
+want_out 'STOP head-worktree-present'
+want_out "self: the caller's directory"
+want_ref "$ORIGIN" refs/heads/feature
+[ -e "$HEAD_WT" ] && ok || bad "the caller's own head worktree was removed"
+
+SCENARIO="a failed remote check removes no head worktree"
+setup_same merge
+git -C "$WORK" switch -q main
+git -C "$WORK" branch -f feature origin/feature
+HEAD_WT="$SCEN/head-wt"
+git -C "$WORK" worktree add -q "$HEAD_WT" feature
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote nosuch"
+run_cleanup
+want_rc 4
+want_out '"worktree":"owner_removal_required"'
+want_ref "$ORIGIN" refs/heads/feature
+[ -e "$HEAD_WT" ] && ok || bad "head worktree removed before the remote checks passed"
 
 SCENARIO="dirty linked head worktree stops before mutation"
 setup_same merge
@@ -704,6 +767,7 @@ RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
 run_cleanup
 want_rc 2
 want_out 'STOP head-worktree-present'
+want_out 'dirty: not clean; --remove-head removes only a clean worktree'
 want_ref "$ORIGIN" refs/heads/feature
 [ -e "$HEAD_WT" ] && ok || bad "dirty linked worktree was removed"
 

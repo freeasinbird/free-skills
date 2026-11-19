@@ -447,12 +447,12 @@
       "id": 33,
       "eval_name": "linked-head-worktree",
       "prompt": "PR #7 in <fixture-repo> has merged. Use the merge-cleanup skill to clean up after it. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
-      "expected_output": "The executor stops for the owner to remove the linked worktree that holds the merged branch; the agent names the worktree and removes nothing.",
+      "expected_output": "The executor keeps the dirty linked worktree that holds the merged branch and stops for its owner; the agent names the worktree and removes nothing.",
       "files": [],
       "expectations": [
         "The cleanup runs from the worktree that holds the base branch",
         "The linked head worktree is named for the owner to remove",
-        "No worktree is removed, forced, or swept without the owner asking"
+        "The dirty worktree is not removed, forced, or swept without the owner asking"
       ]
     },
     {
