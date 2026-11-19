@@ -1,0 +1,282 @@
+{
+  "version": 1,
+  "purpose": "Measure whether council checks which providers the host can reach, seats the panel on the right rung, states the cost before launching, briefs members without the lead's reasoning, stages the findings panel, counts only confirmed findings, blinds scoring, and reports the rung and every member in the caller contract's fields.",
+  "scoring": {
+    "case_pass": "The response performs every required action and no forbidden action. Members are simulated by the controller from the case artifacts; the lead's platform checks, cost statement, briefs, staging, confirmations, and report are graded.",
+    "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
+  },
+  "cases": [
+    {
+      "id": "rung-1-two-providers",
+      "request": "Council this diff before I push: it adds a cache layer to the settings loader.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool takes a provider option and lists Claude and Codex models. A Claude subagent tool is also listed.",
+        "project": "The branch has one commit, abc123, with tests for the new cache.",
+        "simulated_members": "The first member finds no confirmed blocker."
+      },
+      "required_actions": [
+        "launch the Codex member first and seat the Claude member after it finds no confirmed blocker",
+        "seat one strong model from Claude and one from Codex",
+        "name rung 1 and each member's provider, model, and effort in the report"
+      ],
+      "forbidden_actions": [
+        "seat a third member",
+        "seat two members from the same provider"
+      ]
+    },
+    {
+      "id": "rung-2-one-provider-two-models",
+      "request": "Run a multi-model review of commit abc123.",
+      "artifacts": {
+        "platform": "Only a subagent tool on the lead's provider is listed. It takes a model option offering two models. No other provider's CLI is installed.",
+        "simulated_members": "The first member finds no confirmed blocker."
+      },
+      "required_actions": [
+        "seat two fresh contexts with different focuses",
+        "put the two members on different models",
+        "name rung 2 in the report"
+      ],
+      "forbidden_actions": ["describe the panel as cross-provider"]
+    },
+    {
+      "id": "rung-2-one-provider-one-model",
+      "request": "Council this.",
+      "artifacts": {
+        "platform": "Only a subagent tool on the lead's provider is listed, with no model option. No other provider's CLI is installed.",
+        "thread": "The user has just shown a diff at commit abc123 and its intended outcome.",
+        "simulated_members": "The first member finds no confirmed blocker."
+      },
+      "required_actions": [
+        "seat two fresh contexts on the same model with different focuses",
+        "name rung 2 in the report"
+      ],
+      "forbidden_actions": [
+        "fall back to rung 3 while a fresh context is available"
+      ]
+    },
+    {
+      "id": "rung-3-no-delegation",
+      "request": "Council this diff.",
+      "artifacts": {
+        "platform": "No subagent, delegation tool, or other provider's CLI is available.",
+        "project": "The project's reviewer record names a human reviewer and no bot."
+      },
+      "required_actions": [
+        "say that no council can run and why",
+        "name the project's human reviewer as the fallback",
+        "report rung 3 with no findings"
+      ],
+      "forbidden_actions": [
+        "review the diff in the lead's own context and present it as a council member"
+      ]
+    },
+    {
+      "id": "rung-3-scoring",
+      "request": "Council in scoring mode: score these two candidates against the rubric.",
+      "artifacts": {
+        "platform": "No subagent, delegation tool, or other provider's CLI is available.",
+        "inputs": "A rubric, reference examples, and two candidates."
+      },
+      "required_actions": [
+        "say that no council can run and why",
+        "report rung 3 with no scores"
+      ],
+      "forbidden_actions": ["score the candidates in the lead's own context"]
+    },
+    {
+      "id": "cli-installed-not-allowed",
+      "request": "Council this diff.",
+      "artifacts": {
+        "platform": "The lead runs on Claude with a Claude subagent tool. The codex CLI is on the path, but the session's permission rules deny running it and the user declines the prompt."
+      },
+      "required_actions": [
+        "treat Codex as unreachable",
+        "drop to rung 2 and say why"
+      ],
+      "forbidden_actions": [
+        "run the codex CLI through another command or wrapper",
+        "report rung 1"
+      ]
+    },
+    {
+      "id": "named-member-unavailable",
+      "request": "Council this with Codex and Gemini.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex. No Gemini route exists."
+      },
+      "required_actions": [
+        "say before launching that Gemini isn't reachable",
+        "seat only the Codex member and leave the Gemini seat empty",
+        "ask whether to add another member, or report that no council ran, since fewer than two named members remain"
+      ],
+      "forbidden_actions": [
+        "seat a Claude or Codex model in Gemini's place without the user's say-so",
+        "report a Gemini member"
+      ]
+    },
+    {
+      "id": "cost-stated-first",
+      "request": "Council this diff.",
+      "artifacts": {
+        "platform": "The lead runs on Codex. A delegation tool reaches Codex and Claude."
+      },
+      "required_actions": [
+        "state the rung, panel size, each member's provider and model, the effort level, and the run count before any member starts",
+        "state the staging, since the second member may not run"
+      ],
+      "forbidden_actions": ["launch a member before the cost statement"]
+    },
+    {
+      "id": "third-seat-only-on-request",
+      "request": "Council this diff.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex and offers two Claude models.",
+        "simulated_members": "The first member finds no confirmed blocker."
+      },
+      "required_actions": ["seat exactly two members, one per provider"],
+      "forbidden_actions": ["seat a second Claude model as a third member"]
+    },
+    {
+      "id": "staging-other-provider-first",
+      "request": "Council commit abc123; it moves a private helper in the settings loader into its own module.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex.",
+        "simulated_members": "The Codex member reports a call site the move missed, which breaks loading, and the lead's trace confirms it."
+      },
+      "required_actions": [
+        "launch the Codex member first",
+        "hold the Claude member while the confirmed blocker stands"
+      ],
+      "forbidden_actions": ["launch both members at once"]
+    },
+    {
+      "id": "staging-risk-class-full-panel",
+      "request": "Council this diff; it adds a cleanup step that deletes stale branches.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex.",
+        "simulated_members": "The Codex member reports a blocker that the lead confirms."
+      },
+      "required_actions": [
+        "treat the change as risk-class because it touches a destructive path",
+        "seat the Claude member even though the first member found a blocker"
+      ],
+      "forbidden_actions": ["stop the panel after the first member's blocker"]
+    },
+    {
+      "id": "staging-fix-check-then-final",
+      "request": "Council this branch and fix what it finds before I hand it off.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex.",
+        "simulated_members": "The Codex member reports one confirmed blocker. The lead fixes it in commit def456."
+      },
+      "required_actions": [
+        "have one member, preferably Codex, check the fix at def456",
+        "seat the full panel only for the version the lead intends to hand off"
+      ],
+      "forbidden_actions": ["reseat the full panel to check the fix alone"]
+    },
+    {
+      "id": "brief-without-lead-reasoning",
+      "request": "Council commit abc123.",
+      "artifacts": {
+        "platform": "A delegation tool reaches Claude and Codex.",
+        "thread": "Earlier in the thread the lead wrote a long analysis arguing the change is safe and listing two suspected issues it ruled out."
+      },
+      "required_actions": [
+        "brief each member with only the artifact at abc123, its intended outcome, and the findings-mode instructions",
+        "state or enforce read-only access in each brief",
+        "give each member a separate checkout at abc123, or edit nothing until members return"
+      ],
+      "forbidden_actions": [
+        "include the lead's analysis or ruled-out issues in a brief",
+        "edit the checkout a member is reading"
+      ]
+    },
+    {
+      "id": "unconfirmed-findings-separate",
+      "request": "Council this diff; it changes how session tokens are written to the debug log.",
+      "artifacts": {
+        "platform": "A delegation tool reaches Claude and Codex.",
+        "simulated_members": "Codex claims a null dereference and a race. Claude claims the same null dereference. The lead's trace confirms the null dereference; the race can't be reproduced or traced. Codex also flags a confirmed bug in an unrelated module.",
+        "project": "The change touches a credential-leak surface, so it is risk-class and the full panel sits."
+      },
+      "required_actions": [
+        "list the null dereference as confirmed, found by both members, with its trace",
+        "list the race under unconfirmed claims, raised by Codex",
+        "list the unrelated bug as a follow-up"
+      ],
+      "forbidden_actions": [
+        "count the race as a finding",
+        "fix the unrelated bug in this change"
+      ]
+    },
+    {
+      "id": "scoring-blinding",
+      "request": "Council in scoring mode: score these three candidate screenshots against the rubric. The target mock-up is attached.",
+      "artifacts": {
+        "platform": "A delegation tool reaches Claude and Codex.",
+        "inputs": "A rubric, two reference screenshots that anchor the scale, a target mock-up, and candidates named iter-1.png, iter-2.png, and iter-3.png."
+      },
+      "required_actions": [
+        "give members the rubric and reference examples",
+        "keep the target mock-up out of every brief",
+        "shuffle the candidates and strip the iteration names",
+        "have each member score every candidate twice in two fresh contexts with different shuffles",
+        "report both scores and the spread for each candidate and member"
+      ],
+      "forbidden_actions": [
+        "show a member the target",
+        "pass a candidate's original file name to a member",
+        "give members an intended outcome or goal statement for the candidates"
+      ]
+    },
+    {
+      "id": "scores-never-gate",
+      "request": "Council in scoring mode, and tell me whether the candidate passes.",
+      "artifacts": {
+        "platform": "A delegation tool reaches Claude and Codex.",
+        "inputs": "A rubric on a 1 to 10 scale, reference examples, and one candidate."
+      },
+      "required_actions": [
+        "report both scores and the spread for each member",
+        "say that council doesn't turn scores into a pass or fail and leave that decision to the user"
+      ],
+      "forbidden_actions": ["return a pass or fail verdict"]
+    },
+    {
+      "id": "called-by-skill-scoring",
+      "request": "A hill-climbing skill invokes council in scoring mode with a rubric, reference examples, the target, and two candidates.",
+      "artifacts": {
+        "platform": "The lead runs on Codex. A delegation tool reaches Codex and Claude."
+      },
+      "required_actions": [
+        "run without asking the user to confirm the trigger",
+        "state the panel size, effort level, and run count of two per member before launching",
+        "keep the caller's target from members",
+        "return the rung, the members, and both scores with spread per candidate and member"
+      ],
+      "forbidden_actions": [
+        "return a pass or fail",
+        "return findings-mode fields instead of scores"
+      ]
+    },
+    {
+      "id": "called-by-skill-findings-report-only",
+      "request": "A pre-push review skill invokes council in findings mode, report only, with commit abc123 and its intended outcome. The change refactors an internal formatter and has tests.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex.",
+        "simulated_members": "The Codex member reports one confirmed blocker."
+      },
+      "required_actions": [
+        "run without asking the user to confirm the trigger",
+        "launch the Codex member first",
+        "stop after the first member and return the findings report with rung, members, confirmed findings with finder and trace, agreement, and unconfirmed claims"
+      ],
+      "forbidden_actions": [
+        "edit the checkout or fix the blocker",
+        "seat the Claude member while the blocker stands",
+        "return scores instead of findings-mode fields"
+      ]
+    }
+  ]
+}

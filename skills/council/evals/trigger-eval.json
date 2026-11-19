@@ -1,0 +1,38 @@
+[
+  { "query": "Council this diff before I push", "should_trigger": true },
+  { "query": "council", "should_trigger": true },
+  {
+    "query": "Run a multi-model review of the changes on this branch",
+    "should_trigger": true
+  },
+  {
+    "query": "Get a council on PR #412: it rewrites the token refresh path",
+    "should_trigger": true
+  },
+  {
+    "query": "Invoke the council skill in scoring mode on these three candidate screenshots with this rubric",
+    "should_trigger": true
+  },
+  {
+    "query": "Have Claude and Codex both review this commit independently and tell me where they disagree",
+    "should_trigger": true
+  },
+  { "query": "Review this PR", "should_trigger": false },
+  { "query": "/code-review", "should_trigger": false },
+  {
+    "query": "Ask Codex for a second opinion on this function",
+    "should_trigger": false
+  },
+  {
+    "query": "Draft an agenda for Tuesday's city council meeting",
+    "should_trigger": false
+  },
+  {
+    "query": "Push the branch and open the PR; the change deletes old backups",
+    "should_trigger": false
+  },
+  {
+    "query": "Wait for the Codex bot's review on PR #77 and address its comments",
+    "should_trigger": false
+  }
+]
