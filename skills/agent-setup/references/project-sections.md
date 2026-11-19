@@ -2,7 +2,7 @@
 
 Use this reference while gathering the project-specific AGENTS.md content
 during init or adoption, and in update mode when checking an existing
-coordination, work-unit stage, or post-merge obligations record.
+coordination, work-unit stage, post-merge obligations, or claim record.
 
 ## §section-order
 
@@ -125,7 +125,9 @@ During init or adoption:
   fixed-field record from `references/coordination-discovery.md` §record; when
   requested, record the landing baseline. No record means the landing baseline,
   not missing content. Do not invent a lane, ownership map, graph, claim mechanism,
-  or placeholder.
+  or placeholder. The one exception is the claim record from
+  `references/project-sections.md` §claim-record, written only after the owner
+  accepts its offer.
 - Look for a landing check here, before the AGENTS.md write. Read whether the
   base branch's required checks must pass on a branch updated to the tip
   (`references/audit.md` §required-checks), and ask the owner about a merge
@@ -148,8 +150,11 @@ During init or adoption:
   exclusion, and cap recommended concurrency at realistic review and
   integration capacity.
 - If concurrency is expected and the project already defines a forge-visible
-  claim mechanism, record how abandoned or stale claims are released or
-  superseded. Never invent one silently; a claim advertises occupancy only.
+  claim mechanism, keep it and record how abandoned or stale claims are
+  released or superseded. Otherwise, when the project runs concurrent
+  dispatch, offer the claim record from
+  `references/project-sections.md` §claim-record explicitly; never write one
+  unasked. A claim advertises occupancy only.
 - Use `references/coordination-discovery.md` §freeside only to calibrate the
   evidence required for named streams and an integration spine. Never copy its
   lane names or project vocabulary as defaults.
@@ -220,6 +225,132 @@ In update mode:
   repeated field, or a **Detailed mechanics** value that isn't a
   repository-relative path to an existing file. Report it; never rewrite it.
   Step 7 lets the owner request a change.
+- **Protect its location.** Step 5 resolves a record found inside a managed
+  block before any refresh, as it does the forge and landing records.
+
+## §claim-record
+
+A project that runs concurrent dispatch can start one issue twice. Until a PR
+links the issue, nothing on the forge shows that someone is already working
+on it. A claim record closes that gap: a `## Claiming` section in AGENTS.md
+that tells every agent how to mark an issue as taken and how to read the
+mark.
+
+Offer the record only when both gate conditions hold:
+
+- **Concurrent dispatch.** One of these signals holds: the owner or the
+  project's documentation says issues are dispatched in batches or that
+  several workers pick from one backlog, or the project uses tracker issues
+  that list work units. Without one, ask nothing and offer nothing. An owner
+  statement or project text that work runs one unit at a time closes the
+  gate, whatever signal holds. Never test for an installed skill.
+- **No existing mechanism.** When the project already defines claim rules,
+  preserve them and offer no template. Look in AGENTS.md, the coordination
+  document it points to, and the project's other documentation, such as
+  the README. The stale-claim question in
+  `references/project-sections.md` §work-contracts still applies to them.
+
+A serial project is offered nothing. No record means no claim rules, not
+missing content: an open PR that links an issue is then the only sign that
+it's taken.
+
+Use this template. Agents read the section as prose, so the heading, the
+bold lead words, and the comment marker are default wording, not a parser
+contract. Say so when showing it, and let the owner reword it.
+
+````markdown
+## Claiming
+
+A claim shows that a run is already working on an issue before its PR exists.
+It only shows occupancy. Work still starts only from an explicit owner
+assignment, and agents don't choose work for themselves.
+
+- **Check occupancy first.** An issue is occupied when it carries the
+  `in-progress` label and its newest claim comment hasn't expired, or when an
+  open PR links it. The label with no unexpired claim comment isn't a claim.
+  If another run occupies the issue, stop and report it.
+- **Claim before you edit.** The agent that implements an assigned issue adds
+  the `in-progress` label and posts one claim comment. A planner and a batch
+  orchestrator never post, edit, or release a claim. A direct request with no
+  issue has nothing to claim.
+- **Use this comment shape.** Start with the marker so a reader can find the
+  comment. Name the run or thread that holds the claim, and its branch. Give
+  the expiry in UTC, <N> hours after posting:
+
+  ```markdown
+  <!-- work-claim:v1 -->
+
+  **Claim:** <run or thread name>, branch `<branch>`
+  **Expires:** <YYYY-MM-DDTHH:MMZ>
+  ```
+
+- **Reread after you post.** If another run's unexpired claim comment comes
+  before yours on the issue, delete your comment, leave the label, stop, and
+  report the other claim.
+- **Release the claim.** Remove the label and delete your claim comment when
+  your PR opens. The open PR then marks the issue as taken, so link the issue
+  from the PR. Release the same way when you stop without a PR. A comment
+  left behind would still win the next run's reread until it expires. Keep
+  the claim while you wait on an owner question.
+- **Replace a stale claim.** A claim past its expiry no longer counts. The
+  next assigned agent posts its own claim comment and leaves the label in
+  place. A holder that needs longer edits the expiry in its own comment
+  before that time passes. A holder rereads the issue before it resumes
+  after a wait, extends, or releases. If its claim was replaced, it stops,
+  leaves the label, and reports the newer claim.
+- **Why <N> hours.** <The owner's reason for this length.> The owner can
+  delete a dead claim's comment at any time.
+````
+
+Settle these choices with the owner before showing the final text:
+
+- **Expiry length.** The owner sets it. Suggest 24 hours: an implementer can
+  wait overnight for the owner's answer, and a dead claim blocks the issue
+  for a day at most. Whatever the length, it must cover a realistic run, and
+  the record states why it was chosen.
+- **Marker.** Keep the label when one owner's agents share a forge account,
+  because an assignee can't tell those runs apart. Use the Assignees field
+  in place of the label when several people work under their own accounts.
+  The claim comment then also names the claimant's account, and the issue is
+  occupied only while that account is assigned. Release, or losing to an
+  older claim, removes that one assignment. Keep the claim comment and its
+  expiry either way.
+- **Label name.** Ask the owner whether the repository already uses an
+  `in-progress` label for something else, such as a board status. If it
+  does, agree on a dedicated claim label and use it in the record.
+
+The template covers implementation claims only. It reserves nothing while an
+issue is being planned, so add no planning rule unless the owner asks for
+one.
+
+Write the record as unmanaged content, never inside a managed block, where a
+later managed-block sync would delete it:
+
+- **Default place.** Give the record its own section in AGENTS.md. Just
+  before the managed Branches block is the conventional spot, since that
+  block points agents at the project's claim.
+- **Project mechanics document.** When the project keeps its coordination
+  mechanics in a project document, as shapes 3 through 5 in
+  `references/coordination-discovery.md` §shapes do, write the section
+  there. AGENTS.md then carries only its pointer to that document.
+
+Show the exact record text before writing it. The single step-5 write
+includes an accepted record that belongs in AGENTS.md. A noninteractive run
+writes nothing. When the gate holds, it names the skipped offer in its summary, because the expiry
+length and the acceptance are both the owner's.
+
+When the accepted record names a label, check that the label exists as
+`references/audit.md` §claim-label describes.
+
+In update mode:
+
+- **Report the record.** Say whether the project defines claim rules, where
+  they live, and how they treat a stale claim. Preserve existing rules
+  verbatim, whatever their wording; step 7 lets the owner request a change.
+- **Offer a missing record.** When the gate holds, step 9 offers the
+  template. `docs/tracker-format.md` is evidence of tracker issues, not
+  proof of concurrent dispatch, so the gate's serial rule still applies.
+  Write nothing without acceptance.
 - **Protect its location.** Step 5 resolves a record found inside a managed
   block before any refresh, as it does the forge and landing records.
 

@@ -272,6 +272,7 @@ date before merging. Before editing workflows or branch protection, read
   | `devlog/README.md`, `CONTRIBUTING.md`, PR template, `CLAUDE.md`                                                                                                          | Matching sections in `skills/agent-setup/references/scaffolding.md`          | `diff`                                         |
   | `skills/await-pr-review/SKILL.md`, `skills/await-pr-review/references/conductor-brief.md`, `docs/agent-workflow.md` §review-convergence, `AGENTS.md` pull-requests block | Phrases from the reference pinned in `scripts/review-convergence-layers.tsv` | `./scripts/check-review-convergence-layers.sh` |
   | `AGENTS.md` Post-merge obligations record                                                                                                                                | `skills/agent-setup/references/project-sections.md` §post-merge-record       | Read side by side; paths differ                |
+  | `AGENTS.md` Claiming section                                                                                                                                             | `skills/agent-setup/references/project-sections.md` §claim-record            | Read side by side; expiry and names differ     |
 
   When a pinned phrase changes in any layer, update its table row and re-check
   the other layers in the same change.

@@ -8,9 +8,9 @@ workspace outside the repo.
 
 - `trigger-eval.json`: eighteen description-only queries, twelve positive and
   six negative, for setup, devlog, sync, reassessment, and standalone scaffolds.
-- `evals.json`: sixty-six task evals for scope routing, factual intake, profiles,
+- `evals.json`: seventy task evals for scope routing, factual intake, profiles,
   optional work-unit stages, coordination discovery, reassessment, and landing,
-  reviewer, and post-merge obligations records.
+  reviewer, post-merge obligations, and claim records.
   1. `single-stage-init`: initializes a plain project and expects the normal
      single implementation workflow with no stage record.
   2. `planning-implementation-handoff`: initializes a project with separate
@@ -149,6 +149,15 @@ workspace outside the repo.
   66. `update-offers-post-merge-record`: offers a missing post-merge
       obligations record when `docs/tracker-format.md` is current and writes
       nothing without acceptance.
+  67. `init-offers-claim-record-accepted`: offers the claim record to a
+      project that dispatches in batches, takes the expiry length from the
+      owner, and includes the accepted record in the single init write.
+  68. `serial-project-no-claim-offer`: offers no claim record and reports no
+      gap when nothing shows concurrent dispatch.
+  69. `existing-claim-mechanism-preserved`: reports a project's own claim
+      rules, keeps them verbatim, and offers no template.
+  70. `update-reports-claim-record`: reports an existing claim record and
+      leaves its owner-reworded text unchanged through a managed-block sync.
 
 ## Re-Running
 
@@ -322,6 +331,28 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
     `docs/tracker-format.md`, and one tracker issue body, supplied as data,
     that cites it. Omit the post-merge record. Save the original bytes of
     every file and compare them after the run.
+57. For evals 65 and 66, state in the README or AGENTS.md that work runs one
+    unit at a time, as their prompts say, so neither case draws a claim-record
+    offer.
+58. For eval 67, omit AGENTS.md and give the fixture a README that names
+    GitHub issues as work contracts, tracker issues that list units, and
+    batch dispatch of startable units. Supply a label listing without
+    `in-progress`. Keep the owner's expiry answer out of the prompt: 48
+    hours, because the owner answers questions every other day. Supply
+    it only when the agent asks. Save the write transcript.
+59. For eval 68, omit AGENTS.md and give the fixture a README that describes
+    one maintainer assigning one task at a time, with no tracker issues.
+60. For eval 69, reuse eval 66's setup with a current post-merge record,
+    and replace its one-unit-at-a-time line with a line that says startable
+    units are dispatched in batches. Add
+    an AGENTS.md pointer to `docs/coordination.md`, whose Claiming section
+    holds the rules in the prompt. Save the original bytes of both files and
+    compare them after the run.
+61. For eval 70, reuse eval 66's setup with a current post-merge record and a
+    stale `commits` block, without its one-unit-at-a-time line. Add the template Claiming section before the
+    Branches block, with a 24-hour expiry and a reworded Release bullet.
+    Supply a label listing that includes `in-progress`. Save the section's
+    bytes and compare them after the run.
 
 ### Scope and Intake Fixtures
 
@@ -422,5 +453,6 @@ Boolean type. Verify the counts above from parsed data. The landing-baseline
 update changed evals 5–10, 12, 17, 21, and 28 and added 57–59. The landing-record
 update adds 60–62 without changing earlier task definitions or expectations.
 The declared-no-reviewer update adds 63 and 64 the same way, and the
-post-merge record update adds 65 and 66.
+post-merge record update adds 65 and 66. The claim record update adds 67–70 and adds a serial-work sentence to the
+prompts of 65 and 66.
 Keep other cases unchanged unless the reference text they grade changes.
