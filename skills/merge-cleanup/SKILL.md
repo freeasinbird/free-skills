@@ -23,37 +23,27 @@ reconciliation, watcher shutdown, and the final owner-facing judgment.
 
 ## Check Prerequisites
 
-Use this skill on any agent platform that can run the required bundle. Before
-cleanup, establish support through read-only project records and tool checks:
+Before cleanup, confirm support with read-only checks:
 
-- **Supported forge:** GitHub or a compatible GitHub Enterprise host, accessed
-  through authenticated `gh`. Resolve the host and slug as Resolve the Work
-  Unit requires. Keep the actual forge host explicit, not the SSH alias or
-  ambient `GH_HOST`. A custom hostname alone does not mean unsupported.
+- **Forge:** GitHub or a compatible GitHub Enterprise host, through
+  authenticated `gh`. Resolve the host and slug as Resolve the Work Unit
+  requires, and keep the actual forge host explicit, not an SSH alias or
+  ambient `GH_HOST`; a custom hostname alone doesn't mean unsupported.
   Confirm access with a read-only `gh` lookup pinned to that host.
-- **Required runtime:** A shell-capable environment with Bash, Git, `gh`,
-  `env`, `sed`, `tr`, `mktemp`, `mkdir`, `rm`, `readlink`, `tail`, `grep`, and
-  `find`. Check availability with `command -v`. Git must support the bundle's
-  worktree, ref, and transport operations; the landing helper checks
-  `git switch` when the branch name requires it. No numeric minimum versions
-  are specified. Standalone `jq` and `rg` are not cleanup requirements.
-- **Executable bundle:** Check that `merge-cleanup.sh` and its adjacent
-  `base-landing-plan.sh` are present and executable. SSH transport also needs
-  its configured SSH tooling. The executor uses `ssh -G` to validate aliases
-  against the pinned forge host.
-- **Stop on missing support:** Report a non-GitHub forge as unsupported, name
-  unavailable mandatory tooling or an unusable bundle, and report unknown
-  host identity or failed authentication/API evidence as a lookup gap. Stop
-  before any fetch, switch, retarget, delete, or prune. Do not substitute
-  another forge CLI or reconstruct the destructive sequence from prose.
+- **Runtime:** Bash, Git, `gh`, `env`, `sed`, `tr`, `mktemp`, `mkdir`, `rm`,
+  `readlink`, `tail`, `grep`, and `find`, checked with `command -v`, plus the
+  configured SSH tooling for SSH transport. The reconciliation checker and
+  tracker commands also need `awk`.
+- **Bundle:** `merge-cleanup.sh` and its adjacent `base-landing-plan.sh`,
+  present and executable.
 
-These requirements apply to the cleanup executor. The separate reconciliation
-checker and the tracker commands (`tracker-refresh.sh` and
-`tracker-write.sh`) also need `awk`; their manual
-fallbacks are described in Reconcile Project Obligations and do not replace
-the executor.
+When support is missing, stop before any fetch, switch, retarget, delete, or
+prune. Report a non-GitHub forge as unsupported, name the missing tool or
+unusable bundle, and report an unknown host or failed authentication as a
+lookup gap. Never substitute another forge CLI or rebuild the destructive
+sequence from prose.
 
-Once prerequisites pass, follow this procedure:
+Then follow this procedure:
 
 1. Resolve the work unit: the repository, PR number, worktree, and remote
    roles.
