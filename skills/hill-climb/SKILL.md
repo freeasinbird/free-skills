@@ -14,7 +14,7 @@ description: >-
 
 # Hill-Climb
 
-A climb improves an artifact one measured attempt at a time. The owner sets
+A climb improves an artifact one measured attempt or round at a time. The owner sets
 the goal, the target, and the budget and keeps the merge. The climber proves
 the check can be trusted, then tries changes, keeps what beats noise, and
 reverts the rest.
@@ -65,20 +65,26 @@ A check only a human can run marks the goal "not climbable". Say so and stop.
 
 For a council-scored climb:
 
-- **State the cost.** Put council's runs per attempt in the budget before
+- **State the cost.** Put council's runs per unit in the budget before
   sign-off.
-- **Screen first.** Screen each attempt with a program or with one
+- **Screen first.** Screen each candidate with a program or with one
   fresh-context judge that hill-climb runs itself; council never seats a
-  single member. Prove the screen like the check. An attempt passes the
+  single member. Prove the screen like the check. A candidate passes the
   screen only when it beats the current best's screen score by more than the
-  screen's noise. Only passing attempts, the final candidate, and the
-  held-out cases go to the full panel.
+  screen's noise. For a set goal, a candidate passes when its screen score
+  meets the acceptance rule or falls short by no more than the screen's
+  noise. Only passing candidates, the final candidate, and the held-out cases
+  go to the full panel.
+- **Queue proposed candidates.** Council's Scoring Contract doesn't ask
+  judges for candidates, so this applies only when a judge's output includes
+  one. Queue it, and send it through the screen and the full panel like any
+  other candidate. Ignore the score a judge gave its own proposal.
 - **Brief council by its Scoring Contract.** Pass a rubric, the goal file's
   reference examples, and the candidates. Keep the goal statement out of the
   brief, or pass it as the target, which council keeps from members.
 - **Reduce to one score.** Council returns each member's scores and spread,
   never a pass or fail. Apply the goal file's score rule to get one number,
-  then keep or revert by the rules below.
+  then keep, revert, accept, or reject by the rules below.
 
 ## Prove the Check
 
@@ -101,12 +107,16 @@ These are the rules for a trustworthy check. Other skills cite this section.
 
 ## Run Attempts
 
-Before each attempt, verify the goal file's hash. A change pauses the climb
+Before each unit, verify the goal file's hash. A change pauses the climb
 until the owner confirms it.
 
-Each attempt tests one hypothesis. Write the hypothesis and the mechanism
+A climb counts in the goal file's unit. An attempt scores one candidate. A
+round writes one hypothesis per candidate, scores the batch in one run of the
+frozen check, and keeps at most its best candidate by the keep rule below.
+
+Each candidate tests one hypothesis. Write the hypothesis and the mechanism
 that should make it work before changing anything. Then make the change,
-score it from the frozen check, and run every guard. An attempt never edits
+score it from the frozen check, and run every guard. A candidate never edits
 the check, its inputs, or a guard, and never skips a test.
 
 - **Keep** the change only when it beats the current best by more than the
@@ -115,16 +125,36 @@ the check, its inputs, or a guard, and never skips a test.
 - **Revert** it fully otherwise, back to the last kept state. A gain within
   noise is a revert; so is any guard regression, whatever the score.
 
-Log every attempt in the climb directory: its number, hypothesis, mechanism,
-change, score, guard results, and whether it was kept or reverted.
+For a set goal, accept each candidate that meets the goal file's acceptance
+rule with every guard holding, and commit it as a kept attempt is committed.
+Reject the rest. A rejection is not a revert and undoes nothing.
+
+A unit makes **progress** when the best score rises by more than the noise
+band. For a set goal, progress is a new accepted item, or a rise past noise
+in the best near-miss: the best score the full check gave a rejected
+candidate. Stalls and
+the plateau count units without progress, never reverted or rejected
+candidates.
+
+Log every candidate in the climb directory: its unit, number, hypothesis,
+mechanism, change, score, guard results, and outcome (kept, reverted,
+accepted, or rejected). After each unit, log the best score, and for a set
+goal the best near-miss.
 
 ## Check In When Stalled
 
-A run of reverted attempts is a stall. Ask what is blocking progress: a
-missing tool, a slow check, a subproblem too large for one attempt. Turn
-each blocker into a proposal, either a tool to build or a separate climb with
-its own goal file. Show the proposals to the owner and build or start nothing
-until the owner approves it. Check in at the latest before a plateau stop.
+A run of units without progress is a stall. A round with many rejected
+candidates and a higher best score is not a stall. Ask what is blocking
+progress: a missing tool, a slow check, a subproblem too large for one
+attempt. Turn each blocker into a proposal, either a tool to build or a
+separate climb with its own goal file. Show the proposals to the owner and
+build or start nothing until the owner approves it.
+
+Check in at the latest before a plateau stop. Show the best score for each
+recent unit, the cost of one more unit, and the budget left, and offer one
+more unit as a choice beside stopping. If the owner says yes, log the answer
+in the attempt log and run one unit. Never edit the goal file for it, and
+never go past the budget.
 
 ## Ratchet
 
@@ -136,11 +166,15 @@ own check. The earlier stage's metric becomes a guard at its final score.
 
 Stop at the first of these:
 
-- **Target reached.** The score meets the target, and the run has made the
-  goal file's minimum number of attempts.
-- **Plateau.** The goal file's count of reverted attempts in a row (default
-  five), after the run has tried at least two kinds of change.
-- **Budget spent.**
+- **Target reached.** The score meets the target, or for a set goal the
+  accepted count does, and the run has made the goal file's minimum number of
+  units.
+- **Plateau.** The goal file's count of units in a row without progress
+  (default 5 for attempts, 3 for rounds), after the run has tried at least two
+  kinds of change. It never fires while a queued proposed candidate waits to
+  be scored.
+- **Budget spent.** This stop fires even with proposed candidates still
+  queued.
 - **Check is wrong.** The frozen check's hash doesn't match, the goal file
   changed without the owner's confirmation, or an attempt shows the check
   rewards something other than the goal.
@@ -153,16 +187,20 @@ end, never during the climb.
 
 ## Platform Gates
 
-- **Parallel attempts** need two capabilities: delegation that starts
-  parallel workers, and an isolated checkout per attempt, such as a worktree.
-  Each parallel round starts from the current best, keeps at most its best
-  attempt, and the next round starts from that. Without both capabilities,
-  run one attempt at a time.
+- **Parallel attempts** need delegation that starts parallel workers. When
+  the candidates are edits made in parallel, each also needs an isolated
+  checkout, such as a worktree. Each parallel round starts from the current
+  best and, like any round, keeps at most its best candidate; the next round
+  starts from that. Without the capabilities a round needs, make one
+  candidate at a time, save each as a patch against the current best, and
+  score the round together.
 - **Unattended runs** need a way to keep working without the owner present,
   such as a scheduled or background run. At a stall, an unattended run logs
   its proposals, builds and starts nothing, and keeps trying other kinds of
-  change until a stop. Without the capability, run attended and check in at
-  each stall. Every run stops at the budget.
+  change until a stop. At a plateau it stops without asking and puts the
+  check-in's three facts in its report: the best score for each recent unit,
+  the cost of one more unit, and the budget left. Without the capability, run
+  attended and check in at each stall. Every run stops at the budget.
 - **Fresh-context judges** need delegation that starts a fresh context.
   Without it, a judge-only check is unavailable; use a program or reference
   tier, or mark the goal not climbable.
@@ -173,13 +211,19 @@ After a "check is wrong" exit, open no PR: the kept attempts were scored by a
 check that can't be trusted. Report the exit and the kept attempts for the
 owner to judge.
 
-After any other stop, shape the kept changes into commits by the project's
+After any other stop, shape the kept changes, or a set goal's accepted
+items, into commits by the project's
 rules and open a PR through the project's flow. Never merge.
 
 The report gives:
 
 - **Scores.** Baseline to final, with the noise band.
-- **Attempts.** How many were kept and how many reverted.
+- **Candidates.** How many were kept and how many reverted. For a set goal,
+  how many were accepted and rejected, and the best near-miss.
+- **Unscored proposals.** After a budget stop, any proposed candidates left
+  in the queue.
+- **Plateau facts.** After an unattended plateau stop, the best score for
+  each recent unit, the cost of one more unit, and the budget left.
 - **Log path.** The attempt log in the climb directory.
 - **Held-out results.** Scored once, at the end.
 - **Stop reason.** Which stop rule ended the climb.

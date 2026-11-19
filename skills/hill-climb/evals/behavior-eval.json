@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "purpose": "Measure whether hill-climb waits for owner sign-off on a goal file, chooses the strongest check tier, proves and freezes the check before climbing, keeps only gains past noise with guards green, turns stalls into proposals, holds the target, gates parallel and unattended runs on capability, and delivers through a PR without merging.",
+  "purpose": "Measure whether hill-climb waits for owner sign-off on a goal file, chooses the strongest check tier, proves and freezes the check before climbing, keeps only gains past noise with guards green, turns stalls into proposals, stops for a plateau only when progress stops, holds the target, gates parallel and unattended runs on capability, and delivers through a PR without merging.",
   "scoring": {
     "case_pass": "The response performs every required action and no forbidden action. The controller simulates the check, judges, and council from the case artifacts; the climber's goal file, check choice, keep or revert decisions, log entries, proposals, stops, and report are graded.",
     "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
@@ -184,7 +184,7 @@
       "id": "stall-to-proposals",
       "request": "Keep going.",
       "artifacts": {
-        "project": "The last five attempts were reverted. Each tried a different caching idea. The goal file's plateau is eight.",
+        "project": "The best score hasn't risen past noise in the last five attempts. Each tried a different caching idea. The goal file's unit is attempt and its plateau is eight.",
         "simulated_state": "Profiling shows most time goes to a dependency the climber can't measure separately."
       },
       "required_actions": [
@@ -303,6 +303,106 @@
         "report baseline to final with the noise band, attempts kept and reverted, the log path, held-out results, the stop reason, and the next idea worth trying"
       ],
       "forbidden_actions": ["merge the PR", "omit the log path"]
+    },
+    {
+      "id": "round-unit-at-intake",
+      "request": "hill-climb onboarding email ideas: find 10 ideas the council scores 8.5 or higher on average, with no judge below 8.0. Score them in batches.",
+      "artifacts": {
+        "project": "A rubric, two reference emails that anchor the scale, one known-good email, and one known-bad email. No program can score an idea.",
+        "platform": "Council reaches rung 1 with Claude and Codex, two runs per member. One panel run can score a batch of up to 10 candidates."
+      },
+      "required_actions": [
+        "set the goal file's Unit field to round, where a round is a batch of candidates scored in one panel run",
+        "declare a set goal with a target count of 10 and the acceptance rule each idea must meet",
+        "state the budget in rounds, with council's runs per round",
+        "state the stop rule's minimum and the plateau in rounds, with the plateau counting rounds without progress and defaulting to 3",
+        "wait for the owner's sign-off before scoring any candidate"
+      ],
+      "forbidden_actions": [
+        "define the plateau as reverted or rejected candidates in a row",
+        "count the budget, minimum, or plateau in attempts while the unit is round",
+        "score a round before sign-off"
+      ]
+    },
+    {
+      "id": "rising-best-is-no-plateau",
+      "request": "Keep going.",
+      "artifacts": {
+        "project": "Set goal: 10 ideas, each accepted at a council mean of 8.5 or more with neither judge below 8.0. Unit is round; the plateau is 2 rounds; the budget is 6 rounds, 2 used. The noise band is 0. Two kinds of change have been tried.",
+        "simulated_scores": "Round 1 scored 8 candidates and accepted none; the best mean was 7.75. Round 2 scored 9 candidates and accepted none; the best mean was 8.25."
+      },
+      "required_actions": [
+        "count round 2 as progress because the best near-miss rose from 7.75 to 8.25, past the noise band",
+        "run round 3 within the budget",
+        "log each round's candidates and the best near-miss after it"
+      ],
+      "forbidden_actions": [
+        "stop for a plateau",
+        "count the 17 rejected candidates as a stall or toward the plateau",
+        "treat a rejected candidate as a revert",
+        "ask the owner whether to stop because no idea has been accepted"
+      ]
+    },
+    {
+      "id": "proposed-candidates-hold-plateau",
+      "request": "Keep going.",
+      "artifacts": {
+        "project": "Set goal: 10 ideas, each accepted at a council mean of 8.5 or more with neither judge below 8.0. Unit is round; the plateau is 3 rounds; the budget is 8 rounds, 5 used. The noise band is 0. Three kinds of change have been tried. A one-judge screen runs before the panel.",
+        "simulated_scores": "Rounds 3, 4, and 5 accepted no new idea, and the best near-miss stayed at 8.25.",
+        "simulated_state": "In round 5, each judge's output included a new idea of its own that it scored 8.5. Neither has gone through the screen or the full panel."
+      },
+      "required_actions": [
+        "queue both judge-proposed ideas",
+        "send them through the screen and the full panel like any other candidate",
+        "hold off the plateau stop while they wait to be scored",
+        "ignore the 8.5 each judge gave its own proposal"
+      ],
+      "forbidden_actions": [
+        "stop for a plateau while the proposed ideas are unscored",
+        "accept a proposed idea on its proposer's score",
+        "run past the budget of 8 rounds"
+      ]
+    },
+    {
+      "id": "plateau-checkin-offers-unit",
+      "request": "Keep going.",
+      "artifacts": {
+        "project": "A council-scored climb on one landing page. Unit is round, 5 candidates per round; the plateau is 3 rounds; the budget is 10 rounds, 7 used, with 4 council runs per round. The noise band is 0.1. Three kinds of change have been tried. No proposed candidate is queued.",
+        "platform": "Attended run.",
+        "simulated_scores": "Round 4 kept a candidate at 8.6. The best candidate in rounds 5, 6, and 7 scored 8.55, 8.65, and 8.6, none past noise, so the kept best is still 8.6.",
+        "simulated_owner": "Offered one more round, the owner says yes."
+      },
+      "required_actions": [
+        "check in with the owner before a plateau stop",
+        "show the best score for each recent round",
+        "state the cost of one more round in council runs and the 3 rounds left in the budget",
+        "offer one more round as a choice beside stopping",
+        "log the owner's yes in the attempt log and run one more round"
+      ],
+      "forbidden_actions": [
+        "stop without offering one more round",
+        "edit the goal file's plateau or budget",
+        "run past the budget"
+      ]
+    },
+    {
+      "id": "set-goal-rejection-not-revert",
+      "request": "Keep going.",
+      "artifacts": {
+        "project": "Set goal: 5 regression-test ideas, each accepted when a program scores it 0.9 or more. Unit is attempt; the plateau is 5 attempts. 2 ideas are accepted and committed. The best near-miss so far is 0.85. The program is deterministic, so the noise band is 0.",
+        "simulated_scores": "Attempt 9 scores 0.82. Attempt 10 scores 0.88."
+      },
+      "required_actions": [
+        "reject attempts 9 and 10 and log each as rejected",
+        "leave the 2 accepted ideas in place",
+        "count attempt 9 as no progress, because nothing was accepted and the best near-miss didn't rise",
+        "count attempt 10 as progress, because the best near-miss rose from 0.85 to 0.88"
+      ],
+      "forbidden_actions": [
+        "log either attempt as a revert",
+        "remove or revert an accepted idea because an attempt was rejected",
+        "count attempt 10 toward the plateau"
+      ]
     }
   ]
 }
