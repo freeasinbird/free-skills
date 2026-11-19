@@ -109,7 +109,9 @@ only record (no separate config or metadata file).
    with the managed ones, so collect this content, or decide on placeholders,
    before writing. Settle the forge and landing records here too, so accepted
    records enter the single step-5 write. See "Forge Record" and "Landing
-   Record" below.
+   Record" below. When the project uses tracker issues, also show and settle
+   the post-merge obligations record from
+   `references/project-sections.md` §post-merge-record for that write.
 5. Settle `docs/agent-workflow.md`, then write AGENTS.md once and verify the
    write. Read `references/managed-blocks.md` §init-write and follow it.
 6. Create the scaffolding files listed in `references/managed-blocks.md`
@@ -143,9 +145,10 @@ only record (no separate config or metadata file).
 4. Discover the profile: look for the `Agent-setup profile:` line, then read
    `references/managed-blocks.md` §profile-discovery and follow it. Never
    switch a recorded profile without the user's explicit choice.
-5. Protect the reviewer, forge, and landing records before refreshing. If
-   any appears inside a managed block, resolve its location first (see
-   "Automated Reviewer Record", "Forge Record", and "Landing Record").
+5. Protect the reviewer, forge, landing, and post-merge obligations records
+   before refreshing. If any appears inside a managed block, resolve its
+   location first (see "Automated Reviewer Record", "Forge Record", "Landing
+   Record", and `references/project-sections.md` §post-merge-record).
 6. For each managed block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`, exclude the
@@ -157,7 +160,8 @@ only record (no separate config or metadata file).
      matching, so settle it in the same decision (see step 9).
 7. Leave all unmarked (project-specific) content untouched, except for
    owner-requested creation or modification of a forge record, a landing
-   record, a coordination model, or a work-unit stage record. Within any of
+   record, a post-merge obligations record, a coordination model, or a
+   work-unit stage record. Within any of
    those, create or change
    only the requested fields or stages; preserve every unrequested field or
    stage and all unrelated unmarked content verbatim. The only structural
@@ -173,23 +177,28 @@ only record (no separate config or metadata file).
 9. Check scaffolding files: CLAUDE.md, CONTRIBUTING.md, PR template,
    docs/agent-workflow.md, devlog/README.md under a note-keeping profile, and
    docs/tracker-format.md when the project uses tracker issues.
-   Offer to create any that are missing. When offering
-   docs/tracker-format.md, offer in the same decision the one-line citation
-   in the project's tracker text, since step 7 otherwise leaves that
-   unmanaged content alone. For any that exist, compare against
+   Offer to create any that are missing. For any that exist, compare against
    the templates in `references/scaffolding.md` and, on drift, show the diff
    and offer to refresh. Before offering, read
    `references/managed-blocks.md` §scaffold-files and apply its drift rules,
    including the `docs/agent-workflow.md` exception. These files carry no
    markers and may hold local customizations, so never overwrite silently;
    let the user decide per file.
+   - **Cite the tracker format.** When offering docs/tracker-format.md, offer
+     in the same decision the one-line citation in the project's tracker
+     text, since step 7 otherwise leaves that unmanaged content alone.
+   - **Offer the post-merge record.** When the project uses tracker issues
+     and AGENTS.md has no post-merge obligations record, offer one, in the
+     same decision as any docs/tracker-format.md offer. Write it only when
+     its mechanics file exists or is accepted with it.
 10. Audit standard project files (`references/audit.md` §standard-files) and
     flag any newly missing. Also check the automated-reviewer record, the
-    forge record and its Consumers, the landing record, any coordination
-    model, and any optional work-unit stage record (see "Automated Reviewer
-    Record", "Forge Record", "Landing Record",
+    forge record and its Consumers, the landing record, any post-merge
+    obligations record, any coordination model, and any optional work-unit
+    stage record. See "Automated Reviewer Record", "Forge Record", "Landing
+    Record", `references/project-sections.md` §post-merge-record,
     `references/project-sections.md` §work-contracts, and
-    `references/project-sections.md` §stages).
+    `references/project-sections.md` §stages.
 11. Check the settings in `references/audit.md` §repo-settings and
     `references/audit.md` §required-checks, and offer to align any that have
     drifted. Check landing labels as `references/audit.md` §landing-record

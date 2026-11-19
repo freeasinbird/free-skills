@@ -968,6 +968,39 @@
         "AGENTS.md remains byte-for-byte unchanged",
         "No network calls occur"
       ]
+    },
+    {
+      "id": 65,
+      "eval_name": "init-writes-post-merge-record",
+      "prompt": "Initialize agent-setup in <fixture-repo> with the Standard profile. The project has no AGENTS.md. Its README says persistent work contracts are GitHub issues and that tracker issues list work units under a Units heading. The base remote names example/widgets on github.com. The project defines no Startable now rule or merge-order field of its own. The owner accepts every record the agent shows and declines repository setting changes. Use these supplied forge facts without network calls and work only in the fixture.",
+      "expected_output": "An init that shows the exact post-merge obligations record with the template defaults before writing, then writes it in unmanaged content in the single AGENTS.md write, alongside the scaffolded docs/tracker-format.md.",
+      "files": [],
+      "expectations": [
+        "The exact record text is shown before the owner accepts it",
+        "AGENTS.md is written once, and that write contains the record",
+        "The record has the heading `### Post-merge obligations` and the bold labels Containing trackers, Refresh, Detailed mechanics, and Report, each exactly once",
+        "Containing trackers names every open tracker that lists the merged unit's verified closing issue under Units, never edits a closed tracker, and accepts zero containing trackers",
+        "Refresh applies `docs/tracker-format.md` §refresh as one edit, and Detailed mechanics is `docs/tracker-format.md`",
+        "Report names newly unblocked units without claiming or starting them",
+        "The record sits outside every managed block",
+        "docs/tracker-format.md is created, so the mechanics path exists",
+        "No labels are created or applied, and no network calls occur"
+      ]
+    },
+    {
+      "id": 66,
+      "eval_name": "update-offers-post-merge-record",
+      "prompt": "Run an ordinary agent-setup update in <fixture-repo>. AGENTS.md has valid, current Standard managed blocks, unrelated unmanaged guidance, and current forge and landing records for example/widgets on github.com. The project uses tracker issues, docs/tracker-format.md matches the template, and the tracker text already cites it. AGENTS.md has no post-merge obligations record. Required checks must pass on an up-to-date branch; all other repository settings match the skill's recommendations. Use these supplied forge facts without network calls and work only in the fixture; the owner has approved no changes.",
+      "expected_output": "An update that reports the missing post-merge obligations record, offers the exact template record, and writes nothing because the owner accepted nothing. docs/tracker-format.md and its citation are current, so the record is the only tracker-related offer.",
+      "files": [],
+      "expectations": [
+        "The report says AGENTS.md has no post-merge obligations record and that merge cleanup refreshes no tracker without one",
+        "The offer shows the exact record text, with the four template fields and `docs/tracker-format.md` as Detailed mechanics",
+        "The agent offers no change to docs/tracker-format.md or the tracker-text citation, since both are current, and does not invent one to pair with the record offer",
+        "The offered record is placed in unmanaged content, never inside a managed block",
+        "AGENTS.md and docs/tracker-format.md remain byte-for-byte unchanged",
+        "No network calls occur"
+      ]
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 Use this reference while gathering the project-specific AGENTS.md content
 during init or adoption, and in update mode when checking an existing
-coordination or work-unit stage record.
+coordination, work-unit stage, or post-merge obligations record.
 
 ## §section-order
 
@@ -106,7 +106,9 @@ During init or adoption:
 - Note whether those contracts include tracker issues that list work units.
   If so, init step 6 scaffolds `docs/tracker-format.md`
   (`references/scaffolding.md` §tracker-format), and the project's tracker
-  text cites it.
+  text cites it. Also gather the post-merge obligations record
+  (`references/project-sections.md` §post-merge-record), so the accepted
+  record enters the step-5 write.
 - Ask whether the project separates planning, implementation, review, or
   integration into distinct stages with handoffs. Default to the single
   implementation workflow; record stages only when those handoffs are
@@ -163,6 +165,63 @@ such as a width-one fallback from an earlier setup, report it as obsolete and
 offer to remove it. Remove it only when the owner accepts. Do not reassess an
 established model while syncing canonical sections; topology reassessment is
 a separate owner-assigned work unit under "Coordination Reassessment".
+
+## §post-merge-record
+
+A project that uses tracker issues needs a post-merge obligations record in
+AGENTS.md. This is the same condition that scaffolds `docs/tracker-format.md`.
+The merge-cleanup skill refreshes a tracker after a merge only when the record
+exists. Without it, cleanup treats the absence as its safe default and
+refreshes nothing, so the scaffolded format is never applied.
+
+Use this template. The heading and the four bold labels are merge-cleanup's
+fixed record format, so copy them exactly. A misspelled, missing, or repeated
+label makes the record incomplete, and cleanup then stops tracker
+reconciliation.
+
+```markdown
+### Post-merge obligations
+
+- **Containing trackers:** every open tracker issue that lists the merged
+  unit's verified closing issue under `## Units`. A closed tracker is never
+  edited. Zero open containing trackers is a valid zero-work result. A unit
+  with no closing issue has no containing tracker.
+- **Refresh:** apply `docs/tracker-format.md` §refresh in each containing
+  tracker, as one edit.
+- **Detailed mechanics:** `docs/tracker-format.md`.
+- **Report:** name newly unblocked units without claiming or starting them.
+```
+
+Keep a project's own rule. When the project already defines its own
+**Startable now** rule or a merge-order field, name that rule's document in
+**Refresh** beside the format's §refresh step, and point **Detailed
+mechanics** at that document. The template defaults never override such a
+rule. Take the document's path and the rule from the project; copy no other
+project's names.
+
+Write the record as unmanaged content beside the forge and landing records,
+never inside a managed block, where a later managed-block sync would delete
+it. Show the exact record text before writing it; the single step-5 write
+includes the accepted record. A noninteractive run writes the defaults,
+adjusted for any project rule found above, and names them in the summary.
+
+In update mode:
+
+- **Offer a missing record.** When the project uses tracker issues and
+  AGENTS.md has no record, step 9 offers it, in the same decision as any
+  offer of `docs/tracker-format.md` or its tracker-text citation. Write
+  nothing without acceptance.
+- **Keep the mechanics readable.** Write a record whose **Detailed
+  mechanics** names `docs/tracker-format.md` only when that file exists or
+  the owner accepts it in the same decision. A record naming a missing file
+  makes cleanup report every merge incomplete, which is worse than no
+  record.
+- **Audit an existing record.** Report a repeated record, a missing or
+  repeated field, or a **Detailed mechanics** value that isn't a
+  repository-relative path to an existing file. Report it; never rewrite it.
+  Step 7 lets the owner request a change.
+- **Protect its location.** Step 5 resolves a record found inside a managed
+  block before any refresh, as it does the forge and landing records.
 
 ## §stages
 
