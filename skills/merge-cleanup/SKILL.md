@@ -16,10 +16,10 @@ description: >-
 # Merge Cleanup
 
 Clean up after a merged PR: resync the base, remove the merged branch's clean
-worktree, delete and prune the merged branch, verify that close-keyword issues closed, reconcile documented project
-obligations, and stop any review watch. A bundled script handles the Git and
-GitHub mechanics. This skill keeps issue-close verification, project-specific
-reconciliation, watcher shutdown, and the final owner-facing judgment.
+worktree, delete and prune the merged branch, verify that close-keyword issues
+closed, reconcile documented project obligations, and stop any review watch.
+Bundled scripts do the Git and GitHub mechanics; you keep issue-close
+verification, reconciliation, watcher shutdown, and the owner-facing judgment.
 
 ## Check Prerequisites
 
@@ -57,27 +57,24 @@ Then follow this procedure:
 
 ## Resolve the Work Unit
 
-Resolve the merged PR from the conversation first. Otherwise identify it with
-`gh` against the explicit host, but never select an ambiguous candidate.
+Take the merged PR from the conversation, or find it with `gh` against the
+explicit host; never pick an ambiguous candidate. Before running the script,
+establish:
 
-Establish each of these before invoking the script:
-
-- **Base repository and PR number.** Use `host/owner/name` and the positive
-  decimal PR number. Take the host and slug from the project's forge record
-  when AGENTS.md carries one, an entry naming both, before inferring them from
-  a remote: a remote on an SSH host alias hides both. Keep the host explicit
-  even when it is `github.com`: `GH_HOST` and the CLI's default host are
-  ambient state, not pinned evidence.
-- **The exact worktree the cleanup may rewrite.** Prefer the worktree already
-  holding the PR's base branch. Otherwise use the clean feature worktree that
-  can land on the base. Pass its root, not a subdirectory.
+- **Base repository and PR number,** as `host/owner/name` and a positive
+  decimal number. Take the host and slug from the project's forge record when
+  AGENTS.md has one naming both, before inferring them from a remote: an SSH
+  host alias hides both. Keep the host explicit even for `github.com`.
+- **The worktree the cleanup may rewrite:** the one holding the PR's base
+  branch, or else the clean feature worktree that can land on the base. Pass
+  its root, not a subdirectory.
 - **The base and head remote roles.** Inspect configured remotes when
-  necessary. A fork PR usually has different roles; never let a base remote
-  stand in for the fork that owns the head branch.
+  necessary. A fork PR's differ; never let the base remote stand in for the
+  fork that owns the head branch.
 
-Do not fetch, switch, retarget, delete, or prune before invoking the script.
-Those operations belong to one guarded sequence, and a partial manual prelude
-invalidates its initial evidence.
+Don't fetch, switch, retarget, delete, or prune before the script runs. Those
+belong to its one guarded sequence, and a manual prelude invalidates its
+initial evidence.
 
 ## Run the Guarded Cleanup
 
@@ -154,22 +151,14 @@ them: `references/hazards.md` §merged-not-ancestor,
 
 ## Verify Issue Closure
 
-Merging should close issues named with close keywords, but cross-repository
-references, a non-default base, and keyword mistakes can fail silently. Check
-closure:
-
-- **Start with the ledger's `closing_refs`.** Query each named issue
-  separately and pin the repository from that record, since the reference may
-  be cross-repository.
-- **Also read the merged PR body and `closingIssuesReferences`** in one pinned
-  forge lookup. If the body appears to contain a close keyword the forge did
-  not recognize, resolve the apparent target and check it explicitly.
-- **Treat plain `Refs #N` mentions as intentionally non-closing.**
-- **Surface any still-open issue for the user to close.** Do not close it
-  unless the user separately asks; whether the merged work fully resolves it
-  is an owner decision.
-- **If the forge lookup cannot run, state the verification gap** instead of
-  silently omitting this stage.
+Close keywords can fail silently across repositories, on a non-default base,
+or when mistyped. Query each issue in the ledger's `closing_refs` separately,
+pinned to its own repository. In one pinned lookup, also read the merged PR's
+body and `closingIssuesReferences`, and check the target of any close keyword
+the forge missed. Plain `Refs #N` is intentionally non-closing. Surface any
+still-open issue for the owner, and don't close it unless they ask: whether
+the work resolves it is their decision. If the lookup can't run, state the
+verification gap.
 
 ## List the Obligations Found
 
@@ -273,33 +262,29 @@ into the trace, where `none` means the row is absent. After the `guard` row:
 
 ## Stop the Review Watch
 
-If a review watch for the merged PR is still running, stop it where the
-platform provides a background task, automation, or delegated-watcher control.
-If the platform has no such control, say it will self-terminate on activity or
-at its time cap. Do not invent a cancellation mechanism.
+If a review watch for the merged PR still runs, stop it with the platform's
+background-task, automation, or delegated-watcher control. Without one, say it
+will end on activity or at its time cap. Don't invent a cancellation
+mechanism.
 
 ## Summarize
 
-Lead with the cleanup outcome. State:
+Lead with the cleanup outcome: what was resynced, deleted, already absent, or
+blocked; what merge verification showed; any issue needing manual closure;
+and whether a review watch stopped or remains to expire.
 
-- What was resynced, deleted, already absent, or blocked.
-- What merge verification showed.
-- Any issue needing manual closure.
-- Whether a review watch stopped or remains to expire.
+Then give each listed obligation its own line, by tracker name, as done,
+skipped, or blocked with its reason, taken from the ledger:
 
-Then report every listed obligation on its own line as done, skipped, or
-blocked, with its reason. Take each state from the ledger:
-
-- **Done** is a `COMPLETED` row: a verified write, a confirmed no-op, or a
-  recomputed report.
-- **Skipped** is a `SKIPPED` row whose fresh rereads showed the item no longer
-  applied, or an `unsupported` item outside this skill's authority.
-- **Blocked** is an `UNKNOWN` row, or a `SKIPPED` row caused by a source,
-  input, tooling, or freshness failure. Quote the ledger's owner action.
+- **Done:** a `COMPLETED` row, meaning a verified write, a confirmed no-op, or
+  a recomputed report.
+- **Skipped:** a `SKIPPED` row whose fresh rereads showed the item no longer
+  applied, or an `unsupported` item.
+- **Blocked:** an `UNKNOWN` row, or a `SKIPPED` row caused by a source, input,
+  tooling, or freshness failure. Quote the ledger's owner action.
 
 An unreadable required source is one blocked line for the whole
-reconciliation. Never fold these lines into a general cleanup verdict; the
-user should see each tracker by name.
+reconciliation. Never fold these lines into a general cleanup verdict.
 
 ## Sweep Worktrees for Merged Branches
 
