@@ -14,11 +14,15 @@
 #
 #   --base <ref>     the ref a branch must be merged into. Default: the
 #                    branch refs/remotes/origin/HEAD points at. The script
-#                    never fetches, so fetch first: a stale base only keeps
-#                    more worktrees.
+#                    never fetches, so fetch first: a stale base keeps
+#                    worktrees merged since, and can still allow deleting
+#                    paths under a disposables entry the project has since
+#                    dropped.
 #   --remove         remove the clean candidates. Without it, nothing changes.
 #   --remove-dirty   with --remove, also remove the dirty candidates, deleting
-#                    the files the report lists. Alone, a usage error.
+#                    the files the report lists. Alone, a usage error. This
+#                    clears untracked leftovers no entry covers, such as
+#                    scratch files: read a dry run's list first.
 #   --remove-landed  remove only the clean branch candidates whose landing
 #                    merge was found. Keeps every dirty candidate, every
 #                    branch with no landing merge (it may be a fresh branch a
@@ -48,13 +52,18 @@
 # registered worktree, a submodule repository, populated or not, or a nested
 # repository (removal deletes them too), one on the base branch, an unmerged
 # branch, or a branch that no longer resolves, one git resolves to another
-# working tree, and any other detached worktree. Under --remove-head, a
-# worktree on the named branch at another commit is reported moved instead,
-# and a worktree on any other branch is not a candidate and not printed.
+# working tree, and any other detached worktree. A nested repository inside
+# an ignored directory that a disposables entry matches is not one. Under
+# --remove-head, a worktree on the named branch at another commit is
+# reported moved instead, and a worktree on any other branch is not a
+# candidate and not printed.
 #
 # A candidate is clean when worktree-inventory.sh reports OK inventory and no
 # operation is paused in it and, for a detached one, a ref holds its HEAD;
-# anything else is dirty. A dirty branch candidate
+# anything else is dirty. The one exception is the project's disposables: an
+# inventory that stops only because the worktree holds ignored files still
+# counts as clean when every file this script finds is an ignored path that a
+# disposables entry matches, or an ignored .DS_Store. A dirty branch candidate
 # with no landing merge (no first-parent merge of the base whose second parent
 # is its tip) is never removed: a fast-forwarded branch and a branch that has
 # no commits of its own yet look the same, and the second may hold work in
@@ -69,17 +78,46 @@
 # --remove-head, moved, or other-branch when a recheck finds it switched.
 # A candidate's line carries merge (the landing merge's oid and subject, or "none found"),
 # state, operation, unreferenced_head (a detached HEAD no ref holds, or null),
-# and the untracked, modified, ignored, and flagged paths removal would delete.
+# and the untracked, modified, ignored, flagged, and disposable paths removal
+# would delete. disposable names each matched prefix once (app/.build/, not
+# every file under it); ignored holds only the ignored paths no entry matches.
 #
 # Then one result line, whose counts are worktrees, candidates, clean, dirty,
 # removed, and kept (candidates left in place), each worktree counted as its
-# last check found it. Exit codes:
+# last check found it, and whose disposables field lists the file's entries
+# (empty without one; the built-in .DS_Store is not listed). Exit codes:
 #   0   OK sweep {...}             the run finished
-#   2   STOP <guard> {...}         no-base, or remove-failed (nothing after it
+#   2   STOP <guard> {...}         no-base, bad-record (before any worktree is
+#                                  read), or remove-failed (nothing after it
 #                                  was attempted)
 #   4   LOOKUP_FAILED <what> {...} a read failed; nothing after it was removed
 #   64  usage on stderr            bad arguments
 #   69  note on stderr             git or the inventory missing, or not bash
+#
+# Disposables. The project names the ignored paths removal may delete in
+# .worktree-disposables at the repository root, read at the pinned base
+# commit (never from a worktree, so a branch cannot widen it before it
+# lands). Each line is one entry; blank lines and lines starting with # are
+# skipped:
+#   # SwiftPM and Python build output
+#   app/.build/
+#   __pycache__/
+# Each entry is literal: a name or a path relative to the worktree root, with
+# an optional trailing / meaning directory only. An entry with no interior /
+# matches that name at any depth; one with an interior / is anchored at the
+# root. An ignored path is disposable when a leading run of its components
+# matches an entry and that run is itself ignored; an untracked one never is.
+# A missing, empty, or comments-only file means no entries. Built in, with no
+# entry: an ignored file named .DS_Store, at any depth, is disposable.
+# --remove-head has no base, so it reads no file and applies only the
+# built-in rule; the owner's sweep clears declared build output.
+#
+# STOP bad-record refuses the file when it is not a regular file (a
+# symlink's blob is its target's name), holds a NUL byte or a carriage
+# return, has a line with a leading or trailing space (a comment
+# included), or has an entry with a leading / or !, a \, a glob character
+# (* ? [ ]), an empty component (//), a . or .. component, a .git component
+# in any case, or a control character.
 set -u
 
 # Byte semantics for json_escape's string indexing; see worktree-inventory.sh.
@@ -233,10 +271,15 @@ physical_dir() { # physical_dir <dir>: its symlink-free path; run under out_exac
 
 N_WORKTREES=0 N_CANDIDATES=0 N_CLEAN=0 N_DIRTY=0 N_REMOVED=0 N_KEPT=0
 BASE_NAME="" BASE_OID=""
+# The disposables file: DISPOSABLES holds each entry as written, D_BODY the
+# entry without its trailing /, D_DIR whether that / was there, and D_ANCHORED
+# whether the body holds a /. N_DISPOSABLES guards every expansion, since
+# bash 3.2 treats an empty array's "${a[@]}" as unbound under set -u.
+DISPOSABLES=() D_BODY=() D_DIR=() D_ANCHORED=() N_DISPOSABLES=0 DISPOSABLES_JSON=""
 
 result_json() { # result_json <detail>
-  printf '{"base":"%s","base_oid":"%s","mode":"%s","worktrees":%d,"candidates":%d,"clean":%d,"dirty":%d,"removed":%d,"kept":%d,"detail":"%s"}' \
-    "$(json_escape "$BASE_NAME")" "$BASE_OID" "$MODE" "$N_WORKTREES" \
+  printf '{"base":"%s","base_oid":"%s","mode":"%s","disposables":[%s],"worktrees":%d,"candidates":%d,"clean":%d,"dirty":%d,"removed":%d,"kept":%d,"detail":"%s"}' \
+    "$(json_escape "$BASE_NAME")" "$BASE_OID" "$MODE" "$DISPOSABLES_JSON" "$N_WORKTREES" \
     "$N_CANDIDATES" "$N_CLEAN" "$N_DIRTY" "$N_REMOVED" "$N_KEPT" "$(json_escape "$1")"
 }
 stop() { # stop <guard> <detail>
@@ -297,6 +340,91 @@ case "$BASE_BRANCH" in
   refs/heads/*) ;;
   *) BASE_BRANCH="" ;;
 esac
+
+# bad_entry <entry>: print why the grammar refuses it, or nothing. Literal
+# names only: a glob that matches more than intended deletes real work, and
+# a .git component would let removal take a nested repository's history.
+bad_entry() {
+  local e="$1" body c rest
+  case "$e" in
+    '') echo "an empty entry"; return ;;
+    *[[:cntrl:]]*) echo "a control character"; return ;;
+    [[:space:]]* | *[[:space:]]) echo "a leading or trailing space"; return ;;
+    /*) echo "a leading /; entries are relative to the worktree root"; return ;;
+    !*) echo "a leading !; the file has no negation"; return ;;
+    *\\*) echo "a \\"; return ;;
+    *[*?]* | *[][]*) echo "a glob character; entries are literal"; return ;;
+    *//*) echo "an empty component"; return ;;
+  esac
+  body="${e%/}" rest="$body"
+  while :; do
+    c="${rest%%/*}"
+    case "$c" in
+      . | ..) echo "a . or .. component"; return ;;
+      .[gG][iI][tT]) echo "a .git component"; return ;;
+    esac
+    case "$rest" in */*) rest="${rest#*/}" ;; *) break ;; esac
+  done
+}
+
+# Read the disposables file before any worktree, so a bad one stops the run
+# with nothing judged or removed. ls-tree tells a missing file from a failed
+# read, which must stop the run rather than read as no entries; --full-tree
+# finds the root's file from any subdirectory. --remove-head reads none:
+# the merged head's copy may hold entries the base has since dropped.
+DECL=.worktree-disposables
+decl_refuse() { # decl_refuse <why>
+  rm -f "$record_tmp"
+  stop bad-record "$DECL at $BASE_NAME $1"
+}
+record_tmp="" decl_entry=""
+if [ "$MODE" != remove-head ]; then
+  decl_entry=$(git ls-tree --full-tree "$BASE_OID" -- "$DECL" 2>/dev/null) \
+    || lookup_failed record "could not list $DECL at $BASE_NAME"
+fi
+if [ -n "$decl_entry" ]; then
+  case "$decl_entry" in
+    "100644 blob "* | "100755 blob "*) ;;
+    *) decl_refuse "is not a regular file" ;;
+  esac
+  record_tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
+  git cat-file blob "$BASE_OID:$DECL" > "$record_tmp" 2>/dev/null \
+    || { rm -f "$record_tmp"; lookup_failed record "could not read $DECL at $BASE_NAME"; }
+  # read drops a NUL (bash 5) or ends the line at it (bash 3.2), changing the
+  # entry. A file, not a pipe: cmp can exit at the first difference and
+  # kill tr.
+  nul_free_tmp=$(mktemp) \
+    || { rm -f "$record_tmp"; lookup_failed mktemp "could not create a temporary file"; }
+  rc=2
+  tr -d '\000' < "$record_tmp" > "$nul_free_tmp" && { cmp -s "$record_tmp" "$nul_free_tmp"; rc=$?; }
+  rm -f "$nul_free_tmp"
+  case "$rc" in
+    0) ;;
+    1) decl_refuse "holds a NUL byte" ;;
+    *) rm -f "$record_tmp"; lookup_failed record "could not read $DECL at $BASE_NAME" ;;
+  esac
+  n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    case "$line" in
+      *$'\r'*) decl_refuse "line $n holds a carriage return; save it with LF line endings" ;;
+      [[:space:]]* | *[[:space:]]) decl_refuse "line $n has a leading or trailing space" ;;
+      '' | '#'*) continue ;;
+    esac
+    why=$(bad_entry "$line")
+    [ -z "$why" ] || decl_refuse "line $n, entry '$line': $why"
+    DISPOSABLES[N_DISPOSABLES]="$line"
+    D_BODY[N_DISPOSABLES]="${line%/}"
+    D_DIR[N_DISPOSABLES]=false
+    [ "$line" = "${line%/}" ] || D_DIR[N_DISPOSABLES]=true
+    D_ANCHORED[N_DISPOSABLES]=false
+    case "${line%/}" in */*) D_ANCHORED[N_DISPOSABLES]=true ;; esac
+    [ -z "$DISPOSABLES_JSON" ] || DISPOSABLES_JSON+=","
+    DISPOSABLES_JSON+="\"$(json_escape "$line")\""
+    N_DISPOSABLES=$((N_DISPOSABLES + 1))
+  done < "$record_tmp"
+  rm -f "$record_tmp"
+fi
 
 # The worktree this command runs in: removing it unlinks the shell's current
 # directory. Compared by inode, as worktree-inventory.sh does.
@@ -370,12 +498,102 @@ json_add() { # json_add <var> <path>: append a JSON string to a list body
   printf -v "$1" '%s' "$__cur"
 }
 
+# Is <path> disposable? It is when a leading run of its components matches a
+# disposables entry and that run is itself ignored, so declaring notes/ never
+# covers notes/private/ while only the latter is ignored. git never looks
+# inside an ignored directory, so all of it is ignored, nested repositories
+# included. <path> is relative to the worktree root, and a trailing / marks
+# it a directory, as status prints one; <ignored> is true when status
+# already reported <path> ignored. On a match, sets M_PREFIX to the shortest
+# such run, with a trailing / when it is a directory. M_LAST is the previous
+# match: `status -uall --ignored` lists every file under a build directory
+# together, so a path under the last directory prefix is answered without
+# walking it. M_IGNORED and M_KEPT cache check-ignore answers, newline
+# delimited. Callers reset all three for each worktree. Built in: an
+# ignored file named .DS_Store is disposable with no entry, since Finder
+# recreates it and nobody keeps work in it. The entries go first, so a
+# .DS_Store under a declared directory reports that directory's prefix.
+match_disposable() { # match_disposable <worktree> <path> <ignored>
+  match_declared "$@" && return 0
+  if [ "$3" = true ] && [ "${2##*/}" = .DS_Store ]; then
+    M_PREFIX="$2"
+    return 0
+  fi
+  return 1
+}
+match_declared() { # match_declared <worktree> <path> <ignored>
+  local wt="$1" rest="$2" comp prefix="" is_dir j hit rc
+  M_PREFIX=""
+  [ "$N_DISPOSABLES" -gt 0 ] || return 1
+  case "$M_LAST" in
+    */) case "$2" in "$M_LAST"*) M_PREFIX="$M_LAST"; return 0 ;; esac ;;
+  esac
+  while [ -n "$rest" ]; do
+    case "$rest" in
+      */*) comp="${rest%%/*}" rest="${rest#*/}" is_dir=true ;;
+      *) comp="$rest" rest="" is_dir=false ;;
+    esac
+    prefix+="$comp"
+    # The caches are newline delimited, so a prefix holding a newline could
+    # read another path's answer. No part from there down is disposable.
+    case "$prefix" in *$'\n'*) return 1 ;; esac
+    hit=false
+    for ((j = 0; j < N_DISPOSABLES; j++)); do
+      [ "${D_DIR[j]}" = false ] || [ "$is_dir" = true ] || continue
+      if [ "${D_ANCHORED[j]}" = true ]; then
+        [ "$prefix" = "${D_BODY[j]}" ] || continue
+      else
+        [ "$comp" = "${D_BODY[j]}" ] || continue
+      fi
+      hit=true
+      break
+    done
+    if [ "$hit" = true ] && [ "$3" = true ] && [ -z "$rest" ]; then
+      rc=0
+    elif [ "$hit" = true ]; then
+      case "$M_IGNORED" in
+        *$'\n'"$prefix"$'\n'*) rc=0 ;;
+        *)
+          case "$M_KEPT" in
+            *$'\n'"$prefix"$'\n'*) rc=1 ;;
+            *)
+              # No trailing /: with one, a pattern for the directory's
+              # contents, such as cache/* or a * in its own .gitignore,
+              # answers for the directory. ./ keeps a leading : from reading
+              # as pathspec magic. stdin is the caller's record stream.
+              git -C "$wt" -c core.fsmonitor=false check-ignore -q -- "./$prefix" \
+                < /dev/null 2>/dev/null
+              rc=$?
+              case "$rc" in
+                0) M_IGNORED+="$prefix"$'\n' ;;
+                1) M_KEPT+="$prefix"$'\n' ;;
+                *) lookup_failed check-ignore "could not check whether $wt/$prefix is ignored" ;;
+              esac
+              ;;
+          esac
+          ;;
+      esac
+    else
+      rc=1
+    fi
+    if [ "$rc" -eq 0 ]; then
+      M_PREFIX="$prefix"
+      [ "$is_dir" = false ] || M_PREFIX+="/"
+      M_LAST="$M_PREFIX"
+      return 0
+    fi
+    prefix+="/"
+  done
+  return 1
+}
+
 # What removal would delete from a candidate. Sets C_STATE and C_DETAIL (the
 # operation and file-list fields of its line). The inventory decides clean;
 # the lists are read here because the inventory stops without naming files.
 inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
   local path="$1" tmp rec xy p skip=false sparse=false sparse_cfg inv rc
-  local untracked="" modified="" ignored="" flagged="" op=null unref=null
+  local untracked="" modified="" ignored="" flagged="" disposable="" last_added="" op=null unref=null
+  M_LAST="" M_IGNORED=$'\n' M_KEPT=$'\n'
   [ -z "$2" ] || unref="\"$2\""
   if op_probe "$path"; then op="\"$OP_FOUND\""; fi
   tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
@@ -392,7 +610,14 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     xy="${rec:0:2}" p="${rec:3}"
     case "$xy" in
       '??') json_add untracked "$p" ;;
-      '!!') json_add ignored "$p" ;;
+      '!!')
+        if match_disposable "$path" "$p" true; then
+          [ "$M_PREFIX" = "$last_added" ] || json_add disposable "$M_PREFIX"
+          last_added="$M_PREFIX"
+        else
+          json_add ignored "$p"
+        fi
+        ;;
       *)
         json_add modified "$p"
         case "$xy" in R? | C? | ?R | ?C) skip=true ;; esac
@@ -420,15 +645,30 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
   rc=$?
   case "$rc:$inv" in
     "0:OK inventory "*) C_STATE=clean ;;
+    # The inventory stops at its first finding, so STOP dirty means only that
+    # status printed something; it never reaches its flag read. This
+    # script's own reads above stand in for it: the stop is accepted only
+    # when they found declared disposables and nothing else, the flag read
+    # included. A file created between the two reads can still read as
+    # clean here; the recheck right before removal narrows that window to
+    # the one before `git worktree remove`, which refuses untracked files
+    # but deletes ignored ones, as it did before disposables existed.
+    "2:STOP dirty "*)
+      if [ -n "$disposable" ] && [ -z "$untracked$modified$ignored$flagged" ]; then
+        C_STATE=clean
+      else
+        C_STATE=dirty
+      fi
+      ;;
     2:*) C_STATE=dirty ;;
     *) lookup_failed inventory "worktree-inventory.sh could not inventory $path: $inv" ;;
   esac
   # Either reader finding something makes it dirty; neither overrules the
-  # other toward clean.
+  # other toward clean, except for the declared disposables above.
   if [ "$op" != null ] || [ "$unref" != null ] || [ -n "$untracked$modified$ignored$flagged" ]; then
     C_STATE=dirty
   fi
-  C_DETAIL="\"operation\":$op,\"unreferenced_head\":$unref,\"untracked\":[$untracked],\"modified\":[$modified],\"ignored\":[$ignored],\"flagged\":[$flagged]"
+  C_DETAIL="\"operation\":$op,\"unreferenced_head\":$unref,\"untracked\":[$untracked],\"modified\":[$modified],\"ignored\":[$ignored],\"flagged\":[$flagged],\"disposable\":[$disposable]"
 }
 
 # The landing merge: the oldest first-parent merge of the base whose second
@@ -498,13 +738,29 @@ holds_submodule() { # holds_submodule <path>: sets HELD to what it holds
 # Any other .git below the root is a nested repository, untracked or ignored,
 # whose commits may exist nowhere else; status names only its directory, and
 # under an ignored directory not even that. git never tracks a .git path.
+# The one exception is a repository inside an ignored directory that a
+# disposables entry matches, such as a package manager's checkout under
+# .build/: the project declared it disposable. An untracked one never is.
 holds_repository() { # holds_repository <path>: sets HELD to the first one
-  local path="$1" tmp
+  local path="$1" tmp g dir
   HELD=""
+  M_LAST="" M_IGNORED=$'\n' M_KEPT=$'\n'
   tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
-  find "$path" -mindepth 2 -name .git -print0 -quit > "$tmp" 2>/dev/null \
+  # -prune: a nested .git is never searched, so its unreadable objects do not
+  # fail the run. Without entries the first one decides, as before.
+  if [ "$N_DISPOSABLES" -gt 0 ]; then
+    find "$path" -mindepth 2 -name .git -prune -print0 > "$tmp" 2>/dev/null
+  else
+    find "$path" -mindepth 2 -name .git -prune -print0 -quit > "$tmp" 2>/dev/null
+  fi \
     || { rm -f "$tmp"; lookup_failed find "could not search $path for nested repositories"; }
-  IFS= read -r -d '' HELD < "$tmp"
+  while IFS= read -r -d '' g; do
+    dir="${g#"$path"/}"
+    dir="${dir%.git}"
+    match_disposable "$path" "$dir" false && continue
+    HELD="$g"
+    break
+  done < "$tmp"
   rm -f "$tmp"
   [ -n "$HELD" ]
 }
