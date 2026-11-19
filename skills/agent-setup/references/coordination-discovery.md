@@ -87,7 +87,8 @@ that fully represents the project, not the highest label it could claim.
   conflicts at landing. After a rebase that conflicted, the author reads what
   the resolution changed. No coordination record is required, because its
   absence means this baseline. Do not invent lanes, owners, graphs, claims,
-  or ordering.
+  or ordering. A claim record the owner accepted
+  (`references/project-sections.md` §claim-record) isn't invention.
 - **Reassess when:** rebase conflicts or landing failures concentrate in a few
   files, units repeatedly need a recorded start order, or work is discarded at
   landing because a dependency was missed.
@@ -98,7 +99,8 @@ that fully represents the project, not the highest label it could claim.
   path overlap or dependency order is known, but recurring streams are not.
 - **Do:** keep boundaries and dependencies in each work contract. Add a
   forge-visible claim only when the project already defines its mechanism and
-  its stale-claim handling.
+  its stale-claim handling, or the owner accepted the claim record from
+  `references/project-sections.md` §claim-record.
 - **Reassess when:** start order, integration order, branch ancestry, or mutual
   exclusion repeatedly need different treatment.
 

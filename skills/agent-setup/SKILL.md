@@ -100,18 +100,24 @@ only record (no separate config or metadata file).
    is noninteractive or the user has already stated a preference.
 4. Gather the project-specific sections from repository evidence first, and
    ask the owner only about facts that evidence leaves missing or in conflict,
-   naming the disagreeing sources. Read
-   `references/project-sections.md` §guidance for intake and verification,
-   `references/project-sections.md` §work-contracts for coordination
-   discovery, and `references/project-sections.md` §stages for optional
-   work-unit stages, and follow them. The conventional order in
+   naming the disagreeing sources. The conventional order in
    `references/project-sections.md` §section-order interleaves these sections
    with the managed ones, so collect this content, or decide on placeholders,
-   before writing. Settle the forge and landing records here too, so accepted
-   records enter the single step-5 write. See "Forge Record" and "Landing
-   Record" below. When the project uses tracker issues, also show and settle
-   the post-merge obligations record from
-   `references/project-sections.md` §post-merge-record for that write.
+   before writing.
+   - **Follow the intake references.** Read
+     `references/project-sections.md` §guidance for intake and verification,
+     `references/project-sections.md` §work-contracts for coordination
+     discovery, and `references/project-sections.md` §stages for optional
+     work-unit stages, and follow them.
+   - **Settle the records.** Settle the forge and landing records here too,
+     so accepted records enter the single step-5 write. See "Forge Record"
+     and "Landing Record" below. When the project uses tracker issues, also
+     show and settle the post-merge obligations record from
+     `references/project-sections.md` §post-merge-record for that write.
+   - **Offer the claim record.** When the project runs concurrent dispatch
+     and defines no claim rules, offer the claim record as
+     `references/project-sections.md` §claim-record describes. An accepted
+     record enters the same write.
 5. Settle `docs/agent-workflow.md`, then write AGENTS.md once and verify the
    write. Read `references/managed-blocks.md` §init-write and follow it.
 6. Create the scaffolding files listed in `references/managed-blocks.md`
@@ -145,10 +151,11 @@ only record (no separate config or metadata file).
 4. Discover the profile: look for the `Agent-setup profile:` line, then read
    `references/managed-blocks.md` §profile-discovery and follow it. Never
    switch a recorded profile without the user's explicit choice.
-5. Protect the reviewer, forge, landing, and post-merge obligations records
-   before refreshing. If any appears inside a managed block, resolve its
-   location first (see "Automated Reviewer Record", "Forge Record", "Landing
-   Record", and `references/project-sections.md` §post-merge-record).
+5. Protect the reviewer, forge, landing, post-merge obligations, and claim
+   records before refreshing. If any appears inside a managed block, resolve
+   its location first (see "Automated Reviewer Record", "Forge Record",
+   "Landing Record", `references/project-sections.md` §post-merge-record, and
+   `references/project-sections.md` §claim-record).
 6. For each managed block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`, exclude the
@@ -160,9 +167,8 @@ only record (no separate config or metadata file).
      matching, so settle it in the same decision (see step 9).
 7. Leave all unmarked (project-specific) content untouched, except for
    owner-requested creation or modification of a forge record, a landing
-   record, a post-merge obligations record, a coordination model, or a
-   work-unit stage record. Within any of
-   those, create or change
+   record, a post-merge obligations record, a claim record, a coordination
+   model, or a work-unit stage record. Within any of those, create or change
    only the requested fields or stages; preserve every unrequested field or
    stage and all unrelated unmarked content verbatim. The only structural
    exception is an owner-approved legacy-stage migration described in
@@ -191,12 +197,18 @@ only record (no separate config or metadata file).
      and AGENTS.md has no post-merge obligations record, offer one, in the
      same decision as any docs/tracker-format.md offer. Write it only when
      its mechanics file exists or is accepted with it.
+   - **Offer the claim record.** When the project runs concurrent dispatch
+     and defines no claim rules, offer the claim record as
+     `references/project-sections.md` §claim-record describes. Write nothing
+     without acceptance.
 10. Audit standard project files (`references/audit.md` §standard-files) and
     flag any newly missing. Also check the automated-reviewer record, the
     forge record and its Consumers, the landing record, any post-merge
-    obligations record, any coordination model, and any optional work-unit
-    stage record. See "Automated Reviewer Record", "Forge Record", "Landing
-    Record", `references/project-sections.md` §post-merge-record,
+    obligations record, any claim record, any coordination model, and any
+    optional work-unit stage record. See "Automated Reviewer Record", "Forge
+    Record", "Landing Record",
+    `references/project-sections.md` §post-merge-record,
+    `references/project-sections.md` §claim-record,
     `references/project-sections.md` §work-contracts, and
     `references/project-sections.md` §stages.
 11. Check the settings in `references/audit.md` §repo-settings and
