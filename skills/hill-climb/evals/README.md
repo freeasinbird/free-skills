@@ -15,7 +15,7 @@ and grades in a session workspace outside the repository.
   audit (`prompt-crafter`), a single eval run, "reflect" (`reflect`), and
   `Plan #N` (`plan-work-unit`). Two more test edges: making one failing test
   pass, and an unrelated use of "hill climb".
-- `behavior-eval.json`: Twenty-five cases, each with a `request`, `artifacts` that
+- `behavior-eval.json`: Twenty-six cases, each with a `request`, `artifacts` that
   describe the project, platform, and simulated scores or state, and nonempty
   `required_actions` and `forbidden_actions` lists.
 
@@ -28,7 +28,9 @@ and grades in a session workspace outside the repository.
 - `council-rung-3`: Treat a council that can only reach rung 3 as no check
   tier.
 - `council-cost-and-screen`: State council's cost, screen attempts cheaply,
-  and brief council by its Scoring Contract.
+  brief council by its Scoring Contract, and record and name the proven panel.
+- `named-panel-member-fails`: Rescore with the recorded panel when a named
+  member fails, decline a substitute, and pause when it can't be restored.
 - `check-does-not-separate`: Refuse to climb on a check that can't tell good
   from bad past noise.
 - `noise-before-climbing`: Rescore the baseline and freeze the check before
@@ -112,7 +114,8 @@ for key in ("case_pass", "target"):
     assert isinstance(fixture["scoring"][key], str) and fixture["scoring"][key].strip()
 expected = {
     "no-attempt-before-signoff", "human-only-check", "program-over-council",
-    "council-rung-3", "council-cost-and-screen", "check-does-not-separate",
+    "council-rung-3", "council-cost-and-screen", "named-panel-member-fails",
+    "check-does-not-separate",
     "noise-before-climbing", "frozen-check-hash-mismatch",
     "one-hypothesis-with-mechanism", "gain-within-noise-reverted",
     "guard-regression-reverted", "stall-to-proposals", "undeclared-ratchet",
@@ -136,7 +139,7 @@ for case in cases:
 triggers = json.loads(Path("skills/hill-climb/evals/trigger-eval.json").read_text())
 assert sum(t["should_trigger"] for t in triggers) == 8
 assert sum(not t["should_trigger"] for t in triggers) == 8
-print("Behavior fixture structure: passed (twenty-five unique cases); triggers 8/8")
+print("Behavior fixture structure: passed (twenty-six unique cases); triggers 8/8")
 PY
 ```
 

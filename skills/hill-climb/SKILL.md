@@ -82,12 +82,21 @@ For a council-scored climb:
 - **Brief council by its Scoring Contract.** Pass a rubric, the goal file's
   reference examples, and the candidates. Keep the goal statement out of the
   brief, or pass it as the target, which council keeps from members.
+- **Name the proven panel.** Let council pick its default panel for the
+  first proving run. Its completed members become the panel only when no seat
+  failed; otherwise rescore it by the rule below. Log that panel, then pass it
+  as named members on every later call: the other proving runs, every
+  candidate score, rescores, and the held-out cases. Tell council not to add
+  or substitute a member. When council says before launch that a named member
+  is unreachable, don't let it launch the rest or add a member: the panel
+  can't be restored.
 - **Reduce to one score.** Council returns each member's scores and spread,
   never a pass or fail. Apply the goal file's score rule to get one number,
   then keep, revert, accept, or reject by the rules below.
 - **Rescore after a failed seat.** A council report scored a different panel
   than the proven check when it has a failed member, a lower rung than the
-  goal file's check tier, or a panel other than the one that proved the check.
+  goal file's check tier, or completed members that differ from the recorded
+  panel.
   Don't use it to keep, revert, accept, reject, prove the check, or score the
   held-out cases; rescore. Count replacement and rescore runs against the
   budget; when it can't cover a rescore, stop as budget spent with no decision
@@ -107,7 +116,9 @@ These are the rules for a trustworthy check. Other skills cite this section.
    must differ from the reference examples it sees as anchors.
 3. **Freeze the check.** Copy the check, and every file it reads that a
    candidate could change, into the climb directory, and record their hash.
-   From then on the check doesn't change for this stage.
+   For council, record beside that hash in the attempt log each member's
+   provider, model, and effort from the runs that proved the check. That is
+   the recorded panel. From then on the check doesn't change for this stage.
 4. **Score where the climber can't write.** Score every candidate from the
    frozen copy, run against the candidate outside the working checkout. Verify
    the hash before each score; a mismatch is the "check is wrong" exit. Where
@@ -168,7 +179,9 @@ never go past the budget.
 
 A next stage, such as "hold the score, cut the size", runs only when the goal
 file declares it or the owner approves it. Each stage proves and freezes its
-own check. The earlier stage's metric becomes a guard at its final score.
+own check, and a council stage records its own panel. The earlier stage's
+metric becomes a guard at its final score, scored with that stage's recorded
+panel.
 
 ## Stop
 
