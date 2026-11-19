@@ -128,55 +128,39 @@ helper's JSON to recreate the sequence. `worktree-inventory.sh
 
 ### Interpret the Result Ledger
 
-When the script emits a result ledger, its last stdout line is one of these:
+The script's last stdout line is the result:
 
-- `OK cleanup <json>` at exit 0: every mechanical step completed or was
-  already absent.
-- `STOP <guard> <json>` at exit 2: evidence was valid enough to refuse the
-  next unsafe action.
-- `LOOKUP_FAILED <what> <json>` at exit 4: required evidence could not be
-  established, so the next action did not run.
+- `OK cleanup <json>` at exit 0: every step completed or was already absent.
+- `STOP <guard> <json>` at exit 2: a guard refused the next unsafe step.
+- `LOOKUP_FAILED <what> <json>` at exit 4: required evidence couldn't be
+  read, so the next step didn't run. An authentication or API failure is a
+  lookup failure, not proof of an unsupported forge.
 
-Exit 64 means the invocation is invalid. Exit 69 covers explicit runtime
-checks, including missing Git, `gh`, or the executable landing helper, and
-can occur without a JSON ledger. Other missing utilities need not return 69
-or produce a ledger. For example, missing `find` causes `LOOKUP_FAILED` at
-exit 4 when the landing helper inspects the refs tree. Authentication or API
-evidence failures are lookup failures, not proof of an unsupported forge.
+Exit 64 is a usage error, and exit 69 a missing runtime, which may print no
+ledger. Every JSON payload carries every step's disposition. Report completed
+ones even when a later step stopped: a resynced base isn't a failed cleanup
+because remote deletion was refused. The `worktree` field reads
+`removed_clean` after a removal and `owner_removal_required` after the stop. A
+`local_branch` value ending in `_config_retained` means the ref is gone and
+same-named branch config was left on purpose; don't report it as config
+removal.
 
-Every JSON payload carries the same fields: `repo`, `pr`, `merge`,
-`head_branch`, `base_branch`, `head_repo`, `checkout`, `worktree`, `consumers`,
-`remote_branch`, `base_resync`, `local_branch`, `prune`, `closing_refs`,
-`incomplete_step`, and `detail`. Report completed dispositions even when a
-later step stopped. In particular, do not describe a resynced base as a failed
-cleanup merely because remote deletion was refused.
+To retry, resolve the stated guard and rerun the whole script with the same
+PR and checkout; completed deletions are idempotent. Never run the remaining
+Git command by hand. If the script can't run, stop and report the runtime gap.
 
-Three `local_branch` values are truthful boundaries, not incomplete cleanup:
-`deleted_merged_config_retained`, `deleted_verified_config_retained`, and
-`already_absent_config_retained`. Each means the named local ref is absent
-while any same-named branch config stays untouched, to avoid racing another
-Git process that recreates the ref. Do not summarize them as config removal.
-
-A result is retryable after its stated guard is resolved. Re-run the whole
-script with the same pinned PR and checkout; its already-absent dispositions
-make completed deletion steps idempotent. Do not extract and run the remaining
-Git command by hand. If the executable cannot run, stop and report the runtime
-gap as Check Prerequisites requires.
-
-For guard rationale or maintenance, read only the relevant section. Normal
-cleanup does not require loading this reference.
-
-- `references/hazards.md` §merged-not-ancestor
-- `references/hazards.md` §tag-shadow
-- `references/hazards.md` §push-refspec-ambiguity
-- `references/hazards.md` §checkout-detach
-- `references/hazards.md` §leading-hyphen-args
-- `references/hazards.md` §worktree-refusals
-- `references/hazards.md` §worktree-remove-destroys
-- `references/hazards.md` §ignored-file-overwrite
-- `references/hazards.md` §status-config
-- `references/hazards.md` §prune-refspec-scope
-- `references/hazards.md` §branch-d-upstream
+For a guard's rationale, read only its section; normal cleanup doesn't need
+them: `references/hazards.md` §merged-not-ancestor,
+`references/hazards.md` §tag-shadow,
+`references/hazards.md` §push-refspec-ambiguity,
+`references/hazards.md` §checkout-detach,
+`references/hazards.md` §leading-hyphen-args,
+`references/hazards.md` §worktree-refusals,
+`references/hazards.md` §worktree-remove-destroys,
+`references/hazards.md` §ignored-file-overwrite,
+`references/hazards.md` §status-config,
+`references/hazards.md` §prune-refspec-scope, and
+`references/hazards.md` §branch-d-upstream.
 
 ## Verify Issue Closure
 
