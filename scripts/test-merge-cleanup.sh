@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Offline regression matrix for merge-cleanup.sh. Git runs against scratch
 # repositories while a gh shim serves deterministic PR and repository facts.
+#
+# To run it under macOS /bin/bash 3.2, put a `bash` symlink to /bin/bash
+# first on PATH; the shebang and every `bash` call that runs the script
+# resolve `bash` from PATH, so the suite and the script both run under 3.2:
+#   d=$(mktemp -d) && ln -s /bin/bash "$d/bash" &&
+#     PATH="$d:$PATH" ./scripts/test-merge-cleanup.sh
+# Most behavior cases pass --base-remote and --head-remote, so this run
+# covers the explicit-remote path. CI runs Linux bash 5 only.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
