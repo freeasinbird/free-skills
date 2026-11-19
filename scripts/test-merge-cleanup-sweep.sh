@@ -11,8 +11,23 @@
 # --remove-landed skips the landing-merge test, and one copy
 # per guard the refute-first review added (nested worktree, submodule,
 # nested repository, unreferenced detached HEAD, base branch, redirected
-# worktree, inherited GIT_DIR). The newline case discriminates by
-# construction, as in the inventory matrix.
+# worktree, inherited GIT_DIR). The disposables cases marked discriminating
+# were run against copies without the clean-acceptance rule, with every
+# ignored path disposable, without the nested-repository skip or its
+# check-ignore, with one disposable per file, with the file read from the
+# working tree, and with the pathspec and find code a review found unsafe;
+# with the nested-repository probe asking about the repository's path, with
+# or without its slash; skipping the check that a matched part is ignored or
+# stopping at the first matching entry; reading a failed lookup as no
+# entries; without --full-tree, the NUL-check reader's status, or the
+# per-prefix newline guard; refusing every path with a newline; comparing
+# through a pipe; matching any part named .DS_Store, or skipping that rule
+# under --remove-head; reading a file under --remove-head; dropping a last
+# line without a newline; stripping a carriage return; accepting a
+# non-regular file; reading a comment as an entry, or skipping comments
+# before the whitespace check; applying the .DS_Store rule before the
+# entries; and without the NUL check. The newline case discriminates by construction, as in the
+# inventory matrix.
 #
 # Usage: test-merge-cleanup-sweep.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -26,6 +41,9 @@ TMP=$(cd "$(mktemp -d)" && pwd -P)
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -rf "$TMP"' EXIT
 export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+# No global excludes file: a developer's own ignore of .DS_Store would turn
+# the untracked-.DS_Store case into an ignored one.
+export GIT_CONFIG_GLOBAL=/dev/null XDG_CONFIG_HOME="$TMP/xdg"
 
 PASS=0
 FAIL=0
@@ -538,6 +556,427 @@ want_out 'WORKTREE clean {"path":"'"$SCEN/land-wt.Ab12Cd/wt"'","branch":"detache
 want_out "left for the owner's sweep"
 want_kept "$SCEN/land-wt.Ab12Cd/wt"   # discriminating: a sweep that skips the landing-merge test removes it
 
+# --- disposables ---------------------------------------------------------------
+
+disposables() { # disposables <line...>: commit .worktree-disposables on main and sync origin
+  printf '%s\n' "$@" > "$REPO/.worktree-disposables"
+  G "$REPO" add .worktree-disposables
+  G "$REPO" commit -m "worktree disposables"
+  sync_origin
+}
+commit_file() { # commit_file: commit .worktree-disposables as written, and sync origin
+  G "$REPO" add .worktree-disposables
+  G "$REPO" commit -m "worktree disposables"
+  sync_origin
+}
+ignore() { # ignore <pattern...>: ignore in every worktree, without a commit
+  local p
+  for p in "$@"; do printf '%s\n' "$p" >> "$REPO/.git/info/exclude"; done
+}
+
+scenario "an ignored .DS_Store leaves a landed worktree clean without a file"
+ignore .DS_Store
+land feat
+mkdir "$WT/sub"
+: > "$WT/.DS_Store"
+: > "$WT/sub/.DS_Store"
+run
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$WT"'"'   # discriminating: the inventory's STOP dirty decides alone
+want_out '"ignored":[],"flagged":[],"disposable":[".DS_Store","sub/.DS_Store"]'
+want_out '"disposables":[]'   # the built-in rule is not listed
+run --remove-landed
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "an ignored .DS_Store directory is not built in"
+ignore .DS_Store/
+land feat
+mkdir "$WT/.DS_Store"
+printf 'mine\n' > "$WT/.DS_Store/note"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty'
+want_out '"ignored":[".DS_Store/note"],"flagged":[],"disposable":[]'
+want_kept "$WT"   # discriminating: matching any part named .DS_Store removes it
+
+scenario "an untracked .DS_Store is never disposable"
+land feat
+: > "$WT/.DS_Store"
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE dirty'
+want_out '"untracked":[".DS_Store"]'
+want_kept "$WT"
+
+scenario "an undeclared ignored file beside a .DS_Store keeps the worktree dirty"
+ignore .DS_Store
+land feat
+: > "$WT/.DS_Store"
+printf 'secret\n' > "$WT/.env"
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":[".env"],"flagged":[],"disposable":[".DS_Store"]'
+want_kept "$WT"   # discriminating: a sweep that accepts any disposable removes it
+
+scenario "without a file ignored build output keeps the worktree dirty"
+ignore .build/
+land feat
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty'
+want_out '"ignored":[".build/obj.o"],"flagged":[],"disposable":[]'
+want_out '"disposables":[]'
+want_kept "$WT"
+
+scenario "comments and blank lines in the file are skipped"
+disposables '# SwiftPM build output' '' '.build/' '#notes/'
+ignore .build/ notes/
+land feat
+mkdir "$WT/.build" "$WT/notes"
+printf 'o\n' > "$WT/.build/obj.o"
+printf 'mine\n' > "$WT/notes/todo"
+run --remove
+want_rc 0
+want_out '"disposables":[".build/"]'
+want_out '"ignored":["notes/todo"],"flagged":[],"disposable":[".build/"]'
+want_kept "$WT"   # discriminating: reading a comment as an entry removes it
+
+scenario "a file of comments alone declares nothing"
+disposables '# Nothing here yet'
+ignore .build/
+land feat
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove
+want_rc 0
+want_out '"disposables":[]'
+want_out 'WORKTREE dirty'
+want_kept "$WT"
+
+scenario "an empty file declares nothing"
+: > "$REPO/.worktree-disposables"
+commit_file
+ignore .DS_Store .build/
+land feat
+mkdir "$WT/.build"
+: > "$WT/.DS_Store"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove
+want_rc 0
+want_out '"disposables":[]'
+want_out '"ignored":[".build/obj.o"],"flagged":[],"disposable":[".DS_Store"]'
+want_kept "$WT"
+
+scenario "a .DS_Store under a declared directory reports the directory"
+disposables cache/
+ignore cache/
+land feat
+mkdir -p "$WT/cache/sub"
+printf 'a\n' > "$WT/cache/a"
+: > "$WT/cache/sub/.DS_Store"
+printf 'z\n' > "$WT/cache/z"
+run --remove
+want_rc 0
+want_out '"disposable":["cache/"]'   # discriminating: the built-in rule first split the run
+want_out 'WORKTREE removed'
+want_removed "$WT"
+
+scenario "a last line without a newline is read"
+printf '.build/' > "$REPO/.worktree-disposables"
+commit_file
+ignore .build/
+land feat
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove
+want_rc 0
+want_out '"disposables":[".build/"]'   # discriminating: read without || [ -n "$line" ] drops it
+want_out 'WORKTREE removed'
+want_removed "$WT"
+
+scenario "a repository inside a declared ignored directory does not hold the worktree"
+disposables .build/
+ignore .build/
+land feat
+mkdir -p "$WT/.build/checkouts"
+git -C "$WT/.build/checkouts" init -q -b main x
+printf 'x\n' > "$WT/.build/checkouts/x/x.txt"
+G "$WT/.build/checkouts/x" add .
+G "$WT/.build/checkouts/x" commit -m "package checkout"
+printf 'o\n' > "$WT/.build/obj.o"
+run
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$WT"'"'   # discriminating: every nested .git held it
+want_out '"disposable":[".build/"]'   # discriminating: one entry per prefix, not per file
+want_out '"disposables":[".build/"]'
+run --remove
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"   # plain git worktree remove takes the nested repository
+
+scenario "a repository inside a declared directory that is not ignored still holds it"
+disposables .build/
+land feat
+mkdir -p "$WT/.build/checkouts"
+git -C "$WT/.build/checkouts" init -q -b main x
+printf 'x\n' > "$WT/.build/checkouts/x/x.txt"
+G "$WT/.build/checkouts/x" add .
+G "$WT/.build/checkouts/x" commit -m "only here"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: --force deletes the untracked repository
+
+scenario "an anchored entry matches only at the worktree root"
+disposables app/.build/
+ignore .build/
+land feat
+mkdir -p "$WT/app/.build" "$WT/other/app/.build"
+printf 'o\n' > "$WT/app/.build/o"
+printf 'o\n' > "$WT/other/app/.build/o"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty'
+want_out '"ignored":["other/app/.build/o"],"flagged":[],"disposable":["app/.build/"]'
+want_kept "$WT"
+
+scenario "a directory-only entry does not match a file of that name"
+disposables cache/
+ignore cache
+land feat
+printf 'mine\n' > "$WT/cache"
+run --remove
+want_rc 0
+want_out '"ignored":["cache"],"flagged":[],"disposable":[]'
+want_kept "$WT"
+
+scenario "a file only on a branch has no effect"
+land feat
+# The primary checkout, where the sweep runs, holds a file the base lacks.
+G "$REPO" checkout -q -b record
+printf '.build/\n' > "$REPO/.worktree-disposables"
+G "$REPO" add .worktree-disposables
+G "$REPO" commit -m "file off the base"
+ignore .build/
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove
+want_rc 0
+want_out '"disposables":[]'
+want_out 'WORKTREE dirty'
+want_kept "$WT"   # discriminating: reading the working tree's file removes it
+
+scenario "an untracked repository named like pathspec magic still holds its worktree"
+disposables .build/
+ignore /scratch/.build/
+land feat
+mkdir -p "$WT/:scratch"
+git -C "$WT/:scratch" init -q -b main .build
+printf 'x\n' > "$WT/:scratch/.build/x.txt"
+G "$WT/:scratch/.build" add .
+G "$WT/:scratch/.build" commit -m "only here"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: check-ignore read :scratch as magic and --force deleted it
+
+# nested_repo <dir>: a repository with a commit found nowhere else, at <dir>
+# in the worktree.
+nested_repo() {
+  mkdir -p "$WT/$1"
+  git -C "$WT/$1" init -q -b main
+  printf 'x\n' > "$WT/$1/x.txt"
+  G "$WT/$1" add x.txt
+  G "$WT/$1" commit -m "only here"
+}
+
+scenario "a repository at a declared directory whose contents alone are ignored still holds it"
+disposables cache/
+ignore 'cache/*'
+land feat
+nested_repo cache
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: check-ignore on cache/ with its slash answered ignored
+
+scenario "a repository whose own .gitignore ignores everything still holds it"
+disposables deps/
+land feat
+nested_repo deps/tool
+printf '*\n!x.txt\n' > "$WT/deps/tool/.gitignore"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: with the slash, the nested .gitignore answered ignored
+
+scenario "a repository in an ignored directory under a declared one that is not ignored still holds it"
+disposables notes/
+ignore notes/private/
+land feat
+nested_repo notes/private
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: checking the repository's own directory removes it
+
+scenario "ignored files under a declared directory that is not ignored keep the worktree"
+disposables notes/
+ignore notes/private/
+land feat
+mkdir -p "$WT/notes/private"
+printf 'mine\n' > "$WT/notes/private/todo.md"
+git init -q --bare "$WT/notes/private/store.git"
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE dirty'
+want_out '"disposable":[]'
+want_kept "$WT"   # discriminating: matching notes/ alone removed it, bare repository and all
+
+scenario "a repository under the narrower of two declared directories is disposable"
+disposables notes/ notes/private/
+ignore notes/private/
+land feat
+nested_repo notes/private
+run --remove
+want_rc 0
+want_out 'WORKTREE removed'
+want_removed "$WT"   # discriminating: stopping at the first matching entry held it
+
+scenario "a path holding a newline never reads another path's ignore answer"
+disposables cache/
+ignore 'aa*/' unused/cache/private/
+land feat
+mkdir -p "$WT/aa"$'\n'"unused/cache" "$WT/unused/cache/private"
+printf 'x\n' > "$WT/aa"$'\n'"unused/cache/file"
+printf 'mine\n' > "$WT/unused/cache/private/note"
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE dirty'
+want_kept "$WT"   # discriminating: the newline-delimited cache matched unused/cache
+
+scenario "a newline in a name under a declared directory leaves it disposable"
+disposables build/
+ignore build/
+land feat
+mkdir -p "$WT/build"
+printf 'x\n' > "$WT/build/log"$'\n'"old"
+run --remove
+want_rc 0
+want_out 'WORKTREE removed'
+want_removed "$WT"   # discriminating: refusing any path with a newline kept it
+
+scenario "an unreadable nested repository is still reported, not a failed read"
+land feat
+git -C "$WT" init -q -b main inner
+chmod 000 "$WT/inner/.git/objects"
+run --remove --remove-dirty
+chmod 755 "$WT/inner/.git/objects"
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"
+
+scenario "a bad file stops the run before any worktree is read"
+land feat
+for entry in '../x' '/abs' '.git/' 'a/.GIT' '*.pyc' 'a//b' '!keep' 'a\b' 'x/./y'; do
+  NAME="a bad file stops the run: entry '$entry'"
+  disposables .build/ "$entry"
+  run --remove
+  want_rc 2
+  want_out 'STOP bad-record'
+  want_out "line 2, entry"
+  case "$OUT" in *WORKTREE*) bad "a worktree was judged" ;; *) ok ;; esac
+  want_kept "$WT"
+done
+for line in ' x' 'x ' ' ' ' # note' '# note '; do
+  NAME="a bad file stops the run: line '$line'"
+  disposables .build/ "$line"
+  run --remove
+  want_rc 2
+  want_out 'line 2 has a leading or trailing space'
+  want_kept "$WT"   # discriminating: skipping comments first accepted '# note '
+done
+NAME="a bad file stops the run: a carriage return"
+printf '.build/\r\n' > "$REPO/.worktree-disposables"
+commit_file
+run --remove
+want_rc 2
+want_out 'line 1 holds a carriage return'
+want_kept "$WT"   # discriminating: a stripped CR read .build/ as the entry
+NAME="a bad file stops the run: a carriage return on a comment line"
+printf '# Build output\r\n.build/\n' > "$REPO/.worktree-disposables"
+commit_file
+run --remove
+want_rc 2
+want_out 'line 1 holds a carriage return'
+want_kept "$WT"
+NAME="a bad file stops the run: a symbolic link"
+G "$REPO" rm -q .worktree-disposables
+ln -s notes "$REPO/.worktree-disposables"
+commit_file
+run --remove
+want_rc 2
+want_out 'is not a regular file'
+want_kept "$WT"   # discriminating: the link's blob, its target name, read as an entry
+NAME="a bad file stops the run: a directory"
+G "$REPO" rm -q .worktree-disposables
+mkdir "$REPO/.worktree-disposables"
+printf 'x\n' > "$REPO/.worktree-disposables/x"
+commit_file
+run --remove
+want_rc 2
+want_out 'is not a regular file'
+want_kept "$WT"
+G "$REPO" rm -q -r .worktree-disposables
+G "$REPO" commit -m "drop the directory"
+NAME="a bad file stops the run: run from a subdirectory"
+disposables ../x
+mkdir -p "$REPO/sub"
+OUT=$(cd "$REPO/sub" && "$SUT" --remove 2>&1)
+RC=$?
+want_rc 2
+want_out 'STOP bad-record'
+want_kept "$WT"   # discriminating: ls-tree read sub/.worktree-disposables and found no file
+NAME="a bad file stops the run: a file that cannot be read"
+disposables .build/
+blob=$(git -C "$REPO" rev-parse origin/main:.worktree-disposables)
+mv "$REPO/.git/objects/${blob:0:2}/${blob:2}" "$SCEN/blob"
+run --remove
+mv "$SCEN/blob" "$REPO/.git/objects/${blob:0:2}/${blob:2}"
+want_rc 4
+want_out 'LOOKUP_FAILED record'
+want_kept "$WT"   # discriminating: a failed read counted as no entries
+for script in 'exit 1' 'cat; exit 1'; do
+  NAME="a bad file stops the run: a NUL check whose reader runs '$script'"
+  disposables ../x
+  mkdir -p "$SCEN/tr"
+  printf '#!/bin/sh\n%s\n' "$script" > "$SCEN/tr/tr"
+  chmod +x "$SCEN/tr/tr"
+  PATH="$SCEN/tr:$PATH" run --remove
+  want_rc 4
+  want_out 'LOOKUP_FAILED record'
+  want_kept "$WT"   # discriminating: the reader's status was ignored
+done
+NAME="a bad file stops the run: a NUL byte before a long file"
+{ printf 'zero\000\n'; head -c 1048576 /dev/zero | tr '\000' a; printf '\n'; } > "$REPO/.worktree-disposables"
+commit_file
+run --remove
+want_rc 2
+want_out 'holds a NUL byte'
+want_kept "$WT"   # discriminating: cmp exited early and tr's broken pipe read as a failed read
+NAME="a bad file stops the run: a NUL byte"
+printf '.build/\nnotes\000x\n' > "$REPO/.worktree-disposables"
+commit_file
+run --remove
+want_rc 2
+want_out 'holds a NUL byte'
+want_kept "$WT"   # discriminating: read drops the NUL or ends the line there, and accepts the entry
+
 # --- refusals ------------------------------------------------------------------
 
 # --- merge-cleanup's head removal (--remove-head) ----------------------------
@@ -564,6 +1003,27 @@ want_out 'WORKTREE dirty {"path":"'"$WT"'"'
 want_out '"ignored":[".env"]'
 want_out 'not clean; --remove-head removes only a clean worktree'
 want_kept "$WT"
+
+scenario "--remove-head removes a worktree whose only ignored file is a .DS_Store"
+TIP=$(git -C "$REPO" rev-parse feat)
+ignore .DS_Store
+: > "$WT/.DS_Store"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"   # discriminating: skipping the built-in rule under --remove-head keeps it
+
+scenario "--remove-head reads no disposables file"
+disposables .build/
+ignore .build/
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out '"disposables":[]'
+want_out 'WORKTREE dirty'
+want_kept "$WT"   # discriminating: a copy that reads origin/main's file removes it
 
 scenario "--remove-head keeps a branch that moved past the head"
 TIP=$(git -C "$REPO" rev-parse feat)

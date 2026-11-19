@@ -440,7 +440,8 @@ without `--force` still deletes ignored ones.
 
 Fetch the base's remote first, with `git fetch --prune <remote>`: `origin`
 by default, or the remote in the ref `--base` names. The sweep never fetches,
-so a branch merged on the forge but not yet fetched looks unmerged and stays.
+so a branch merged on the forge but not yet fetched looks unmerged and stays,
+and a disposables entry the project has since dropped still allows deletion.
 Then run it from the primary checkout, starting with the dry run:
 
 ```sh
@@ -488,13 +489,49 @@ detached worktree that a dead `land` run left at its exact
 Don't run a manual removal while a landing batch is running: the batch's live
 temporary worktree is a candidate too.
 
+An ignored `.DS_Store` file never makes a worktree dirty: Finder writes one
+in any folder a user opens, on every Mac.
+
+A project may also name the ignored build output that removal may delete, in
+a committed `.worktree-disposables` file at the repository root:
+
+```text
+# SwiftPM and Python build output
+app/.build/
+__pycache__/
+```
+
+The sweep reads the file at the base commit, never from a worktree, so a
+branch can't widen it before it lands. Each line holds one entry; blank lines
+and lines that start with `#` are skipped. Each entry is literal: a name, or a
+path from the worktree root, with an optional trailing `/` for directories
+only. A name with no interior `/` matches at any depth; a path with one is
+anchored at the root.
+
+An ignored path doesn't make a worktree dirty when the part of it an entry
+matches is itself ignored: declaring `notes/` doesn't cover
+`notes/private/` while only the latter is ignored. A nested repository under
+such a part doesn't make it `holds-repository`. An untracked path is never
+disposable. merge-cleanup's own `--remove-head` call reads no file, so only
+the `.DS_Store` rule applies there.
+
+Without the file, every other ignored file still makes a worktree dirty.
+agent-setup offers the file for build output.
+
+Scratch files an agent left behind are untracked, so no entry covers them.
+After the owner reads a dry run's list, `--remove --remove-dirty` clears
+them.
+
 Each registered worktree gets one `WORKTREE <disposition> <json>` line:
 
 - **`removed`:** This run removed it.
-- **`clean`:** A candidate whose removal deletes nothing but its checkout.
+- **`clean`:** A candidate whose removal deletes nothing but its checkout and
+  the disposables its `disposable` list names, such as `app/.build/` or
+  `sub/.DS_Store`, one entry per matched prefix.
 - **`dirty`:** A candidate holding untracked, modified, ignored, or
   index-flagged files, a paused operation, or a detached HEAD that no ref
-  holds; its line lists each file. A
+  holds; its line lists each file. Its `ignored` list holds only the ignored
+  paths no disposables entry matches. A
   dirty branch whose line says no landing merge was found is never removed: a
   branch with no commits of its own looks the same and may be work in
   progress.
@@ -503,11 +540,22 @@ Each registered worktree gets one `WORKTREE <disposition> <json>` line:
   `unmerged`, `unresolved-branch`, `unreadable`, `redirected`, and
   `detached-other`. The line's reason says why. A `prunable` entry is reported, never pruned.
 
-The last line is `OK sweep <json>` with counts, `STOP no-base`,
-`STOP remove-failed` when git refused a removal and nothing after it was
-attempted, or `LOOKUP_FAILED <what>` when a read failed. Report removed and
-kept worktrees by path. The sweep rechecks each worktree right before removing
-it, which narrows a race with another process but can't close it.
+The last line is one of these:
+
+- **`OK sweep <json>`:** The run finished. It carries the counts and the
+  file's `disposables` entries.
+- **`STOP no-base`:** No base resolved.
+- **`STOP bad-record`:** The disposables file isn't a regular file, holds a
+  NUL byte or a carriage return, or has a line that breaks the grammar that
+  `--help` gives. The sweep stops rather than guess. No worktree was read or
+  removed.
+- **`STOP remove-failed`:** git refused a removal, and nothing after it was
+  attempted.
+- **`LOOKUP_FAILED <what>`:** A read failed.
+
+Report removed and kept worktrees by path. The sweep rechecks each worktree
+right before removing it, which narrows a race with another process but can't
+close it.
 
 Afterwards, rerun merge-cleanup for each PR that stopped
 `head-worktree-present`.

@@ -118,6 +118,11 @@ only record (no separate config or metadata file).
      and defines no claim rules, offer the claim record as
      `references/project-sections.md` §claim-record describes. An accepted
      record enters the same write.
+   - **Offer the disposables file.** When a build tool in use creates
+     ignored output, offer a `.worktree-disposables` file as
+     `references/project-sections.md` §worktree-disposables describes. Write
+     an accepted file with the step-6 scaffolding; its AGENTS.md pointer
+     enters the step-5 write.
 5. Settle `docs/agent-workflow.md`, then write AGENTS.md once and verify the
    write. Read `references/managed-blocks.md` §init-write and follow it.
 6. Create the scaffolding files listed in `references/managed-blocks.md`
@@ -153,10 +158,12 @@ only record (no separate config or metadata file).
    `references/managed-blocks.md` §profile-discovery and follow it. Never
    switch a recorded profile without the user's explicit choice.
 5. Protect the reviewer, forge, landing, post-merge obligations, and claim
-   records before refreshing. If any appears inside a managed block, resolve
-   its location first (see "Automated Reviewer Record", "Forge Record",
-   "Landing Record", `references/project-sections.md` §post-merge-record, and
-   `references/project-sections.md` §claim-record).
+   records, and the worktree disposables pointer, before refreshing. If any
+   appears inside a managed block, resolve its location first (see "Automated Reviewer
+   Record", "Forge Record", "Landing Record",
+   `references/project-sections.md` §post-merge-record,
+   `references/project-sections.md` §claim-record, and
+   `references/project-sections.md` §worktree-disposables).
 6. For each managed block:
    - Extract the content between markers.
    - Compare against the canonical version for that KEY. For `done`, exclude the
@@ -168,8 +175,10 @@ only record (no separate config or metadata file).
      matching, so settle it in the same decision (see step 9).
 7. Leave all unmarked (project-specific) content untouched, except for
    owner-requested creation or modification of a forge record, a landing
-   record, a post-merge obligations record, a claim record, a coordination
-   model, or a work-unit stage record. Within any of those, create or change
+   record, a post-merge obligations record, a claim record, a worktree
+   disposables pointer (`references/project-sections.md`
+   §worktree-disposables), a coordination model, or a work-unit stage
+   record. Within any of those, create or change
    only the requested fields or stages; preserve every unrequested field or
    stage and all unrelated unmarked content verbatim. The only structural
    exception is an owner-approved legacy-stage migration described in
@@ -202,14 +211,19 @@ only record (no separate config or metadata file).
      and defines no claim rules, offer the claim record as
      `references/project-sections.md` §claim-record describes. Write nothing
      without acceptance.
+   - **Offer the disposables file.** When the project has no
+     `.worktree-disposables` file and a build tool in use creates ignored
+     output, offer one as `references/project-sections.md`
+     §worktree-disposables describes.
 10. Audit standard project files (`references/audit.md` §standard-files) and
     flag any newly missing. Also check the automated-reviewer record, the
     forge record and its Consumers, the landing record, any post-merge
-    obligations record, any claim record, any coordination model, and any
-    optional work-unit stage record. See "Automated Reviewer Record", "Forge
-    Record", "Landing Record",
+    obligations record, any claim record, any worktree disposables file,
+    any coordination model, and any optional work-unit stage record. See
+    "Automated Reviewer Record", "Forge Record", "Landing Record",
     `references/project-sections.md` §post-merge-record,
     `references/project-sections.md` §claim-record,
+    `references/project-sections.md` §worktree-disposables,
     `references/project-sections.md` §work-contracts, and
     `references/project-sections.md` §stages.
 11. Check the settings in `references/audit.md` §repo-settings and
