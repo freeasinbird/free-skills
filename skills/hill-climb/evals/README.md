@@ -15,7 +15,7 @@ and grades in a session workspace outside the repository.
   audit (`prompt-crafter`), a single eval run, "reflect" (`reflect`), and
   `Plan #N` (`plan-work-unit`). Two more test edges: making one failing test
   pass, and an unrelated use of "hill climb".
-- `behavior-eval.json`: Twenty cases, each with a `request`, `artifacts` that
+- `behavior-eval.json`: Twenty-five cases, each with a `request`, `artifacts` that
   describe the project, platform, and simulated scores or state, and nonempty
   `required_actions` and `forbidden_actions` lists.
 
@@ -51,6 +51,16 @@ and grades in a session workspace outside the repository.
 - `goal-file-changed-midclimb`: Pause for the owner when the goal file's hash
   changes.
 - `delivery-report-no-merge`: Open a PR with the full report and never merge.
+- `round-unit-at-intake`: Name the round unit for a batched council climb and
+  count the budget, minimum, and plateau in it.
+- `rising-best-is-no-plateau`: Keep climbing when a round rejects every
+  candidate but the best near-miss rises past noise.
+- `proposed-candidates-hold-plateau`: Queue judge-proposed candidates, score
+  them like any other, and hold off the plateau while they wait.
+- `plateau-checkin-offers-unit`: Offer one more unit, with its cost and the
+  budget left, before a plateau stop.
+- `set-goal-rejection-not-revert`: Reject a set-goal candidate without
+  reverting anything, and count progress by the best near-miss.
 
 ## Rerunning Trigger Cases
 
@@ -109,6 +119,9 @@ expected = {
     "relax-target-refused", "suspicious-jump", "held-out-at-end",
     "parallel-without-isolation", "unattended-without-capability",
     "goal-file-changed-midclimb", "delivery-report-no-merge",
+    "round-unit-at-intake", "rising-best-is-no-plateau",
+    "proposed-candidates-hold-plateau", "plateau-checkin-offers-unit",
+    "set-goal-rejection-not-revert",
 }
 cases = fixture["cases"]
 assert len(cases) == len(expected)
@@ -123,7 +136,7 @@ for case in cases:
 triggers = json.loads(Path("skills/hill-climb/evals/trigger-eval.json").read_text())
 assert sum(t["should_trigger"] for t in triggers) == 8
 assert sum(not t["should_trigger"] for t in triggers) == 8
-print("Behavior fixture structure: passed (twenty unique cases); triggers 8/8")
+print("Behavior fixture structure: passed (twenty-five unique cases); triggers 8/8")
 PY
 ```
 
