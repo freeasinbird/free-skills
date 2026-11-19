@@ -47,6 +47,11 @@ repository.
   report fields.
 - `called-by-skill-findings-report-only`: Run on a skill's call, stop after a
   first-member blocker, fix nothing, and return the findings report fields.
+- `standing-request-covered`: Run on a project instruction that requests
+  council for the change's class, without asking, and state the cost first.
+- `standing-request-not-covered`: Suggest council, and launch no member, when
+  the project instruction's classes leave out the change, here an untested
+  behavior change.
 
 ## Rerunning Trigger Cases
 
@@ -66,5 +71,5 @@ Never start real members against real code for a behavior case.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 18 unique behavior IDs match the inventory above. Parsing
+files. Confirm 20 unique behavior IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.
