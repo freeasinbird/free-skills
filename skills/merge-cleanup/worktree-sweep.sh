@@ -3,10 +3,11 @@
 # batch of landings, report what each removal would delete, and remove only
 # what the owner authorized for this run. Removal is destructive, so the
 # default is a dry run and every removal is rechecked just before it happens.
-# The owner runs it, never merge-cleanup or a landing batch.
+# The owner runs it; a landing batch runs only --remove-landed, at its end,
+# and merge-cleanup never runs it.
 #
 # Usage:
-#   worktree-sweep.sh [--base <ref>] [--remove [--remove-dirty]]
+#   worktree-sweep.sh [--base <ref>] [--remove [--remove-dirty] | --remove-landed]
 #   worktree-sweep.sh --help
 #
 #   --base <ref>     the ref a branch must be merged into. Default: the
@@ -16,6 +17,12 @@
 #   --remove         remove the clean candidates. Without it, nothing changes.
 #   --remove-dirty   with --remove, also remove the dirty candidates, deleting
 #                    the files the report lists. Alone, a usage error.
+#   --remove-landed  remove only the clean branch candidates whose landing
+#                    merge was found. Keeps every dirty candidate, every
+#                    branch with no landing merge (it may be a fresh branch a
+#                    session just started in), and every detached land-wt
+#                    worktree (a lander may be using it). With --remove or
+#                    --remove-dirty, a usage error.
 #
 # A candidate is a linked worktree on a branch whose tip is an ancestor of the
 # base, or a detached worktree at land's <tmp>/land-wt.XXXXXX/wt template.
@@ -73,7 +80,7 @@ case "${1:-}" in
   --help | -h) [ $# -eq 1 ] || usage; sed -n '2,/^set -u$/p' "$0" | sed '$d'; exit 0 ;;
 esac
 
-BASE_OPT="" REMOVE=false REMOVE_DIRTY=false
+BASE_OPT="" REMOVE=false REMOVE_DIRTY=false REMOVE_LANDED=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --base)
@@ -84,9 +91,16 @@ while [ $# -gt 0 ]; do
       BASE_OPT="$2"; shift 2 ;;
     --remove) REMOVE=true; shift ;;
     --remove-dirty) REMOVE_DIRTY=true; shift ;;
+    --remove-landed) REMOVE_LANDED=true; shift ;;
     *) echo "worktree-sweep.sh: unknown argument: $1" >&2; usage ;;
   esac
 done
+# --remove-landed is a narrower rule, not a widening of --remove, so a run
+# names exactly one removal rule.
+if [ "$REMOVE_LANDED" = true ] && { [ "$REMOVE" = true ] || [ "$REMOVE_DIRTY" = true ]; }; then
+  echo "worktree-sweep.sh: --remove-landed stands alone; drop --remove and --remove-dirty" >&2
+  usage
+fi
 # Two flags, so deleting files the owner may still want always takes a
 # separate, deliberate word on the command line.
 if [ "$REMOVE_DIRTY" = true ] && [ "$REMOVE" != true ]; then
@@ -182,6 +196,7 @@ lookup_failed() { # lookup_failed <what> <detail>
 MODE=dry-run
 [ "$REMOVE" != true ] || MODE=remove
 [ "$REMOVE_DIRTY" != true ] || MODE=remove-dirty
+[ "$REMOVE_LANDED" != true ] || MODE=remove-landed
 
 git rev-parse --git-dir >/dev/null 2>&1 \
   || lookup_failed repository "not inside a git repository"
@@ -417,11 +432,11 @@ holds_repository() { # holds_repository <path>: sets HELD to the first one
 
 # Classify WT entry <i>. Sets C_CLASS (a non-candidate disposition, or
 # "candidate"), C_REASON for a non-candidate, and for a candidate C_STATE,
-# C_DETAIL, C_MERGE (empty for a detached one), and C_DIRTY_OK: whether
-# --remove-dirty may remove it.
+# C_DETAIL, C_MERGE (empty for a detached one), C_LANDED (false for a
+# detached one), and C_DIRTY_OK: whether --remove-dirty may remove it.
 classify() { # classify <i>
   local i="$1" path="${WT_PATH[$1]}" ref="${WT_BRANCH[$1]}" tip rc top head holder unref
-  C_CLASS="" C_REASON="" C_STATE="" C_DETAIL="" C_MERGE="" C_DIRTY_OK=false
+  C_CLASS="" C_REASON="" C_STATE="" C_DETAIL="" C_MERGE="" C_LANDED=false C_DIRTY_OK=false
   if [ "$i" -eq 0 ]; then
     C_CLASS=primary C_REASON="the primary checkout is never a candidate"; return
   fi
@@ -509,7 +524,14 @@ emit() { # emit <disposition> <path> <ref> <reason or empty>: uses C_* for a can
 }
 
 authorized() { # authorized: may this run remove the candidate in C_*?
-  [ "$C_CLASS" = candidate ] && [ "$REMOVE" = true ] || return 1
+  [ "$C_CLASS" = candidate ] || return 1
+  # Only a branch has a landing merge, so a detached land-wt worktree, which
+  # a lander starting after the batch's release may be using, is never one.
+  if [ "$REMOVE_LANDED" = true ]; then
+    [ "$C_STATE" = clean ] && [ "$C_LANDED" = true ]
+    return
+  fi
+  [ "$REMOVE" = true ] || return 1
   [ "$C_STATE" = clean ] && return 0
   [ "$REMOVE_DIRTY" = true ] && [ "$C_DIRTY_OK" = true ]
 }
@@ -523,7 +545,8 @@ for ((i = 0; i < WT_COUNT; i++)); do
   classify "$i"
   P_PATH[i]="${WT_PATH[i]}" P_REF[i]="${WT_BRANCH[i]}"
   P_CLASS[i]="$C_CLASS" P_REASON[i]="$C_REASON" P_STATE[i]="$C_STATE"
-  P_DETAIL[i]="$C_DETAIL" P_MERGE[i]="$C_MERGE" P_DIRTY_OK[i]="$C_DIRTY_OK"
+  P_DETAIL[i]="$C_DETAIL" P_MERGE[i]="$C_MERGE" P_LANDED[i]="$C_LANDED"
+  P_DIRTY_OK[i]="$C_DIRTY_OK"
   if [ "$C_CLASS" = candidate ]; then
     N_CANDIDATES=$((N_CANDIDATES + 1))
     if [ "$C_STATE" = clean ]; then N_CLEAN=$((N_CLEAN + 1)); else N_DIRTY=$((N_DIRTY + 1)); fi
@@ -542,7 +565,7 @@ HALTED=""
 for ((i = 0; i < N_WORKTREES; i++)); do
   path="${P_PATH[i]}" ref="${P_REF[i]}"
   C_CLASS="${P_CLASS[i]}" C_STATE="${P_STATE[i]}" C_DETAIL="${P_DETAIL[i]}"
-  C_MERGE="${P_MERGE[i]}" C_DIRTY_OK="${P_DIRTY_OK[i]}"
+  C_MERGE="${P_MERGE[i]}" C_LANDED="${P_LANDED[i]}" C_DIRTY_OK="${P_DIRTY_OK[i]}"
   if [ "$C_CLASS" != candidate ]; then
     emit "$C_CLASS" "$path" "$ref" "${P_REASON[i]}"
     continue
@@ -554,7 +577,15 @@ for ((i = 0; i < N_WORKTREES; i++)); do
   fi
   if ! authorized; then
     N_KEPT=$((N_KEPT + 1))
-    if [ "$REMOVE" != true ]; then
+    if [ "$REMOVE_LANDED" = true ]; then
+      if [ "$C_STATE" != clean ]; then
+        emit "$C_STATE" "$path" "$ref" "dirty; --remove-landed removes only clean worktrees"
+      elif [ "$ref" = detached ]; then
+        emit "$C_STATE" "$path" "$ref" "a detached land-wt worktree, left for the owner's sweep: a lander may be using it"
+      else
+        emit "$C_STATE" "$path" "$ref" "clean, but no landing merge was found: a branch with no commits of its own looks the same, so a session may be starting work in it"
+      fi
+    elif [ "$REMOVE" != true ]; then
       emit "$C_STATE" "$path" "$ref" "dry run"
     elif [ "$REMOVE_DIRTY" != true ]; then
       emit "$C_STATE" "$path" "$ref" "dirty; --remove-dirty would delete the files listed"
