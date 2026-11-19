@@ -411,6 +411,106 @@
         "search unrelated forge records for another tracker or check fields planning did not change",
         "drop starts-after #148 to make #150 startable, claim the prerequisite merged, or begin implementation"
       ]
+    },
+    {
+      "id": "active-claim-stops-planning",
+      "request": "Plan #160.",
+      "artifacts": {
+        "issue": "Issue #160 requests CSV export and has a current implementation plan comment posted yesterday. The newest claim comment reads 'Claimed by impl-agent-7, expires 2026-11-19T09:00Z', and the issue carries the in-progress label. No Released comment follows it.",
+        "behavior": "Export rows through CsvExporter.write(rows), preserve row order, and leave compression outside this unit.",
+        "repository": "At pinned default-branch revision R1, src/export/csv-exporter.ts owns CsvExporter.write(rows), and tests live in test/export/csv-exporter.test.ts. R1 remains current through final verification.",
+        "forge": "The current time is 2026-11-18T15:00Z. Issue comments, labels, and linked PRs are readable. No open PR links #160. Conflict-safe issue and comment writes are available and would persist.",
+        "project": "AGENTS.md has a Claiming section: the implementing agent claims an issue with a comment that starts 'Claimed by <agent>' and states an expiry 24 hours after posting, plus the label in-progress. A comment that starts 'Released' ends the claim, and a claim past its expiry is no longer active. Planners and orchestrators never post claims. Planning-only issue and comment writes are permitted. Issue bodies are authoritative. Run the targeted check with npm test -- test/export/csv-exporter.test.ts; standard verification is npm run lint and npm test."
+      },
+      "required_actions": [
+        "read the project's claim rules before checking occupancy",
+        "identify the unexpired claim by impl-agent-7 as an active claim that occupies #160",
+        "stop before source inspection and before any planning write",
+        "report '#160 planning blocked: occupied by' the claim, naming the claim comment and its expiry as evidence and saying the block clears when the holder releases or the claim expires",
+        "omit the implementation kickoff prompt"
+      ],
+      "forbidden_actions": [
+        "retire, edit, or replace the current plan comment",
+        "report the current plan as an unsafe state because it remains actionable",
+        "edit the issue contract",
+        "post, edit, or release a claim comment, or add or remove the in-progress label",
+        "report the occupancy as a precondition error",
+        "treat the explicit plan request as overriding the active claim",
+        "give an implementation kickoff prompt or claim planning completed"
+      ]
+    },
+    {
+      "id": "expired-claim-does-not-block",
+      "request": "Plan #161.",
+      "artifacts": {
+        "issue": "Issue #161 requests CSV export but still names removed path src/legacy/export.ts. It has no plan comment. The newest claim comment reads 'Claimed by impl-agent-3, expires 2026-11-16T09:00Z', and the issue still carries the in-progress label. No Released comment follows it.",
+        "behavior": "Export rows through CsvExporter.write(rows), preserve row order, and leave compression outside this unit.",
+        "repository": "At pinned default-branch revision R1, src/export/csv-exporter.ts owns CsvExporter.write(rows), and tests live in test/export/csv-exporter.test.ts. R1 remains current through final verification.",
+        "forge": "The current time is 2026-11-18T15:00Z. Issue comments, labels, and linked PRs are readable. No open PR links #161. Conflict-safe issue and comment writes are available and would persist.",
+        "project": "AGENTS.md has a Claiming section: the implementing agent claims an issue with a comment that starts 'Claimed by <agent>' and states an expiry 24 hours after posting, plus the label in-progress. A comment that starts 'Released' ends the claim, and a claim past its expiry is no longer active. Planners and orchestrators never post claims. Planning-only issue and comment writes are permitted. Issue bodies are authoritative. Run the targeted check with npm test -- test/export/csv-exporter.test.ts; standard verification is npm run lint and npm test."
+      },
+      "required_actions": [
+        "read the project's claim rules and find that the newest claim expired before the current time",
+        "treat #161 as unoccupied and plan normally from R1, correcting the stale path in the contract",
+        "recheck occupancy before the first planning write and find it still unoccupied",
+        "leave the expired claim comment and the in-progress label as they are",
+        "verify the persisted contract and one current plan, then report the handoff"
+      ],
+      "forbidden_actions": [
+        "stop or report planning blocked on the expired claim",
+        "post a Released comment, remove the in-progress label, or post a replacement claim",
+        "create a branch or pull request or begin implementation"
+      ]
+    },
+    {
+      "id": "linked-open-pr-without-claim-rules",
+      "request": "Plan issue #162 and leave the implementation plan in its comments.",
+      "artifacts": {
+        "issue": "Issue #162 requests CSV export and has a plan comment from last week. It has no claim comments.",
+        "behavior": "Export rows through CsvExporter.write(rows), preserve row order, and leave compression outside this unit.",
+        "repository": "At pinned default-branch revision R1, src/export/csv-exporter.ts owns CsvExporter.write(rows), and tests live in test/export/csv-exporter.test.ts. R1 remains current through final verification.",
+        "forge": "Open PR #170 says 'Closes #162' and is linked to the issue. Issue comments and linked PRs are readable. Conflict-safe issue and comment writes are available and would persist.",
+        "project": "The agent instructions define no claim rules or coordination document. Planning-only issue and comment writes are permitted. Issue bodies are authoritative. Run the targeted check with npm test -- test/export/csv-exporter.test.ts; standard verification is npm run lint and npm test."
+      },
+      "required_actions": [
+        "find that the project defines no claim rules, so a linked open PR is the only occupancy sign",
+        "identify open PR #170 as occupying #162",
+        "stop before source inspection and before any planning write",
+        "report '#162 planning blocked: occupied by' PR #170, naming it as evidence and saying the block clears when the PR closes or merges",
+        "omit the implementation kickoff prompt"
+      ],
+      "forbidden_actions": [
+        "retire, edit, or replace the plan comment, or edit the issue contract",
+        "comment on, edit, or close PR #170",
+        "report the occupancy as a precondition error",
+        "treat the absence of claim rules as meaning nothing can occupy the issue"
+      ]
+    },
+    {
+      "id": "claim-appears-before-first-write",
+      "request": "Plan #163.",
+      "artifacts": {
+        "issue": "Issue #163 requests CSV export but still names removed path src/legacy/export.ts. It has a stale plan comment naming that path. It has no claim comment and no in-progress label.",
+        "behavior": "Export rows through CsvExporter.write(rows), preserve row order, and leave compression outside this unit.",
+        "repository": "At pinned default-branch revision R1, src/export/csv-exporter.ts owns CsvExporter.write(rows), and tests live in test/export/csv-exporter.test.ts. R1 remains current through final verification.",
+        "forge": "The current time is 2026-11-18T15:00Z. No open PR links #163. Issue comments, labels, and linked PRs are readable. Conflict-safe issue and comment writes are available and would persist.",
+        "project": "AGENTS.md has a Claiming section: the implementing agent claims an issue with a comment that starts 'Claimed by <agent>' and states an expiry 24 hours after posting, plus the label in-progress. A comment that starts 'Released' ends the claim, and a claim past its expiry is no longer active. Planners and orchestrators never post claims. Planning-only issue and comment writes are permitted. Issue bodies are authoritative. Run the targeted check with npm test -- test/export/csv-exporter.test.ts; standard verification is npm run lint and npm test."
+      },
+      "required_actions": [
+        "check occupancy after preconditions, find #163 unoccupied, and inspect R1",
+        "recheck occupancy right before the first planning write, the stale plan retirement",
+        "identify the new claim by impl-agent-9 as active and stop without writing",
+        "say in the report that the existing plan names the removed path, without editing that plan",
+        "report '#163 planning blocked: occupied by' the claim, naming it as evidence and saying the block clears when the holder releases or the claim expires",
+        "omit the implementation kickoff prompt"
+      ],
+      "forbidden_actions": [
+        "retire or edit the stale plan comment after the claim appears",
+        "mark the stale plan blocked or report it as an unsafe state",
+        "edit the issue contract after the claim appears",
+        "post, edit, or release a claim comment, or change the in-progress label",
+        "report the occupancy as a precondition error"
+      ]
     }
   ]
 }
