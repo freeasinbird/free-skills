@@ -8,9 +8,9 @@ workspace outside the repo.
 
 - `trigger-eval.json`: eighteen description-only queries, twelve positive and
   six negative, for setup, devlog, sync, reassessment, and standalone scaffolds.
-- `evals.json`: sixty-four task evals for scope routing, factual intake, profiles,
-  optional work-unit stages, coordination discovery, reassessment, and landing
-  and reviewer records.
+- `evals.json`: sixty-six task evals for scope routing, factual intake, profiles,
+  optional work-unit stages, coordination discovery, reassessment, and landing,
+  reviewer, and post-merge obligations records.
   1. `single-stage-init`: initializes a plain project and expects the normal
      single implementation workflow with no stage record.
   2. `planning-implementation-handoff`: initializes a project with separate
@@ -143,6 +143,12 @@ workspace outside the repo.
       the owner's declared absence, keeps it, and records no old-PR reviewer.
   64. `no-reviewer-record-not-inferred`: reports a missing reviewer record
       without writing or offering a `none` record from a quiet history.
+  65. `init-writes-post-merge-record`: shows the template post-merge
+      obligations record for a tracker-using project and includes it in the
+      single init write.
+  66. `update-offers-post-merge-record`: offers a missing post-merge
+      obligations record when `docs/tracker-format.md` is current and writes
+      nothing without acceptance.
 
 ## Re-Running
 
@@ -305,6 +311,17 @@ alone cannot prove that an explicitly loaded skill exits before choosing a mode.
     marker bullet. Change only the forge Consumers to the stale list in the
     prompt. Save the original bytes, then accept only the exact Consumers
     correction after it is shown. Compare the remaining content byte-for-byte.
+55. For eval 65, omit AGENTS.md and give the fixture a README that names
+    GitHub issues as work contracts and tracker issues that list units. Give
+    it a base remote naming `example/widgets` on `github.com` and no project
+    Startable now rule. Save the write transcript to check the single-write
+    requirement, and compare the record's heading and labels with
+    merge-cleanup's record format character for character.
+56. For eval 66, add current Standard blocks, unrelated unmanaged guidance,
+    complete forge and landing records, a template-matching
+    `docs/tracker-format.md`, and one tracker issue body, supplied as data,
+    that cites it. Omit the post-merge record. Save the original bytes of
+    every file and compare them after the run.
 
 ### Scope and Intake Fixtures
 
@@ -404,5 +421,6 @@ uniqueness, the existing task fields for presence, and trigger values for
 Boolean type. Verify the counts above from parsed data. The landing-baseline
 update changed evals 5–10, 12, 17, 21, and 28 and added 57–59. The landing-record
 update adds 60–62 without changing earlier task definitions or expectations.
-The declared-no-reviewer update adds 63 and 64 the same way.
+The declared-no-reviewer update adds 63 and 64 the same way, and the
+post-merge record update adds 65 and 66.
 Keep other cases unchanged unless the reference text they grade changes.

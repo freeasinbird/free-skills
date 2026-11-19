@@ -271,6 +271,7 @@ date before merging. Before editing workflows or branch protection, read
   | `docs/agent-workflow.md`                                                                                                                                                 | `skills/agent-setup/references/scaffolding.md` §agent-workflow               | `./scripts/check-managed-sync.sh`              |
   | `devlog/README.md`, `CONTRIBUTING.md`, PR template, `CLAUDE.md`                                                                                                          | Matching sections in `skills/agent-setup/references/scaffolding.md`          | `diff`                                         |
   | `skills/await-pr-review/SKILL.md`, `skills/await-pr-review/references/conductor-brief.md`, `docs/agent-workflow.md` §review-convergence, `AGENTS.md` pull-requests block | Phrases from the reference pinned in `scripts/review-convergence-layers.tsv` | `./scripts/check-review-convergence-layers.sh` |
+  | `AGENTS.md` Post-merge obligations record                                                                                                                                | `skills/agent-setup/references/project-sections.md` §post-merge-record       | Read side by side; paths differ                |
 
   When a pinned phrase changes in any layer, update its table row and re-check
   the other layers in the same change.
@@ -322,6 +323,22 @@ date before merging. Before editing workflows or branch protection, read
   - **Reviewer:** `none`. The project has no automated reviewer.
   - **Consumer:** `land-approved-prs` reads this record from the default
     branch's tip. Update the skill if the record's shape changes.
+
+### Post-merge obligations
+
+- **Containing trackers:** every open tracker issue that lists the merged
+  unit's verified closing issue under `## Units`. A closed tracker is never
+  edited. Zero open containing trackers is a valid zero-work result. A unit
+  with no closing issue has no containing tracker.
+- **Refresh:** apply `skills/agent-setup/references/tracker-format.md`
+  §refresh in each containing tracker, as one edit.
+- **Detailed mechanics:** `skills/agent-setup/references/tracker-format.md`.
+- **Report:** name newly unblocked units without claiming or starting them.
+
+The merge-cleanup skill reads this record to refresh trackers after a merge.
+free-skills keeps no `docs/tracker-format.md` copy, so the record points at
+the format's source in agent-setup. If that file moves or renames its
+`## refresh` heading, update this record in the same change.
 
 <!-- agents-md:managed:branches -->
 
