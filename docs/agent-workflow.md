@@ -387,10 +387,13 @@ reviewer when there is none, however many files it touches.
   surface, a returned-object trust boundary, or a contract or public interface
   uses the `council` skill when it is installed.
 - **Treat this section as the standing request for council.** It is the
-  project's request for council on that work, so council's "the user asks for
-  it" condition holds. Call council in findings mode, report only, with the
-  change at a fixed revision, its intended outcome, and the risk-class flag
-  set. Council picks its rung and panel and states their cost. This procedure,
+  project's request for council on that work, which council's "When to Run"
+  accepts. It is also a parallel-delegate budget the owner set in advance:
+  one council panel per review round, at the rung council picks. That meets
+  the Context Discipline rule to stay within a budget the user already set.
+  Call council in findings mode, report only, with the change at a fixed
+  revision, its intended outcome, and the risk-class flag set. Council picks
+  its rung and panel and states their cost before launching. This procedure,
   not council's staging, owns fixes and re-review.
 - **Give the single reviewer a fixed brief.** Send the same words every
   round, changing only the revision. Give the reviewer no reasoning trail, and
