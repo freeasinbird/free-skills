@@ -7,7 +7,8 @@
 # the sweep and fail against them: one that trusts git's own refusal (status
 # without --ignored and no flag read; `git worktree remove` without --force
 # deletes ignored and index-flagged files), one without the primary or the
-# self rule, one that treats every ancestor branch as landed, and one copy
+# self rule, one that treats every ancestor branch as landed, one whose
+# --remove-landed skips the landing-merge test, and one copy
 # per guard the refute-first review added (nested worktree, submodule,
 # nested repository, unreferenced detached HEAD, base branch, redirected
 # worktree, inherited GIT_DIR). The newline case discriminates by
@@ -487,6 +488,56 @@ want_out 'WORKTREE unmerged {"path":"'"$WT"'"'
 want_removed "$NL"
 want_kept "$WT"
 
+# --- the end-of-batch sweep (--remove-landed) ---------------------------------
+
+scenario "--remove-landed removes a landed clean branch"
+land feat
+run --remove-landed
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_out '"mode":"remove-landed"'
+want_out '"removed":1,"kept":0'
+want_removed "$WT"
+
+scenario "--remove-landed keeps a fast-forwarded clean branch"
+G "$REPO" merge --ff-only feat
+sync_origin
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$WT"'"'
+want_out '"merge":"none found"'
+want_out 'clean, but no landing merge was found'
+want_out '"mode":"remove-landed"'
+want_kept "$WT"   # discriminating: a sweep that skips the landing-merge test removes it
+
+scenario "--remove-landed keeps a clean branch cut from the base tip"
+# A session that has created its worktree but not yet edited a file.
+G "$REPO" worktree add -b fresh "$SCEN/fresh"
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$SCEN/fresh"'"'
+want_out 'a session may be starting work in it'
+want_kept "$SCEN/fresh"   # discriminating: a sweep that skips the landing-merge test removes it
+
+scenario "--remove-landed keeps a landed dirty branch"
+land feat
+printf 'scratch\n' > "$WT/scratch.txt"
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"untracked":["scratch.txt"]'
+want_out 'dirty; --remove-landed removes only clean worktrees'
+want_kept "$WT"
+
+scenario "--remove-landed keeps a clean detached land-wt worktree"
+# A lander that starts after the batch's release works in one of these.
+G "$REPO" worktree add --detach "$SCEN/land-wt.Ab12Cd/wt" main
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$SCEN/land-wt.Ab12Cd/wt"'","branch":"detached"'
+want_out "left for the owner's sweep"
+want_kept "$SCEN/land-wt.Ab12Cd/wt"   # discriminating: a sweep that skips the landing-merge test removes it
+
 # --- refusals ------------------------------------------------------------------
 
 scenario "a removal git refuses stops the run and attempts nothing after it"
@@ -521,6 +572,19 @@ want_rc 64
 want_out 'Usage:'
 want_kept "$WT"
 
+scenario "--remove-landed with --remove or --remove-dirty is a usage error"
+land feat
+run --remove-landed --remove
+want_rc 64
+want_out 'Usage:'
+run --remove --remove-landed
+want_rc 64
+run --remove-landed --remove-dirty
+want_rc 64
+run --remove --remove-dirty --remove-landed
+want_rc 64
+want_kept "$WT"
+
 scenario "an unknown argument or a missing --base value is a usage error"
 run --force
 want_rc 64
@@ -533,6 +597,7 @@ scenario "--help prints the contract"
 run --help
 want_rc 0
 want_out '--remove-dirty'
+want_out '--remove-landed'
 
 echo "merge-cleanup sweep matrix: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

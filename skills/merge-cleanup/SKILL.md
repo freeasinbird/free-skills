@@ -416,10 +416,12 @@ user should see each tracker by name.
 
 ## Sweep Worktrees for Merged Branches
 
-Run the sweep only when the owner asks for it in this session, such as "sweep
-the worktrees" or "remove the worktrees for merged branches". A merge-cleanup
-request or a landing batch never authorizes it. Removing a worktree deletes
-files: `git worktree remove` without `--force` still deletes ignored ones.
+Run a manual sweep only when the owner asks for it in this session, such as
+"sweep the worktrees" or "remove the worktrees for merged branches". A landing
+batch runs the sweep with `--remove-landed`, and nothing else, at its end; the
+land-approved-prs skill says when. A merge-cleanup request alone never
+authorizes a sweep. Removing a worktree deletes files: `git worktree remove`
+without `--force` still deletes ignored ones.
 
 Fetch the base's remote first, with `git fetch --prune <remote>`: `origin`
 by default, or the remote in the ref `--base` names. The sweep never fetches,
@@ -436,6 +438,10 @@ run; approval of an earlier run doesn't carry over:
 - `--remove` removes the clean candidates.
 - `--remove --remove-dirty` also removes the dirty candidates, deleting the
   files their lines list. `--remove-dirty` alone is a usage error.
+- `--remove-landed` removes only the clean branch candidates whose landing
+  merge the sweep found. It keeps dirty candidates, branches with no landing
+  merge, and detached `land-wt` worktrees, each with its reason. A landing
+  batch uses it. With `--remove` or `--remove-dirty`, it's a usage error.
 - `--base '<ref>'` names the branch merged branches land on, when
   `refs/remotes/origin/HEAD` doesn't, such as a remote not called `origin`.
 - `--help` or `-h` prints the full contract.
@@ -445,10 +451,21 @@ run; approval of an earlier run doesn't carry over:
 <skill-dir>/worktree-sweep.sh --remove --remove-dirty
 ```
 
+A landing batch, after it releases its lock, runs:
+
+```sh
+<skill-dir>/worktree-sweep.sh --remove-landed
+```
+
+It requires the landing merge because a branch cut from the base tip, with no
+commits yet, also passes the ancestry test; a session may be starting work in
+it. It leaves detached `land-wt` worktrees because a lander that starts after
+the release may be using one.
+
 A candidate is a linked worktree on a branch merged into the base, or a
 detached worktree that a dead `land` run left at its exact
 `land-wt.XXXXXX/wt` template (six letters or digits).
-Don't run a removal while a landing batch is running: the batch's live
+Don't run a manual removal while a landing batch is running: the batch's live
 temporary worktree is a candidate too.
 
 Each registered worktree gets one `WORKTREE <disposition> <json>` line:
