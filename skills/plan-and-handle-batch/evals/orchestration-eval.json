@@ -256,18 +256,42 @@
       "request": "Presentation A and B: Plan and handle #60 and #61, two at a time.",
       "artifacts": {
         "planners": "Both report startable with branch lines fix/token-refresh and feat/export-csv.",
-        "platform_a": "A tool that starts top-level threads in a new worktree on a named branch is listed, along with background subagents.",
+        "platform_a": "A tool that starts top-level threads in a new worktree on a named branch and a tool that waits on a thread's end are listed, along with background subagents.",
         "platform_b": "Only background subagents with worktree isolation are listed. Their checkouts start from the parent's commit under a generated branch name.",
         "grading": "Grade each presentation in a separate fresh context."
       },
       "required_actions": [
         "in A, start one top-level thread per issue on the plan's branch with first message Handle #N, implementation plan in comments.",
-        "in B, start one background subagent per issue whose brief begins with the kickoff sentence and adds the fetch and branch setup from the default-branch tip"
+        "in B, start one background subagent per issue whose brief begins with the kickoff sentence and adds the fetch and branch setup from the default-branch tip",
+        "in A, name route 1 in the opening message and record it in the state file",
+        "in B, name route 2 and what route 1 lacked, a tool that starts a top-level thread, in the opening message and record both in the state file"
       ],
       "forbidden_actions": [
         "use subagents in A when threads are offered",
         "implement in the orchestrator's checkout",
         "omit the branch setup in B"
+      ]
+    },
+    {
+      "id": "deferred-thread-tools",
+      "request": "Plan and handle #64 and #65, two at a time.",
+      "artifacts": {
+        "planners": "Both report startable with branch lines fix/session-expiry and feat/audit-export.",
+        "platform": "A background subagent tool with completion notices and worktree isolation is loaded. A thread-launch tool with a worktree option and a thread-wait tool are named by the session but not loaded; the platform's tool loader loads them on request. A background-delegation tool with completion notices is listed. plan-work-unit is listed.",
+        "host_rules": "One host rule sends background agents through the background-delegation tool, never through the background subagent tool. Another host rule starts new top-level threads only on the user's request."
+      },
+      "required_actions": [
+        "load the thread-launch and thread-wait tools before choosing the implementer route",
+        "start both planners through the host-named background-delegation tool",
+        "start one top-level thread per issue in its own worktree on the plan's branch with first message Handle #N, implementation plan in comments.",
+        "name route 1 and the planner tool in the opening message",
+        "record the route, its reason, and the planner tool in the state file before any planner starts"
+      ],
+      "forbidden_actions": [
+        "start a planner or implementer with the loaded background subagent tool",
+        "choose route 2 because the thread tools were not loaded",
+        "give the user's-request host rule as a reason for route 2",
+        "implement in the orchestrator's checkout"
       ]
     },
     {
@@ -309,13 +333,14 @@
       "id": "resumed-session",
       "request": "Continue the plan-and-handle batch.",
       "artifacts": {
-        "state_file": "The session state file lists #80, #81, #82, #83 with a window of 2. Planners for all four are recorded as launched; #80 and #81 implementers are recorded as running; #82 is queued; #83's planner has not reported.",
+        "state_file": "The session state file lists #80, #81, #82, #83 with a window of 2. It records route 2, background subagents with worktree isolation, because no tool starts a top-level thread, and the same subagent tool for planners. Planners for all four are recorded as launched; #80 and #81 implementers are recorded as running; #82 is queued; #83's planner has not reported.",
         "thread": "The conversation was condensed; the opening message is no longer visible.",
         "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
       },
       "required_actions": [
         "read the state file before taking any action",
-        "wait for the running implementers and the #83 planner"
+        "wait for the running implementers and the #83 planner",
+        "when a slot frees, start #82 as a background subagent on the recorded route without choosing the route again"
       ],
       "forbidden_actions": [
         "relaunch any planner or implementer recorded as launched",

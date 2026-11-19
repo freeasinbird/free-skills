@@ -31,30 +31,35 @@ changes in your own checkout.
 Follow this procedure:
 
 1. Check the requirements.
-2. Read the request into an ordered issue list and a window.
-3. Write the state file, then send the opening message.
-4. Plan every issue.
-5. Dispatch startable plans in a rolling window.
-6. Report one table.
+2. Choose the planner tool and the implementer route.
+3. Read the request into an ordered issue list and a window.
+4. Write the state file, then send the opening message.
+5. Plan every issue.
+6. Dispatch startable plans in a rolling window.
+7. Report one table.
 
 ## Requirements
 
 Check three requirements before anything launches. Decide each from what the
 session lists and what is installed, never from guesswork about the platform.
+The examples show what meets a requirement; they don't choose a route (see
+Choose the Routes).
 
 1. **Background delegation with a wake.** The session can start subagents or
    threads that run in the background, and it learns when each one ends. A
    completion notice or a blocking wait on a delegate counts as the wake. A
    sleep loop or a status poll doesn't. Examples: Claude Code's `Agent` run in
-   the background with task notifications, or Codex `spawn_agent` with
-   `wait_agent`.
+   the background with task notifications, Codex `spawn_agent` with
+   `wait_agent`, T3 Code `delegate_task`, or a new top-level thread waited on
+   with T3 Code `t3_thread_launch` and `t3_thread_wait`.
 2. **`plan-work-unit` for the planners.** The skill is listed in this session,
    or installed beside this one as `../plan-work-unit/SKILL.md`.
 3. **An isolated checkout per implementer.** The platform can start each
    implementer in its own worktree or checkout, or each implementer has a
    shell and Git to create its own worktree. Examples: a new top-level thread
-   with a worktree workspace (T3 Code `t3_thread_launch`), or a subagent with
-   worktree isolation (Claude Code `isolation: "worktree"`).
+   with a worktree workspace (T3 Code `t3_thread_launch` with
+   `workspaceStrategy`), or a subagent with worktree isolation (Claude Code
+   `isolation: "worktree"`).
 
 Decide each requirement this way:
 
@@ -64,6 +69,15 @@ Decide each requirement this way:
   explicit requests doesn't fail a requirement.
 - **Unfamiliar isn't missing.** Never fail a requirement because a tool name
   is unfamiliar.
+- **Named but unloaded counts as listed.** Some sessions name a tool but load
+  its definition only on demand.
+  - Before you decide a requirement or the route, load each such tool that
+    could start a thread, wait on one, or delegate in the background. Load it
+    through the platform's tool loader, even when a loaded tool already meets
+    the requirement. Where every listed tool is loaded, there is nothing to
+    load.
+  - A tool that fails to load isn't offered, and the failure is the reason.
+  - Never choose a tool because it's already loaded.
 
 On a miss, launch nothing and stop with this error, naming each missing part:
 
@@ -82,7 +96,9 @@ each issue in the batch, and of nothing else. For a tracker, the batch is the
 set its rules resolve (see A Tracker). It authorizes launching the planners
 and implementers this file describes, without per-launch confirmation. Where a
 host starts new top-level threads only on the user's request, this invocation
-is that request. If the host still refuses, take the subagent route.
+is that request. If the host still refuses, take the subagent route for that
+launch and the rest. Update the route in the state file with the refusal as
+its reason, and tell the owner in one line.
 
 The assignment doesn't cover choosing, adding, or dropping issues beyond the
 rules under Read the Request, merging or landing, restarting an implementer
@@ -91,6 +107,34 @@ run that ended, or work in another repository.
 Don't route around an approval prompt the platform shows. If a launch is
 refused or fails, record the issue as not dispatched with the error, free its
 slot, and continue with the rest.
+
+## Choose the Routes
+
+Before you read the request, choose how planners and implementers start.
+Decide from every tool the session lists, loaded or not (see Requirements).
+
+- **The planner tool.** Check whether the host's rules name a tool for
+  background delegation. Where they name one, start planners and route 2
+  implementers through it. Example: T3 Code sends background agents through
+  `delegate_task`, never a background `Agent`. Where the rules name none, use
+  any tool that meets requirement 1.
+- **The implementer route.** Route 1, a new top-level thread, is available
+  when the session lists all three of these:
+  - A tool that starts a new top-level thread.
+  - A worktree of its own for that thread.
+  - A wake on the thread's end, from a completion notice or a blocking wait.
+
+  Example: T3 Code `t3_thread_launch` with `workspaceStrategy`, waited on with
+  `t3_thread_wait`. Take route 2, a background subagent, only when one of the
+  three is missing, and name the missing one as the reason.
+
+- **Not a reason for route 2.** A host rule that starts top-level threads only
+  on the user's request doesn't rule out route 1. This invocation is that
+  request (see Authorization). A host-named delegation tool doesn't rule it
+  out either; it governs background delegates, not top-level threads.
+- **Record both.** Write the route, the tool that starts implementers, the
+  route's reason, and the planner tool to the state file. Name them in the
+  opening message.
 
 ## Read the Request
 
@@ -196,13 +240,23 @@ message and start without waiting for a reply:
 Plan and handle batch: #3268, #3171, #3166 (3 issues, in dispatch order).
 Window: 3 implementations at a time (default; tell me a number to change it).
 Model: session model for planners and implementers.
+Planners: background delegates through <planner tool>.
+Implementers: new top-level threads with worktrees (route 1).
 State: <state file path>
 Starting 3 planners now.
 ```
 
+On route 2, the implementer line names what route 1 lacked:
+
+```text
+Implementers: background subagents through <tool> (route 2: no tool waits
+on a thread's end).
+```
+
 List the issue numbers in dispatch order, even when the request already gave
 them, so the owner can stop a wrong set at once. Mark a default as a default.
-This holds for a set named earlier, once it resolves to one list.
+This holds for a set named earlier, once it resolves to one list. The route
+lines let the owner stop a wrong route before any implementer runs.
 
 When the check leaves issues out, add a line for them, each with its reason.
 For a tracker, also name it in the first line:
@@ -215,11 +269,12 @@ Left out: #899 (open PR #930), #905 (held: Blocker line in Dependencies).
 
 ## Plan Every Issue
 
-Start one background planner per issue, all at once. Planners don't count
-against the window. If the platform caps how many delegates run at once, start
-the rest as earlier planners finish. Brief each planner with this text. Fill in
-`N`, the project's branch-naming rule, and the owner's request. Write a set
-named earlier, or a tracker's resolved units, out as its issue numbers:
+Start one background planner per issue, all at once, through the planner tool
+you recorded. Planners don't count against the window. If the platform caps
+how many delegates run at once, start the rest as earlier planners finish.
+Brief each planner with this text. Fill in `N`, the project's branch-naming
+rule, and the owner's request. Write a set named earlier, or a tracker's
+resolved units, out as its issue numbers:
 
 ```text
 Plan #N
@@ -279,14 +334,15 @@ planning.
 Each implementer works in its own checkout on the plan's branch. That branch
 starts from the freshly fetched default-branch tip. A unit whose Dependencies
 field stacks it on a PR that is still open starts from that PR's branch
-instead. Use the first route the platform offers:
+instead. Use the route you recorded under Choose the Routes:
 
 1. **A new top-level thread** with its own worktree on the plan's branch, when
    you can also wait on that thread's end. Send the kickoff sentence alone,
    unless the checkout needs the branch setup. A stacked unit needs it when
    the thread's worktree starts from the default branch.
-2. **A background subagent,** with worktree isolation where the platform
-   offers it. Send the kickoff sentence and the brief below.
+2. **A background subagent,** through the planner tool where the host names
+   one, with worktree isolation where the platform offers it. Send the
+   kickoff sentence and the brief below.
 
 Some platforms start a delegate's checkout from your commit or pick its branch
 name. There, the brief's branch setup is required, or the PR starts from a
@@ -384,6 +440,9 @@ Record for the batch:
 
 - The repository, the ordered issue list, the window, and model choices.
 - The issues left out, with their reasons, and for a tracker its number.
+- The implementer route, the tool that starts implementers, the route's
+  reason, and the planner tool. On route 2, the reason names what route 1
+  lacked.
 
 Record for each issue:
 
@@ -402,6 +461,9 @@ Then follow these rules:
   the owner's answer to its question.
 - **The recorded set stands.** Never resolve a tracker again. A unit that
   became startable since then waits for a later batch.
+- **The recorded route stands.** Launch the remaining implementers on the
+  recorded route, and start any planner through the recorded tool. Don't
+  choose either again.
 - **Unknown stays unknown.** If the platform can't tell you whether a
   recorded run is still going, report it as unknown rather than starting
   another.
