@@ -106,6 +106,7 @@ Then write AGENTS.md once, in the conventional section order (see below):
   list, any accepted forge record, any accepted post-merge obligations
   record, any accepted claim record that belongs in AGENTS.md, and any
   justified coordination or work-unit stage record, in an unmanaged section.
+- Any accepted worktree disposables pointer, in the same unmanaged section.
 
 Verify that write before moving on. Init pastes the managed blocks by hand,
 and every comparison update mode makes depends on their byte-exactness.
@@ -139,6 +140,10 @@ Init step 6 creates these scaffolding files:
   §tracker-format, only when the project uses tracker issues (the one shape
   for wave, feature, and backlog trackers; the project's coordination text
   and post-merge obligations cite it)
+- `.worktree-disposables`: the entries the owner accepted in init step 4,
+  only when they accepted a file (`references/project-sections.md`
+  §worktree-disposables). It has no template, so never rewrite an existing
+  one; report it as update mode does.
 
 For any that already exist, don't recreate them. Compare against the template
 and, on drift, show the diff and offer to refresh; never overwrite silently.

@@ -2,7 +2,8 @@
 
 Use this reference while gathering the project-specific AGENTS.md content
 during init or adoption, and in update mode when checking an existing
-coordination, work-unit stage, post-merge obligations, or claim record.
+coordination, work-unit stage, post-merge obligations, or claim record, or a
+worktree disposables file.
 
 ## §section-order
 
@@ -358,7 +359,67 @@ In update mode:
   template. `docs/tracker-format.md` is evidence of tracker issues, not
   proof of concurrent dispatch, so the gate's serial rule still applies.
   Write nothing without acceptance.
-- **Protect its location.** Step 5 resolves a record found inside a managed
+
+## §worktree-disposables
+
+The merge-cleanup sweep, and a landing batch's `--remove-landed`, remove a
+merged branch's worktree only when removal deletes nothing anyone may want.
+An ignored `.DS_Store` never holds a worktree; every other ignored file
+does. On a project with a build, ignored build output can hold every
+worktree. A committed `.worktree-disposables` file at the repository root
+names the ignored paths that removal may delete.
+
+Offer the file only when a build tool in use creates ignored output. There
+is no default entry: with no such output, offer nothing. Suggest entries from
+evidence, and show each with its source:
+
+- **Ignored build output only.** Suggest a directory that `.gitignore`
+  ignores and a build tool in use creates, such as SwiftPM's `.build/`,
+  Xcode's `DerivedData/`, Python's `__pycache__/`, or Cargo's `target/`. Name the tool's evidence, such as `Package.swift` or
+  `Cargo.toml`, and the `.gitignore` line.
+- **Nothing people edit.** Never suggest a path where people keep notes,
+  secrets, scratch, or local settings, such as `.env`, `.vscode/`, `notes/`,
+  or `tmp/`. A tool's directory can mix both: SwiftPM's `.swiftpm/` holds
+  package configuration such as mirrors, so never suggest it. Warn the owner that removal deletes everything under an entry.
+- **Ignored paths only.** An entry counts only where the part it names is
+  itself ignored, so declaring `notes/` doesn't cover `notes/private/`
+  while only the latter is ignored. An untracked path is never disposable.
+
+Use this form, one literal entry per line:
+
+```text
+# SwiftPM build output
+.build/
+```
+
+Blank lines and lines that start with `#` are skipped. A name with no
+interior `/`, such as `__pycache__/`, matches at any depth. A path with one,
+such as `app/.build/`, is anchored at the worktree root. A trailing `/` means
+directories only. Save the file with LF line endings. The sweep stops with
+`STOP bad-record` rather than guess: it refuses globs, a leading `/` or `!`,
+`.` and `..` components, any `.git` component, surrounding whitespace, a
+carriage return, a NUL byte, and a file that isn't a regular file. Its
+`--help` (`skills/merge-cleanup/worktree-sweep.sh` in the merge-cleanup
+skill) gives the full grammar.
+
+Show the exact file before writing it. With the accepted file, add this
+one-line pointer as an unmanaged bullet beside the forge and landing records,
+never inside a managed block, so a reader of AGENTS.md finds the file:
+
+```markdown
+- **Worktree disposables:** see `.worktree-disposables`.
+```
+
+In update mode:
+
+- **Offer a missing file.** When the project has no `.worktree-disposables`
+  and a build tool in use creates ignored output, step 9 offers one with the
+  suggestions above. Write nothing without acceptance.
+- **Audit an existing file.** Report an entry the sweep's grammar refuses,
+  or a missing pointer. A dry run of the sweep reports a bad file as
+  `STOP bad-record`. Report it; never rewrite the file. Step 7 lets the owner
+  request a change.
+- **Protect the pointer.** Step 5 moves a pointer found inside a managed
   block before any refresh, as it does the forge and landing records.
 
 ## §stages
