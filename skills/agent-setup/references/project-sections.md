@@ -321,6 +321,10 @@ Settle these choices with the owner before showing the final text:
 - **Label name.** Ask the owner whether the repository already uses an
   `in-progress` label for something else, such as a board status. If it
   does, agree on a dedicated claim label and use it in the record.
+- **Open comments.** Tell the owner that on a public repository anyone can
+  post the marker comment and block an issue until it expires. The blocked
+  agent reports the claim, and the owner deletes the comment. Accepting the
+  template accepts that risk.
 
 The template covers implementation claims only. It reserves nothing while an
 issue is being planned, so add no planning rule unless the owner asks for
