@@ -909,7 +909,10 @@ git_pinned_url() { # git_pinned_url <ssh-command> <literal-url> <git args with @
   [ "$seen" -eq 1 ] || lookup_failed url-pin "pinned Git command did not contain exactly one URL placeholder"
   next=$((count + 1))
   [ -z "$ssh_command" ] || env_args+=("GIT_SSH_COMMAND=$ssh_command")
-  env "${env_args[@]}" "GIT_CONFIG_COUNT=$((count + 2))" \
+  # Bash before 4.4 treats an empty "${env_args[@]}" as unbound under set -u
+  # and exits. The empty-ssh_command callers (safe_prune, the base-resync
+  # fetch) discard stderr, so that crash would leave no output at all.
+  env ${env_args[@]+"${env_args[@]}"} "GIT_CONFIG_COUNT=$((count + 2))" \
     "GIT_CONFIG_KEY_${count}=url.$target.insteadOf" \
     "GIT_CONFIG_VALUE_${count}=$pin" \
     "GIT_CONFIG_KEY_${next}=url.$target.pushInsteadOf" \
