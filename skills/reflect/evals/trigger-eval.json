@@ -1,0 +1,66 @@
+[
+  {
+    "query": "reflect",
+    "should_trigger": true
+  },
+  {
+    "query": "What did we learn from this session?",
+    "should_trigger": true
+  },
+  {
+    "query": "Let's reflect on that run before we close out",
+    "should_trigger": true
+  },
+  {
+    "query": "I corrected you three times in this session. What should change so the next agent doesn't repeat it?",
+    "should_trigger": true
+  },
+  {
+    "query": "Look back over this thread and turn the mistakes into lasting fixes",
+    "should_trigger": true
+  },
+  {
+    "query": "Reflect on yesterday's merge-cleanup thread and propose fixes for what went wrong",
+    "should_trigger": true
+  },
+  {
+    "query": "Before we wrap up: any lessons from this session worth encoding in a skill or a check?",
+    "should_trigger": true
+  },
+  {
+    "query": "That took four tries to get lint passing. Mine this session for what the project setup should have told you up front.",
+    "should_trigger": true
+  },
+  {
+    "query": "Summarize this session for me",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a recap of what we did today so I can paste it into Slack",
+    "should_trigger": false
+  },
+  {
+    "query": "Add a devlog note recording the decision we made about the default window",
+    "should_trigger": false
+  },
+  {
+    "query": "Audit our AGENTS.md and tell me how well it actually works",
+    "should_trigger": false
+  },
+  {
+    "query": "Rewrite this PR description so it's easier to read",
+    "should_trigger": false
+  },
+  {
+    "query": "Plan #412",
+    "should_trigger": false
+  },
+  {
+    "query": "Review PR #390 for correctness bugs",
+    "should_trigger": false
+  },
+  {
+    "query": "PR #388 merged, please clean up",
+    "should_trigger": false
+  }
+]
