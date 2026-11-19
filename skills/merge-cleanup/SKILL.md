@@ -43,17 +43,7 @@ unusable bundle, and report an unknown host or failed authentication as a
 lookup gap. Never substitute another forge CLI or rebuild the destructive
 sequence from prose.
 
-Then follow this procedure:
-
-1. Resolve the work unit: the repository, PR number, worktree, and remote
-   roles.
-2. Run the guarded cleanup script.
-3. Interpret the result ledger.
-4. Verify issue closure.
-5. List the obligations found.
-6. Reconcile project obligations.
-7. Stop the review watch.
-8. Summarize for the owner, one line per obligation.
+Then follow the sections in order through Summarize.
 
 ## Resolve the Work Unit
 
