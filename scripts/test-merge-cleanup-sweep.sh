@@ -540,6 +540,78 @@ want_kept "$SCEN/land-wt.Ab12Cd/wt"   # discriminating: a sweep that skips the l
 
 # --- refusals ------------------------------------------------------------------
 
+# --- merge-cleanup's head removal (--remove-head) ----------------------------
+
+scenario "--remove-head removes the clean worktree at the head, with no base test"
+# feat is not merged into origin/main: the caller vouches for the oid.
+TIP=$(git -C "$REPO" rev-parse feat)
+G "$REPO" worktree add -b other "$SCEN/other"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_out '"mode":"remove-head"'
+want_out '"removed":1,"kept":0'
+case "$OUT" in *"$SCEN/other"* | *"WORKTREE primary"*) bad "printed a worktree on another branch" ;; *) ok ;; esac
+want_removed "$WT"
+want_kept "$SCEN/other"
+
+scenario "--remove-head keeps a dirty head worktree"
+TIP=$(git -C "$REPO" rev-parse feat)
+printf 'secret\n' > "$WT/.env"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":[".env"]'
+want_out 'not clean; --remove-head removes only a clean worktree'
+want_kept "$WT"
+
+scenario "--remove-head keeps a branch that moved past the head"
+TIP=$(git -C "$REPO" rev-parse feat)
+printf 'g\n' > "$WT/g.txt"
+G "$WT" add .
+G "$WT" commit -m "after the merge"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out 'WORKTREE moved {"path":"'"$WT"'"'
+want_out "not the merged head $TIP"
+want_kept "$WT"
+
+scenario "--remove-head keeps the worktree that holds the caller's directory"
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir "$WT/sub"
+run --remove-head feat --head-oid "$TIP" --caller-dir "$WT/sub"
+want_rc 0
+want_out 'WORKTREE self {"path":"'"$WT"'"'
+want_out "the caller's directory $WT/sub is inside it"
+want_kept "$WT"
+
+scenario "--caller-dir protects a worktree in the owner's sweep too"
+land feat
+run --remove --caller-dir "$WT"
+want_rc 0
+want_out 'WORKTREE self {"path":"'"$WT"'"'
+want_kept "$WT"
+
+scenario "--remove-head usage errors"
+TIP=$(git -C "$REPO" rev-parse feat)
+run --remove-head feat
+want_rc 64
+run --head-oid "$TIP"
+want_rc 64
+run --remove-head feat --head-oid "$TIP" --base origin/main
+want_rc 64
+run --remove-head feat --head-oid "$TIP" --remove
+want_rc 64
+run --remove-head feat --head-oid "$TIP" --remove-landed
+want_rc 64
+run --remove-head feat --head-oid "${TIP:0:12}"
+want_rc 64
+run --remove-head feat --head-oid "$(printf '%s' "$TIP" | tr a-f A-F)"
+want_rc 64
+run --remove-head feat --head-oid "$TIP" --caller-dir "$SCEN/missing"
+want_rc 4
+want_kept "$WT"
+
 scenario "a removal git refuses stops the run and attempts nothing after it"
 land feat
 # `git worktree list` sorts linked worktrees by path, so zlater comes after wt.
@@ -598,6 +670,7 @@ run --help
 want_rc 0
 want_out '--remove-dirty'
 want_out '--remove-landed'
+want_out '--remove-head'
 
 echo "merge-cleanup sweep matrix: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

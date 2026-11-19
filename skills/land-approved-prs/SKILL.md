@@ -535,8 +535,9 @@ Summarize. Run it from the same checkout and pass:
 - `--pr` as the merged PR's number.
 - `--checkout` as the checkout's absolute root.
 
-Never remove a worktree during a batch. If merge-cleanup stops
-`head-worktree-present`, record the path. Then do the parts it skipped that
+Merge-cleanup removes the PR's head worktree itself when it's clean. Never
+remove a worktree any other way during a batch. If merge-cleanup stops
+`head-worktree-present`, it kept that worktree; record the path. Then do the parts it skipped that
 don't touch the worktree: fast-forward the checkout's default branch from the
 remote, and confirm the issues the PR closes actually closed. Leave the local
 branch; "The End-of-Batch Sweep" may free it.
@@ -602,12 +603,10 @@ merge-cleanup retargets them itself before its own delete. The next
 children in the batch report as unblocked by the parent.
 
 When the repository doesn't auto-delete merged branches and merge-cleanup
-stops `head-worktree-present`, nothing deletes or retargets yet. The children
-stay based on the merged branch, and filter 2 keeps excluding them. When that
-worktree is clean, the end-of-batch sweep removes it and its merge-cleanup
-rerun retargets them, so the next batch can admit them. When the sweep keeps
-it, name them in the batch report as waiting on the owner's removal of that
-worktree; the cleanup run after it retargets them.
+stops `head-worktree-present` because it kept the parent's worktree, nothing
+deletes or retargets yet. The children stay based on the merged branch, and
+filter 2 keeps excluding them. Name them in the batch report as waiting on the
+owner's removal of that worktree; the cleanup run after it retargets them.
 
 A child's turn after a rebased parent starts from the parent's pre-rebase
 commits. Its own `land` rebase drops the ones that match what merged, and the

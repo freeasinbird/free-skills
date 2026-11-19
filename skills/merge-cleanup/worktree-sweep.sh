@@ -4,10 +4,12 @@
 # what the owner authorized for this run. Removal is destructive, so the
 # default is a dry run and every removal is rechecked just before it happens.
 # The owner runs it; a landing batch runs only --remove-landed, at its end,
-# and merge-cleanup never runs it.
+# and merge-cleanup runs only --remove-head, for the PR it cleans up.
 #
 # Usage:
 #   worktree-sweep.sh [--base <ref>] [--remove [--remove-dirty] | --remove-landed]
+#     [--caller-dir <dir>]
+#   worktree-sweep.sh --remove-head <branch> --head-oid <oid> [--caller-dir <dir>]
 #   worktree-sweep.sh --help
 #
 #   --base <ref>     the ref a branch must be merged into. Default: the
@@ -23,6 +25,21 @@
 #                    session just started in), and every detached land-wt
 #                    worktree (a lander may be using it). With --remove or
 #                    --remove-dirty, a usage error.
+#   --remove-head <branch>
+#                    remove only the worktree on refs/heads/<branch>, and only
+#                    when it is clean and the branch is at --head-oid. The
+#                    caller vouches that <oid> is a merged PR's head, so no
+#                    base or ancestry test applies; merge-cleanup passes the
+#                    head it verified on the forge. Prints lines only for
+#                    worktrees on that branch. With --base, --remove,
+#                    --remove-dirty, or --remove-landed, a usage error.
+#   --head-oid <oid> the full object name the branch must be at. Required by
+#                    --remove-head, and a usage error without it.
+#   --caller-dir <dir>
+#                    a directory the caller stands in, such as a shell's
+#                    working directory, that this run's own directory may not
+#                    be. The worktree holding it is reported self, like the
+#                    one this runs in.
 #
 # A candidate is a linked worktree on a branch whose tip is an ancestor of the
 # base, or a detached worktree at land's <tmp>/land-wt.XXXXXX/wt template.
@@ -31,7 +48,9 @@
 # registered worktree, a submodule repository, populated or not, or a nested
 # repository (removal deletes them too), one on the base branch, an unmerged
 # branch, or a branch that no longer resolves, one git resolves to another
-# working tree, and any other detached worktree.
+# working tree, and any other detached worktree. Under --remove-head, a
+# worktree on the named branch at another commit is reported moved instead,
+# and a worktree on any other branch is not a candidate and not printed.
 #
 # A candidate is clean when worktree-inventory.sh reports OK inventory and no
 # operation is paused in it and, for a detached one, a ref holds its HEAD;
@@ -46,8 +65,9 @@
 # where <disposition> is removed, clean, dirty (a candidate left in place), or
 # the reason it is not a candidate: primary, self, prunable, locked,
 # holds-worktree, holds-submodule, holds-repository, base-branch, unmerged,
-# unresolved-branch, unreadable, redirected, or detached-other. A candidate's
-# line carries merge (the landing merge's oid and subject, or "none found"),
+# unresolved-branch, unreadable, redirected, detached-other, or, under
+# --remove-head, moved, or other-branch when a recheck finds it switched.
+# A candidate's line carries merge (the landing merge's oid and subject, or "none found"),
 # state, operation, unreferenced_head (a detached HEAD no ref holds, or null),
 # and the untracked, modified, ignored, and flagged paths removal would delete.
 #
@@ -81,8 +101,20 @@ case "${1:-}" in
 esac
 
 BASE_OPT="" REMOVE=false REMOVE_DIRTY=false REMOVE_LANDED=false
+HEAD_BRANCH="" HEAD_OID_OPT="" CALLER_OPT=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --remove-head | --head-oid | --caller-dir)
+      [ $# -ge 2 ] || { echo "worktree-sweep.sh: $1 requires a value" >&2; usage; }
+      case "$2" in
+        '' | -*) echo "worktree-sweep.sh: $1 needs a value, not '$2'" >&2; usage ;;
+      esac
+      case "$1" in
+        --remove-head) HEAD_BRANCH="$2" ;;
+        --head-oid) HEAD_OID_OPT="$2" ;;
+        --caller-dir) CALLER_OPT="$2" ;;
+      esac
+      shift 2 ;;
     --base)
       [ $# -ge 2 ] || { echo "worktree-sweep.sh: --base requires a value" >&2; usage; }
       case "$2" in
@@ -105,6 +137,25 @@ fi
 # separate, deliberate word on the command line.
 if [ "$REMOVE_DIRTY" = true ] && [ "$REMOVE" != true ]; then
   echo "worktree-sweep.sh: --remove-dirty only widens --remove; pass both" >&2
+  usage
+fi
+# --remove-head judges one branch against the oid its caller verified, so a
+# base or a broader rule has no meaning beside it.
+if [ -n "$HEAD_BRANCH" ]; then
+  if [ -n "$BASE_OPT" ] || [ "$REMOVE" = true ] || [ "$REMOVE_LANDED" = true ]; then
+    echo "worktree-sweep.sh: --remove-head stands alone; drop --base, --remove, --remove-dirty, and --remove-landed" >&2
+    usage
+  fi
+  case "$HEAD_OID_OPT" in
+    '') echo "worktree-sweep.sh: --remove-head requires --head-oid" >&2; usage ;;
+    *[!0-9a-f]*) echo "worktree-sweep.sh: --head-oid must be a full lowercase hex object name" >&2; usage ;;
+  esac
+  case "${#HEAD_OID_OPT}" in
+    40 | 64) ;;
+    *) echo "worktree-sweep.sh: --head-oid must be a full lowercase hex object name" >&2; usage ;;
+  esac
+elif [ -n "$HEAD_OID_OPT" ]; then
+  echo "worktree-sweep.sh: --head-oid only qualifies --remove-head" >&2
   usage
 fi
 
@@ -176,6 +227,10 @@ out_exact() { # out_exact <var> <cmd...>: capture stdout byte-exactly
   printf -v "$__v" '%s' "${__o%$'\n'}"
 }
 
+physical_dir() { # physical_dir <dir>: its symlink-free path; run under out_exact
+  cd -P -- "$1" && pwd -P
+}
+
 N_WORKTREES=0 N_CANDIDATES=0 N_CLEAN=0 N_DIRTY=0 N_REMOVED=0 N_KEPT=0
 BASE_NAME="" BASE_OID=""
 
@@ -197,26 +252,33 @@ MODE=dry-run
 [ "$REMOVE" != true ] || MODE=remove
 [ "$REMOVE_DIRTY" != true ] || MODE=remove-dirty
 [ "$REMOVE_LANDED" != true ] || MODE=remove-landed
+[ -z "$HEAD_BRANCH" ] || MODE=remove-head
 
 git rev-parse --git-dir >/dev/null 2>&1 \
   || lookup_failed repository "not inside a git repository"
 
 # Pin the base once, so every worktree in the run is judged against the same
-# commit even if a fetch lands mid-run.
-if [ -n "$BASE_OPT" ]; then
+# commit even if a fetch lands mid-run. --remove-head needs none.
+if [ "$MODE" = remove-head ]; then
+  :
+elif [ -n "$BASE_OPT" ]; then
   BASE_NAME="$BASE_OPT"
 else
   out_exact BASE_NAME git symbolic-ref -q refs/remotes/origin/HEAD \
     || stop no-base "refs/remotes/origin/HEAD is not set; pass --base <ref> to name the branch that merged branches land on"
 fi
-BASE_OID=$(git rev-parse --verify --quiet "$BASE_NAME^{commit}" 2>/dev/null) \
-  || stop no-base "$BASE_NAME does not resolve to a commit; fetch, or pass --base <ref>"
+if [ "$MODE" != remove-head ]; then
+  BASE_OID=$(git rev-parse --verify --quiet "$BASE_NAME^{commit}" 2>/dev/null) \
+    || stop no-base "$BASE_NAME does not resolve to a commit; fetch, or pass --base <ref>"
+fi
 
 # The local branch the base stands for (main for origin/main), whose worktree
 # is the owner's checkout of the default branch, not a merged branch's. A
 # remote's name may hold a slash, so the longest configured remote that
 # prefixes the ref is the one stripped.
-BASE_BRANCH=$(git rev-parse --symbolic-full-name "$BASE_NAME" 2>/dev/null) || BASE_BRANCH=""
+BASE_BRANCH=""
+[ -z "$BASE_NAME" ] \
+  || BASE_BRANCH=$(git rev-parse --symbolic-full-name "$BASE_NAME" 2>/dev/null) || BASE_BRANCH=""
 case "$BASE_BRANCH" in
   refs/remotes/*/*)
     remotes=$(git remote) || lookup_failed remotes "could not list the remotes"
@@ -239,6 +301,23 @@ esac
 # The worktree this command runs in: removing it unlinks the shell's current
 # directory. Compared by inode, as worktree-inventory.sh does.
 out_exact SELF git rev-parse --show-toplevel || SELF=""
+# The caller's directory, physical, so each worktree's ancestry test below
+# compares inodes, not spellings.
+CALLER=""
+if [ -n "$CALLER_OPT" ]; then
+  out_exact CALLER physical_dir "$CALLER_OPT" \
+    || lookup_failed caller-dir "could not enter --caller-dir $CALLER_OPT"
+fi
+holds_caller() { # holds_caller <path>: is the caller's directory at or under it?
+  local d="$CALLER"
+  [ -n "$d" ] || return 1
+  while :; do
+    [ "$d" -ef "$1" ] && return 0
+    [ "$d" != / ] || return 1
+    d="${d%/*}"
+    [ -n "$d" ] || d=/
+  done
+}
 
 # Parse `git worktree list --porcelain -z` NUL-aware into WT_* arrays. Each
 # entry is NUL-terminated fields ended by an empty field; the first entry is
@@ -437,11 +516,17 @@ holds_repository() { # holds_repository <path>: sets HELD to the first one
 classify() { # classify <i>
   local i="$1" path="${WT_PATH[$1]}" ref="${WT_BRANCH[$1]}" tip rc top head holder unref
   C_CLASS="" C_REASON="" C_STATE="" C_DETAIL="" C_MERGE="" C_LANDED=false C_DIRTY_OK=false
+  if [ "$MODE" = remove-head ] && [ "$ref" != "refs/heads/$HEAD_BRANCH" ]; then
+    C_CLASS=other-branch C_REASON="it does not hold refs/heads/$HEAD_BRANCH"; return
+  fi
   if [ "$i" -eq 0 ]; then
     C_CLASS=primary C_REASON="the primary checkout is never a candidate"; return
   fi
   if [ -n "$SELF" ] && [ "$path" -ef "$SELF" ]; then
     C_CLASS=self C_REASON="this command runs in it; run the sweep from another worktree to judge it"; return
+  fi
+  if holds_caller "$path"; then
+    C_CLASS=self C_REASON="the caller's directory $CALLER is inside it; removing it would pull the caller's working directory out from under it"; return
   fi
   # A missing directory is checked as well as the field, which an older git
   # does not print.
@@ -469,15 +554,23 @@ classify() { # classify <i>
       if ! tip=$(git rev-parse --verify --quiet "$ref^{commit}" 2>/dev/null); then
         C_CLASS=unresolved-branch C_REASON="$ref no longer resolves"; return
       fi
-      git merge-base --is-ancestor "$tip" "$BASE_OID" 2>/dev/null
-      rc=$?
-      case "$rc" in
-        0) ;;
-        1) C_CLASS=unmerged C_REASON="$ref is not merged into $BASE_NAME"; return ;;
-        *) lookup_failed merge-base "could not compare $ref with $BASE_NAME" ;;
-      esac
-      find_landing "$tip"
-      C_DIRTY_OK="$C_LANDED"
+      if [ "$MODE" = remove-head ]; then
+        # Commits past the merged head exist only here; the merge kept none
+        # of them.
+        if [ "$tip" != "$HEAD_OID_OPT" ]; then
+          C_CLASS=moved C_REASON="$ref is at $tip, not the merged head $HEAD_OID_OPT"; return
+        fi
+      else
+        git merge-base --is-ancestor "$tip" "$BASE_OID" 2>/dev/null
+        rc=$?
+        case "$rc" in
+          0) ;;
+          1) C_CLASS=unmerged C_REASON="$ref is not merged into $BASE_NAME"; return ;;
+          *) lookup_failed merge-base "could not compare $ref with $BASE_NAME" ;;
+        esac
+        find_landing "$tip"
+        C_DIRTY_OK="$C_LANDED"
+      fi
       ;;
     *)
       C_CLASS=unresolved-branch C_REASON="git reports no branch for it"; return ;;
@@ -525,6 +618,10 @@ emit() { # emit <disposition> <path> <ref> <reason or empty>: uses C_* for a can
 
 authorized() { # authorized: may this run remove the candidate in C_*?
   [ "$C_CLASS" = candidate ] || return 1
+  if [ "$MODE" = remove-head ]; then
+    [ "$C_STATE" = clean ]
+    return
+  fi
   # Only a branch has a landing merge, so a detached land-wt worktree, which
   # a lander starting after the batch's release may be using, is never one.
   if [ "$REMOVE_LANDED" = true ]; then
@@ -567,7 +664,7 @@ for ((i = 0; i < N_WORKTREES; i++)); do
   C_CLASS="${P_CLASS[i]}" C_STATE="${P_STATE[i]}" C_DETAIL="${P_DETAIL[i]}"
   C_MERGE="${P_MERGE[i]}" C_LANDED="${P_LANDED[i]}" C_DIRTY_OK="${P_DIRTY_OK[i]}"
   if [ "$C_CLASS" != candidate ]; then
-    emit "$C_CLASS" "$path" "$ref" "${P_REASON[i]}"
+    [ "$C_CLASS" = other-branch ] || emit "$C_CLASS" "$path" "$ref" "${P_REASON[i]}"
     continue
   fi
   if [ -n "$HALTED" ]; then
@@ -577,7 +674,9 @@ for ((i = 0; i < N_WORKTREES; i++)); do
   fi
   if ! authorized; then
     N_KEPT=$((N_KEPT + 1))
-    if [ "$REMOVE_LANDED" = true ]; then
+    if [ "$MODE" = remove-head ]; then
+      emit "$C_STATE" "$path" "$ref" "not clean; --remove-head removes only a clean worktree"
+    elif [ "$REMOVE_LANDED" = true ]; then
       if [ "$C_STATE" != clean ]; then
         emit "$C_STATE" "$path" "$ref" "dirty; --remove-landed removes only clean worktrees"
       elif [ "$ref" = detached ]; then

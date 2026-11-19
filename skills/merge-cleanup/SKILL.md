@@ -3,8 +3,9 @@ name: merge-cleanup
 description: >-
   Run post-merge cleanup when a user reports "merged", "PR merged, please
   clean up", "PR #N is merged", "just merged it, tidy up", or "the PR landed".
-  Safely tidies branches and refs, verifies issue closure, performs documented
-  project reconciliation, and stops review watches. Also sweeps the
+  Safely tidies branches, refs, and the merged branch's clean worktree,
+  verifies issue closure, performs documented project reconciliation, and
+  stops review watches. Also sweeps the
   worktrees of merged branches when the owner asks: "sweep the worktrees" or
   "remove the worktrees for merged branches". Not for merging a PR or
   cleaning up one that remains open. The bundled executor requires a
@@ -14,8 +15,8 @@ description: >-
 
 # Merge Cleanup
 
-Clean up after a merged PR: resync the base, delete and prune the merged
-branch, verify that close-keyword issues closed, reconcile documented project
+Clean up after a merged PR: resync the base, remove the merged branch's clean
+worktree, delete and prune the merged branch, verify that close-keyword issues closed, reconcile documented project
 obligations, and stop any review watch. A bundled script handles the Git and
 GitHub mechanics. This skill keeps issue-close verification, project-specific
 reconciliation, watcher shutdown, and the final owner-facing judgment.
@@ -105,15 +106,28 @@ available:
   only after inspecting the mapping and choosing the remote for that role.
   Explicit remotes help ambiguous layouts and hostless local-path fixtures;
   they do not bypass the script's identity, push-target, or lease checks.
+- **Keep the head worktree:** `--keep-worktree`, only when the owner says to
+  keep the merged branch's worktree. The cleanup then stops for them, as for
+  a dirty one.
 - **Contract:** `--help` and `-h` print it.
+
+Run the script from your session's own working directory; don't `cd` into
+another checkout first. The script never removes the worktree it was started
+from, so this keeps it from removing the directory your shell stands in.
 
 The script runs this mechanical sequence in order:
 
 1. **Pin the facts** from the base repository: the merged PR, head OID, base
    branch, head repository, and closing references.
 2. **Preflight, then reject unsafe state.** Reject:
-   - Dirty or paused worktrees, and linked head worktrees that still require
-     owner removal.
+   - Dirty or paused worktrees, and a linked head worktree it can't remove.
+     It removes the linked worktree that holds the head branch through
+     `worktree-sweep.sh --remove-head`, only when that worktree is clean,
+     still at the merged head, and doesn't hold the caller's working
+     directory. Otherwise it stops `head-worktree-present` for the owner,
+     with the sweep's reason. The ledger's `worktree` field reads
+     `removed_clean` after a removal and `owner_removal_required` after
+     the stop.
    - Dangerous ref aliases and mismatched local refs.
    - Credential-bearing URLs.
    - Overlapping remote-tracking namespaces and ambiguous remote identities.
@@ -139,9 +153,9 @@ The script runs this mechanical sequence in order:
 5. **Delete the local head and prune.**
    - Compare-and-delete the local head at the forge-verified OID, then prune
      the base and distinct head remotes.
-   - Stop for the owner to remove a linked head worktree: Git offers no
-     inventory lease for safe automatic removal. The owner can remove it with
-     the sweep in Sweep Worktrees for Merged Branches.
+   - Stop if a worktree took the head branch after the preflight. The owner
+     can remove a kept worktree with the sweep in Sweep Worktrees for Merged
+     Branches.
    - Retain `branch.<name>` config deliberately: Git cannot couple its
      deletion atomically to the expected ref OID.
 
@@ -420,7 +434,8 @@ Run a manual sweep only when the owner asks for it in this session, such as
 "sweep the worktrees" or "remove the worktrees for merged branches". A landing
 batch runs the sweep with `--remove-landed`, and nothing else, at its end; the
 land-approved-prs skill says when. A merge-cleanup request alone never
-authorizes a sweep. Removing a worktree deletes files: `git worktree remove`
+authorizes a sweep; the cleanup's own removal of its head worktree, described
+in Run the Guarded Cleanup, is not one. Removing a worktree deletes files: `git worktree remove`
 without `--force` still deletes ignored ones.
 
 Fetch the base's remote first, with `git fetch --prune <remote>`: `origin`
@@ -444,6 +459,11 @@ run; approval of an earlier run doesn't carry over:
   batch uses it. With `--remove` or `--remove-dirty`, it's a usage error.
 - `--base '<ref>'` names the branch merged branches land on, when
   `refs/remotes/origin/HEAD` doesn't, such as a remote not called `origin`.
+- `--remove-head '<branch>' --head-oid '<oid>'` is merge-cleanup.sh's own
+  call: it removes only that branch's worktree, when it's clean and at that
+  commit. Don't run it by hand.
+- `--caller-dir '<dir>'` keeps the worktree that holds `<dir>`, as it keeps
+  the one the sweep runs in.
 - `--help` or `-h` prints the full contract.
 
 ```sh

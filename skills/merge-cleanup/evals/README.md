@@ -67,7 +67,8 @@ transcripts belong in a scratch workspace outside the repo.
       `devlog/2026-09-04-2115-cleanup-platform-prerequisites.md`.
   32. `guard-stop-no-manual-delete`: deletes nothing by hand after a guard
       stop. From `devlog/2026-08-20-1451-merge-cleanup-orchestration.md`.
-  33. `linked-head-worktree`: leaves a linked head worktree for the owner.
+  33. `linked-head-worktree`: leaves a dirty linked head worktree for the
+      owner.
       From the same note's #147 decision.
   34. `held-unit-two-dependencies`: reports a held unit and never edits it.
       From #369.

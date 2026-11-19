@@ -450,10 +450,14 @@ from outside. So it is the under-covering refusal that section documents, not
 a guard against this. Naming the worktree the removal runs from is the
 preflight's only guard here.
 
-Relied on by the worktree preflight: step 2's `worktree_scan`, which stops for
-the owner to remove a linked worktree still holding the head branch. When the
-base branch is checked out in another linked worktree, it instead directs the
-caller to rerun with that worktree as `--checkout` rather than remove it.
+Relied on by the worktree preflight: step 2's `worktree_scan`, which finds a
+linked worktree still holding the head branch. The preflight removes it
+through `worktree-sweep.sh --remove-head` only when it's clean, and passes the
+caller's starting directory as `--caller-dir`, so a removal never takes the
+directory the session stands in. Otherwise the preflight stops for the owner.
+When the base branch is checked out in another linked worktree, it instead
+directs the caller to rerun with that worktree as `--checkout` rather than
+remove it.
 
 ---
 
@@ -537,9 +541,10 @@ the finding rather than its diff. These rules are what `worktree-inventory.sh`
 implements, and `scripts/test-merge-cleanup-inventory.sh` holds one case per
 finding above, so a later change either keeps them or turns the matrix red.
 
-Relied on by `worktree-inventory.sh`, which implements these rules. The
-orchestrator does not run it: its step 2 preflight stops for the owner to
-remove a linked head worktree instead.
+Relied on by `worktree-inventory.sh`, which implements these rules, and so
+by `worktree-sweep.sh`, whose clean test runs it. The orchestrator's preflight
+reaches it through `worktree-sweep.sh --remove-head` before removing a linked
+head worktree.
 
 ---
 
