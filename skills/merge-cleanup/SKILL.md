@@ -91,8 +91,10 @@ invalidates its initial evidence.
 
 ## Run the Guarded Cleanup
 
-Invoke the script by its skill-directory path so its bundled helpers remain
-available:
+Run the script by its skill-directory path, so its bundled helpers stay
+available, from your session's own working directory. Don't `cd` into another
+checkout first: the script never removes the worktree it started from, and
+this keeps it from removing the directory your shell stands in.
 
 ```sh
 <skill-dir>/merge-cleanup.sh \
@@ -101,74 +103,28 @@ available:
   --checkout '<absolute-worktree-root>'
 ```
 
-- **Required:** `--repo`, `--pr`, and `--checkout`.
 - **Optional remotes:** `--base-remote '<name>'` or `--head-remote '<name>'`,
   only after inspecting the mapping and choosing the remote for that role.
   Explicit remotes help ambiguous layouts and hostless local-path fixtures;
-  they do not bypass the script's identity, push-target, or lease checks.
+  they don't bypass the script's identity, push-target, or lease checks.
 - **Keep the head worktree:** `--keep-worktree`, only when the owner says to
   keep the merged branch's worktree. The cleanup then stops for them, as for
   a dirty one.
-- **Contract:** `--help` and `-h` print it.
+- **Contract:** `--help` prints it.
 
-Run the script from your session's own working directory; don't `cd` into
-another checkout first. The script never removes the worktree it was started
-from, so this keeps it from removing the directory your shell stands in.
+The script pins the merged PR's facts, rejects unsafe state, lands on the base
+branch and fully resyncs it, then deletes the remote head under an OID lease,
+retargeting a same-repository stacked PR first. Last, it deletes the local
+head and prunes. The resync finishes before branch deletion, so a later stop
+still leaves a current base (issue #105). It first removes the linked worktree
+holding the head branch only when that worktree is clean, at the merged head,
+and doesn't hold your working directory; otherwise it stops
+`head-worktree-present` for the owner. It leaves an absent base branch for
+the owner to create and keeps `branch.<name>` config.
 
-The script runs this mechanical sequence in order:
-
-1. **Pin the facts** from the base repository: the merged PR, head OID, base
-   branch, head repository, and closing references.
-2. **Preflight, then reject unsafe state.** Reject:
-   - Dirty or paused worktrees, and a linked head worktree it can't remove.
-     It removes the linked worktree that holds the head branch through
-     `worktree-sweep.sh --remove-head`, only when that worktree is clean,
-     still at the merged head, and doesn't hold the caller's working
-     directory. Otherwise it stops `head-worktree-present` for the owner,
-     with the sweep's reason. The ledger's `worktree` field reads
-     `removed_clean` after a removal and `owner_removal_required` after
-     the stop.
-   - Dangerous ref aliases and mismatched local refs.
-   - Credential-bearing URLs.
-   - Overlapping remote-tracking namespaces and ambiguous remote identities.
-3. **Land on the base branch and resync it.**
-   - Require the local base branch to exist, then land on it through
-     `base-landing-plan.sh`.
-   - Re-resolve branch-conditioned remotes and tracking state, guard that
-     namespace, then fetch and fully fast-forward-resync the base.
-   - Leave an absent base for the owner to create before rerunning cleanup:
-     Git offers no branch-creation lease that also rejects a concurrently
-     created dangling symbolic ref.
-4. **Delete the remote head.**
-   - Re-resolve the head repository and compare its exact remote branch OID
-     with the merged PR head.
-   - Pin its validated fetch URL, and require its single push URL to identify
-     the same destination.
-   - Bind each transport command through a one-use full-length URL rewrite, so
-     later live rewrite config cannot redirect it.
-   - Check branch consumers, then delete with an OID lease.
-   - Retarget a same-repository stacked PR to the merged PR's base and verify
-     it first. Stop on a cross-repository stack or a shared head anywhere in
-     the repository network.
-5. **Delete the local head and prune.**
-   - Compare-and-delete the local head at the forge-verified OID, then prune
-     the base and distinct head remotes.
-   - Stop if a worktree took the head branch after the preflight. The owner
-     can remove a kept worktree with the sweep in Sweep Worktrees for Merged
-     Branches.
-   - Retain `branch.<name>` config deliberately: Git cannot couple its
-     deletion atomically to the expected ref OID.
-
-The base resync deliberately finishes before remote deletion. This ordering
-comes from issue #105: a later destructive guard can stop while leaving the
-checkout on a current base, without weakening the branch-deletion guards.
-
-`merge-cleanup.sh` calls `base-landing-plan.sh --format nul` internally. That
-helper's default format stays JSON for human inspection; `--format json`,
-`--format nul`, `--help`, and `-h` are its documented interfaces. Do not parse
-the human JSON to recreate the orchestrator. The linked-worktree guard is also
-available as `worktree-inventory.sh '<absolute-worktree-root>'`, with `--help`
-or `-h`, for diagnosis only.
+It calls `base-landing-plan.sh --format nul` internally; never parse that
+helper's JSON to recreate the sequence. `worktree-inventory.sh
+'<absolute-worktree-root>'` runs the linked-worktree guard for diagnosis only.
 
 ### Interpret the Result Ledger
 
