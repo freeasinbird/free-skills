@@ -603,9 +603,11 @@ reviewer when there is none, however many files it touches.
   subagent; after many blocker rounds, reassess as §review-convergence says.
 - **Fall back when a route is missing.** Without council installed, use one
   fresh-context reviewer with the brief. When council reports rung 3 (no
-  panel), use the fallback reviewer it names. When delegation is unavailable
-  or needs permission you don't have, skip it and rely on the external bot or
-  human. You may ask the user first.
+  panel), count any confirmed findings it kept from a lone member, labeled a
+  single review, as confirmed findings of this round. Fix their blockers
+  first, then give the fixed revision to the fallback reviewer it names. When
+  delegation is unavailable or needs permission you don't have, skip it and
+  rely on the external bot or human. You may ask the user first.
 - **Match the review effort to risk.** A same-model delegate is only partly
   independent and costs tokens.
 
