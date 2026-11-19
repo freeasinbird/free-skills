@@ -111,6 +111,8 @@ The implementation checklist:
 3. Make the scoped change. For a visible UI change, capture the current state
    before you change it. Include the docs, tests, and assets needed to keep
    the change complete. Add a decision note only when its triggers apply.
+   Write scratch scripts and temporary output outside the checkout, in a
+   session workspace or temporary directory.
 4. Run relevant verification and the standard lint, build, and test checks.
    Record any check you could not run in the PR.
 5. Commit one concern at a time. Explain why in each commit body.
