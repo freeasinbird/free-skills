@@ -43,7 +43,11 @@ repository.
 - `prerequisite-inside-batch`: Leave a dependent issue undispatched while its
   prerequisite in the batch awaits a human merge.
 - `threads-before-subagents`: Use threads where offered; otherwise brief
-  subagents with the branch setup.
+  subagents with the branch setup. Name the route in the opening message and
+  the state file, and on route 2 name what route 1 lacked.
+- `deferred-thread-tools`: Load named but unloaded thread tools before
+  choosing, take route 1, and start planners through the host-named
+  delegation tool.
 - `stacked-unit-branch-base`: Keep the brief's rule that a unit stacked on an
   open PR branches from that PR's branch and targets it.
 - `run-ends-without-report`: Free the slot and never restart the run.
@@ -75,5 +79,5 @@ two-presentation case in its own fresh context.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 19 unique orchestration IDs match the inventory above. Parsing
+files. Confirm 20 unique orchestration IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.
