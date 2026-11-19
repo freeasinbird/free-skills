@@ -266,8 +266,8 @@ It only shows occupancy. Work still starts only from an explicit owner
 assignment, and agents don't choose work for themselves.
 
 - **Check occupancy first.** An issue is occupied when it carries the
-  `in-progress` label and its newest claim comment hasn't expired, or when an
-  open PR links it. The label with no unexpired claim comment isn't a claim.
+  `in-progress` label and any of its claim comments hasn't expired, or when
+  an open PR links it. The label with no unexpired claim comment isn't a claim.
   If another run occupies the issue, stop and report it.
 - **Claim before you edit.** The agent that implements an assigned issue adds
   the `in-progress` label and posts one claim comment. A planner and a batch
@@ -286,7 +286,8 @@ assignment, and agents don't choose work for themselves.
 
 - **Reread after you post.** If another run's unexpired claim comment comes
   before yours on the issue, delete your comment, leave the label, stop, and
-  report the other claim.
+  report the other claim. If an open PR now links the issue, release your
+  claim, stop, and report the PR.
 - **Release the claim.** Remove the label and delete your claim comment when
   your PR opens. The open PR then marks the issue as taken, so link the issue
   from the PR. Release the same way when you stop without a PR. A comment
@@ -297,7 +298,9 @@ assignment, and agents don't choose work for themselves.
   place. A holder that needs longer edits the expiry in its own comment
   before that time passes. A holder rereads the issue before it resumes
   after a wait, extends, or releases. If its claim was replaced, it stops,
-  leaves the label, and reports the newer claim.
+  leaves the label, and reports the newer claim. If its claim expired with no
+  newer claim, it deletes its old comment and claims again with a new comment
+  and the reread above before it resumes.
 - **Why <N> hours.** <The owner's reason for this length.> The owner can
   delete a dead claim's comment at any time.
 ````
@@ -318,6 +321,10 @@ Settle these choices with the owner before showing the final text:
 - **Label name.** Ask the owner whether the repository already uses an
   `in-progress` label for something else, such as a board status. If it
   does, agree on a dedicated claim label and use it in the record.
+- **Open comments.** Tell the owner that on a public repository anyone can
+  post the marker comment and block an issue until it expires. The blocked
+  agent reports the claim, and the owner deletes the comment. Accepting the
+  template accepts that risk.
 
 The template covers implementation claims only. It reserves nothing while an
 issue is being planned, so add no planning rule unless the owner asks for
