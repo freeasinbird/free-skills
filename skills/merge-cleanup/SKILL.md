@@ -170,20 +170,16 @@ each containing tracker with its unit entry and transition, each field to
 refresh, the closing issues that select those trackers, and any other
 documented post-merge duty, including one this skill may not perform.
 
-Write the same list as the trace's `policy` and `plan` rows: `write` for a
-transition or refresh to apply, `noop` for one already satisfied, `report`
-for derived output such as newly unblocked units, and `unsupported` for a
-duty outside this skill's authority. Then generate the trace skeleton:
+Write the same list as a plan file's `policy` and `plan` rows, then generate
+the trace and fill it in as `references/project-obligations.md`
+§state-machine says:
 
 ```sh
 <skill-dir>/reconciliation-ledger.sh --skeleton '<plan-file>' > '<trace-file>'
 ```
 
-As the work runs, replace each expected value with the observed one, and an
-item that didn't run with its `skip` row. With a readably absent record, the
-list is empty: say so in one line, and still close the trace. When the record
-or its mechanics can't be read, list no items; the skeleton adds one umbrella
-skip naming the failed source.
+With a readably absent record, the list is empty: say so in one line, and
+still close the trace.
 
 ## Reconcile Project Obligations
 
@@ -252,9 +248,9 @@ into the trace, where `none` means the row is absent. After the `guard` row:
 - **Report what it leaves.** Put the refresh's ticks, startable set, and
   every item it left in place in the summary. Name each `held` unit with its
   reason, so the owner can fix its Dependencies field.
-- **Apply a project's own Startable now rule** with `--edited '<copy>' --base
-'<refresh-file>'`: save the refresh output, copy it, and change only the
-  copy's `class ... startable` line and **Startable now** bullet. When the
+- **Apply a project's own Startable now rule.** Save the refresh output, copy
+  it, and change only the copy's `class ... startable` line and **Startable
+  now** bullet. Pass `--edited '<copy>' --base '<refresh-file>'`. When the
   rule would add or remove the class line, report that instead of writing.
 - **Handle exits.** On 64, fix the arguments and rerun. Only on 69 or no
   executable, when nothing ran, apply the format's refresh section by hand and
