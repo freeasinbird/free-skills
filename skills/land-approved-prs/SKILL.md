@@ -8,7 +8,8 @@ description: >-
   landed; the agent reads each PR against what landed, reworks it only when
   a landed change dictates the fix, lands it with the bundled engine, runs
   merge-cleanup, and hands back everything else with the record's hand-back
-  label. Not for approving a PR (only the owner approves), merging one
+  label. The batch ends by sweeping landed branches' clean worktrees. Not
+  for approving a PR (only the owner approves), merging one
   unapproved PR, or post-merge cleanup alone.
 ---
 
@@ -154,7 +155,8 @@ message as approval.
    plans against a branch that no longer exists. Listing also refreshes the
    lock, picks up new approvals, and drops revoked ones.
 5. **Stop on an empty fresh list.** That call also releases the lock. Then
-   write the batch report. Any other end follows "Ending Early."
+   run "The End-of-Batch Sweep" and write the batch report. Any other end
+   follows "Ending Early."
 
 ```sh
 <skill-dir>/list-ready.sh --repo <owner/name> --run <id>
@@ -467,8 +469,9 @@ the batch as "Ending Early" says.
 ### Ending Early
 
 Any end other than an empty fresh list leaves the lock held. Release it with
-`list-ready.sh --release <id>`, then write the batch report and name what
-stopped the batch. After `lock-lost`, release nothing: the lock is no longer
+`list-ready.sh --release <id>`, then run "The End-of-Batch Sweep" unless its
+skip rules apply, write the batch report, and name what stopped the batch.
+After `lock-lost`, release nothing and skip the sweep: the lock is no longer
 yours.
 
 ### The Rework Rule
@@ -536,12 +539,49 @@ Never remove a worktree during a batch. If merge-cleanup stops
 `head-worktree-present`, record the path. Then do the parts it skipped that
 don't touch the worktree: fast-forward the checkout's default branch from the
 remote, and confirm the issues the PR closes actually closed. Leave the local
-branch.
+branch; "The End-of-Batch Sweep" may free it.
 
 Never print a bare `git worktree remove` line for the owner to paste: even
-without `--force`, it deletes the worktree's ignored files and exits 0.
-Removing worktrees is the owner's, after the batch: point them at
-merge-cleanup's worktree sweep, which reports what each removal would delete.
+without `--force`, it deletes the worktree's ignored files and exits 0. For a
+worktree the end-of-batch sweep keeps, point the owner at merge-cleanup's
+worktree sweep, which reports what each removal would delete.
+
+## The End-of-Batch Sweep
+
+Every batch ends by removing landed branches' clean worktrees: this batch's,
+and any earlier landing's still on disk. Run the sweep only after this run's
+lock is released, by an empty fresh list or by `--release`, and before the
+batch report. Skip it after `lock-lost`, `lock-held`, or `lock-stale`,
+because another lander may be live, and when the run never held the lock.
+Skip it when the owner says not to sweep for this batch.
+
+From the primary checkout, fetch the base's remote, then run merge-cleanup's
+sweep with `--remove-landed` and the base named. Here, `<merge-cleanup-dir>`
+is the merge-cleanup skill's directory beside this one. The remote is
+`origin`, or the `--base-remote` value when the batch passed one.
+
+```sh
+git fetch --prune <remote>
+<merge-cleanup-dir>/worktree-sweep.sh --remove-landed --base <remote>/<default-branch>
+```
+
+`--remove-landed` removes a worktree only when it's clean, on a branch, and
+the sweep found that branch's landing merge. It keeps everything else, with a
+reason on its line: dirty worktrees, fresh branches with no landing merge, and
+detached `land-wt` worktrees. The last rule makes sweeping after the release
+safe. A lander that starts in that gap works in a `land-wt` worktree or on an
+unmerged branch, and the sweep removes neither. Never add `--remove` or
+`--remove-dirty`: what this sweep keeps is the owner's to remove. A `STOP` or
+`LOOKUP_FAILED` result goes in the batch report as it stands; never rerun the
+sweep with other flags.
+
+A session still open in a removed worktree loses its directory, as it would
+after the owner's own sweep. For each PR whose merge-cleanup stopped
+`head-worktree-present` and whose worktree the sweep removed, rerun
+merge-cleanup's procedure with the same arguments as "After the Merge." That
+deletes the local branch and retargets any stacked children. A removed
+worktree whose PR this batch didn't land keeps its local branch; name it in
+the report so the owner can run merge-cleanup for it.
 
 ## Ordering
 
@@ -563,9 +603,11 @@ children in the batch report as unblocked by the parent.
 
 When the repository doesn't auto-delete merged branches and merge-cleanup
 stops `head-worktree-present`, nothing deletes or retargets yet. The children
-stay based on the merged branch, and filter 2 keeps excluding them. Name them
-in the batch report as waiting on the owner's removal of that worktree; the
-cleanup run after it retargets them.
+stay based on the merged branch, and filter 2 keeps excluding them. When that
+worktree is clean, the end-of-batch sweep removes it and its merge-cleanup
+rerun retargets them, so the next batch can admit them. When the sweep keeps
+it, name them in the batch report as waiting on the owner's removal of that
+worktree; the cleanup run after it retargets them.
 
 A child's turn after a rebased parent starts from the parent's pre-rebase
 commits. Its own `land` rebase drops the ones that match what merged, and the
@@ -586,9 +628,9 @@ children or merges the parent.
 
 Once the owner has released a stale lock, the next run starts as usual. Report,
 and leave in place, any temporary worktree the dead run's `land` left
-registered, at a path ending in `land-wt.XXXXXX/wt`. It blocks nothing, and the
-owner removes it with merge-cleanup's worktree sweep. The PR the dead run was
-on is in one of three states:
+registered, at a path ending in `land-wt.XXXXXX/wt`. It blocks nothing. The
+end-of-batch sweep leaves it, so the owner removes it with merge-cleanup's
+manual worktree sweep. The PR the dead run was on is in one of three states:
 
 - **Not yet pushed:** it is still approved and starts over.
 - **Rebased and pushed, not merged:** its head is neither the approved head
@@ -667,6 +709,7 @@ End every batch with a report:
 - Each CI rerun: its classification, any flake issue, and the result.
 - Every excluded PR that still carries the approval label, with its filter
   and detail.
-- Which worktrees were kept, with their paths.
+- The worktrees the end-of-batch sweep removed, by path, and the ones it
+  kept, by path with the sweep's reason. If the sweep was skipped, say why.
 - Any reviewer finding posted on a merged head.
 - Any lock or lookup problem the owner should know about.
