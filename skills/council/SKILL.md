@@ -96,8 +96,12 @@ at launch or partway this way:
   mode, a member whose either run fails is failed.
 - **Retry once at most.** Retry only a transient error, such as a rate limit
   with a stated reset or a dropped connection, and only when the wait fits the
-  run. It fits within a time budget the user or caller set, or, with none,
-  before the other launched members return. Otherwise the seat is failed.
+  run. It fits within a time budget the user or caller set. With no budget,
+  it fits before the other launched members return. With no budget and no
+  other launched member still running when the error arrives, such as the
+  first member in findings staging, the wait is at most 2 minutes. Retry
+  after a stated reset no more than 2 minutes away, or at once after a
+  dropped connection. Otherwise the seat is failed.
 - **Re-seat a default panel only when the rung drops.** When the remaining
   planned seats still support the planned rung, report the failure and launch
   no replacement. Otherwise prefer a replacement that keeps the planned rung:
