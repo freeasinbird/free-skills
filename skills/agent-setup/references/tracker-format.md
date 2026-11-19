@@ -12,9 +12,17 @@ trackers instead of restating the shape.
 ## title
 
 - Title a wave tracker `Wave N: <Name>`, such as `Wave 3: Sync Rebuild`.
-  Tooling finds a wave tracker by its milestone and the `tracker` label, never
-  by title text.
+  A wave tracker also carries its milestone.
 - Title a feature or backlog tracker by its subject.
+
+## label
+
+Every tracker, whether wave, feature, or backlog, carries the `tracker`
+label. The label lets people list a project's trackers on the forge. No
+tooling selects a tracker by label or title text; the project's records and
+the requests agents receive name the trackers to read. A tracker kept in a
+comment can't carry a label, so leave its host issue unlabeled unless that
+issue is itself a tracker. Create the label once if the project lacks it.
 
 ## intro
 
@@ -127,6 +135,7 @@ Replace the angle-bracket text. Delete an optional bullet rather than writing
 "none". For a wave tracker the bold name is `Wave <N>: <Name>`; a feature or
 backlog tracker names its subject and drops the **Gate** bullet. A project
 without lanes drops the `### lane:<name>` subhead and the `<lane>` qualifier.
+Apply the `tracker` label when you create the issue.
 
 ````markdown
 **<Tracker name>.** <One sentence naming the scope.>
