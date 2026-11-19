@@ -1,0 +1,66 @@
+[
+  {
+    "query": "hill-climb the startup time of the CLI",
+    "should_trigger": true
+  },
+  {
+    "query": "hillclimb this",
+    "should_trigger": true
+  },
+  {
+    "query": "Keep improving the search ranking until it scores 0.9 on the relevance eval",
+    "should_trigger": true
+  },
+  {
+    "query": "Hill-climb the MCP tool descriptions: get the eval to 100%, then trim them while holding the score",
+    "should_trigger": true
+  },
+  {
+    "query": "Run a hill climb on bundle size, target under 200 KB, budget 30 attempts",
+    "should_trigger": true
+  },
+  {
+    "query": "Keep iterating on the landing page until every council judge scores it 9 or higher",
+    "should_trigger": true
+  },
+  {
+    "query": "Push the parser's benchmark down as far as you can: try one change at a time and revert anything that doesn't help",
+    "should_trigger": true
+  },
+  {
+    "query": "Start a climb on test coverage for the auth module, owner sign-off first",
+    "should_trigger": true
+  },
+  {
+    "query": "Score these three README drafts against this rubric with a council",
+    "should_trigger": false
+  },
+  {
+    "query": "Improve this README",
+    "should_trigger": false
+  },
+  {
+    "query": "Audit my AGENTS.md for instructions agents ignore",
+    "should_trigger": false
+  },
+  {
+    "query": "Run the merge-cleanup evals once and tell me the pass rate",
+    "should_trigger": false
+  },
+  {
+    "query": "reflect",
+    "should_trigger": false
+  },
+  {
+    "query": "Plan #412",
+    "should_trigger": false
+  },
+  {
+    "query": "Make the failing test in parser_test.py pass",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the elevation gain on the hill climb route for Saturday's ride?",
+    "should_trigger": false
+  }
+]
