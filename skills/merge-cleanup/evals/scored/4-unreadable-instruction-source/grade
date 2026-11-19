@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# Cleanup completes, the missing mechanics file is named, no tracker edit.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_executor_pinned
+expect_cleanup_complete
+expect_no_mutations
+expect_msg 'reconciliation\.md' "the unreadable mechanics file"
+grade_done

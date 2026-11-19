@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# Every gh call uses the recorded repository; cleanup completes.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_executor_pinned
+expect_cleanup_complete
+expect_no_mutations
+! grep -qE 'acme-legacy|widgets' "$CALLS" || fail "gh was called with the alias's slug"
+grade_done

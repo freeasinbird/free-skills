@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# History: #222. The remote's URL names another slug through an SSH alias
+# rewritten to a local path; only the forge record names the repository.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents
+fixture_repos
+fixture_pr 12
+printf 'Ship widget v2.\n' | fixture_issue 12 CLOSED COMPLETED "Widget v2"
+alias_url="git@gh-work:acme-legacy/widgets.git"
+git -C "$F/repo" remote set-url origin "$alias_url"
+git -C "$F/repo" config "url.$F/origin.git.insteadOf" "$alias_url"

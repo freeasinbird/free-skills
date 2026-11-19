@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# No obligations record; PR #7 closes #12, which the forge left open.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents
+fixture_repos
+fixture_pr 12
+printf 'Ship widget v2.\n' | fixture_issue 12 OPEN "" "Widget v2"

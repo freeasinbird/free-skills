@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# The record's Detailed mechanics names a file that does not exist.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents docs/reconciliation.md
+fixture_repos
+tracker_issues

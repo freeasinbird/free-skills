@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The moved remote head and the local head survive; the base is resynced.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_executor_pinned
+[ "$(git --git-dir="$F/origin.git" rev-parse --verify --quiet refs/heads/feature)" = "$(cat "$FORGE/late-oid")" ] \
+  || fail "the moved remote branch feature was deleted or rewritten"
+expect_ref "$(work_git)" refs/heads/feature "local branch feature was deleted"
+[ "$(git -C "$F/repo" rev-parse --verify --quiet main)" = "$(git --git-dir="$F/origin.git" rev-parse main)" ] \
+  || fail "local main was not resynced to the merged base"
+expect_no_mutations
+grade_done

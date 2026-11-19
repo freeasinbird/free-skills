@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# The mechanics ask for a tracker refresh plus a release deletion.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents docs/tracker-mechanics.md
+tracker_mechanics release | fixture_file docs/tracker-mechanics.md
+fixture_repos
+tracker_issues

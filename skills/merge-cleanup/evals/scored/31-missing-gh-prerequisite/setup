@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# History: #249 and devlog/2026-09-04-2115-cleanup-platform-prerequisites.md.
+# gh is not installed.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents
+fixture_repos
+fixture_pr 12
+printf 'Ship widget v2.\n' | fixture_issue 12 OPEN "" "Widget v2"
+rm "$F/bin/gh"

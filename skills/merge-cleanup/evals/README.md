@@ -1,13 +1,14 @@
 # merge-cleanup evals
 
-Eval definitions for the skill-creator loop. Only the definitions live in the
-repo; run outputs, fixture repositories, CLI stubs, and grading artifacts
-belong in a scratch workspace outside the repo.
+Eval definitions for the skill-creator loop, plus a scored subset that one
+command runs and grades by program. Run outputs, fixture repositories, and
+transcripts belong in a scratch workspace outside the repo.
 
 ## Files
 
-- `evals.json`: twenty-eight task evals for project-specific post-merge
-  obligations.
+- `evals.json`: thirty-five task evals. Cases 1 to 28 cover project-specific
+  post-merge obligations; cases 29 to 35 come from the skill's history and
+  its sweep, and each has a scored fixture.
   1. `no-obligations-record`: preserves generic cleanup and its summary.
   2. `freeside-style-tracker-refresh`: reconciles typed tracker lists.
   3. `multiple-containing-trackers`: updates every known container only.
@@ -56,8 +57,26 @@ belong in a scratch workspace outside the repo.
   27. `noop-input-changes-with-stable-policy`: revalidates no-op inputs.
   28. `input-changes-during-write`: downgrades a verified target when another
       selector or computation input changes during the write window.
+  29. `tracker-refresh-failure`: writes nothing when the refresh fails. From
+      `devlog/2026-11-05-1057-tracker-write-command.md`, where an agent wrote
+      an empty refresh result over a tracker.
+  30. `aliased-remote-forge-record`: takes the repository from the forge
+      record, not the SSH alias URL. From #222.
+  31. `missing-gh-prerequisite`: stops before any fetch or delete when `gh`
+      is missing. From #249 and
+      `devlog/2026-09-04-2115-cleanup-platform-prerequisites.md`.
+  32. `guard-stop-no-manual-delete`: deletes nothing by hand after a guard
+      stop. From `devlog/2026-08-20-1451-merge-cleanup-orchestration.md`.
+  33. `linked-head-worktree`: leaves a linked head worktree for the owner.
+      From the same note's #147 decision.
+  34. `held-unit-two-dependencies`: reports a held unit and never edits it.
+      From #369.
+  35. `sweep-clean-worktrees`: fetches, then removes only the clean merged
+      worktree the owner asked to remove.
+- `scored/`: one directory per scored case, the shared fixture library, and
+  the held-out list. See Scored Eval.
 
-## Re-Running
+## Re-Running the Hand-Graded Cases
 
 1. Create a separate scratch git repository per eval with a merged feature
    branch, a clean checkout, and local default and remote-tracking refs that
@@ -152,3 +171,127 @@ belong in a scratch workspace outside the repo.
 27. Replace `<fixture-repo>` in each prompt with its per-run path. Run each task
     with and without the revised skill, grade outputs against the expectations,
     and retain all generated artifacts outside this repository.
+
+## Scored Eval
+
+`scripts/run-scored-eval.sh` runs each scored case in fresh agent sessions
+and prints a pass rate with its spread. It drives Claude Code only; any other
+`--agent` stops with the platform-gate error.
+
+```sh
+./scripts/run-scored-eval.sh --eval-dir skills/merge-cleanup/evals \
+  --skill-dir <candidate-skill-dir> --agent claude --model claude-sonnet-5-5 \
+  --repeats 3 --jobs 4
+```
+
+- **Needs:** Bash, Git, `jq`, `shasum` or `sha256sum`, and a logged-in
+  `claude` CLI. The runner names whatever is missing and stops.
+- **Output:** passes per case, each repeat's pass rate, the spread, cost,
+  and time, then `score=<mean> band=<max-min> runs=<n> cost_usd=<sum>
+check=<sha256>`. Each run directory keeps the agent's `transcript.jsonl`,
+  which shows every command and file read, and its `grade.txt`.
+- **Exit:** 0 when every run completed, whatever the score; 3 when a setup
+  or agent run failed to complete.
+
+### Case Layout
+
+Each `scored/<id>-<eval_name>/` holds two executables. `setup <fixture-dir>`
+builds the fixture, and `grade <fixture-dir> <final-message-file>` exits 0
+on a pass, printing one line per failed assertion. The prompt is the case's
+`evals.json` entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
+
+Graders check only program-visible facts: the stub's call log, the
+fixture's refs, worktrees, and files, and facts in the final message, such
+as an issue number or path. No model judges a run. A grader never matches
+wording, so a rewritten `SKILL.md` keeps its score when it keeps the
+behavior.
+
+`scored/lib/` holds the shared parts:
+
+- **`gh`:** a fixture forge. It serves one repository,
+  `github.invalid/acme/repo`, from files and logs every call. Any other host
+  or slug fails as gh would.
+- **`fixture.sh`:** builds the origin, a merged PR #7, a work clone that
+  predates the merge, the AGENTS.md forge record, and tracker issues.
+- **`grade.sh`:** assertions over the call log, git state, and message.
+
+### No Real Forge
+
+Fixtures use `.invalid` hosts and local-path remotes, so no remote or URL
+names a real server. Every run gets an empty `GH_CONFIG_DIR`, a dummy
+`GH_TOKEN`, and a `PATH` without the real `gh`. The agent keeps the real
+`HOME` because Claude Code finds its login there; settings, user
+instructions, skills, MCP servers, and auto memory stay off.
+
+One gap stays open: an agent that unsets `GH_TOKEN` and calls the real `gh`
+by absolute path can read the stored login. No fixture names a real
+repository, so this takes deliberate steps; see the decision note.
+
+The agent's shell is the caller's `bash`. Run the eval with Bash 4.4 or
+later until #406 fixes the executor under macOS's stock bash 3.2.
+
+### Section Coverage
+
+Every `##` section of `SKILL.md` that directs behavior has a climb case
+that exercises its behavior. The cases guard behavior, not prose. The
+scripts' `--help` and `references/` restate most sections, so removing one
+section alone left the score unchanged; see Measured Results.
+
+| Section                             | Climb cases      |
+| ----------------------------------- | ---------------- |
+| Check Prerequisites                 | 31               |
+| Resolve the Work Unit               | 1, 33            |
+| Run the Guarded Cleanup             | 1, 4, 11, 29, 33 |
+| Interpret the Result Ledger         | 1, 33            |
+| Verify Issue Closure                | 1                |
+| List the Obligations Found          | 4, 11            |
+| Reconcile Project Obligations       | 11, 29           |
+| Stop the Review Watch               | 1                |
+| Summarize                           | 1, 11, 29, 33    |
+| Sweep Worktrees for Merged Branches | 35               |
+
+### Held-Out Cases
+
+`scored/held-out` lists 30, 32, and 34, all history cases. The default
+`--split climb` skips them. Score them once, at the end of a climb, with
+`--split held-out`, and never tune a candidate against them.
+
+### Freeze the Check
+
+Before a climb, copy `scripts/run-scored-eval.sh` and this whole `evals`
+directory into the climb directory and score from that copy. The `check=`
+hash covers the runner and every file under `--eval-dir`, by relative path,
+so the copy hashes the same as the source. Record it, and compare each
+score's `check=` with it; a mismatch means the check changed.
+
+### Measured Results
+
+Measured on 2026-11-18 at the commit that added this section, with
+`--model claude-sonnet-5-5 --repeats 3 --jobs 7`. A climb records its own
+`check=` when it freezes the check; this README sits inside the hashed
+directory, so a hash recorded here would not survive its own edit.
+The variant and held-out rows ran before the runner turned auto memory off;
+the baseline scored 1.000 again, with a 0.000 band, after that change.
+
+| Candidate                                 | Score | Repeats             | Band  |
+| ----------------------------------------- | ----- | ------------------- | ----- |
+| Current skill, climb split                | 1.000 | 1.000, 1.000, 1.000 | 0.000 |
+| `SKILL.md` body removed, frontmatter kept | 0.666 | 0.714, 0.571, 0.714 | 0.143 |
+| Current skill, held-out split, once       | 1.000 | 1.000               | n/a   |
+
+- **Sensitivity:** the known-bad variant's best repeat (0.714) sits below
+  the baseline's worst (1.000). It failed cases 1, 4, and 11: it skipped
+  the executor or the review-watch report.
+- **Single sections don't move the score.** Removing the guarded-cleanup
+  section or the reconcile section alone scored 1.000 over 21 runs each,
+  before #404 reworded the sweep section. Transcripts show the agent
+  rebuilding them from `merge-cleanup.sh --help`, the tracker scripts'
+  help, and `references/project-obligations.md`.
+- **Unsafe edits don't move it either.** A section telling the agent to skip
+  the scripts and force-remove worktrees scored 1.000 once; the agent ran
+  the guarded executor anyway.
+- **Cost per full climb score (21 runs):** about 3 minutes at `--jobs 7` and
+  12 agent-minutes. Claude Code reports about $3 at API prices; on a
+  subscription it counts against usage limits instead. The held-out split
+  takes 3 runs, under a minute.
+- **Held-out rule:** score `--split held-out` once, at the end of a climb.

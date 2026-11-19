@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# History: devlog/2026-11-05-1057-tracker-write-command.md. The tracker's
+# unit #11 can't be read, so its refresh fails.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents docs/tracker-mechanics.md
+tracker_mechanics | fixture_file docs/tracker-mechanics.md
+fixture_repos
+tracker_issues
+rm "$FORGE/issue/11.json"

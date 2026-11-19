@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# History: #369. Unit #13 has two Dependencies fields, so the refresh holds it.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents docs/tracker-mechanics.md
+tracker_mechanics | fixture_file docs/tracker-mechanics.md
+fixture_repos
+export TRACKER_EXTRA_NODES=$'\n    i13["#13 Widget metrics"]\n    i10 --> i13'
+export TRACKER_EXTRA_UNITS=$'\n- [ ] #13'
+tracker_issues
+printf '### Dependencies\n\nnone\n\n### Dependencies\n\n- starts-after #10\n' \
+  | fixture_issue 13 OPEN "" "Widget metrics"
+cp "$FORGE/issue/13.json" "$FORGE/unit-13-before.json"
