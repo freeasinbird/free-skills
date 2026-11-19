@@ -51,6 +51,14 @@ repository.
   before posting the plan.
 - `tracker-refresh-holds-written-field`: Run the read-only fallback, fix the
   written field's parse failure, and leave another unit's stated Blocker alone.
+- `active-claim-stops-planning`: Stop before inspection on an unexpired claim
+  and report planning blocked, leaving the plan, contract, and claim untouched.
+- `expired-claim-does-not-block`: Plan normally past an expired claim, and
+  leave the stale claim comment and label as they are.
+- `linked-open-pr-without-claim-rules`: Treat a linked open PR as occupancy
+  when the project defines no claim rules, and stop without writing.
+- `claim-appears-before-first-write`: Recheck before the first planning write,
+  catch a claim posted during inspection, and stop without writing.
 
 ## Revision-Tree Setup
 
@@ -109,6 +117,16 @@ The helper does not enforce agent isolation or implement a tracker adapter.
 The runner must provide both. If the platform cannot supply those capabilities,
 record the affected behavioral runs as unavailable; setup success is not a pass.
 
+## Occupancy Race Setup
+
+For `claim-appears-before-first-write`, start with #163 unclaimed. When the
+controller answers the planner's authoritative-reference lookup, post the
+comment `Claimed by impl-agent-9, expires 2026-11-19T15:00Z` and add the
+`in-progress` label. That lookup falls after the first occupancy check and the
+issue reread, and before source inspection or any planning write. Return both
+on later reads. Keep this timing out of the task context, and grade from the
+trace that a second occupancy read came after inspection and before any write.
+
 ## Forward-Testing
 
 Run each case in a fresh context with the skill and only the raw request and
@@ -138,6 +156,9 @@ cases, record these separate verdicts:
   handoff. A later base move retains R1 provenance and reports the move without
   a reinspection loop.
 
+Most older cases don't say whether claims or linked PRs are readable. Don't
+penalize a **Not verified** line that names them as unchecked.
+
 For the other cases, grade preconditions, retirement-first ordering, one current
 plan, write hygiene, and the planning-only boundary against the fixture.
 Record failures and unavailable runs individually. Repeat presentations before
@@ -146,9 +167,9 @@ claiming the fixture's repeated-run target was met.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 17 unique planning IDs match the inventory above: the original
-12, the two revision-access cases, the coordination-record case, and the two
-Dependencies-check cases.
+files. Confirm 21 unique planning IDs match the inventory above: the original
+12, the two revision-access cases, the coordination-record case, the two
+Dependencies-check cases, and the four occupancy cases.
 
 JSON parsing and inventory checks only validate fixture structure. They do not
 grade model behavior, source reads, or persisted output. Report structural

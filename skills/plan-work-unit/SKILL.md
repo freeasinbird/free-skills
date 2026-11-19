@@ -28,13 +28,14 @@ user explicitly authorizes planning writes.
 Follow this procedure:
 
 1. Verify preconditions from project instructions and the forge.
-2. Read the whole issue, resolve the grounding revision, then inspect that
+2. Check the issue for occupancy, and stop if someone holds it.
+3. Read the whole issue, resolve the grounding revision, then inspect that
    exact repository tree.
-3. Retire and verify any stale plan before changing the contract.
-4. Complete the authoritative work-contract record, written plainly, and
+4. Retire and verify any stale plan before changing the contract.
+5. Complete the authoritative work-contract record, written plainly, and
    check any Dependencies field you wrote.
-5. Post one current plan, written plainly.
-6. Verify the writes, report the handoff, and stop.
+6. Post one current plan, written plainly.
+7. Verify the writes, report the handoff, and stop.
 
 ## Hold the Routing Boundary
 
@@ -100,9 +101,51 @@ restriction exists and the forge supports the writes, proceed.
 Once a planning write persists, a later failure is not a precondition error.
 It is the partial unsafe state covered under Replan.
 
+## Check Occupancy
+
+After the write preconditions pass, check the assigned issue for occupancy
+before source inspection or any planning write. Check only the assigned
+issue, even when a planning write targets a partner issue. Use the project's
+claim rules. Find those rules in its agent instructions, such as a Claiming
+section in AGENTS.md or the coordination document it points to. Read them
+before you check, and apply their lease expiry and release markers as
+written.
+
+An issue is occupied when it has an active claim or an open PR that links it.
+Where the project defines no claim rules, an open PR that links the issue is
+the only sign. Planning an occupied issue would replace the plan or contract
+its holder is working from.
+
+When the assigned issue is occupied, stop before inspection and before any
+write. Send the blocked report (see Blocked or Paused) with the Status
+`#N planning blocked: occupied by <claim or PR>`. Name every claim and PR you
+found, and say what clears each: the holder releases, the claim expires, or
+the PR closes or merges. Planning can proceed only once all of them clear.
+This is not a precondition error.
+
+Leave any existing plan as it is, even one you found stale: its holder is
+working from it, so don't mark it blocked or report it as an unsafe state. If
+you already found it stale, say so in the report so the holder learns of it.
+
+Check again right before the first planning write of any kind, such as a plan
+retirement, a contract edit, a coordination record, an invalidation comment,
+or the plan comment. If the assigned issue is now occupied, stop without
+writing and report planning blocked the same way.
+
+- **Only read.** Never post, edit, or release a claim, a claim label, or a
+  PR. An expired claim doesn't block planning; leave it as it is.
+- **Owner requests don't override.** An explicit "Plan #N" doesn't override
+  an active claim or a linked open PR. The owner clears each claim through
+  the project's release rule and closes or merges each PR, then asks again.
+- **Partly checked occupancy.** Any occupancy you can see blocks. When the
+  forge can't show claims or linked PRs, check what it can show, and proceed
+  if nothing there occupies the issue. Either way, name each source you
+  couldn't check in one line of the report. In a finished report, put it
+  under **Not verified**, outside that section's two-bullet cap.
+
 ## Inspect and Record the Revision
 
-After preconditions pass:
+After preconditions pass and the occupancy check lets planning proceed:
 
 1. Read the whole issue, including plan comments and linked decisions.
 2. Resolve and record an immutable grounding revision from the declared
@@ -128,8 +171,9 @@ After preconditions pass:
    blocked when the record must exist before planning. When it must exist
    only before reservation, record it as a start blocker instead.
 6. Confirm the operation, repository, issue state, write capability,
-   dependencies, and authorization blockers. Do not claim the issue, create an
-   implementation branch, edit implementation files, or open a pull request.
+   dependencies, and authorization blockers. Do not post, edit, or release a
+   claim on the issue, create an implementation branch, edit implementation
+   files, or open a pull request.
 
 A coordination record written in step 5 is a planning write like the others.
 On a partner issue, change only the record: append it or edit that one field,
@@ -242,7 +286,9 @@ Never report an unchecked field as passing.
 
 ### Blocked Replan
 
-When a blocker prevents a truthful replacement plan:
+When a blocker prevents a truthful replacement plan, follow these steps. An
+occupied issue is the exception: write nothing and leave its plan as it is
+(see Check Occupancy).
 
 1. Edit the old plan to mark it blocked and name the invalidating fact. If
    editing is unavailable, post one linked invalidation comment.
@@ -252,11 +298,12 @@ When a blocker prevents a truthful replacement plan:
 4. Do not invent a replacement only to retire a stale plan.
 
 A complete contract may describe a unit whose implementation is blocked. A
-known dependency or ordering blocker does not stop the planning handoff. Record
-it in the contract and plan. Stop planning only when missing information or an
-owner decision prevents a truthful contract or code-grounded plan. A
-coordination record the project requires before planning, but reserves to
-another role, is such missing information.
+known dependency or ordering blocker does not stop the planning handoff.
+Record it in the contract and plan. Stop planning only when missing
+information or an owner decision prevents a truthful contract or code-grounded
+plan, or when the issue is occupied (see Check Occupancy). A coordination
+record the project requires before planning, but reserves to another role, is
+such missing information.
 
 ## Post One Current Plan
 
@@ -365,8 +412,9 @@ tables. Aim for 120 to 200 words. Omit a part only where its rule says so.
    read but did not run, or write-safety gaps that no reread closes, such as
    a whole-body write that could lose a concurrent edit. If the default
    branch advanced during planning, say so in one line and recommend
-   verification or a replan. Do not reinspect and republish here. Omit when
-   there is nothing to report.
+   verification or a replan. An unchecked-occupancy line (see Check
+   Occupancy) doesn't count toward the two. Do not reinspect and republish
+   here. Omit when there is nothing to report.
 6. **Kickoff.** The kickoff prompt for a fresh implementation task, with the
    real issue number in place of `N`:
 
@@ -393,7 +441,7 @@ implementation waits on another unit.
 - Give the recommended action before any options.
 - Verify any required prior-plan invalidation before reporting.
 - If the prior plan remains actionable, report its location as an unsafe
-  state.
+  state, unless the block is occupancy (see Check Occupancy).
 - Never hand off an incomplete authoritative record.
 - Omit the implementation kickoff prompt.
 
