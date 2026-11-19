@@ -53,9 +53,16 @@ counts as reachable through either of these:
   session's permissions. A denied or prompting command that the user declines
   doesn't count; never route around it.
 
-The number of reachable providers sets the rung below; each provider lost
-moves the panel toward a lower rung. The tools named here are examples, never
-requirements.
+Reachable also means the account has usage left, which shows only at launch;
+don't spend a run probing it beforehand. A member can fail for quota, a rate
+limit, or exhausted usage on the account, at launch or partway. Unless a
+retry under When a Member Fails clears it, that provider is unreachable for
+the rest of this run. Any other failure, such as a model the route doesn't
+offer or a timeout, costs that seat, not the provider.
+
+The number of reachable providers sets the rung below; each provider lost,
+before or during the run, moves the panel toward a lower rung. The tools named
+here are examples, never requirements.
 
 ## Choose the Rung
 
@@ -78,13 +85,45 @@ named members aren't reachable and leave their seats empty. Never fill an
 empty seat with a different model unless the user says to; when fewer than two
 named members remain, ask whether to add one, or report that no council ran.
 
+## When a Member Fails
+
+A missing review must never read as a clean one. Handle a member that fails
+at launch or partway this way:
+
+- **Failed means failed.** A member refused at launch, or one that errors,
+  times out, or returns no parseable report, is a failed seat. Record its
+  provider, model, and error, and never count it as "no findings." In scoring
+  mode, a member whose either run fails is failed.
+- **Retry once at most.** Retry only a transient error, such as a rate limit
+  with a stated reset or a dropped connection, and only when the wait fits the
+  run. It fits within a time budget the user or caller set, or, with none,
+  before the other launched members return. Otherwise the seat is failed.
+- **Re-seat a default panel only when the rung drops.** When the remaining
+  planned seats still support the planned rung, report the failure and launch
+  no replacement. Otherwise prefer a replacement that keeps the planned rung:
+  the failed member's own provider if it is still reachable, on another model
+  where one is offered, or a reachable provider not yet seated. Only when none
+  exists, seat another fresh context on a remaining provider (rung 2). State
+  the revised cost first. Re-seat each slot once; a failed replacement leaves
+  the slot failed. With no seat left, the panel drops to the lower rung or
+  rung 3.
+- **Leave a named member's seat empty.** The Named members rule above
+  applies: no substitute without the user's say-so.
+
+Report the rung the panel achieved. Count completed members, plus reachable
+seats that staging held back after a completed member found a confirmed
+blocker; never count a failed seat. Count members, not runs: a scoring
+member's two runs are one member. Two or more providers is rung 1, two or more
+members on one provider is rung 2, and fewer than two is rung 3.
+
 ## State the Cost First
 
 Before launching anyone, state the rung, the panel size, each member's
 provider and model, the effort level, and the number of runs (two per member
 in scoring mode). Use high effort unless the user or
 caller sets another. For findings mode, also state the staging below, since
-later members may not run.
+later members may not run. Re-state the cost before launching any
+replacement for a failed seat.
 
 ## Brief Members
 
@@ -127,6 +166,10 @@ independence:
 4. **Full panel for the final version.** The whole panel reviews again only
    the version you intend to hand off.
 
+A failed member isn't a member that found no confirmed blocker. Its
+replacement, if When a Member Fails calls for one, or else the next planned
+member, takes its place in the stage.
+
 When the caller wants a report only, with no fixes, stop after steps 1 and 2.
 
 ## Findings Mode
@@ -165,7 +208,8 @@ caller decides what a score means.
 ## Caller Contract
 
 Other skills call council through these inputs and report fields. Changing
-them means updating every caller.
+them means updating every caller. Callers treat a council with failed seats
+as the rung it achieved.
 
 ### Findings Contract
 
@@ -175,8 +219,10 @@ whether the work is risk-class, and whether to report only.
 
 **Report:**
 
-- **Rung and members.** The rung, and each member's provider, model, and
-  effort, with any named member that wasn't reachable.
+- **Rung and members.** The rung the panel achieved, and each member's
+  provider, model, and effort, with any named member that wasn't reachable.
+- **Failed members.** Each failed member's provider, model, and reason, and
+  whether its seat was re-seated.
 - **Confirmed findings.** Each with the member or members that found it and
   its reproduction or trace.
 - **Agreement.** Where members agreed and where they disagreed.
@@ -191,12 +237,16 @@ members or an effort level.
 
 **Report:**
 
-- **Rung and members.** As in findings mode.
-- **Scores.** For each candidate and member, both scores and their spread.
+- **Rung, members, and failed members.** As in findings mode.
+- **Scores.** For each candidate and completed member, both scores and their
+  spread.
 
 The scoring report never includes a pass or fail.
 
 ### Rung 3 Contract
 
 At rung 3 either mode reports the rung, the reason no council ran, and the
-fallback reviewer, with no findings or scores.
+fallback reviewer, with no council findings or scores. A run that fell to rung
+3 because members failed also lists them. In findings mode, it keeps a lone
+completed member's confirmed findings, labeled a single review, not a
+council.

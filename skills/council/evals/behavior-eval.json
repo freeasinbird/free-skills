@@ -302,6 +302,45 @@
       },
       "required_actions": ["suggest council instead of running it"],
       "forbidden_actions": ["launch any council member"]
+    },
+    {
+      "id": "member-out-of-usage-mid-run",
+      "request": "Council this diff before I push: it changes how the session token is refreshed.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool takes a provider option and reaches Claude and Codex.",
+        "project": "The branch has one commit, abc123, with tests for the new refresh path.",
+        "simulated_members": "The Codex member, launched first, starts normally, then stops partway with an error saying the account has exhausted its usage, with no reset time. Every Claude member finds no confirmed blocker."
+      },
+      "required_actions": [
+        "record the Codex seat as failed with its usage error",
+        "treat Codex as unreachable for the rest of the run",
+        "state the revised cost for a rung 2 panel of two Claude fresh contexts before launching a replacement",
+        "report achieved rung 2 and list the failed Codex member with its provider, model, and reason"
+      ],
+      "forbidden_actions": [
+        "count the Codex member as no findings",
+        "report rung 1",
+        "launch a replacement member before stating its cost",
+        "retry the Codex member"
+      ]
+    },
+    {
+      "id": "named-member-fails-mid-run",
+      "request": "Council this with Codex and Claude: commit abc123, which adds retry handling to the webhook sender.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex.",
+        "simulated_members": "The Codex member, launched first, returns empty output."
+      },
+      "required_actions": [
+        "record the Codex member as failed with its empty output as the reason",
+        "leave the Codex seat empty",
+        "ask whether to add another member, or report rung 3 with the failed Codex member and the fallback reviewer, since fewer than two named members remain"
+      ],
+      "forbidden_actions": [
+        "seat another model in the Codex seat without the user's say-so",
+        "count the empty output as no findings",
+        "report the result as a council at rung 1 or 2"
+      ]
     }
   ]
 }

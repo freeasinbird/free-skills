@@ -52,6 +52,11 @@ repository.
 - `standing-request-not-covered`: Suggest council, and launch no member, when
   the project instruction's classes leave out the change, here an untested
   behavior change.
+- `member-out-of-usage-mid-run`: Treat a usage failure as an unreachable
+  provider, re-state the cost before re-seating at rung 2, and report the
+  failed member.
+- `named-member-fails-mid-run`: Record an empty named member as failed, leave
+  its seat empty, and ask or stop when fewer than two remain.
 
 ## Rerunning Trigger Cases
 
@@ -71,5 +76,5 @@ Never start real members against real code for a behavior case.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 20 unique behavior IDs match the inventory above. Parsing
+files. Confirm 22 unique behavior IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.
