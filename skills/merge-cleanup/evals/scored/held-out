@@ -1,0 +1,4 @@
+# Cases a climb never sees; score them once, at the end of a climb.
+30-aliased-remote-forge-record
+32-guard-stop-no-manual-delete
+34-held-unit-two-dependencies

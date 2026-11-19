@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# The owner asks to sweep and remove clean merged worktrees. Branch feature
+# merged on the forge since the last fetch; a dirty merged worktree and an
+# unmerged one must stay.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents
+fixture_repos
+fixture_pr
+repo="$F/repo"
+git -C "$repo" switch -q main
+git -C "$repo" worktree add -q "$F/wt-feature" feature
+# feature-b merged too, and holds an untracked file.
+git -C "$repo" switch -q -c feature-b
+echo "b" >"$repo/b.txt"
+git -C "$repo" add b.txt
+git -C "$repo" commit -qm "Add b"
+git -C "$repo" push -q -u origin feature-b
+git -C "$repo" switch -q main
+git -C "$repo" worktree add -q "$F/wt-feature-b" feature-b
+echo "keep me" >"$F/wt-feature-b/draft.txt"
+git -C "$repo" switch -q -c wip
+echo "wip" >"$repo/wip.txt"
+git -C "$repo" add wip.txt
+git -C "$repo" commit -qm "Work in progress"
+git -C "$repo" switch -q main
+git -C "$repo" worktree add -q "$F/wt-wip" wip
+merge="$F/merge"
+git clone -q "$F/origin.git" "$merge"
+git_id "$merge"
+git -C "$merge" merge -q --no-ff origin/feature-b -m "Add b (#8)"
+git -C "$merge" push -q origin main
+rm -rf "$merge"

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# Generic cleanup completes, open #12 is surfaced, nothing is mutated.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_executor_pinned
+expect_cleanup_complete
+expect_no_mutations
+expect_msg '#12([^0-9]|$)' "the still-open closing issue #12"
+expect_msg 'watch' "the review-watch state"
+grade_done

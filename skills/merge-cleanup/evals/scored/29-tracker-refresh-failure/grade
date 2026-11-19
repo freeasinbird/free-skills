@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# No tracker write after a failed refresh; tracker #1 is reported by name.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_executor_pinned
+expect_cleanup_complete
+expect_no_mutations
+grep -q '^- \[ \] #10$' <(issue_body 1) || fail "tracker #1 body changed"
+expect_msg '#1([^0-9]|$)' "tracker #1 by name"
+grade_done

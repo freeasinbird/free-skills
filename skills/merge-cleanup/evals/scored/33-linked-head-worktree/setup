@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# History: devlog/2026-08-20-1451-merge-cleanup-orchestration.md (#147).
+# The feature branch is checked out in a linked worktree.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents
+fixture_repos
+fixture_pr 12
+printf 'Ship widget v2.\n' | fixture_issue 12 CLOSED COMPLETED "Widget v2"
+git -C "$F/repo" switch -q main
+git -C "$F/repo" worktree add -q "$F/feature-wt" feature
+echo "scratch notes" >"$F/feature-wt/notes.txt"

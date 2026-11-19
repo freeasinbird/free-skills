@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# Only the clean merged worktree is removed.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+[ ! -e "$F/wt-feature" ] || fail "clean merged worktree wt-feature was not removed"
+[ -f "$F/wt-feature-b/draft.txt" ] || fail "dirty worktree wt-feature-b lost draft.txt"
+[ -d "$F/wt-wip" ] || fail "unmerged worktree wt-wip was removed"
+git -C "$F/repo" worktree list --porcelain | grep -q "^worktree $F/wt-wip$" \
+  || fail "unmerged worktree wt-wip is no longer registered"
+expect_no_mutations
+grade_done

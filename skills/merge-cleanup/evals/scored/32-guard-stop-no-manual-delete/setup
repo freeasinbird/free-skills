@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# History: devlog/2026-08-20-1451-merge-cleanup-orchestration.md (single
+# executor). The remote head moved after the merge, so deletion must stop.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+standard_agents
+fixture_repos
+fixture_pr 12
+printf 'Ship widget v2.\n' | fixture_issue 12 CLOSED COMPLETED "Widget v2"
+late="$F/late"
+git clone -q --branch feature "$F/origin.git" "$late"
+git_id "$late"
+echo "late fix" >>"$late/widget.txt"
+git -C "$late" commit -qam "Late fix after the merge"
+git -C "$late" push -q origin feature
+git -C "$late" rev-parse HEAD >"$FORGE/late-oid"
+rm -rf "$late"

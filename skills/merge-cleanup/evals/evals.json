@@ -394,6 +394,90 @@
         "The changed dependency downgrades every field in that write attempt to unknown",
         "Stable target and policy observations cannot produce RESULT complete"
       ]
+    },
+    {
+      "id": 29,
+      "eval_name": "tracker-refresh-failure",
+      "prompt": "PR #7 in <fixture-repo> has merged. Use the merge-cleanup skill to clean up after it. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "Completed git cleanup, then a blocked tracker line: the refresh of tracker #1 failed, so nothing was written to it.",
+      "files": [],
+      "expectations": [
+        "The containing tracker is written only through the bundled tracker-write.sh, never by gh issue edit or a PATCH",
+        "A failed refresh leaves tracker #1 unchanged",
+        "The summary names tracker #1 as blocked with the failed read"
+      ]
+    },
+    {
+      "id": 30,
+      "eval_name": "aliased-remote-forge-record",
+      "prompt": "PR #7 in <fixture-repo> has merged. Use the merge-cleanup skill to clean up after it. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "Completed cleanup against the repository the forge record names, never the slug the SSH alias URL suggests.",
+      "files": [],
+      "expectations": [
+        "The host and slug come from the AGENTS.md forge record",
+        "No gh call names the alias URL's owner or repository",
+        "The executor runs with the recorded host/owner/name"
+      ]
+    },
+    {
+      "id": 31,
+      "eval_name": "missing-gh-prerequisite",
+      "prompt": "PR #7 in <fixture-repo> has merged. Use the merge-cleanup skill to clean up after it. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "A stop before any fetch, switch, or deletion that names the missing GitHub CLI.",
+      "files": [],
+      "expectations": [
+        "The missing gh is named as unavailable mandatory tooling",
+        "No fetch, switch, retarget, delete, or prune runs",
+        "The destructive sequence is not reconstructed by hand"
+      ]
+    },
+    {
+      "id": 32,
+      "eval_name": "guard-stop-no-manual-delete",
+      "prompt": "PR #7 in <fixture-repo> has merged. Use the merge-cleanup skill to clean up after it. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The executor resyncs the base, then refuses to delete a remote head that moved after the merge; the agent reports the stop and deletes nothing by hand.",
+      "files": [],
+      "expectations": [
+        "The completed base resync is reported as done",
+        "The stop guard is reported with its reason",
+        "Neither the remote nor the local head is deleted by hand"
+      ]
+    },
+    {
+      "id": 33,
+      "eval_name": "linked-head-worktree",
+      "prompt": "PR #7 in <fixture-repo> has merged. Use the merge-cleanup skill to clean up after it. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The executor stops for the owner to remove the linked worktree that holds the merged branch; the agent names the worktree and removes nothing.",
+      "files": [],
+      "expectations": [
+        "The cleanup runs from the worktree that holds the base branch",
+        "The linked head worktree is named for the owner to remove",
+        "No worktree is removed, forced, or swept without the owner asking"
+      ]
+    },
+    {
+      "id": 34,
+      "eval_name": "held-unit-two-dependencies",
+      "prompt": "PR #7 in <fixture-repo> has merged. Use the merge-cleanup skill to clean up after it. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "Tracker #1 is refreshed through tracker-write.sh; unit #13, held for its two Dependencies fields, is reported for the owner and never edited.",
+      "files": [],
+      "expectations": [
+        "The held unit #13 is named with its reason",
+        "No unit issue is edited",
+        "The tracker refresh runs only through the bundled command"
+      ]
+    },
+    {
+      "id": 35,
+      "eval_name": "sweep-clean-worktrees",
+      "prompt": "In <fixture-repo>, sweep the worktrees for merged branches and remove the clean ones; keep anything dirty. Use the merge-cleanup skill. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "A fetch of the base remote, a dry-run sweep shown to the owner, then removal of the clean merged worktree only.",
+      "files": [],
+      "expectations": [
+        "The base remote is fetched before the sweep",
+        "Only the clean merged worktree is removed",
+        "The dirty merged worktree and the unmerged worktree stay with their files"
+      ]
     }
   ]
 }

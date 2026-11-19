@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# Fixture forge for the scored merge-cleanup eval: a stand-in for the GitHub
+# CLI that serves one repository's PR, issue, and repository facts from files
+# and logs every call. Modeled on the gh shim in scripts/test-merge-cleanup.sh,
+# widened so an agent's own lookups work too, not only the bundled scripts'.
+#
+# The forge directory sits next to this file's directory (<fixture>/forge):
+#   host, slug       The only repository that exists (github.invalid, acme/repo).
+#   origin           Path of the bare repository that plays the forge's git.
+#   pr/<N>.json      PR objects in `gh pr view --json` shape.
+#   issue/<N>.json   Issue objects in `gh issue view --json` shape.
+#   repo.json        REST repository facts (`gh api repos/<slug>`).
+#   associated.json  GraphQL associatedPullRequests answer for the merged head.
+#   calls.log        One line per call: the arguments joined by spaces.
+#   auth-fail        When present, auth status and every API read fail (401).
+#   fail-write       When present, `issue edit` fails after logging (HTTP 502).
+#
+# Any other repository, host, or unsupported command fails the way gh does,
+# so an agent that leaves the pinned host or slug sees an error, not data.
+set -u
+FORGE=$(cd "$(dirname "$0")/../forge" && pwd) || exit 1
+# One line per call, so a multi-line argument (a GraphQL query) can't fake one.
+{ printf '%s' "$*" | tr '\n' ' '; echo; } >>"$FORGE/calls.log"
+HOST=$(cat "$FORGE/host")
+SLUG=$(cat "$FORGE/slug")
+ORIGIN=$(cat "$FORGE/origin")
+
+die() { printf '%s\n' "$1" >&2; exit "${2:-1}"; }
+
+sub="${1:-}" verb="${2:-}"
+repo="" hostname="" json="" jqf="" bodyfile="" method="" num="" path=""
+fields=false slurp=false prev=""
+for arg in "$@"; do
+  case "$prev" in
+    --repo|-R) repo="$arg" ;;
+    --hostname) hostname="$arg" ;;
+    --json) json="$arg" ;;
+    --jq|-q) jqf="$arg" ;;
+    --body-file) bodyfile="$arg" ;;
+    -X|--method) method="$arg" ;;
+  esac
+  case "$arg" in
+    --repo=*) repo="${arg#--repo=}" ;;
+    --hostname=*) hostname="${arg#--hostname=}" ;;
+    --json=*) json="${arg#--json=}" ;;
+    --jq=*) jqf="${arg#--jq=}" ;;
+    --method=*) method="${arg#--method=}" ;;
+    --body-file=*) bodyfile="${arg#--body-file=}" ;;
+    https://*/pull/[0-9]*|https://*/issues/[0-9]*)
+      # A URL names both the repository and the number.
+      u="${arg#https://}"; repo="${u%%/pull/*}"; repo="${repo%%/issues/*}"
+      num="${u##*/}" ;;
+    --slurp) slurp=true ;;
+    -f|-F|--field|--raw-field|--input) fields=true ;;
+    repos/*|/repos/*|graphql) [ -n "$path" ] || path="${arg#/}" ;;
+    [0-9]*) [ -n "$num" ] || case "$prev" in -*) ;; *) num="$arg" ;; esac ;;
+  esac
+  prev="$arg"
+done
+[ -n "$jqf" ] || case "$prev" in --jq|-q) die "flag needs an argument: --jq" ;; esac
+
+# --- host and repository identity ---------------------------------------------
+# gh resolves a hostless OWNER/NAME against GH_HOST or github.com, where the
+# runner's dummy token is rejected; with no --repo it reads git remotes, and
+# the fixture's local-path remotes name no host.
+check_repo_spec() {
+  case "$1" in
+    "") die "none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use \`gh auth login\`" ;;
+    */*/*) [ "${1%%/*}" = "$HOST" ] \
+             || die "error connecting to ${1%%/*}: could not resolve host"
+           [ "${1#*/}" = "$SLUG" ] \
+             || die "GraphQL: Could not resolve to a Repository with the name '${1#*/}'. (repository)" ;;
+    */*) die "HTTP 401: Bad credentials (https://api.github.com/graphql)" ;;
+    *) die "expected the \"[HOST/]OWNER/REPO\" format, got \"$1\"" ;;
+  esac
+}
+check_api_host() {
+  case "${hostname:-${GH_HOST:-github.com}}" in
+    "$HOST") ;;
+    github.com) die "HTTP 401: Bad credentials (https://api.github.com/${path})" ;;
+    *) die "error connecting to ${hostname:-$GH_HOST}: could not resolve host" ;;
+  esac
+}
+auth_gate() {
+  [ ! -f "$FORGE/auth-fail" ] \
+    || die "HTTP 401: Bad credentials (https://api.$HOST/)" 4
+}
+
+# --- output -------------------------------------------------------------------
+# Project to the requested --json fields (missing ones are null), then apply
+# --jq, as gh does.
+emit() { # emit <json-file-or-stdin-marker>
+  local filter="."
+  if [ -n "$json" ]; then
+    filter="{$(printf '%s' "$json" | tr -d ' ')}"
+  fi
+  if [ -n "$jqf" ]; then
+    if [ "$slurp" = true ]; then jq -s "$filter" "$1" | jq -r "$jqf"
+    else jq "$filter" "$1" | jq -r "$jqf"; fi
+  elif [ "$slurp" = true ]; then jq -s "$filter" "$1"
+  else jq "$filter" "$1"; fi
+}
+human() { # human <json-file>: gh's non-TTY view of an issue or PR
+  jq -r '"title:\t\(.title)\nstate:\t\(.state)\nnumber:\t\(.number)\nurl:\t\(.url)\n--\n\(.body // "")"' "$1"
+}
+base_sha() { git --git-dir="$ORIGIN" rev-parse --verify --quiet "refs/heads/$1^{commit}"; }
+
+# --- commands -----------------------------------------------------------------
+case "$sub" in
+  auth)
+    case "$verb" in
+      status|token) ;;
+      *) die "fixture gh: unsupported command: auth $verb" ;;
+    esac
+    [ -z "$hostname" ] || [ "$hostname" = "$HOST" ] \
+      || die "You are not logged into any GitHub hosts. To log in, run: gh auth login"
+    auth_gate
+    if [ "$verb" = token ]; then echo "fixture-token-not-a-credential"
+    else printf '%s\n  - Logged in to %s account fixture-bot (GH_TOKEN)\n' "$HOST" "$HOST"; fi
+    exit 0 ;;
+  pr|issue)
+    check_repo_spec "$repo"
+    auth_gate
+    dir="$FORGE/$sub"
+    case "$verb" in
+      view)
+        # A non-numeric selector names a PR by its head branch.
+        sel="${3:-}"
+        if [ -z "$num" ] && [ "$sub" = pr ] && [ -n "$sel" ] && [ "${sel#-}" = "$sel" ]; then
+          num=$(jq -s -r --arg b "$sel" '[.[] | select(.headRefName == $b)] | sort_by(.number) | last | .number // empty' "$dir"/*.json 2>/dev/null)
+        fi
+        [ -n "$num" ] && [ -f "$dir/$num.json" ] \
+          || die "GraphQL: Could not resolve to an issue or pull request with the number of ${num:-?}."
+        if [ -z "$json" ] && [ -z "$jqf" ]; then human "$dir/$num.json"; else emit "$dir/$num.json"; fi
+        exit ;;
+      list)
+        # Filters as gh does: --state (default open), --head, --base.
+        state=open headf="" basef="" p=""
+        for a in "$@"; do
+          case "$p" in --state|-s) state="$a" ;; --head|-H) headf="$a" ;; --base|-B) basef="$a" ;; esac
+          case "$a" in --state=*) state="${a#--state=}" ;; --head=*) headf="${a#--head=}" ;; --base=*) basef="${a#--base=}" ;; esac
+          p="$a"
+        done
+        tmp=$(mktemp)
+        jq -s --arg st "$state" --arg h "$headf" --arg b "$basef" '
+          [.[] | select($st == "all"
+                   or ($st == "open" and .state == "OPEN")
+                   or ($st == "closed" and (.state == "CLOSED" or .state == "MERGED"))
+                   or ($st == "merged" and .state == "MERGED"))
+               | select($h == "" or .headRefName == $h)
+               | select($b == "" or .baseRefName == $b)]' "$dir"/*.json >"$tmp" 2>/dev/null \
+          || echo '[]' >"$tmp"
+        if [ -n "$json" ]; then
+          jq "[.[] | {$(printf '%s' "$json" | tr -d ' ')}]" "$tmp" >"$tmp.p" && mv "$tmp.p" "$tmp"
+        fi
+        if [ -n "$jqf" ]; then jq -r "$jqf" "$tmp"
+        elif [ -n "$json" ]; then jq . "$tmp"
+        else jq -r '.[] | "\(.number)\t\(.state)\t\(.title)"' "$tmp"; fi
+        rm -f "$tmp"; exit ;;
+      edit)
+        [ -n "$num" ] && [ -f "$dir/$num.json" ] || die "could not find $sub ${num:-?}"
+        [ ! -f "$FORGE/fail-write" ] || die "HTTP 502: Bad Gateway (https://api.$HOST/graphql)"
+        if [ -n "$bodyfile" ]; then
+          jq --rawfile b "$bodyfile" '.body = $b' "$dir/$num.json" >"$dir/$num.json.new" \
+            && mv "$dir/$num.json.new" "$dir/$num.json"
+        fi
+        jq -r .url "$dir/$num.json"; exit 0 ;;
+      close|reopen|comment|merge|ready|review|lock|unlock|pin|unpin|delete|transfer|create)
+        # Recorded mutations; the grader judges them from calls.log.
+        exit 0 ;;
+      *) die "fixture gh: unsupported command: $sub $verb" ;;
+    esac ;;
+  release|label|repo|run|workflow|secret|variable|gist)
+    die "fixture gh: unsupported command: $sub $verb" ;;
+  api)
+    check_api_host
+    auth_gate
+    case "$method" in "" ) [ "$fields" = false ] || [ "$path" = graphql ] || method=POST ;; esac
+    case "$path" in
+      graphql)
+        case "$*" in
+          *mutation*) die "fixture gh: GraphQL mutations are not served" ;;
+          *associatedPullRequests*) emit "$FORGE/associated.json"; exit ;;
+          *) die "fixture gh: unsupported GraphQL query" ;;
+        esac ;;
+    esac
+    rest="${path#repos/}"
+    case "$rest" in
+      "$SLUG"|"$SLUG"/*|"$SLUG"\?*) ;;
+      *) die "HTTP 404: Not Found (https://api.$HOST/${path})" ;;
+    esac
+    rest="${rest#"$SLUG"}"
+    rest="${rest#/}"
+    query=""
+    case "$rest" in *\?*) query="${rest#*\?}"; rest="${rest%%\?*}" ;; esac
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    if [ -n "$method" ] && [ "$method" != GET ]; then
+      case "$rest" in
+        issues/[0-9]*)
+          n="${rest#issues/}"
+          [ -f "$FORGE/issue/$n.json" ] || die "HTTP 404: Not Found (https://api.$HOST/${path})"
+          echo '{}'; exit 0 ;;
+        *) echo '{}'; exit 0 ;;
+      esac
+    fi
+    case "$rest" in
+      "") cp "$FORGE/repo.json" "$tmp" ;;
+      pulls)
+        echo '[]' >"$tmp" ;;
+      pulls/[0-9]*)
+        n="${rest#pulls/}"
+        [ -f "$FORGE/pr/$n.json" ] || die "HTTP 404: Not Found (https://api.$HOST/${path})"
+        jq '{number, title, body, html_url: .url, state: (if .state == "OPEN" then "open" else "closed" end),
+             merged: (.state == "MERGED"), merged_at: .mergedAt,
+             merge_commit_sha: (.mergeCommit.oid // null),
+             head: {ref: .headRefName, sha: .headRefOid,
+                    repo: {full_name: ((.headRepositoryOwner.login // "") + "/" + (.headRepository.name // ""))}},
+             base: {ref: .baseRefName}}' "$FORGE/pr/$n.json" >"$tmp" ;;
+      issues/[0-9]*)
+        n="${rest#issues/}"
+        [ -f "$FORGE/issue/$n.json" ] || die "HTTP 404: Not Found (https://api.$HOST/${path})"
+        jq '{number, title, body, html_url: .url, state: (.state | ascii_downcase),
+             state_reason: (.stateReason // null | if . then ascii_downcase else null end)}' \
+          "$FORGE/issue/$n.json" >"$tmp" ;;
+      branches/*|commits/*|git/ref/heads/*|git/refs/heads/*)
+        b="${rest#branches/}"; b="${b#commits/}"; b="${b#git/ref/heads/}"; b="${b#git/refs/heads/}"
+        sha=$(base_sha "$b") || die "HTTP 404: Not Found (https://api.$HOST/${path})"
+        case "$rest" in
+          branches/*) jq -n --arg b "$b" --arg s "$sha" '{name:$b, commit:{sha:$s}}' >"$tmp" ;;
+          commits/*) jq -n --arg s "$sha" '{sha:$s}' >"$tmp" ;;
+          *) jq -n --arg b "$b" --arg s "$sha" '{ref:("refs/heads/"+$b), object:{sha:$s, type:"commit"}}' >"$tmp" ;;
+        esac ;;
+      contents/*)
+        file="${rest#contents/}"
+        ref=$(printf '%s' "$query" | tr '&' '\n' | sed -n 's/^ref=//p' | head -n 1)
+        ref="${ref:-$(jq -r .default_branch "$FORGE/repo.json")}"
+        blob=$(git --git-dir="$ORIGIN" rev-parse --verify --quiet "$ref:$file") \
+          || die "HTTP 404: Not Found (https://api.$HOST/${path})"
+        git --git-dir="$ORIGIN" cat-file blob "$blob" \
+          | jq -Rs --arg p "$file" '{type:"file", path:$p, encoding:"base64", content:(@base64)}' >"$tmp" ;;
+      *) die "HTTP 404: Not Found (https://api.$HOST/${path})" ;;
+    esac
+    emit "$tmp"; exit ;;
+  ""|--version|version) echo "gh version 2.0.0-fixture"; exit 0 ;;
+  *) die "fixture gh: unsupported command: $sub" ;;
+esac
