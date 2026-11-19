@@ -385,3 +385,32 @@ gh label create needs-rework --repo <host>/<slug> --color d93f0b \
 If the read fails, including on a later page, report that the labels couldn't
 be checked instead of inferring they're missing. Without `gh` or a supported
 forge, report the check as unavailable.
+
+## §tracker-label
+
+Run this check only when the project uses tracker issues, the same condition
+that scaffolds `docs/tracker-format.md`. In init mode, the step-4 intake
+found tracker issues. In update mode, the project has
+`docs/tracker-format.md` or step 9 is offering it. The check needs a host
+that `gh` serves, resolved as §forge-record describes.
+
+Read all labels with the same paginated call that Landing Labels uses under
+§landing-record. One read can serve both checks:
+
+```sh
+gh api --hostname <host> --paginate 'repos/<slug>/labels' --jq '.[].name'
+```
+
+When `tracker` is missing, report it by name and offer to create it, showing
+the exact command first:
+
+```sh
+gh label create tracker --repo <host>/<slug> --color fbca04 \
+  --description "Coordination issue in the shared tracker format; lists work units, not work itself"
+```
+
+Keep an existing label's color and description. Never apply the label to an
+issue; labeling trackers is the owner's job. If the read fails, including on
+a later page, report that the labels couldn't be checked instead of inferring
+the label is missing. Without `gh` or a supported forge, report the check as
+unavailable.
