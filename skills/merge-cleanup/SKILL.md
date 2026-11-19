@@ -16,83 +16,61 @@ description: >-
 # Merge Cleanup
 
 Clean up after a merged PR: resync the base, remove the merged branch's clean
-worktree, delete and prune the merged branch, verify that close-keyword issues closed, reconcile documented project
-obligations, and stop any review watch. A bundled script handles the Git and
-GitHub mechanics. This skill keeps issue-close verification, project-specific
-reconciliation, watcher shutdown, and the final owner-facing judgment.
+worktree, delete and prune the merged branch, verify that close-keyword issues
+closed, reconcile documented project obligations, and stop any review watch.
+Bundled scripts do the Git and GitHub mechanics; you keep the judgment.
 
 ## Check Prerequisites
 
-Use this skill on any agent platform that can run the required bundle. Before
-cleanup, establish support through read-only project records and tool checks:
+Before cleanup, confirm support with read-only checks:
 
-- **Supported forge:** GitHub or a compatible GitHub Enterprise host, accessed
-  through authenticated `gh`. Resolve the host and slug as Resolve the Work
-  Unit requires. Keep the actual forge host explicit, not the SSH alias or
-  ambient `GH_HOST`. A custom hostname alone does not mean unsupported.
+- **Forge:** GitHub or a compatible GitHub Enterprise host, through
+  authenticated `gh`. Resolve the host and slug as Resolve the Work Unit
+  requires, and keep the actual forge host explicit, not an SSH alias or
+  ambient `GH_HOST`; a custom hostname alone doesn't mean unsupported.
   Confirm access with a read-only `gh` lookup pinned to that host.
-- **Required runtime:** A shell-capable environment with Bash, Git, `gh`,
-  `env`, `sed`, `tr`, `mktemp`, `mkdir`, `rm`, `readlink`, `tail`, `grep`, and
-  `find`. Check availability with `command -v`. Git must support the bundle's
-  worktree, ref, and transport operations; the landing helper checks
-  `git switch` when the branch name requires it. No numeric minimum versions
-  are specified. Standalone `jq` and `rg` are not cleanup requirements.
-- **Executable bundle:** Check that `merge-cleanup.sh` and its adjacent
-  `base-landing-plan.sh` are present and executable. SSH transport also needs
-  its configured SSH tooling. The executor uses `ssh -G` to validate aliases
-  against the pinned forge host.
-- **Stop on missing support:** Report a non-GitHub forge as unsupported, name
-  unavailable mandatory tooling or an unusable bundle, and report unknown
-  host identity or failed authentication/API evidence as a lookup gap. Stop
-  before any fetch, switch, retarget, delete, or prune. Do not substitute
-  another forge CLI or reconstruct the destructive sequence from prose.
+- **Runtime:** Bash, Git, `gh`, `env`, `sed`, `tr`, `mktemp`, `mkdir`, `rm`,
+  `readlink`, `tail`, `grep`, and `find`, checked with `command -v`, plus the
+  configured SSH tooling for SSH transport. The reconciliation checker and
+  tracker commands also need `awk`.
+- **Bundle:** `merge-cleanup.sh` and its adjacent `base-landing-plan.sh`,
+  present and executable.
 
-These requirements apply to the cleanup executor. The separate reconciliation
-checker and the tracker commands (`tracker-refresh.sh` and
-`tracker-write.sh`) also need `awk`; their manual
-fallbacks are described in Reconcile Project Obligations and do not replace
-the executor.
+When support is missing, stop before any fetch, switch, retarget, delete, or
+prune. Report a non-GitHub forge as unsupported, name the missing tool or
+unusable bundle, and report an unknown host or failed authentication as a
+lookup gap. Never substitute another forge CLI or rebuild the destructive
+sequence from prose.
 
-Once prerequisites pass, follow this procedure:
-
-1. Resolve the work unit: the repository, PR number, worktree, and remote
-   roles.
-2. Run the guarded cleanup script.
-3. Interpret the result ledger.
-4. Verify issue closure.
-5. List the obligations found.
-6. Reconcile project obligations.
-7. Stop the review watch.
-8. Summarize for the owner, one line per obligation.
+Then follow the sections in order through Summarize.
 
 ## Resolve the Work Unit
 
-Resolve the merged PR from the conversation first. Otherwise identify it with
-`gh` against the explicit host, but never select an ambiguous candidate.
+Take the merged PR from the conversation, or find it with `gh` against the
+explicit host; never pick an ambiguous candidate. Before running the script,
+establish:
 
-Establish each of these before invoking the script:
-
-- **Base repository and PR number.** Use `host/owner/name` and the positive
-  decimal PR number. Take the host and slug from the project's forge record
-  when AGENTS.md carries one, an entry naming both, before inferring them from
-  a remote: a remote on an SSH host alias hides both. Keep the host explicit
-  even when it is `github.com`: `GH_HOST` and the CLI's default host are
-  ambient state, not pinned evidence.
-- **The exact worktree the cleanup may rewrite.** Prefer the worktree already
-  holding the PR's base branch. Otherwise use the clean feature worktree that
-  can land on the base. Pass its root, not a subdirectory.
+- **Base repository and PR number,** as `host/owner/name` and a positive
+  decimal number. Take the host and slug from the project's forge record when
+  AGENTS.md has one naming both, before inferring them from a remote: an SSH
+  host alias hides both. Keep the host explicit even for `github.com`.
+- **The worktree the cleanup may rewrite:** the one holding the PR's base
+  branch, or else the clean feature worktree that can land on the base. Pass
+  its root, not a subdirectory.
 - **The base and head remote roles.** Inspect configured remotes when
-  necessary. A fork PR usually has different roles; never let a base remote
-  stand in for the fork that owns the head branch.
+  necessary. A fork PR's differ; never let the base remote stand in for the
+  fork that owns the head branch.
 
-Do not fetch, switch, retarget, delete, or prune before invoking the script.
-Those operations belong to one guarded sequence, and a partial manual prelude
-invalidates its initial evidence.
+Don't fetch, switch, retarget, delete, or prune before the script runs. Those
+belong to its one guarded sequence, and a manual prelude invalidates its
+initial evidence.
 
 ## Run the Guarded Cleanup
 
-Invoke the script by its skill-directory path so its bundled helpers remain
-available:
+Run the script by its skill-directory path, so its bundled helpers stay
+available, from your session's own working directory. Don't `cd` into another
+checkout first: the script never removes the worktree it started from, and
+this keeps it from removing the directory your shell stands in.
 
 ```sh
 <skill-dir>/merge-cleanup.sh \
@@ -101,184 +79,102 @@ available:
   --checkout '<absolute-worktree-root>'
 ```
 
-- **Required:** `--repo`, `--pr`, and `--checkout`.
 - **Optional remotes:** `--base-remote '<name>'` or `--head-remote '<name>'`,
   only after inspecting the mapping and choosing the remote for that role.
   Explicit remotes help ambiguous layouts and hostless local-path fixtures;
-  they do not bypass the script's identity, push-target, or lease checks.
+  they don't bypass the script's identity, push-target, or lease checks.
 - **Keep the head worktree:** `--keep-worktree`, only when the owner says to
   keep the merged branch's worktree. The cleanup then stops for them, as for
   a dirty one.
-- **Contract:** `--help` and `-h` print it.
+- **Contract:** `--help` prints it.
 
-Run the script from your session's own working directory; don't `cd` into
-another checkout first. The script never removes the worktree it was started
-from, so this keeps it from removing the directory your shell stands in.
+The script pins the merged PR's facts, rejects unsafe state, lands on the base
+branch and fully resyncs it, then deletes the remote head under an OID lease,
+retargeting a same-repository stacked PR first. Last, it deletes the local
+head and prunes. The resync finishes before branch deletion, so a later stop
+still leaves a current base. It first removes the linked worktree
+holding the head branch only when that worktree is clean, at the merged head,
+and doesn't hold your working directory; otherwise it stops
+`head-worktree-present` for the owner. It leaves an absent base branch for
+the owner to create and keeps `branch.<name>` config.
 
-The script runs this mechanical sequence in order:
-
-1. **Pin the facts** from the base repository: the merged PR, head OID, base
-   branch, head repository, and closing references.
-2. **Preflight, then reject unsafe state.** Reject:
-   - Dirty or paused worktrees, and a linked head worktree it can't remove.
-     It removes the linked worktree that holds the head branch through
-     `worktree-sweep.sh --remove-head`, only when that worktree is clean,
-     still at the merged head, and doesn't hold the caller's working
-     directory. Otherwise it stops `head-worktree-present` for the owner,
-     with the sweep's reason. The ledger's `worktree` field reads
-     `removed_clean` after a removal and `owner_removal_required` after
-     the stop.
-   - Dangerous ref aliases and mismatched local refs.
-   - Credential-bearing URLs.
-   - Overlapping remote-tracking namespaces and ambiguous remote identities.
-3. **Land on the base branch and resync it.**
-   - Require the local base branch to exist, then land on it through
-     `base-landing-plan.sh`.
-   - Re-resolve branch-conditioned remotes and tracking state, guard that
-     namespace, then fetch and fully fast-forward-resync the base.
-   - Leave an absent base for the owner to create before rerunning cleanup:
-     Git offers no branch-creation lease that also rejects a concurrently
-     created dangling symbolic ref.
-4. **Delete the remote head.**
-   - Re-resolve the head repository and compare its exact remote branch OID
-     with the merged PR head.
-   - Pin its validated fetch URL, and require its single push URL to identify
-     the same destination.
-   - Bind each transport command through a one-use full-length URL rewrite, so
-     later live rewrite config cannot redirect it.
-   - Check branch consumers, then delete with an OID lease.
-   - Retarget a same-repository stacked PR to the merged PR's base and verify
-     it first. Stop on a cross-repository stack or a shared head anywhere in
-     the repository network.
-5. **Delete the local head and prune.**
-   - Compare-and-delete the local head at the forge-verified OID, then prune
-     the base and distinct head remotes.
-   - Stop if a worktree took the head branch after the preflight. The owner
-     can remove a kept worktree with the sweep in Sweep Worktrees for Merged
-     Branches.
-   - Retain `branch.<name>` config deliberately: Git cannot couple its
-     deletion atomically to the expected ref OID.
-
-The base resync deliberately finishes before remote deletion. This ordering
-comes from issue #105: a later destructive guard can stop while leaving the
-checkout on a current base, without weakening the branch-deletion guards.
-
-`merge-cleanup.sh` calls `base-landing-plan.sh --format nul` internally. That
-helper's default format stays JSON for human inspection; `--format json`,
-`--format nul`, `--help`, and `-h` are its documented interfaces. Do not parse
-the human JSON to recreate the orchestrator. The linked-worktree guard is also
-available as `worktree-inventory.sh '<absolute-worktree-root>'`, with `--help`
-or `-h`, for diagnosis only.
+It calls `base-landing-plan.sh --format nul` internally; never parse that
+helper's JSON to recreate the sequence. `worktree-inventory.sh
+'<absolute-worktree-root>'` runs the linked-worktree guard for diagnosis only.
 
 ### Interpret the Result Ledger
 
-When the script emits a result ledger, its last stdout line is one of these:
+The script's last stdout line is the result:
 
-- `OK cleanup <json>` at exit 0: every mechanical step completed or was
-  already absent.
-- `STOP <guard> <json>` at exit 2: evidence was valid enough to refuse the
-  next unsafe action.
-- `LOOKUP_FAILED <what> <json>` at exit 4: required evidence could not be
-  established, so the next action did not run.
+- `OK cleanup <json>` at exit 0: every step completed or was already absent.
+- `STOP <guard> <json>` at exit 2: a guard refused the next unsafe step.
+- `LOOKUP_FAILED <what> <json>` at exit 4: required evidence couldn't be
+  read, so the next step didn't run. An authentication or API failure is a
+  lookup failure, not proof of an unsupported forge.
 
-Exit 64 means the invocation is invalid. Exit 69 covers explicit runtime
-checks, including missing Git, `gh`, or the executable landing helper, and
-can occur without a JSON ledger. Other missing utilities need not return 69
-or produce a ledger. For example, missing `find` causes `LOOKUP_FAILED` at
-exit 4 when the landing helper inspects the refs tree. Authentication or API
-evidence failures are lookup failures, not proof of an unsupported forge.
+Exit 64 is a usage error, and exit 69 a missing runtime, which may print no
+ledger. Every JSON payload carries every step's disposition. Report completed
+ones even when a later step stopped: a resynced base isn't a failed cleanup
+because remote deletion was refused. The `worktree` field reads
+`removed_clean` after a removal and `owner_removal_required` after the stop. A
+`local_branch` value ending in `_config_retained` means the ref is gone and
+same-named branch config was left on purpose; don't report it as config
+removal.
 
-Every JSON payload carries the same fields: `repo`, `pr`, `merge`,
-`head_branch`, `base_branch`, `head_repo`, `checkout`, `worktree`, `consumers`,
-`remote_branch`, `base_resync`, `local_branch`, `prune`, `closing_refs`,
-`incomplete_step`, and `detail`. Report completed dispositions even when a
-later step stopped. In particular, do not describe a resynced base as a failed
-cleanup merely because remote deletion was refused.
+To retry, resolve the stated guard and rerun the whole script with the same
+PR and checkout; completed deletions are idempotent. Never run the remaining
+Git command by hand. If the script can't run, stop and report the runtime gap.
 
-Three `local_branch` values are truthful boundaries, not incomplete cleanup:
-`deleted_merged_config_retained`, `deleted_verified_config_retained`, and
-`already_absent_config_retained`. Each means the named local ref is absent
-while any same-named branch config stays untouched, to avoid racing another
-Git process that recreates the ref. Do not summarize them as config removal.
-
-A result is retryable after its stated guard is resolved. Re-run the whole
-script with the same pinned PR and checkout; its already-absent dispositions
-make completed deletion steps idempotent. Do not extract and run the remaining
-Git command by hand. If the executable cannot run, stop and report the runtime
-gap as Check Prerequisites requires.
-
-For guard rationale or maintenance, read only the relevant section. Normal
-cleanup does not require loading this reference.
-
-- `references/hazards.md` §merged-not-ancestor
-- `references/hazards.md` §tag-shadow
-- `references/hazards.md` §push-refspec-ambiguity
-- `references/hazards.md` §checkout-detach
-- `references/hazards.md` §leading-hyphen-args
-- `references/hazards.md` §worktree-refusals
-- `references/hazards.md` §worktree-remove-destroys
-- `references/hazards.md` §ignored-file-overwrite
-- `references/hazards.md` §status-config
-- `references/hazards.md` §prune-refspec-scope
-- `references/hazards.md` §branch-d-upstream
+For a guard's rationale, read only its section; normal cleanup doesn't need
+them: `references/hazards.md` §merged-not-ancestor,
+`references/hazards.md` §tag-shadow,
+`references/hazards.md` §push-refspec-ambiguity,
+`references/hazards.md` §checkout-detach,
+`references/hazards.md` §leading-hyphen-args,
+`references/hazards.md` §worktree-refusals,
+`references/hazards.md` §worktree-remove-destroys,
+`references/hazards.md` §ignored-file-overwrite,
+`references/hazards.md` §status-config,
+`references/hazards.md` §prune-refspec-scope, and
+`references/hazards.md` §branch-d-upstream.
 
 ## Verify Issue Closure
 
-Merging should close issues named with close keywords, but cross-repository
-references, a non-default base, and keyword mistakes can fail silently. Check
-closure:
-
-- **Start with the ledger's `closing_refs`.** Query each named issue
-  separately and pin the repository from that record, since the reference may
-  be cross-repository.
-- **Also read the merged PR body and `closingIssuesReferences`** in one pinned
-  forge lookup. If the body appears to contain a close keyword the forge did
-  not recognize, resolve the apparent target and check it explicitly.
-- **Treat plain `Refs #N` mentions as intentionally non-closing.**
-- **Surface any still-open issue for the user to close.** Do not close it
-  unless the user separately asks; whether the merged work fully resolves it
-  is an owner decision.
-- **If the forge lookup cannot run, state the verification gap** instead of
-  silently omitting this stage.
+Close keywords can fail silently across repositories, on a non-default base,
+or when mistyped. Query each issue in the ledger's `closing_refs` separately,
+pinned to its own repository. In one pinned lookup, also read the merged PR's
+body and `closingIssuesReferences`, and check the target of any close keyword
+the forge missed. Plain `Refs #N` is intentionally non-closing. Surface any
+still-open issue for the owner, and don't close it unless they ask. If the lookup can't run, state the
+verification gap.
 
 ## List the Obligations Found
 
-Discover the project's post-merge obligations before any tracker write, and
-tell the user the list before acting on it. Inspect the authoritative project
-instructions that govern the repository for exactly one fixed-field
-`Post-merge obligations` record whose fields each appear exactly once. Read it
-and its mechanics document as `references/project-obligations.md` §discovery
-requires, then list:
+Before any tracker write, find the project's post-merge obligations and tell
+the user the list before acting on it. Read the one `Post-merge obligations`
+record in the project's authoritative instructions, and its mechanics
+document, as `references/project-obligations.md` §discovery requires. List
+each containing tracker with its unit entry and transition, each field to
+refresh, the closing issues that select those trackers, and any other
+documented post-merge duty, including one this skill may not perform.
 
-- **Each containing tracker**, with the unit entry and transition the
-  mechanics name for it.
-- **Each field to refresh** in that tracker.
-- **The closing issues** whose verified state selects those trackers.
-- **Any other documented post-merge duty**, including one the record asks for
-  but this skill may not perform.
-
-Write the same list as the trace's `policy` row and `plan` rows. Use `write`
-for a transition or refresh to apply, `noop` for one already satisfied,
-`report` for derived output such as newly unblocked units, and `unsupported`
-for a duty outside this skill's authority. Then generate the trace skeleton:
+Write the same list as a plan file's `policy` and `plan` rows, then generate
+the trace and fill it in as `references/project-obligations.md`
+§state-machine says:
 
 ```sh
 <skill-dir>/reconciliation-ledger.sh --skeleton '<plan-file>' > '<trace-file>'
 ```
 
-The skeleton holds the happy-path events in the checked order. Replace each
-expected value with the observed one as the work runs, and replace the block
-of an item that did not run with its `skip` row. With a readably absent
-record, the list is empty: say so in one line, and still close the trace.
-When the record or its mechanics cannot be read, list no items; the skeleton
-adds the one umbrella skip, and its reason names the failed source.
+With a readably absent record, the list is empty: say so in one line, and
+still close the trace.
 
 ## Reconcile Project Obligations
 
 Run this after issue-close verification, and only when merge verification
-passed. An earlier mechanical cleanup stop does not block safe reconciliation,
-but continuing requires a freshly resolved current base tip. Report the
-mechanical and project results separately.
+passed. An earlier mechanical stop doesn't block reconciliation, but
+continuing needs a freshly resolved base tip. Report mechanical and project
+results separately.
 
 Before acting, read these, and use `references/project-obligations.md`
 §freeside-example only as calibration:
@@ -290,272 +186,117 @@ Before acting, read these, and use `references/project-obligations.md`
 - `references/project-obligations.md` §trackers
 - `references/project-obligations.md` §failures
 
-**Scope.** Reconcile only known trackers and authorized fields, observing every
-limit in the reference.
+They hold the full rules; in short:
 
-- The record can authorize only documented transitions and listed refreshes
-  for known containing trackers, never another external or project mutation.
-- Readable absence adds no behavior or summary text, but only after its final
-  base-tip check stays unchanged. An unreadable required source makes cleanup
-  incomplete.
+- **Scope.** Change only known containing trackers, and only by the record's
+  documented transitions and listed refreshes, never another external or
+  project mutation.
+- **Freshness.** Read the record and mechanics from one freshly resolved base
+  commit, never the checked-out tree or a stale ref. Recheck the base tip
+  before and after every tracker write. Right before a write, reread every
+  input that selected the tracker or shaped the edit, and reread them all
+  after verifying it. A changed or unverifiable input makes the attempt's
+  fields unknown and stops later work.
+- **Ledger.** Record each event in the trace as observed, never as expected,
+  and close it with a final base-tip observation even when no write ran.
+  Check it with `<skill-dir>/reconciliation-ledger.sh '<trace-file>'`;
+  `--help` prints the trace contract. Only `RESULT complete` supports a full
+  reconciliation claim, and a stable absence stays silent. If the checker
+  can't run, apply the state machine by hand and report that gap.
 
-**Freshness and rereads.** Read the record and mechanics from one freshly
-resolved immutable base commit, never from the checked-out feature tree or a
-stale local ref.
-
-- Recheck that base tip before every tracker write attempt and after its
-  tracker verification attempt, even when the write or verification failed.
-- Immediately before a tracker write, freshly reread every external object
-  whose state selected the tracker or determined the computed edit, not only
-  the tracker being written. Then recompute and apply only the documented
-  idempotent transition.
-- After the target verification, reread that full input set again.
-- A changed or unverifiable input makes every otherwise verified field from
-  the attempt unknown, and stops later work.
-- Successful later verification proves current observed state, not that no
-  concurrent edit was overwritten.
-
-**Ledger.** Use `reconciliation-ledger.sh` for every discovery result,
-including readable absence.
-
-- Start from the skeleton generated in the previous step, which enumerates
-  work per tracker and per transition or refreshed field. Record each ordered
-  freshness, guard, attempt, target verification, full-input recheck, and
-  disposition event as observed, never as expected.
-- Name every external input used by a write, no-op, or report. After all writes
-  are dispositioned, reread and recompute no-op and report items before
-  recording them fresh.
-- Close the trace with a final base-tip observation even when no write ran.
-- A stable absence suppresses the complete ledger and stays silent; otherwise
-  report the checker's ledger and owner action.
-- Only `RESULT complete` supports a full project-reconciliation claim.
-
-Run it as `<skill-dir>/reconciliation-ledger.sh '<trace-file>'`; `--help`, or
-`-h`, prints the trace contract. If the executable check cannot run, apply the
-referenced state machine manually and report that verification gap.
-
-**Shared-format trackers.** Write the refresh of a known containing tracker
-on the shared tracker format only with the bundled `tracker-write.sh`, never
-with `gh issue edit` or `gh api -X PATCH`. Plan the body and each comment that
-holds both a `flowchart` fence and a `## Units` heading with the read-only
-`tracker-refresh.sh`, which takes the same `--repo`, `--issue`, and
-`--comment`. `OK unchanged` plans a `noop`, and `OK changed` plans a `write`.
-Run the write command only for a planned `write`:
+**Shared-format trackers.** Write a known containing tracker on the shared
+tracker format only with `tracker-write.sh`, never with `gh issue edit` or
+`gh api -X PATCH`. Plan the body, and each comment holding both a `flowchart`
+fence and a `## Units` heading, with the read-only `tracker-refresh.sh`,
+which takes the same `--repo`, `--issue`, and `--comment`: `OK unchanged`
+plans a `noop`, and `OK changed` a `write`. Run the write only for a planned
+`write`, typing each flag and value literally, never through an unquoted
+variable, which zsh passes as one argument:
 
 ```sh
 <skill-dir>/tracker-write.sh --repo <host/owner/name> --issue <N>
 <skill-dir>/tracker-write.sh --repo <host/owner/name> --issue <N> --comment <ID>
 ```
 
-- **Pass the arguments literally.** Type each flag and value in the command,
-  never through an unquoted variable such as `$ARGS`. The agent's shell may
-  be zsh, which passes that variable as one argument.
-- **It guards its own write.** It runs `tracker-refresh.sh` and writes nothing
-  when that run fails or prints nothing. It rereads the tracker right before
-  the write and writes nothing when the text changed. After the write, it
-  rereads the tracker and reruns the refresh to verify.
-- **Record the refresh's reads as the inputs.** The refresh reads the tracker
-  and every unit and prerequisite it consults. Name those in the guard and
-  recheck rows.
-- **The race is narrowed, not closed.** GitHub updates are unconditional, so
-  an edit that lands between the last reread and the write is still
-  overwritten. The tracker's edit history is the recovery path.
-- **Copy its result line into the trace.** Stdout is one line:
-  `tracker-write.sh: RESULT <result> guard=<g> attempt=<a> verify=<v> recheck=<r>`.
-  Each field is that ledger row's value, and `none` means the row is absent.
-  Then dispose of the item by its result:
+Name the refresh's reads in
+the guard and recheck rows. Copy its one stdout line,
+`tracker-write.sh: RESULT <result> guard=<g> attempt=<a> verify=<v> recheck=<r>`,
+into the trace, where `none` means the row is absent. After the `guard` row:
 
-| Result (exit)                    | Trace after the `guard` row                                     |
-| -------------------------------- | --------------------------------------------------------------- |
-| `written` (0)                    | The attempt, verify, and recheck rows as printed                |
-| `write-failed`, `unverified` (5) | The attempt, verify, and recheck rows as printed                |
-| `noop` (0)                       | `skip` with reason `already current at write time`, `remaining` |
-| `changed-since-read` (3)         | `skip` with reason `tracker changed since read`, `remaining`    |
-| `lookup-failed` (4)              | `skip` naming the failed read, `guard`                          |
-| `refused` (2)                    | `skip` naming the stderr cause, `ambiguity`                     |
+| Result (exit)                                  | Trace                                                |
+| ---------------------------------------------- | ---------------------------------------------------- |
+| `written` (0), `write-failed`/`unverified` (5) | The attempt, verify, and recheck rows as printed     |
+| `noop` (0)                                     | `skip`, `already current at write time`, `remaining` |
+| `changed-since-read` (3)                       | `skip`, `tracker changed since read`, `remaining`    |
+| `lookup-failed` (4)                            | `skip` naming the failed read, `guard`               |
+| `refused` (2)                                  | `skip` naming the stderr cause, `ambiguity`          |
 
-- **Report what it leaves.** Stderr carries the refresh's status line and any
-  reason for stopping. Put its ticks, startable set, and every item it left in
-  place in the owner summary. Name each `held` unit with its reason, so the
-  owner can fix that unit's Dependencies field. `--help` prints the full
-  contract.
-- **Pass a project's own Startable now rule as `--edited`.** That rule stays
-  the agent's judgment. Save `tracker-refresh.sh` output to one file and copy
-  it to another. In the copy, change only the `class ... startable` line and
-  the **Startable now** bullet. Pass
-  `--edited '<copy>' --base '<refresh-file>'`. The command refuses any other
-  change, including an added or removed line, and reports
-  `changed-since-read` when its own refresh differs from the base. When the
+- **Report what it leaves.** Put the refresh's ticks, startable set, and
+  every item it left in place in the summary. Name each `held` unit with its
+  reason, so the owner can fix its Dependencies field.
+- **Apply a project's own Startable now rule.** Save the refresh output, copy
+  it, and change only the copy's `class ... startable` line and **Startable
+  now** bullet. Pass `--edited '<copy>' --base '<refresh-file>'`. When the
   rule would add or remove the class line, report that instead of writing.
-- **Record any unguarded write honestly.** If a tracker write ever ran without
-  a complete guard, record `guard unavailable` and then its attempt, verify,
-  and recheck. The ledger prints the item `UNKNOWN` with the guard owner
-  action.
-- **Fix the call on exit 64.** It printed usage, called no gh, and wrote
-  nothing; correct the arguments and run it again.
-- **Fall back by hand only on exit 69.** Only when the command can't run at
-  all (exit 69, which prints no result line, or no executable), apply the
-  format's refresh section by hand and report that gap. Never do so after any
-  other exit.
+- **Handle exits.** On 64, fix the arguments and rerun. Only on 69 or no
+  executable, when nothing ran, apply the format's refresh section by hand and
+  report the gap; record such a write as `guard unavailable`.
 
 ## Stop the Review Watch
 
-If a review watch for the merged PR is still running, stop it where the
-platform provides a background task, automation, or delegated-watcher control.
-If the platform has no such control, say it will self-terminate on activity or
-at its time cap. Do not invent a cancellation mechanism.
+If a review watch for the merged PR still runs, stop it with the platform's
+background-task, automation, or delegated-watcher control. Without one, say it
+will end on activity or at its time cap. Don't invent a cancellation
+mechanism.
 
 ## Summarize
 
-Lead with the cleanup outcome. State:
+Lead with the cleanup outcome: what was resynced, deleted, already absent, or
+blocked; what merge verification showed; any issue needing manual closure;
+and whether a review watch stopped or remains to expire.
 
-- What was resynced, deleted, already absent, or blocked.
-- What merge verification showed.
-- Any issue needing manual closure.
-- Whether a review watch stopped or remains to expire.
+Then give each listed obligation its own line, by tracker name, as done,
+skipped, or blocked with its reason, taken from the ledger:
 
-Then report every listed obligation on its own line as done, skipped, or
-blocked, with its reason. Take each state from the ledger:
-
-- **Done** is a `COMPLETED` row: a verified write, a confirmed no-op, or a
-  recomputed report.
-- **Skipped** is a `SKIPPED` row whose fresh rereads showed the item no longer
-  applied, or an `unsupported` item outside this skill's authority.
-- **Blocked** is an `UNKNOWN` row, or a `SKIPPED` row caused by a source,
-  input, tooling, or freshness failure. Quote the ledger's owner action.
+- **Done:** a `COMPLETED` row, meaning a verified write, a confirmed no-op, or
+  a recomputed report.
+- **Skipped:** a `SKIPPED` row whose fresh rereads showed the item no longer
+  applied, or an `unsupported` item.
+- **Blocked:** an `UNKNOWN` row, or a `SKIPPED` row caused by a source, input,
+  tooling, or freshness failure. Quote the ledger's owner action.
 
 An unreadable required source is one blocked line for the whole
-reconciliation. Never fold these lines into a general cleanup verdict; the
-user should see each tracker by name.
+reconciliation. Never fold these lines into a general cleanup verdict.
 
 ## Sweep Worktrees for Merged Branches
 
 Run a manual sweep only when the owner asks for it in this session, such as
-"sweep the worktrees" or "remove the worktrees for merged branches". A landing
-batch runs the sweep with `--remove-landed`, and nothing else, at its end; the
-land-approved-prs skill says when. A merge-cleanup request alone never
-authorizes a sweep; the cleanup's own removal of its head worktree, described
-in Run the Guarded Cleanup, is not one. Removing a worktree deletes files: `git worktree remove`
-without `--force` still deletes ignored ones.
+"sweep the worktrees" or "remove the worktrees for merged branches". A
+merge-cleanup request alone never authorizes one; the cleanup's own removal of
+its head worktree is not a sweep. A landing batch runs only `--remove-landed`,
+after it releases its lock, as the land-approved-prs skill says. Don't run a
+manual removal while a landing batch runs: its live temporary worktree is a
+candidate too. Removal deletes files, ignored ones included.
 
-Fetch the base's remote first, with `git fetch --prune <remote>`: `origin`
-by default, or the remote in the ref `--base` names. The sweep never fetches,
-so a branch merged on the forge but not yet fetched looks unmerged and stays,
-and a disposables entry the project has since dropped still allows deletion.
-Then run it from the primary checkout, starting with the dry run:
+1. Fetch the base's remote with `git fetch --prune <remote>`: `origin`, or
+   the remote of the ref `--base` names. The sweep never fetches.
+2. From the primary checkout, run the dry run and show the owner its report:
 
-```sh
-<skill-dir>/worktree-sweep.sh
-```
+   ```sh
+   <skill-dir>/worktree-sweep.sh
+   ```
 
-Show the owner the report. Remove only with the flags the owner names for this
-run; approval of an earlier run doesn't carry over:
+3. Remove only with the flags the owner names for this run; approval of an
+   earlier run doesn't carry over. `--remove` removes the clean candidates;
+   `--remove --remove-dirty` also deletes the files the dirty candidates
+   list.
+4. Report removed and kept worktrees by path. Then rerun merge-cleanup for
+   each PR that stopped `head-worktree-present`.
 
-- `--remove` removes the clean candidates.
-- `--remove --remove-dirty` also removes the dirty candidates, deleting the
-  files their lines list. `--remove-dirty` alone is a usage error.
-- `--remove-landed` removes only the clean branch candidates whose landing
-  merge the sweep found. It keeps dirty candidates, branches with no landing
-  merge, and detached `land-wt` worktrees, each with its reason. A landing
-  batch uses it. With `--remove` or `--remove-dirty`, it's a usage error.
-- `--base '<ref>'` names the branch merged branches land on, when
-  `refs/remotes/origin/HEAD` doesn't, such as a remote not called `origin`.
-- `--remove-head '<branch>' --head-oid '<oid>'` is merge-cleanup.sh's own
-  call: it removes only that branch's worktree, when it's clean and at that
-  commit. Don't run it by hand.
-- `--caller-dir '<dir>'` keeps the worktree that holds `<dir>`, as it keeps
-  the one the sweep runs in.
-- `--help` or `-h` prints the full contract.
-
-```sh
-<skill-dir>/worktree-sweep.sh --remove
-<skill-dir>/worktree-sweep.sh --remove --remove-dirty
-```
-
-A landing batch, after it releases its lock, runs:
-
-```sh
-<skill-dir>/worktree-sweep.sh --remove-landed
-```
-
-It requires the landing merge because a branch cut from the base tip, with no
-commits yet, also passes the ancestry test; a session may be starting work in
-it. It leaves detached `land-wt` worktrees because a lander that starts after
-the release may be using one.
-
-A candidate is a linked worktree on a branch merged into the base, or a
-detached worktree that a dead `land` run left at its exact
-`land-wt.XXXXXX/wt` template (six letters or digits).
-Don't run a manual removal while a landing batch is running: the batch's live
-temporary worktree is a candidate too.
-
-An ignored `.DS_Store` file never makes a worktree dirty: Finder writes one
-in any folder a user opens, on every Mac.
-
-A project may also name the ignored build output that removal may delete, in
-a committed `.worktree-disposables` file at the repository root:
-
-```text
-# SwiftPM and Python build output
-app/.build/
-__pycache__/
-```
-
-The sweep reads the file at the base commit, never from a worktree, so a
-branch can't widen it before it lands. Each line holds one entry; blank lines
-and lines that start with `#` are skipped. Each entry is literal: a name, or a
-path from the worktree root, with an optional trailing `/` for directories
-only. A name with no interior `/` matches at any depth; a path with one is
-anchored at the root.
-
-An ignored path doesn't make a worktree dirty when the part of it an entry
-matches is itself ignored: declaring `notes/` doesn't cover
-`notes/private/` while only the latter is ignored. A nested repository under
-such a part doesn't make it `holds-repository`. An untracked path is never
-disposable. merge-cleanup's own `--remove-head` call reads no file, so only
-the `.DS_Store` rule applies there.
-
-Without the file, every other ignored file still makes a worktree dirty.
-agent-setup offers the file for build output.
-
-Scratch files an agent left behind are untracked, so no entry covers them.
-After the owner reads a dry run's list, `--remove --remove-dirty` clears
-them.
-
-Each registered worktree gets one `WORKTREE <disposition> <json>` line:
-
-- **`removed`:** This run removed it.
-- **`clean`:** A candidate whose removal deletes nothing but its checkout and
-  the disposables its `disposable` list names, such as `app/.build/` or
-  `sub/.DS_Store`, one entry per matched prefix.
-- **`dirty`:** A candidate holding untracked, modified, ignored, or
-  index-flagged files, a paused operation, or a detached HEAD that no ref
-  holds; its line lists each file. Its `ignored` list holds only the ignored
-  paths no disposables entry matches. A
-  dirty branch whose line says no landing merge was found is never removed: a
-  branch with no commits of its own looks the same and may be work in
-  progress.
-- **Never a candidate:** `primary`, `self`, `locked`, `prunable`,
-  `holds-worktree`, `holds-submodule`, `holds-repository`, `base-branch`,
-  `unmerged`, `unresolved-branch`, `unreadable`, `redirected`, and
-  `detached-other`. The line's reason says why. A `prunable` entry is reported, never pruned.
-
-The last line is one of these:
-
-- **`OK sweep <json>`:** The run finished. It carries the counts and the
-  file's `disposables` entries.
-- **`STOP no-base`:** No base resolved.
-- **`STOP bad-record`:** The disposables file isn't a regular file, holds a
-  NUL byte or a carriage return, or has a line that breaks the grammar that
-  `--help` gives. The sweep stops rather than guess. No worktree was read or
-  removed.
-- **`STOP remove-failed`:** git refused a removal, and nothing after it was
-  attempted.
-- **`LOOKUP_FAILED <what>`:** A read failed.
-
-Report removed and kept worktrees by path. The sweep rechecks each worktree
-right before removing it, which narrows a race with another process but can't
-close it.
-
-Afterwards, rerun merge-cleanup for each PR that stopped
-`head-worktree-present`.
+`--base '<ref>'` names the base when `refs/remotes/origin/HEAD` doesn't, and
+`--caller-dir '<dir>'` keeps the worktree that holds `<dir>`.
+`--remove-head '<branch>' --head-oid '<oid>'` is merge-cleanup.sh's own call;
+never run it by hand. `--help` gives the candidate rules, the
+`.worktree-disposables` file's grammar (read at the base commit; an ignored
+`.DS_Store` is always disposable), each `WORKTREE` disposition, and the result
+lines.

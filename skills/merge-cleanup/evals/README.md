@@ -296,3 +296,29 @@ the baseline scored 1.000 again, with a 0.000 band, after that change.
   subscription it counts against usage limits instead. The held-out split
   takes 3 runs, under a minute.
 - **Held-out rule:** score `--split held-out` once, at the end of a climb.
+
+#### Size Climb (#393)
+
+Measured on 2026-11-19 by the size climb, with the same model and flags.
+Every score ran from a copy of the skill without `evals/`, so no run could
+read the graders.
+
+| Candidate                                   | Split    | Score | Band  |
+| ------------------------------------------- | -------- | ----- | ----- |
+| Base `SKILL.md` (4,193 words), 3 rescores   | climb    | 1.000 | 0.000 |
+| Frontmatter only                            | climb    | 0.952 | 0.143 |
+| Final `SKILL.md` (2,180 words)              | climb    | 1.000 | 0.000 |
+| Base `SKILL.md`                             | held-out | 1.000 | 0.000 |
+| Climb's last attempt (2,166 words)          | held-out | 0.889 | 0.333 |
+| Final, after restoring two remote-role cues | held-out | 1.000 | 0.000 |
+
+- **Sensitivity fell without `evals/` in the copy.** The frontmatter-only
+  variant failed one run of 21, in case 1's review-watch report, against
+  0.666 above. The score guards behavior the scripts' `--help` and
+  `references/` don't already teach.
+- **Held-out caught a dropped cue.** Case 30 failed once when the climb had
+  cut the cues to inspect remotes and pass explicit ones on an aliased
+  layout. Restoring them passed 3 of 3, though in 2 of 3 runs the agent
+  still passed the remotes only after the script stopped `remote-unresolved`.
+  This held-out score isn't independent, since it guided the fix.
+- **Cost per climb score:** about $2.60 and 8 minutes, not 3 minutes.
