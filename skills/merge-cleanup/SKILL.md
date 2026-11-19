@@ -431,131 +431,33 @@ user should see each tracker by name.
 ## Sweep Worktrees for Merged Branches
 
 Run a manual sweep only when the owner asks for it in this session, such as
-"sweep the worktrees" or "remove the worktrees for merged branches". A landing
-batch runs the sweep with `--remove-landed`, and nothing else, at its end; the
-land-approved-prs skill says when. A merge-cleanup request alone never
-authorizes a sweep; the cleanup's own removal of its head worktree, described
-in Run the Guarded Cleanup, is not one. Removing a worktree deletes files: `git worktree remove`
-without `--force` still deletes ignored ones.
+"sweep the worktrees" or "remove the worktrees for merged branches". A
+merge-cleanup request alone never authorizes one; the cleanup's own removal of
+its head worktree is not a sweep. A landing batch runs only `--remove-landed`,
+after it releases its lock, as the land-approved-prs skill says. Don't run a
+manual removal while a landing batch runs: its live temporary worktree is a
+candidate too. Removal deletes files, ignored ones included.
 
-Fetch the base's remote first, with `git fetch --prune <remote>`: `origin`
-by default, or the remote in the ref `--base` names. The sweep never fetches,
-so a branch merged on the forge but not yet fetched looks unmerged and stays,
-and a disposables entry the project has since dropped still allows deletion.
-Then run it from the primary checkout, starting with the dry run:
+1. Fetch the base's remote with `git fetch --prune <remote>`: `origin`, or
+   the remote of the ref `--base` names. The sweep never fetches, so a stale
+   base keeps merged worktrees and still honors a dropped disposables entry.
+2. From the primary checkout, run the dry run and show the owner its report:
 
-```sh
-<skill-dir>/worktree-sweep.sh
-```
+   ```sh
+   <skill-dir>/worktree-sweep.sh
+   ```
 
-Show the owner the report. Remove only with the flags the owner names for this
-run; approval of an earlier run doesn't carry over:
+3. Remove only with the flags the owner names for this run; approval of an
+   earlier run doesn't carry over. `--remove` removes the clean candidates;
+   `--remove --remove-dirty` also deletes the files the dirty candidates
+   list.
+4. Report removed and kept worktrees by path. Then rerun merge-cleanup for
+   each PR that stopped `head-worktree-present`.
 
-- `--remove` removes the clean candidates.
-- `--remove --remove-dirty` also removes the dirty candidates, deleting the
-  files their lines list. `--remove-dirty` alone is a usage error.
-- `--remove-landed` removes only the clean branch candidates whose landing
-  merge the sweep found. It keeps dirty candidates, branches with no landing
-  merge, and detached `land-wt` worktrees, each with its reason. A landing
-  batch uses it. With `--remove` or `--remove-dirty`, it's a usage error.
-- `--base '<ref>'` names the branch merged branches land on, when
-  `refs/remotes/origin/HEAD` doesn't, such as a remote not called `origin`.
-- `--remove-head '<branch>' --head-oid '<oid>'` is merge-cleanup.sh's own
-  call: it removes only that branch's worktree, when it's clean and at that
-  commit. Don't run it by hand.
-- `--caller-dir '<dir>'` keeps the worktree that holds `<dir>`, as it keeps
-  the one the sweep runs in.
-- `--help` or `-h` prints the full contract.
-
-```sh
-<skill-dir>/worktree-sweep.sh --remove
-<skill-dir>/worktree-sweep.sh --remove --remove-dirty
-```
-
-A landing batch, after it releases its lock, runs:
-
-```sh
-<skill-dir>/worktree-sweep.sh --remove-landed
-```
-
-It requires the landing merge because a branch cut from the base tip, with no
-commits yet, also passes the ancestry test; a session may be starting work in
-it. It leaves detached `land-wt` worktrees because a lander that starts after
-the release may be using one.
-
-A candidate is a linked worktree on a branch merged into the base, or a
-detached worktree that a dead `land` run left at its exact
-`land-wt.XXXXXX/wt` template (six letters or digits).
-Don't run a manual removal while a landing batch is running: the batch's live
-temporary worktree is a candidate too.
-
-An ignored `.DS_Store` file never makes a worktree dirty: Finder writes one
-in any folder a user opens, on every Mac.
-
-A project may also name the ignored build output that removal may delete, in
-a committed `.worktree-disposables` file at the repository root:
-
-```text
-# SwiftPM and Python build output
-app/.build/
-__pycache__/
-```
-
-The sweep reads the file at the base commit, never from a worktree, so a
-branch can't widen it before it lands. Each line holds one entry; blank lines
-and lines that start with `#` are skipped. Each entry is literal: a name, or a
-path from the worktree root, with an optional trailing `/` for directories
-only. A name with no interior `/` matches at any depth; a path with one is
-anchored at the root.
-
-An ignored path doesn't make a worktree dirty when the part of it an entry
-matches is itself ignored: declaring `notes/` doesn't cover
-`notes/private/` while only the latter is ignored. A nested repository under
-such a part doesn't make it `holds-repository`. An untracked path is never
-disposable. merge-cleanup's own `--remove-head` call reads no file, so only
-the `.DS_Store` rule applies there.
-
-Without the file, every other ignored file still makes a worktree dirty.
-agent-setup offers the file for build output.
-
-Scratch files an agent left behind are untracked, so no entry covers them.
-After the owner reads a dry run's list, `--remove --remove-dirty` clears
-them.
-
-Each registered worktree gets one `WORKTREE <disposition> <json>` line:
-
-- **`removed`:** This run removed it.
-- **`clean`:** A candidate whose removal deletes nothing but its checkout and
-  the disposables its `disposable` list names, such as `app/.build/` or
-  `sub/.DS_Store`, one entry per matched prefix.
-- **`dirty`:** A candidate holding untracked, modified, ignored, or
-  index-flagged files, a paused operation, or a detached HEAD that no ref
-  holds; its line lists each file. Its `ignored` list holds only the ignored
-  paths no disposables entry matches. A
-  dirty branch whose line says no landing merge was found is never removed: a
-  branch with no commits of its own looks the same and may be work in
-  progress.
-- **Never a candidate:** `primary`, `self`, `locked`, `prunable`,
-  `holds-worktree`, `holds-submodule`, `holds-repository`, `base-branch`,
-  `unmerged`, `unresolved-branch`, `unreadable`, `redirected`, and
-  `detached-other`. The line's reason says why. A `prunable` entry is reported, never pruned.
-
-The last line is one of these:
-
-- **`OK sweep <json>`:** The run finished. It carries the counts and the
-  file's `disposables` entries.
-- **`STOP no-base`:** No base resolved.
-- **`STOP bad-record`:** The disposables file isn't a regular file, holds a
-  NUL byte or a carriage return, or has a line that breaks the grammar that
-  `--help` gives. The sweep stops rather than guess. No worktree was read or
-  removed.
-- **`STOP remove-failed`:** git refused a removal, and nothing after it was
-  attempted.
-- **`LOOKUP_FAILED <what>`:** A read failed.
-
-Report removed and kept worktrees by path. The sweep rechecks each worktree
-right before removing it, which narrows a race with another process but can't
-close it.
-
-Afterwards, rerun merge-cleanup for each PR that stopped
-`head-worktree-present`.
+`--base '<ref>'` names the base when `refs/remotes/origin/HEAD` doesn't, and
+`--caller-dir '<dir>'` keeps the worktree that holds `<dir>`.
+`--remove-head '<branch>' --head-oid '<oid>'` is merge-cleanup.sh's own call;
+never run it by hand. `--help` gives the candidate rules, the
+`.worktree-disposables` file's grammar (read at the base commit; an ignored
+`.DS_Store` is always disposable), each `WORKTREE` disposition, and the result
+lines.
