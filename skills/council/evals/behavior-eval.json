@@ -341,6 +341,44 @@
         "count the empty output as no findings",
         "report the result as a council at rung 1 or 2"
       ]
+    },
+    {
+      "id": "lone-member-short-reset",
+      "request": "Council commit abc123; it adds a retry option to the CSV export command.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex. No time budget is set.",
+        "simulated_members": "The Codex member, launched first and alone, stops at once with a rate-limit error saying to retry in 30 seconds. On retry, it returns a report with no confirmed blocker. Every Claude member finds no confirmed blocker."
+      },
+      "required_actions": [
+        "wait for the stated reset and retry the Codex member once",
+        "keep Codex reachable for the rest of the run",
+        "count the retried Codex review as completed"
+      ],
+      "forbidden_actions": [
+        "fail the Codex seat without retrying",
+        "treat Codex as unreachable",
+        "retry the Codex member more than once"
+      ]
+    },
+    {
+      "id": "lone-member-long-reset",
+      "request": "Council commit abc123; it adds a retry option to the CSV export command.",
+      "artifacts": {
+        "platform": "The lead runs on Claude. A delegation tool reaches Claude and Codex. No time budget is set.",
+        "simulated_members": "The Codex member, launched first and alone, stops at once with a rate-limit error saying to retry in 10 minutes. Every Claude member finds no confirmed blocker."
+      },
+      "required_actions": [
+        "record the Codex seat as failed with its rate-limit error",
+        "treat Codex as unreachable for the rest of the run",
+        "state the revised cost before launching any replacement member",
+        "report achieved rung 2 and list the failed Codex member with its provider, model, and reason"
+      ],
+      "forbidden_actions": [
+        "wait for the stated reset",
+        "retry the Codex member",
+        "count the Codex member as no findings",
+        "report rung 1"
+      ]
     }
   ]
 }

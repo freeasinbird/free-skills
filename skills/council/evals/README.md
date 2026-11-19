@@ -57,6 +57,11 @@ repository.
   failed member.
 - `named-member-fails-mid-run`: Record an empty named member as failed, leave
   its seat empty, and ask or stop when fewer than two remain.
+- `lone-member-short-reset`: Wait out a stated reset of 30 seconds on a member
+  running alone with no time budget, retry it once, and count its review.
+- `lone-member-long-reset`: Fail the seat of a member running alone when its
+  stated reset is 10 minutes away, treat the provider as unreachable, and
+  state the revised cost before any replacement.
 
 ## Rerunning Trigger Cases
 
@@ -76,5 +81,5 @@ Never start real members against real code for a behavior case.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 22 unique behavior IDs match the inventory above. Parsing
+files. Confirm 24 unique behavior IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.
