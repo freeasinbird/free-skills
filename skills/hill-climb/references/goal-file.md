@@ -15,25 +15,36 @@ owner. A field left blank needs the owner's answer before sign-off.
 - Goal: <what should get better, in one sentence>
 - Metric: <what the check measures>
 - Better direction: <higher or lower>
-- Target: <the score that ends the climb>
+- Target: <the score that ends the climb; for a set goal, a count of items
+  and the rule each item must meet to be accepted>
+- Unit: <attempt or round>
 - Guards: <checks that must not regress, each with its current result>
 - Check: <the command, reference, or rubric, and every file it reads>
 - Check tier: <program, reference, or council at rung 1 or 2>
 - Score rule: <for council, how member scores become one number>
-- Screen: <for council, the program or single judge that screens attempts>
+- Screen: <for council, the program or single judge that screens candidates>
 - Reference examples: <for council, anchors for the rubric's scale>
 - Known-good case: <path or description>
 - Known-bad case: <path or description>
 - Held-out cases: <cases scored only at the end>
-- Budget: <attempts, time, or runs; for council, runs per attempt>
-- Stop rule: <target plus a minimum of N attempts>
-- Plateau: <reverted attempts in a row; default 5>
+- Budget: <units, time, or runs; for council, runs per unit>
+- Stop rule: <target plus a minimum of N units>
+- Plateau: <units in a row with no progress; default 5 for attempts, 3 for
+  rounds>
 - Ratchet stages: <declared next stages, or none>
 - Climb directory: <durable path outside the repository>
 ```
 
 Field notes:
 
+- **Target.** A set goal collects items instead of improving one artifact,
+  such as "10 ideas that each score 8.5 or more". A candidate that meets the
+  acceptance rule is accepted; one that doesn't is rejected. A rejection is
+  not a revert and undoes nothing.
+- **Unit.** An attempt scores one candidate. A round is a batch of candidates
+  scored in one run of the check. The budget, the stop rule's minimum, and the
+  plateau all count in this unit. SKILL.md's Run Attempts section defines
+  progress for a unit.
 - **Guards.** List each guard with its baseline result, so a regression is
   plain. A scored guard holds while it stays within its noise band of that
   result.
@@ -45,12 +56,14 @@ Field notes:
 - **Reference examples.** Keep them apart from the known-good and known-bad
   cases. A judge that has seen a case as an anchor recognizes it, so a case
   used as both proves nothing.
-- **Held-out cases.** Keep them out of every attempt's scoring. Score them
+- **Held-out cases.** Keep them out of every candidate's scoring. Score them
   once, at the end.
 - **Budget.** For a council-scored climb, state the panel's runs for each
-  attempt that reaches it.
-- **Stop rule.** The minimum number of attempts stops a lucky early score
-  from ending the climb.
+  unit that reaches it.
+- **Stop rule.** The minimum number of units stops a lucky early score from
+  ending the climb.
+- **Plateau.** Count units with no progress. The number of reverted or
+  rejected candidates never counts toward it.
 - **Ratchet stages.** Each stage names its own metric, target, and check. The
   earlier stage's metric becomes a guard at its final score.
 - **Sign-off.** Record it in the attempt log, not in this file: who signed
