@@ -94,7 +94,10 @@ no dependency text on the line.
 owner ticks at close, each ending with `Evidence: #N`, the unit whose merge
 supplies the proof, or `Evidence: #N, then #M` when the proof lands in steps.
 Per-unit exit criteria stay off the tracker; each unit
-issue's acceptance section owns them.
+issue's acceptance section owns them. A change that alters what an open
+tracker's Exit bullet asks for rewords that bullet, unticked, in the same
+work unit and names the change in its PR, so the owner never faces a gate
+that can't be met.
 
 ## notes
 
