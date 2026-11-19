@@ -85,6 +85,14 @@ For a council-scored climb:
 - **Reduce to one score.** Council returns each member's scores and spread,
   never a pass or fail. Apply the goal file's score rule to get one number,
   then keep, revert, accept, or reject by the rules below.
+- **Rescore after a failed seat.** A council report scored a different panel
+  than the proven check when it has a failed member, a lower rung than the
+  goal file's check tier, or a panel other than the one that proved the check.
+  Don't use it to keep, revert, accept, reject, prove the check, or score the
+  held-out cases; rescore. Count replacement and rescore runs against the
+  budget; when it can't cover a rescore, stop as budget spent with no decision
+  on that unit. If the full panel can't be restored, pause the climb and check
+  in with the owner, since the proven check can't run.
 
 ## Prove the Check
 
