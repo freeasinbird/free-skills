@@ -340,6 +340,50 @@ free-skills keeps no `docs/tracker-format.md` copy, so the record points at
 the format's source in agent-setup. If that file moves or renames its
 `## refresh` heading, update this record in the same change.
 
+## Claiming
+
+A claim shows that a run is already working on an issue before its PR exists.
+It only shows occupancy. Work still starts only from an explicit owner
+assignment, and agents don't choose work for themselves.
+
+- **Check occupancy first.** An issue is occupied when it carries the
+  `in-progress` label and its newest claim comment hasn't expired, or when an
+  open PR links it. The label with no unexpired claim comment isn't a claim.
+  If another run occupies the issue, stop and report it.
+- **Claim before you edit.** The agent that implements an assigned issue adds
+  the `in-progress` label and posts one claim comment. A planner and a batch
+  orchestrator never post, edit, or release a claim. A direct request with no
+  issue has nothing to claim.
+- **Use this comment shape.** Start with the marker so a reader can find the
+  comment. Name the run or thread that holds the claim, and its branch. Give
+  the expiry in UTC, 24 hours after posting:
+
+  ```markdown
+  <!-- work-claim:v1 -->
+
+  **Claim:** <run or thread name>, branch `<type>/<slug>`
+  **Expires:** <YYYY-MM-DDTHH:MMZ>
+  ```
+
+- **Reread after you post.** If another run's unexpired claim comment comes
+  before yours on the issue, delete your comment, leave the label, stop, and
+  report the other claim.
+- **Release the claim.** Remove the label and delete your claim comment when
+  your PR opens. The open PR then marks the issue as taken, so link the issue
+  from the PR. Release the same way when you stop without a PR. A comment
+  left behind would still win the next run's reread until it expires. Keep
+  the claim while you wait on an owner question.
+- **Replace a stale claim.** A claim past its expiry no longer counts. The
+  next assigned agent posts its own claim comment and leaves the label in
+  place. A holder that needs longer edits the expiry in its own comment
+  before that time passes. A holder rereads the issue before it resumes
+  after a wait, extends, or releases. If its claim was replaced, it stops,
+  leaves the label, and reports the newer claim.
+- **Why 24 hours.** An implementer can wait overnight for the owner's answer,
+  and a claim usually ends within hours when the PR opens. A dead claim blocks
+  the issue for a day at most, and the owner can delete the claim comment at
+  any time.
+
 <!-- agents-md:managed:branches -->
 
 ## Branches
