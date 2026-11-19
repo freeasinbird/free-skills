@@ -441,3 +441,40 @@ follow the claim rules until it exists. If the read fails,
 including on a later page, report that the labels couldn't be checked instead
 of inferring the label is missing. Without `gh` or a supported forge, report
 the check as unavailable.
+
+## §clean-push-hook
+
+This skill ships an optional git pre-push hook,
+`scripts/pre-push-clean-worktree.sh`. It refuses a push from a linked
+worktree whose `git status --porcelain` isn't empty, and names the files. It
+allows a push from a clean linked worktree, from one holding only ignored
+files, and from the primary checkout. The managed text never requires it;
+`docs/agent-workflow.md` §handing-off step 7 checks for a clean worktree
+either way. The hook enforces that check at push time.
+
+Treat this as **detect → report → offer to install**, during init and update:
+
+- **Find the hook path.** Run `git rev-parse --git-path hooks/pre-push` in
+  the project. It honors `core.hooksPath`. Without that setting, or with an
+  absolute one, every worktree of the clone shares the result. A relative
+  `core.hooksPath` resolves inside each worktree's own checkout, so a copy
+  installed from one worktree doesn't cover the others. Report that, and
+  name the worktrees the installation covers.
+- **Check whose hook it is.** Run
+  `git config --show-origin --show-scope --get core.hooksPath`. When an
+  absolute path comes from global or system scope, it serves every
+  repository on the machine, not just this project. Say so, and install only
+  when the owner accepts that wider scope. A relative path from those scopes
+  resolves inside each repository, as it does inside each worktree.
+- **Never replace a hook.** When a file already exists at that path, report
+  its path and install nothing, even when it looks like this script. The
+  owner decides whether to merge the two.
+- **Install only on the owner's yes.** Copy the script to that path and make
+  it executable. When the path lies inside the working tree, as a committed
+  `core.hooksPath` directory does, say that the copy becomes a repository
+  file before asking.
+- **Name its scope.** A hook in the clone's own git directory isn't
+  committed, so each clone installs its own. Say so in the summary.
+
+Without shell or file access, show the owner the two commands instead:
+the copy and the `chmod +x`.

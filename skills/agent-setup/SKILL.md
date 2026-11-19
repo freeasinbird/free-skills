@@ -137,7 +137,9 @@ only record (no separate config or metadata file).
    Check landing labels as `references/audit.md` §landing-record describes.
    When the project uses tracker issues, check the tracker label as
    `references/audit.md` §tracker-label describes. When a claim record names
-   a label, check it as `references/audit.md` §claim-label describes.
+   a label, check it as `references/audit.md` §claim-label describes. Offer
+   the optional clean-worktree pre-push hook as `references/audit.md`
+   §clean-push-hook describes.
 9. Summarize what was created, what the user should fill in, which standard
    files are missing, and which repo settings need attention.
 
@@ -218,6 +220,8 @@ only record (no separate config or metadata file).
     describes. When the project uses tracker issues, check the tracker label
     as `references/audit.md` §tracker-label describes. When a claim record
     names a label, check it as `references/audit.md` §claim-label describes.
+    Offer the optional clean-worktree pre-push hook as `references/audit.md`
+    §clean-push-hook describes.
 
 Where the running agent can execute shell scripts, run this skill's
 `scripts/compare-managed-blocks.sh` for the mechanical parts of steps 3 and 6.

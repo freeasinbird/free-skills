@@ -129,6 +129,9 @@ Run each suite when its stated trigger applies.
   (`./scripts/test-merge-cleanup-inventory.sh`)
 - Sweep validation matrix green when merge-cleanup's `worktree-sweep.sh`
   changed (`./scripts/test-merge-cleanup-sweep.sh`)
+- Pre-push hook matrix green when agent-setup's
+  `pre-push-clean-worktree.sh` changed
+  (`./scripts/test-agent-setup-pre-push-hook.sh`)
 - Landing validation matrix green when merge-cleanup's
   `base-landing-plan.sh` changed
   (`./scripts/test-merge-cleanup-landing.sh`)
