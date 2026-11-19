@@ -339,6 +339,9 @@ includes an accepted record that belongs in AGENTS.md. A noninteractive run
 writes nothing. When the gate holds, it names the skipped offer in its summary, because the expiry
 length and the acceptance are both the owner's.
 
+When the accepted record names a label, check that the label exists as
+`references/audit.md` §claim-label describes.
+
 In update mode:
 
 - **Report the record.** Say whether the project defines claim rules, where

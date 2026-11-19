@@ -414,3 +414,30 @@ issue; labeling trackers is the owner's job. If the read fails, including on
 a later page, report that the labels couldn't be checked instead of inferring
 the label is missing. Without `gh` or a supported forge, report the check as
 unavailable.
+
+## §claim-label
+
+Run this check only when a claim record names a label: one the owner just
+accepted from `references/project-sections.md` §claim-record, or one already
+in the project's claim rules. Check every label the rules name, including a
+label used beside the Assignees field. Rules that name no label need no
+check. The check needs a host that `gh` serves, resolved
+as §forge-record describes.
+
+Reuse the paginated label read from §tracker-label; one read can serve every
+label check. Report each of the record's labels as present or missing. Offer
+to create a missing one, showing the exact command first. For the template's default
+label:
+
+```sh
+gh label create in-progress --repo <host>/<slug> --color 1d76db \
+  --description "An agent holds an implementation claim; see the project's Claiming rules"
+```
+
+Keep an existing label's color and description. Never apply the label to an
+issue; only the agent that implements an issue claims it. When the owner
+declines to create a missing label, say in the summary that agents can't
+follow the claim rules until it exists. If the read fails,
+including on a later page, report that the labels couldn't be checked instead
+of inferring the label is missing. Without `gh` or a supported forge, report
+the check as unavailable.
