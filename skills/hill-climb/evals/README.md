@@ -15,7 +15,7 @@ and grades in a session workspace outside the repository.
   audit (`prompt-crafter`), a single eval run, "reflect" (`reflect`), and
   `Plan #N` (`plan-work-unit`). Two more test edges: making one failing test
   pass, and an unrelated use of "hill climb".
-- `behavior-eval.json`: Twenty-six cases, each with a `request`, `artifacts` that
+- `behavior-eval.json`: Twenty-eight cases, each with a `request`, `artifacts` that
   describe the project, platform, and simulated scores or state, and nonempty
   `required_actions` and `forbidden_actions` lists.
 
@@ -63,6 +63,10 @@ and grades in a session workspace outside the repository.
   budget left, before a plateau stop.
 - `set-goal-rejection-not-revert`: Reject a set-goal candidate without
   reverting anything, and count progress by the best near-miss.
+- `held-out-regression-asks-owner`: Ask the owner before fixing a held-out
+  regression, and report a guided rescore as a confirmation.
+- `change-after-final-score-rescored`: Rescore after a review fix, and name
+  the change in the report and its commit.
 
 ## Rerunning Trigger Cases
 

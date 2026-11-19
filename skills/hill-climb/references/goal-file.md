@@ -59,7 +59,7 @@ Field notes:
   cases. A judge that has seen a case as an anchor recognizes it, so a case
   used as both proves nothing.
 - **Held-out cases.** Keep them out of every candidate's scoring. Score them
-  once, at the end.
+  once, at the end; the only later rescores are the ones Deliver names.
 - **Budget.** For a council-scored climb, state the panel's runs for each
   unit that reaches it.
 - **Stop rule.** The minimum number of units stops a lucky early score from
