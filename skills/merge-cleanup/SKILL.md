@@ -183,42 +183,35 @@ closure:
 
 ## List the Obligations Found
 
-Discover the project's post-merge obligations before any tracker write, and
-tell the user the list before acting on it. Inspect the authoritative project
-instructions that govern the repository for exactly one fixed-field
-`Post-merge obligations` record whose fields each appear exactly once. Read it
-and its mechanics document as `references/project-obligations.md` §discovery
-requires, then list:
+Before any tracker write, find the project's post-merge obligations and tell
+the user the list before acting on it. Read the one `Post-merge obligations`
+record in the project's authoritative instructions, and its mechanics
+document, as `references/project-obligations.md` §discovery requires. List
+each containing tracker with its unit entry and transition, each field to
+refresh, the closing issues that select those trackers, and any other
+documented post-merge duty, including one this skill may not perform.
 
-- **Each containing tracker**, with the unit entry and transition the
-  mechanics name for it.
-- **Each field to refresh** in that tracker.
-- **The closing issues** whose verified state selects those trackers.
-- **Any other documented post-merge duty**, including one the record asks for
-  but this skill may not perform.
-
-Write the same list as the trace's `policy` row and `plan` rows. Use `write`
-for a transition or refresh to apply, `noop` for one already satisfied,
-`report` for derived output such as newly unblocked units, and `unsupported`
-for a duty outside this skill's authority. Then generate the trace skeleton:
+Write the same list as the trace's `policy` and `plan` rows: `write` for a
+transition or refresh to apply, `noop` for one already satisfied, `report`
+for derived output such as newly unblocked units, and `unsupported` for a
+duty outside this skill's authority. Then generate the trace skeleton:
 
 ```sh
 <skill-dir>/reconciliation-ledger.sh --skeleton '<plan-file>' > '<trace-file>'
 ```
 
-The skeleton holds the happy-path events in the checked order. Replace each
-expected value with the observed one as the work runs, and replace the block
-of an item that did not run with its `skip` row. With a readably absent
-record, the list is empty: say so in one line, and still close the trace.
-When the record or its mechanics cannot be read, list no items; the skeleton
-adds the one umbrella skip, and its reason names the failed source.
+As the work runs, replace each expected value with the observed one, and an
+item that didn't run with its `skip` row. With a readably absent record, the
+list is empty: say so in one line, and still close the trace. When the record
+or its mechanics can't be read, list no items; the skeleton adds one umbrella
+skip naming the failed source.
 
 ## Reconcile Project Obligations
 
 Run this after issue-close verification, and only when merge verification
-passed. An earlier mechanical cleanup stop does not block safe reconciliation,
-but continuing requires a freshly resolved current base tip. Report the
-mechanical and project results separately.
+passed. An earlier mechanical stop doesn't block reconciliation, but
+continuing needs a freshly resolved base tip. Report mechanical and project
+results separately.
 
 Before acting, read these, and use `references/project-obligations.md`
 §freeside-example only as calibration:
@@ -230,113 +223,63 @@ Before acting, read these, and use `references/project-obligations.md`
 - `references/project-obligations.md` §trackers
 - `references/project-obligations.md` §failures
 
-**Scope.** Reconcile only known trackers and authorized fields, observing every
-limit in the reference.
+They hold the full rules; in short:
 
-- The record can authorize only documented transitions and listed refreshes
-  for known containing trackers, never another external or project mutation.
-- Readable absence adds no behavior or summary text, but only after its final
-  base-tip check stays unchanged. An unreadable required source makes cleanup
-  incomplete.
+- **Scope.** Change only known containing trackers, and only by the record's
+  documented transitions and listed refreshes, never another external or
+  project mutation.
+- **Freshness.** Read the record and mechanics from one freshly resolved base
+  commit, never the checked-out tree or a stale ref. Recheck the base tip
+  before and after every tracker write. Right before a write, reread every
+  input that selected the tracker or shaped the edit, and reread them all
+  after verifying it. A changed or unverifiable input makes the attempt's
+  fields unknown and stops later work.
+- **Ledger.** Record each event in the trace as observed, never as expected,
+  and close it with a final base-tip observation even when no write ran.
+  Check it with `<skill-dir>/reconciliation-ledger.sh '<trace-file>'`;
+  `--help` prints the trace contract. Only `RESULT complete` supports a full
+  reconciliation claim, and a stable absence stays silent. If the checker
+  can't run, apply the state machine by hand and report that gap.
 
-**Freshness and rereads.** Read the record and mechanics from one freshly
-resolved immutable base commit, never from the checked-out feature tree or a
-stale local ref.
-
-- Recheck that base tip before every tracker write attempt and after its
-  tracker verification attempt, even when the write or verification failed.
-- Immediately before a tracker write, freshly reread every external object
-  whose state selected the tracker or determined the computed edit, not only
-  the tracker being written. Then recompute and apply only the documented
-  idempotent transition.
-- After the target verification, reread that full input set again.
-- A changed or unverifiable input makes every otherwise verified field from
-  the attempt unknown, and stops later work.
-- Successful later verification proves current observed state, not that no
-  concurrent edit was overwritten.
-
-**Ledger.** Use `reconciliation-ledger.sh` for every discovery result,
-including readable absence.
-
-- Start from the skeleton generated in the previous step, which enumerates
-  work per tracker and per transition or refreshed field. Record each ordered
-  freshness, guard, attempt, target verification, full-input recheck, and
-  disposition event as observed, never as expected.
-- Name every external input used by a write, no-op, or report. After all writes
-  are dispositioned, reread and recompute no-op and report items before
-  recording them fresh.
-- Close the trace with a final base-tip observation even when no write ran.
-- A stable absence suppresses the complete ledger and stays silent; otherwise
-  report the checker's ledger and owner action.
-- Only `RESULT complete` supports a full project-reconciliation claim.
-
-Run it as `<skill-dir>/reconciliation-ledger.sh '<trace-file>'`; `--help`, or
-`-h`, prints the trace contract. If the executable check cannot run, apply the
-referenced state machine manually and report that verification gap.
-
-**Shared-format trackers.** Write the refresh of a known containing tracker
-on the shared tracker format only with the bundled `tracker-write.sh`, never
-with `gh issue edit` or `gh api -X PATCH`. Plan the body and each comment that
-holds both a `flowchart` fence and a `## Units` heading with the read-only
-`tracker-refresh.sh`, which takes the same `--repo`, `--issue`, and
-`--comment`. `OK unchanged` plans a `noop`, and `OK changed` plans a `write`.
-Run the write command only for a planned `write`:
+**Shared-format trackers.** Write a known containing tracker on the shared
+tracker format only with `tracker-write.sh`, never with `gh issue edit` or
+`gh api -X PATCH`. Plan the body, and each comment holding both a `flowchart`
+fence and a `## Units` heading, with the read-only `tracker-refresh.sh`,
+which takes the same `--repo`, `--issue`, and `--comment`: `OK unchanged`
+plans a `noop`, and `OK changed` a `write`. Run the write only for a planned
+`write`, typing each flag and value literally, never through an unquoted
+variable, which zsh passes as one argument:
 
 ```sh
 <skill-dir>/tracker-write.sh --repo <host/owner/name> --issue <N>
 <skill-dir>/tracker-write.sh --repo <host/owner/name> --issue <N> --comment <ID>
 ```
 
-- **Pass the arguments literally.** Type each flag and value in the command,
-  never through an unquoted variable such as `$ARGS`. The agent's shell may
-  be zsh, which passes that variable as one argument.
-- **It guards its own write.** It runs `tracker-refresh.sh` and writes nothing
-  when that run fails or prints nothing. It rereads the tracker right before
-  the write and writes nothing when the text changed. After the write, it
-  rereads the tracker and reruns the refresh to verify.
-- **Record the refresh's reads as the inputs.** The refresh reads the tracker
-  and every unit and prerequisite it consults. Name those in the guard and
-  recheck rows.
-- **The race is narrowed, not closed.** GitHub updates are unconditional, so
-  an edit that lands between the last reread and the write is still
-  overwritten. The tracker's edit history is the recovery path.
-- **Copy its result line into the trace.** Stdout is one line:
-  `tracker-write.sh: RESULT <result> guard=<g> attempt=<a> verify=<v> recheck=<r>`.
-  Each field is that ledger row's value, and `none` means the row is absent.
-  Then dispose of the item by its result:
+It writes nothing when the refresh fails or the tracker changed since it read
+it, and it verifies the write. GitHub updates are unconditional, so a narrow
+race remains; the edit history recovers from it. Name the refresh's reads in
+the guard and recheck rows. Copy its one stdout line,
+`tracker-write.sh: RESULT <result> guard=<g> attempt=<a> verify=<v> recheck=<r>`,
+into the trace, where `none` means the row is absent. After the `guard` row:
 
-| Result (exit)                    | Trace after the `guard` row                                     |
-| -------------------------------- | --------------------------------------------------------------- |
-| `written` (0)                    | The attempt, verify, and recheck rows as printed                |
-| `write-failed`, `unverified` (5) | The attempt, verify, and recheck rows as printed                |
-| `noop` (0)                       | `skip` with reason `already current at write time`, `remaining` |
-| `changed-since-read` (3)         | `skip` with reason `tracker changed since read`, `remaining`    |
-| `lookup-failed` (4)              | `skip` naming the failed read, `guard`                          |
-| `refused` (2)                    | `skip` naming the stderr cause, `ambiguity`                     |
+| Result (exit)                                  | Trace                                                |
+| ---------------------------------------------- | ---------------------------------------------------- |
+| `written` (0), `write-failed`/`unverified` (5) | The attempt, verify, and recheck rows as printed     |
+| `noop` (0)                                     | `skip`, `already current at write time`, `remaining` |
+| `changed-since-read` (3)                       | `skip`, `tracker changed since read`, `remaining`    |
+| `lookup-failed` (4)                            | `skip` naming the failed read, `guard`               |
+| `refused` (2)                                  | `skip` naming the stderr cause, `ambiguity`          |
 
-- **Report what it leaves.** Stderr carries the refresh's status line and any
-  reason for stopping. Put its ticks, startable set, and every item it left in
-  place in the owner summary. Name each `held` unit with its reason, so the
-  owner can fix that unit's Dependencies field. `--help` prints the full
-  contract.
-- **Pass a project's own Startable now rule as `--edited`.** That rule stays
-  the agent's judgment. Save `tracker-refresh.sh` output to one file and copy
-  it to another. In the copy, change only the `class ... startable` line and
-  the **Startable now** bullet. Pass
-  `--edited '<copy>' --base '<refresh-file>'`. The command refuses any other
-  change, including an added or removed line, and reports
-  `changed-since-read` when its own refresh differs from the base. When the
+- **Report what it leaves.** Put the refresh's ticks, startable set, and
+  every item it left in place in the summary. Name each `held` unit with its
+  reason, so the owner can fix its Dependencies field.
+- **Apply a project's own Startable now rule** with `--edited '<copy>' --base
+'<refresh-file>'`: save the refresh output, copy it, and change only the
+  copy's `class ... startable` line and **Startable now** bullet. When the
   rule would add or remove the class line, report that instead of writing.
-- **Record any unguarded write honestly.** If a tracker write ever ran without
-  a complete guard, record `guard unavailable` and then its attempt, verify,
-  and recheck. The ledger prints the item `UNKNOWN` with the guard owner
-  action.
-- **Fix the call on exit 64.** It printed usage, called no gh, and wrote
-  nothing; correct the arguments and run it again.
-- **Fall back by hand only on exit 69.** Only when the command can't run at
-  all (exit 69, which prints no result line, or no executable), apply the
-  format's refresh section by hand and report that gap. Never do so after any
-  other exit.
+- **Handle exits.** On 64, fix the arguments and rerun. Only on 69 or no
+  executable, when nothing ran, apply the format's refresh section by hand and
+  report the gap; record such a write as `guard unavailable`.
 
 ## Stop the Review Watch
 
