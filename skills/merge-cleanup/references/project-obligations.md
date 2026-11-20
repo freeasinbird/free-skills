@@ -101,7 +101,9 @@ project-reconciliation outcome.
 
 Write the `policy` row and every `plan` row to a plan file, then run
 `reconciliation-ledger.sh --skeleton '<plan-file>'` and save its output as the
-trace.
+trace. When every item is a shared-format tracker in the merged repository,
+`tracker-reconcile.sh` runs the whole state machine from the plan file
+instead, as SKILL.md's List the Obligations Found section says.
 
 - The skeleton holds every later event in the checked order: one pre, guard,
   attempt, verify, recheck, post block per write item, then one observe per

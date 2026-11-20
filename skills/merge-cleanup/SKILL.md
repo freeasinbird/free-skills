@@ -158,9 +158,35 @@ each containing tracker with its unit entry and transition, each field to
 refresh, the closing issues that select those trackers, and any other
 documented post-merge duty, including one this skill may not perform.
 
-Write the same list as a plan file's `policy` and `plan` rows, then generate
-the trace and fill it in as `references/project-obligations.md`
-§state-machine says:
+Write the same list as a plan file's `policy` and `plan` rows. Name each
+shared-format tracker item `#<N>` for an issue body or `#<N>/<comment-id>`
+for a tracker kept in a comment, adding `:<label>` when one tracker carries
+two items, such as `#835:refresh` and `#835:startable`.
+
+When the policy is `complete` or `absent` and every item is such a tracker in
+this repository, run the reconciliation with one command. Type each flag and
+value literally:
+
+```sh
+<skill-dir>/tracker-reconcile.sh --repo <host/owner/name> --base <branch> --plan '<plan-file>' --trace '<trace-file>'
+```
+
+It runs every step under Reconcile Project Obligations, writes the trace from
+what it observed, and prints the ledger on stdout; report from that ledger.
+Its progress and the tracker scripts' stops go to stderr. Exit codes:
+
+- **0:** `RESULT complete`, and only that.
+- **1:** any other ledger result.
+- **2:** the ledger rejected the plan or the finished trace.
+- **64:** a usage error, an existing `--trace` file, or a plan it doesn't
+  run, with no forge call and no trace. It refuses a policy that is
+  `unreadable`, `invalid`, or at an `unverifiable` tip, an `unsupported`
+  item, and an item name that isn't a tracker in this form.
+- **69:** `gh`, `awk`, or a sibling script is missing.
+
+For a refused plan, a tracker in another repository, or a project's own
+Startable now rule, generate the trace and fill it in by hand as
+`references/project-obligations.md` §state-machine says:
 
 ```sh
 <skill-dir>/reconciliation-ledger.sh --skeleton '<plan-file>' > '<trace-file>'
@@ -204,7 +230,9 @@ They hold the full rules; in short:
   reconciliation claim, and a stable absence stays silent. If the checker
   can't run, apply the state machine by hand and report that gap.
 
-**Shared-format trackers.** Write a known containing tracker on the shared
+**Shared-format trackers.** These rules and the result table below are the
+contract `tracker-reconcile.sh` implements, and the manual path for a plan it
+refuses. Write a known containing tracker on the shared
 tracker format only with `tracker-write.sh`, never with `gh issue edit` or
 `gh api -X PATCH`. Plan the body, and each comment holding both a `flowchart`
 fence and a `## Units` heading, with the read-only `tracker-refresh.sh`,
