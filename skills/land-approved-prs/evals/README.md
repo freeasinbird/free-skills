@@ -174,7 +174,8 @@ score's `check=` with it; a mismatch means the check changed.
 
 ### Measured Results
 
-Measured on 2026-11-20 at the commit that added this eval, with
+Measured on 2026-11-20, the first four rows at the commit that added this
+eval and the size-climbed rows at the #440 climb's final tree, with
 `--model claude-sonnet-5-5 --repeats 3 --jobs 7`. Every score ran from a
 copy of the skill without `evals/`, so no run could read the graders. A
 climb records its own `check=` when it freezes the check; this README sits
@@ -187,7 +188,13 @@ own edit.
 | `### Hand-Back` removed             | climb    | 0.556 | 0.556, 0.556, 0.556 | 0.000 |
 | `SKILL.md` body removed             | climb    | 0.407 | 0.333, 0.556, 0.333 | 0.223 |
 | Current skill, held-out split, once | held-out | 1.000 | 1.000, 1.000, 1.000 | 0.000 |
+| Size-climbed skill (#440)           | climb    | 1.000 | 1.000, 1.000, 1.000 | 0.000 |
+| Size-climbed skill, held-out, once  | held-out | 1.000 | 1.000, 1.000, 1.000 | 0.000 |
 
+- **Size climb (#440):** the climbed `SKILL.md` has 4,339 words, down from
+  6,186. The climb re-measured the current skill three times at 1.000 with a
+  0.000 band and the `### Hand-Back` cut at 0.556, matching the rows above.
+  See the 2026-11-20 devlog note.
 - **Noise:** two more baseline scores, at an earlier revision whose case 1,
   4, and 9 checks were weaker, also scored 1.000 with a 0.000 band.
 - **Sensitivity:** with one `###` section removed, the best repeat (0.556)
