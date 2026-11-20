@@ -49,7 +49,8 @@ Field notes:
   progress for a unit.
 - **Guards.** List each guard with its baseline result, so a regression is
   plain. A scored guard holds while it stays within its noise band of that
-  result.
+  result. Mark each guard cheap or expensive relative to one score, so the
+  climb runs the cheap ones before scoring a candidate.
 - **Constraints.** Quote each limit the owner stated, in the owner's words.
   List any limit the climber adds apart from those, each naming its source:
   a file and section, a decision note, or the owner's message. A

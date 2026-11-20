@@ -7,15 +7,16 @@ and grades in a session workspace outside the repository.
 
 ## Files
 
-- `trigger-eval.json`: 16 queries (8 should-trigger, 8 should-not-trigger).
+- `trigger-eval.json`: 17 queries (8 should-trigger, 9 should-not-trigger).
   The positives cover "hill-climb X", "hillclimb", "keep improving X until it
   scores Y", a ratchet request, and implicit asks to push a score toward a
   target over many attempts. The negatives are near-misses: a one-off council
   scoring request (`council`), "improve this README" with no score, a prompt
   audit (`prompt-crafter`), a single eval run, "reflect" (`reflect`), and
-  `Plan #N` (`plan-work-unit`). Two more test edges: making one failing test
-  pass, and an unrelated use of "hill climb".
-- `behavior-eval.json`: Thirty-three cases, each with a `request`, `artifacts` that
+  `Plan #N` (`plan-work-unit`), and building a scored eval before a climb
+  (`prepare-hill-climb`). Two more test edges: making one failing test pass,
+  and an unrelated use of "hill climb".
+- `behavior-eval.json`: Thirty-five cases, each with a `request`, `artifacts` that
   describe the project, platform, and simulated scores or state, and nonempty
   `required_actions` and `forbidden_actions` lists.
 
@@ -78,6 +79,11 @@ and grades in a session workspace outside the repository.
   propose fresh-context generators within the budget.
 - `constraint-breach-rejected`: Reject a candidate that breaches a constraint
   before the screen, and never count it as progress or near-miss.
+- `proof-record-accepted`: Read a prepared draft goal file, wait for
+  sign-off, and accept a matching proof record in place of proving steps 1
+  to 3.
+- `proof-record-mismatch-reproved`: Name the failed condition and prove the
+  check again when the source no longer hashes to the record's value.
 
 ## Rerunning Trigger Cases
 
@@ -85,14 +91,16 @@ Run each query in a fresh context that sees only this skill's `description`
 and the query. Ask whether the skill should load, and compare the answer with
 `should_trigger`. Use a fresh delegate per query where the platform offers
 one; otherwise use a new session per query. Include the descriptions of
-`council`, `prompt-crafter`, `reflect`, and `plan-work-unit` beside this one
-when testing the negatives that should route there. Repeat after any
-description change.
+`council`, `prompt-crafter`, `reflect`, `plan-work-unit`, and
+`prepare-hill-climb` beside this one when testing the negatives that should
+route there. Repeat after any description change.
 
 ## Rerunning Behavior Cases
 
 Run each case in a fresh context with `skills/hill-climb/SKILL.md`, its
-`references/goal-file.md`, the case `request`, and its `artifacts`. Keep
+`references/goal-file.md`, the case `request`, and its `artifacts`. The
+proof-record cases also get
+`skills/prepare-hill-climb/references/proof-record.md`. Keep
 `required_actions`, `forbidden_actions`, and this README out of the task
 context. A controller plays the platform, the check, the judges, and the
 owner: it lists the tools the case names and returns scores and state from
@@ -143,6 +151,7 @@ expected = {
     "change-after-final-score-rescored", "request-limit-to-constraints",
     "climber-limit-needs-source", "repeated-unmeasured-fact",
     "single-source-set-goal", "constraint-breach-rejected",
+    "proof-record-accepted", "proof-record-mismatch-reproved",
 }
 cases = fixture["cases"]
 assert len(cases) == len(expected)
@@ -156,8 +165,8 @@ for case in cases:
 
 triggers = json.loads(Path("skills/hill-climb/evals/trigger-eval.json").read_text())
 assert sum(t["should_trigger"] for t in triggers) == 8
-assert sum(not t["should_trigger"] for t in triggers) == 8
-print("Behavior fixture structure: passed (thirty-three unique cases); triggers 8/8")
+assert sum(not t["should_trigger"] for t in triggers) == 9
+print("Behavior fixture structure: passed (thirty-five unique cases); triggers 8/9")
 PY
 ```
 

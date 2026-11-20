@@ -62,5 +62,9 @@
   {
     "query": "What's the elevation gain on the hill climb route for Saturday's ride?",
     "should_trigger": false
+  },
+  {
+    "query": "Build a scored eval for visual-evidence and prove it before we climb its size",
+    "should_trigger": false
   }
 ]
