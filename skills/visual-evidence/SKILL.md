@@ -323,25 +323,20 @@ elaborate. Use `gh pr edit --attach` for an open PR's description, and
   on this path; read `references/gh-attach.md` §video first. Write
   `![label](./demo.mp4)` alone in its paragraph so GitHub renders a player,
   with its label in the paragraph above.
-- **Pre-authorize on platforms with a command allowlist:** An operator can
-  allow the four `gh` commands above for this path, and `gh-imgup` for the
-  fallback, such as `Bash(gh pr create *)` in Claude Code.
 
 ### Upload With gh-imgup
 
-Images are positional arguments. Upload-only means omitting `--pr` and
-`--issue`.
+Pass images as positional arguments. Use `--pr <n>` or `--issue <n>` only to
+post a follow-up comment.
 
 ```sh
 # GITHUB_TOKEN set; add --repo owner/repo when the remote doesn't resolve
 gh-imgup before.png after.png
 ```
 
-It prints one Markdown image line per file to stdout, in argument order.
-Progress goes to stderr, so captured stdout contains only the links. Compose
-those lines into the body. Use `--pr <n>` or `--issue <n>` only to post a
-follow-up comment. The CLI needs Node 22+. `--help` lists all options and
-carries the same review.
+It prints one Markdown image line per file to stdout, in argument order, and
+progress to stderr; compose the stdout lines into the body. It needs Node
+22+, and `--help` lists every option and carries the same review.
 
 ### Place and Verify
 
