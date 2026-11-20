@@ -321,44 +321,33 @@ gh pr create --title "Fix card list padding" --body-file pr-body.md \
 
 gh uploads each file and rewrites its reference to the hosted URL. Read
 `references/gh-attach.md` §body-rewrite before composing anything more
-elaborate than this.
+elaborate. Use `gh pr edit --attach` for an open PR's description, and
+`gh pr comment` or `gh issue comment` only for a later addition; see
+`references/gh-attach.md` §commands.
 
-- **Pick the command by target:** Use `gh pr create --attach` for a new PR,
-  `gh pr edit --attach` for an open PR's description, and
-  `gh pr comment --attach` or `gh issue comment --attach` for a later
-  addition. See `references/gh-attach.md` §commands.
-- **Use Markdown image syntax only:** Write `![label](./file.png)`. gh rewrites
-  Markdown image and link nodes. A raw `<img src="./file.png">` is left as
-  written and the file is appended at the end instead.
-- **Put labels in the body references:** The `#alt` suffix, as in
-  `--attach './after.png#After: empty state'`, applies only to a file the body
-  doesn't reference. An in-body reference keeps its own alt text.
+- **Use Markdown image syntax only:** gh leaves a raw `<img src>` as written
+  and appends the file at the end. Labels belong in the body's references;
+  the `#alt` suffix on `--attach` names only an unreferenced file.
 - **Attach each file once:** Every run uploads every `--attach` file again. A
   second `gh pr edit --attach` with the same file appends a duplicate.
 - **Start every edit of an existing body from the live body:** `--body-file`
   replaces the whole body, so a fresh file sent to an open PR or an existing
-  issue erases its description. Fetch the live body first, for example
-  `gh pr view <n> --json body --jq .body > pr-body.md`, then add the
-  references to it. The same holds after an upload. gh rewrites the body it
-  sends, not the local file, so `pr-body.md` still holds local paths. Sending
-  it again with `gh pr edit --body-file` alone overwrites the hosted URLs with
-  those local paths, and the images break. See `references/gh-attach.md`
-  §body-rewrite.
+  issue erases its description. Fetch it first, such as
+  `gh pr view <n> --json body --jq .body > pr-body.md`. gh rewrites the body
+  it sends, not the local file, so resending `pr-body.md` with `--body-file`
+  alone overwrites the hosted URLs with local paths and breaks the images.
 - **Respect gh's limits:** Images up to 10 MB (`png`, `jpg`, `jpeg`, `gif`,
-  `webp`), video up to 100 MB, 50 files per command, validated by extension
-  only. Never attach SVG: gh accepts it, but it can carry scripts, and
-  gh-imgup refuses it for that reason.
-- **Give a recording its own paragraph:** Capturing video is outside this
-  skill's procedure, but a recording you were given uploads on this path.
-  Read `references/gh-attach.md` §video first. Write `![label](./demo.mp4)`
-  alone in its paragraph: gh turns it into a bare URL, which GitHub renders
-  as a player. In a table or beside other text it becomes a plain link. Video
-  has no alt text, so put the label in its own paragraph above, with a blank
-  line between them.
+  `webp`), video up to 100 MB, 50 files per command, checked by extension
+  only. Never attach SVG: gh
+  accepts it, but it can carry scripts, and gh-imgup refuses it for that
+  reason.
+- **Give a recording its own paragraph:** A recording you were given uploads
+  on this path; read `references/gh-attach.md` §video first. Write
+  `![label](./demo.mp4)` alone in its paragraph so GitHub renders a player,
+  with its label in the paragraph above.
 - **Pre-authorize on platforms with a command allowlist:** An operator can
-  allow `gh pr create`, `gh pr edit`, `gh pr comment`, and `gh issue comment`
-  for this path, and `gh-imgup` for the fallback. In Claude Code,
-  `Bash(gh pr create *)` is one such rule; each platform has its own syntax.
+  allow the four `gh` commands above for this path, and `gh-imgup` for the
+  fallback, such as `Bash(gh pr create *)` in Claude Code.
 
 ### Upload With gh-imgup
 
