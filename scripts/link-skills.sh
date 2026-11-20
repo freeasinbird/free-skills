@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# link-skills.sh — symlink this repo's skills into the local Claude Code and
-# Codex skill directories, then prune links for skills that no longer exist.
+# link-skills.sh — symlink this repo's skills into the local Claude Code,
+# Codex, and Antigravity skill directories, then prune links for skills that
+# no longer exist.
 #
 # Idempotent reconcile: run it once per machine, then again after `git pull`
 # to pick up added or removed skills. Because the installed entries are
@@ -56,6 +57,9 @@ SRC="$REPO/skills"
 TARGETS=(
   "$HOME/.claude/skills" # Claude Code
   "$HOME/.agents/skills" # Codex
+  # Antigravity reads global skills only under ~/.gemini/config; it doesn't
+  # search ~/.agents/skills outside a project.
+  "$HOME/.gemini/config/skills" # Antigravity
 )
 
 run() {
