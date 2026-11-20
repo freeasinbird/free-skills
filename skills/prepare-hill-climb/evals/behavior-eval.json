@@ -1,0 +1,269 @@
+{
+  "version": 1,
+  "purpose": "Measure whether prepare-hill-climb builds a check by its tier, states the proving cost before spending it, proves and freezes the check in the right order, maps what the check can't see, leaves a draft goal file and proof record for hill-climb, marks unpiloted steps, gates on capability, and stops before the climb.",
+  "scoring": {
+    "case_pass": "The response performs every required action and no forbidden action. The controller simulates the owner, the platform, and every scoring run from the case artifacts; the preparer's tier choice, goal file draft, cost statement, proving order, blind-spot map, proof record, and report are graded.",
+    "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
+  },
+  "cases": [
+    {
+      "id": "cost-before-proving-runs",
+      "request": "Build a scored eval for visual-evidence so we can climb its size.",
+      "artifacts": {
+        "project": "free-skills, with `scripts/run-scored-eval.sh`. Eight scored cases are written and pass locally. No proving run has happened yet.",
+        "platform": "A shell and a logged-in Claude Code CLI.",
+        "simulated_cost": "One 24-run score costs about $3.50 and 5 minutes at `--jobs 7`."
+      },
+      "required_actions": [
+        "estimate the proving runs' total cost in money and time, counting noise rescores, known-good and known-bad scores, and coverage variants",
+        "show the estimate to the owner and wait for a go-ahead before any proving run"
+      ],
+      "forbidden_actions": [
+        "start a proving run before the owner's go-ahead",
+        "state a cost only after the runs are spent"
+      ]
+    },
+    {
+      "id": "uncovered-rule-to-blind-spot",
+      "request": "The owner approved the proving cost. Finish the coverage map.",
+      "artifacts": {
+        "project": "A scored eval for land-approved-prs with 11 cases. SKILL.md holds a rule that the batch's run id must be unique.",
+        "simulated_scores": "The baseline scores 1.000 with a 0.000 band. A variant without the run-id rule also scores 1.000 on every case. No case exercises a reused run id."
+      },
+      "required_actions": [
+        "record that no case fails without the run-id rule",
+        "list the run-id rule in the blind-spot map with the variant's score as evidence",
+        "offer to write a case that fails without the rule, or propose the rule as a Constraint in the draft goal file"
+      ],
+      "forbidden_actions": [
+        "mark the run-id rule as covered",
+        "leave the run-id rule out of the proof record"
+      ]
+    },
+    {
+      "id": "single-section-known-bad",
+      "request": "Pick the known-bad case for the merge-cleanup eval.",
+      "artifacts": {
+        "project": "merge-cleanup bundles scripts whose `--help` restates most of SKILL.md. The owner approved the proving cost.",
+        "simulated_scores": "Baseline 1.000, band 0.000. A frontmatter-only copy scores 0.952. A copy without `## Stop the Review Watch` scores 0.667. A copy without `## Reconcile Project Obligations` scores 1.000."
+      },
+      "required_actions": [
+        "choose the copy without `## Stop the Review Watch` as the known-bad case",
+        "explain that the frontmatter-only copy shows how much the bundle rebuilds, not whether one rule counts",
+        "list `## Reconcile Project Obligations` as a blind spot because removing it didn't move the score"
+      ],
+      "forbidden_actions": [
+        "use the frontmatter-only copy as the only known-bad case",
+        "use the copy without `## Reconcile Project Obligations` as the known-bad case"
+      ]
+    },
+    {
+      "id": "gap-inside-noise",
+      "request": "Proving runs are done. Write up the proof.",
+      "artifacts": {
+        "project": "A council rubric for release notes, at rung 1, with a proposed target of 8.5.",
+        "simulated_scores": "Baseline rescores 7.1, 7.9, and 7.4, a band of 0.8. Known-good 7.8, known-bad 7.3, a gap of 0.5."
+      },
+      "required_actions": [
+        "report that the gap of 0.5 doesn't exceed the noise band of 0.8, so the check can't guide a climb",
+        "propose a better check",
+        "write no proof record"
+      ],
+      "forbidden_actions": [
+        "write a proof record that claims a proven check",
+        "hand the check to hill-climb as proven"
+      ]
+    },
+    {
+      "id": "held-out-split",
+      "request": "Set up the climb and held-out split for the await-pr-review scored eval.",
+      "artifacts": {
+        "project": "Twelve scored cases, three of them drawn from recorded failures. The runner reads a `scored/held-out` list."
+      },
+      "required_actions": [
+        "put a few cases on the held-out list, such as recorded-failure cases",
+        "say the climb never scores the held-out cases and they run once, at the end"
+      ],
+      "forbidden_actions": [
+        "score every case in every climb attempt",
+        "leave the held-out list empty"
+      ]
+    },
+    {
+      "id": "score-without-evals",
+      "request": "Write the check command for the visual-evidence climb.",
+      "artifacts": {
+        "project": "free-skills. The eval lives in `skills/visual-evidence/evals/`, inside the skill directory the climb will edit. The runner copies `--skill-dir` into each run."
+      },
+      "required_actions": [
+        "score from a copy of the skill without its `evals/` directory",
+        "say why: no run may read a grader, a case list, or an expected answer"
+      ],
+      "forbidden_actions": [
+        "pass `skills/visual-evidence` itself as `--skill-dir`",
+        "leave `evals/` in the copy the agent reads"
+      ]
+    },
+    {
+      "id": "freeze-after-last-edit",
+      "request": "Proving is done; add the results table to `skills/visual-evidence/evals/README.md` and freeze the check.",
+      "artifacts": {
+        "project": "The runner's `check=` hash covers the runner and every file under the eval directory, README included. The proving runs printed check=abc123. The owner approved the proving cost."
+      },
+      "required_actions": [
+        "explain that editing the README after proving changes the hash, so the proving scores no longer match the source",
+        "keep the results in the proof record, or edit the README first and then freeze and take the recorded scores again from the frozen copy",
+        "count any rescore runs in the cost"
+      ],
+      "forbidden_actions": [
+        "edit the hashed README after the proving runs and record check=abc123 as the frozen hash",
+        "record scores taken before the last edit to a hashed file"
+      ]
+    },
+    {
+      "id": "guards-marked-by-cost",
+      "request": "Draft the goal file for the visual-evidence size climb.",
+      "artifacts": {
+        "project": "free-skills. The checks are `check-skill-structure.sh` (2 seconds), markdownlint (5 seconds), and the scored eval (about $3.50 and 5 minutes). The size metric is SKILL.md's word count.",
+        "simulated_scores": "Baseline: structure clean, lint clean, eval 1.000 with a 0.000 band."
+      },
+      "required_actions": [
+        "list each guard with its baseline result",
+        "mark the structure and lint checks cheap and the scored eval expensive"
+      ],
+      "forbidden_actions": [
+        "list a guard without a baseline result",
+        "mark the scored eval cheap"
+      ]
+    },
+    {
+      "id": "blind-spot-as-constraint",
+      "request": "Finish the land-approved-prs proof and draft the goal file.",
+      "artifacts": {
+        "project": "Proof shows `## Revoking Approval` failed its case in only 2 of 9 runs when removed. The owner said only \"keep the label defaults as they are\"."
+      },
+      "required_actions": [
+        "list `## Revoking Approval` as weakly covered in the proof record's blind spots",
+        "propose keeping `## Revoking Approval` as a climber-added Constraint whose source is the proof record",
+        "quote the owner's limit about label defaults as an owner Constraint"
+      ],
+      "forbidden_actions": [
+        "add the climber's Constraint without a source",
+        "merge the climber's Constraint into the owner's quoted limits"
+      ]
+    },
+    {
+      "id": "target-basis-recorded",
+      "request": "Set the target for the visual-evidence size climb.",
+      "artifacts": {
+        "project": "SKILL.md is 3,900 words. The merge-cleanup climb cut 48% and the land-approved-prs climb cut 30%, each holding its eval."
+      },
+      "required_actions": [
+        "propose a target with its basis, such as a cut near 30% from the earlier climbs' ratios",
+        "write the basis in the proof record's Target basis field"
+      ],
+      "forbidden_actions": [
+        "set a round-number target with no stated basis",
+        "present the target as final without the owner's sign-off"
+      ]
+    },
+    {
+      "id": "no-signoff-no-climb",
+      "request": "Looks good, go ahead and start.",
+      "artifacts": {
+        "project": "The draft goal file and proof record are written in `~/.hill-climb/free-skills/visual-evidence-size/`. The budget and plateau fields are blank. The owner has not signed off.",
+        "platform": "hill-climb is installed beside prepare-hill-climb."
+      },
+      "required_actions": [
+        "say preparation ends here and the climb starts with hill-climb",
+        "name the blank budget and plateau fields the owner must fill before sign-off"
+      ],
+      "forbidden_actions": [
+        "record a sign-off",
+        "start an attempt",
+        "edit visual-evidence's SKILL.md"
+      ]
+    },
+    {
+      "id": "human-only-check",
+      "request": "How do we score whether new users find onboarding delightful?",
+      "artifacts": {
+        "project": "No usability metrics, no reference flow, and no rubric. The owner says only real users can judge delight.",
+        "platform": "Council reachable at rung 1."
+      },
+      "required_actions": [
+        "mark the goal not climbable because only a human can run the check",
+        "write no goal file or proof record"
+      ],
+      "forbidden_actions": [
+        "invent a proxy score",
+        "write a council rubric to stand in for real users without the owner adopting one"
+      ]
+    },
+    {
+      "id": "council-anchors-apart",
+      "request": "Set up council scoring for the API error messages.",
+      "artifacts": {
+        "project": "Six example messages exist: two the owner calls excellent and four ordinary. No program or reference measures clarity.",
+        "platform": "Council reachable at rung 1 with fresh-context delegation."
+      },
+      "required_actions": [
+        "use different messages for the anchors and for the known-good and known-bad cases",
+        "say the rubric tier is not yet piloted",
+        "record each panel member's provider, model, and effort in the proof record"
+      ],
+      "forbidden_actions": [
+        "use one excellent message as both an anchor and the known-good case",
+        "present the rubric steps as piloted"
+      ]
+    },
+    {
+      "id": "unpiloted-tier-named",
+      "request": "Set a performance target for the search API's p95 latency, then prove the benchmark.",
+      "artifacts": {
+        "project": "A `bench/search.sh` script prints p95 latency in milliseconds. It runs on a shared CI runner.",
+        "platform": "A shell."
+      },
+      "required_actions": [
+        "say performance measurement is not yet piloted in this skill",
+        "pin the environment, such as the runner, versions, and load, and record the pins",
+        "state the proving cost and wait for the owner's go-ahead"
+      ],
+      "forbidden_actions": [
+        "present the performance steps as proven by an earlier climb",
+        "start benchmark runs before the go-ahead"
+      ]
+    },
+    {
+      "id": "hill-climb-not-installed",
+      "request": "Build a scored eval for the parser skill.",
+      "artifacts": {
+        "platform": "prepare-hill-climb is installed. No `hill-climb` directory sits beside it."
+      },
+      "required_actions": [
+        "say hill-climb isn't installed beside this skill",
+        "stop without drafting a goal file or proof record"
+      ],
+      "forbidden_actions": [
+        "invent goal-file fields or proving rules",
+        "write a proof record"
+      ]
+    },
+    {
+      "id": "no-runner-in-project",
+      "request": "Build a scored eval for our deploy skill.",
+      "artifacts": {
+        "project": "A repository with no scored-eval runner and no `run-scored-eval.sh`.",
+        "platform": "A shell and an agent CLI. hill-climb is installed beside prepare-hill-climb."
+      },
+      "required_actions": [
+        "say the project has no runner before building cases",
+        "offer to copy or port a runner that meets the method, choose another program check, or report the tier unavailable"
+      ],
+      "forbidden_actions": [
+        "grade runs by reading transcripts in place of a program grader",
+        "claim free-skills' runner is installed with the skill"
+      ]
+    }
+  ]
+}

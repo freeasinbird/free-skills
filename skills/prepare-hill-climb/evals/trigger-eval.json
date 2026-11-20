@@ -1,0 +1,66 @@
+[
+  {
+    "query": "Set up scoring for the onboarding docs so we can climb them later",
+    "should_trigger": true
+  },
+  {
+    "query": "Build a scored eval for visual-evidence",
+    "should_trigger": true
+  },
+  {
+    "query": "How do we score the error messages' clarity?",
+    "should_trigger": true
+  },
+  {
+    "query": "Find comps for this pricing page design",
+    "should_trigger": true
+  },
+  {
+    "query": "Set a performance target for the search API's p95 latency",
+    "should_trigger": true
+  },
+  {
+    "query": "Before we hill-climb the parser's speed, build the benchmark and prove it can tell a fast build from a slow one",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a rubric and anchor examples so council can score our release notes in a climb",
+    "should_trigger": true
+  },
+  {
+    "query": "We want to shrink await-pr-review's SKILL.md; first work out what check would catch a dropped rule",
+    "should_trigger": true
+  },
+  {
+    "query": "hill-climb the CLI startup time; I want it under 150 ms",
+    "should_trigger": false
+  },
+  {
+    "query": "Keep improving the bundle size until it's under 200 KB",
+    "should_trigger": false
+  },
+  {
+    "query": "Score these three README drafts against this rubric with a council",
+    "should_trigger": false
+  },
+  {
+    "query": "Run the merge-cleanup evals once and tell me the pass rate",
+    "should_trigger": false
+  },
+  {
+    "query": "Plan #441",
+    "should_trigger": false
+  },
+  {
+    "query": "Write unit tests for the date parser",
+    "should_trigger": false
+  },
+  {
+    "query": "Improve this README",
+    "should_trigger": false
+  },
+  {
+    "query": "Benchmark the parser once and tell me the median time",
+    "should_trigger": false
+  }
+]
