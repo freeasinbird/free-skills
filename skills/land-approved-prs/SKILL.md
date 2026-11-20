@@ -16,8 +16,7 @@ description: >-
 # Land Approved PRs
 
 The owner reads a PR and approves it; that is their last decision about it.
-Later, the owner asks an agent in the repository's primary checkout to land
-the approved PRs. Scripts take the landing lock, list the ready PRs, and gather
+Scripts take the landing lock, list the ready PRs, and gather
 what landed since each PR was opened. You read each ready PR against what
 landed, decide whether it still holds, and land it. Anything that needs new
 work or a decision goes back to the owner.
@@ -26,12 +25,11 @@ Never start a batch on your own. The owner starts each one.
 
 ## Requirements
 
-This skill requires a shell, git, and a forge CLI (`gh`) authenticated for
-the repository. It also requires the merge-cleanup skill installed beside it,
-because merge-cleanup owns everything after each merge. If any one of these is
-missing, stop before listing and hand the batch to the owner. There is no prose
-fallback: the lock, the filters, and the landing engine exist only as
-scripts.
+This skill requires a shell, git, and a forge CLI (`gh`) authenticated for the
+repository. It also requires the merge-cleanup skill installed beside it. If any
+one of these is missing, stop before listing and hand the batch to the owner.
+There is no prose fallback: the lock, the filters, and the landing engine exist
+only as scripts.
 
 Run from the repository's primary checkout, on its default branch, with a clean
 tree. If the checkout is on another branch or has changes, stop and tell the
@@ -80,7 +78,6 @@ together; the record ends at the first line of another shape, and the script
 stops `bad-record` on a malformed one:
 
 - **Mechanism** is `label`, the only mechanism this version lands.
-- **Approval** and **Hand-back** name the two labels.
 - **Approver permission** is the lowest repository role whose label counts:
   `write`, `maintain`, or `admin`, as held when the batch lists.
 - **Stale lock age** defaults to 240 minutes.
@@ -114,9 +111,8 @@ message as approval.
    name, the start time, and a random suffix (`laptop-202610181430-7f3a`).
    The script treats a lock with this id as yours, so two sessions sharing
    an id would both hold it.
-2. **List.** Run `list-ready.sh` with the run id. It takes the lock and prints
-   the ready PRs in order, then every excluded PR with its filter and
-   evidence. Read the list; never recompute it.
+2. **List.** Run `list-ready.sh` with the run id. It takes the lock and lists
+   the ready and excluded PRs. Read the list; never recompute it.
 3. **Land the first ready PR** by "One PR" below.
 4. **List again** after each PR lands or is handed back, never working from
    an older list. Listing also refreshes the lock, picks up new approvals,
@@ -132,10 +128,10 @@ message as approval.
 <skill-dir>/list-ready.sh --repo <owner/name> --release <id>
 ```
 
-Pass `--order` when the owner typed an order ("land #12, then #9"), and pass
-the same `--order` on every list in the batch; a list without it falls back to
-approval order. Pass `--base-remote <name>` when several remotes name the
-repository, and pass the same value to `landed-since.sh`.
+Pass `--order` when the owner typed an order ("land #12, then #9"), and pass the
+same `--order` on every list in the batch. Pass `--base-remote <name>` when
+several remotes name the repository, and pass the same value to
+`landed-since.sh`.
 
 Run the PRs in sequence in the main session, which owns the engine's waits.
 Where the platform supports delegation, hand only the bounded read and
@@ -143,44 +139,37 @@ decision of steps 1 and 2 in "One PR" to a subagent; otherwise do them inline.
 
 ## Readiness Filters
 
-Each filter exists for a stated reason, and adding or removing one is the
-owner's decision. `list-ready.sh` applies them and names the first one a PR
-fails:
+Adding or removing a filter is the owner's decision. `list-ready.sh` applies
+them and names the first one a PR fails:
 
-1. **Open and not a draft.** A draft is the author saying "not yet."
+1. **Open and not a draft.**
 2. **Targets the default branch.** A stacked PR becomes eligible when its
    parent merges and the forge retargets it.
 3. **Approved per the record and not handed back.** A collaborator at or
    above the Approver permission added the latest approval label event, and
    the PR lacks the hand-back label.
-4. **The head is the approved one, or this run pushed it.** The owner read a
-   specific version, so the script reconstructs it from push evidence, never
-   from comments. A head recorded with `--pushed` counts only for its PR.
-5. **No unresolved review threads.** The owner may have approved before the
-   last round posted.
+4. **The head is the approved one, or this run pushed it.** The script
+   reconstructs it from push evidence, never from comments. A head recorded
+   with `--pushed` counts only for its PR.
+5. **No unresolved review threads.**
 6. **The recorded reviewer's round is complete on the current head,** when
    the record names a reviewer.
-7. **Not a fork head.** The engine doesn't rebase or push another
-   repository's branch.
+7. **Not a fork head.**
 
 An excluded PR needs no action from you, with one exception: a filter 4
 exclusion won't clear on its own, so hand that PR back. List every excluded PR
 that still carries the approval label in the batch report, with its filter and
 detail, because the owner may be waiting on it.
 
-CI is deliberately not a filter. The engine checks CI on the exact commit it
-will merge, after any rebase.
+CI is deliberately not a filter: the engine checks CI on the exact commit it
+will merge.
 
 ## The Lock
 
-One lander runs per repository. Landing is serial on purpose: each PR is read
-against what the previous one landed, and only the lock stops another lander
-from merging between the engine's base read and its merge.
-
-The lock is the ref `refs/land/lock` on the repository's remote, whose commit
-date is the heartbeat. `list-ready.sh` acquires it on the first non-empty
-list, refreshes it on every later list and `--pushed` record, and releases it
-on an empty fresh list or `--release <id>`.
+One lander runs per repository, so each PR is read against what the previous
+one landed. The lock is the ref `refs/land/lock` on the remote. `list-ready.sh`
+acquires it on the first non-empty list, refreshes it on every later list and
+`--pushed` record, and releases it on an empty fresh list or `--release <id>`.
 
 - **Stale** means a heartbeat older than the record's stale age, which must
   exceed the longest a live lander goes without listing: the engine's caps
@@ -287,20 +276,18 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
     network or registry failure, or a forge 5xx. Rerun.
   - **Known flake:** Every failing test is named as flaky in an open issue in
     the project. Rerun, and comment on that issue with the run link.
-  - **Suspected flake:** The failure is outside the PR's diff paths and the
-    packages it touches, and the same check passed on the PR's previous head:
-    the `old_head_oid` from this batch's `STOP rebased`, or else the head
-    before the pinned one in the PR's push history. Rerun. If the rerun
-    passes, file a flake issue naming the test and both runs, and link it in
-    the batch report.
+  - **Suspected flake:** The failure is outside the PR's paths and packages,
+    and the same check passed on the PR's previous head: this batch's
+    `old_head_oid` from `STOP rebased`, or else the head before the pinned one.
+    Rerun. If it passes, file a flake issue naming the test and both runs, and
+    link it in the batch report.
   - **Otherwise:** The failure is in the PR's paths, or no previous green run
     exists. Treat it under the rework rule, or hand back.
 
   To rerun, run `land.sh rerun` on the pinned head, then `land` again on the
   same head. The engine allows one rerun per pinned head; a rebase onto a new
   tip gets a fresh one. A second failure on that head hands back, with both
-  runs and the classification in the comment, because a repeated failure is
-  evidence against a flake.
+  runs and the classification in the comment.
 
 - **`nothing-to-rerun`:** The failure cleared, for example after someone
   reran it. Run `land` again on the same head; if it stops `checks-failed`,
@@ -337,15 +324,13 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
   head was already rerun; `rerun-unsupported`, that a failure isn't a GitHub
   Actions job.
 
-A read failure isn't a guard stop. `LOOKUP_FAILED` means a script couldn't
-read the forge or the remote, after the scripts' own retries of a transient
-forge read. Read the `stderr` key first, when present. A timeout, an HTTP 5xx,
-or a rate limit is transient: check that the forge and remote are reachable,
-then rerun the same script once. A 404, a permission error, or an
-authentication error won't clear, so end the batch as "Ending Early" says and
-quote the error. With no `stderr` key, check reachability and rerun once.
-Never act on your own reading in place of the script's result. If the rerun
-fails, end the batch as "Ending Early" says.
+`LOOKUP_FAILED` is a read failure, not a guard stop, and the scripts already
+retried transient forge reads. Read its `stderr` key first. On a timeout, an
+HTTP 5xx, a rate limit, or no `stderr` key, check that the forge and remote are
+reachable, then rerun the same script once. A 404, a permission error, or an
+authentication error won't clear: end the batch as "Ending Early" says and
+quote the error. Never act on your own reading in place of the script's
+result. If the rerun fails, end the batch as "Ending Early" says.
 
 ### Ending Early
 
@@ -424,7 +409,7 @@ closed. Leave the local branch; "The End-of-Batch Sweep" may free it.
 Never print a bare `git worktree remove` line for the owner to paste: even
 without `--force`, it deletes the worktree's ignored files and exits 0. For a
 worktree the end-of-batch sweep keeps, point the owner at merge-cleanup's
-worktree sweep, which reports what each removal would delete.
+worktree sweep.
 
 ## The End-of-Batch Sweep
 
@@ -460,11 +445,10 @@ local branch; name it in the report so the owner can run merge-cleanup for it.
 
 ## Ordering
 
-Oldest approval first. A typed order overrides it, passed as `--order`. When
-an ordered PR is open but not ready, the list holds back every PR sequenced
-after it, naming the dependency. When you hand back an ordered PR, hand back
-the PRs sequenced after it too, naming the PR they waited on. PRs the owner
-didn't sequence follow in approval order.
+Oldest approval first, unless the owner typed an order. When an ordered PR is
+open but not ready, the list holds back every PR sequenced after it. When you
+hand back an ordered PR, hand back the PRs sequenced after it too, naming the
+PR they waited on.
 
 ## Stacks
 
@@ -481,8 +465,7 @@ report as waiting on the owner's removal of that worktree; the cleanup run after
 it retargets them.
 
 A child's own `land` rebase drops the parent's pre-rebase commits that match
-what merged. A conflict there is a `rebase-conflict` and follows that stop's
-rule.
+what merged.
 
 A native GitHub stack (one managed with `gh stack`) needs linear history
 between its branches, so the parent's `merge` may stop `merge-refused`. Hand
