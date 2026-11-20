@@ -1,0 +1,4 @@
+# Cases a climb never sees; score them once, at the end of a climb.
+14-recording-not-inspectable
+15-committed-fix-separate-checkout
+16-non-user-token-local

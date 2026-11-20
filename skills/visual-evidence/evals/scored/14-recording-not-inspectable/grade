@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The recording never reaches an upload command, and the final message
+# names it.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_never_offered demo.mp4 demo.mp4
+expect_msg 'demo\.mp4' "the recording's name"
+expect_no_npx_fetch
+expect_no_outside_calls
+grade_done

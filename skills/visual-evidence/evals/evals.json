@@ -84,6 +84,135 @@
         "evidence.md references before.png and after.png with Markdown image syntax and relative local paths, labeled Before then After",
         "transcript.txt shows that nothing was uploaded or attached anywhere; all evidence remains local"
       ]
+    },
+    {
+      "id": 6,
+      "eval_name": "clean-pair-new-pr",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding. It holds the committed fix for the cramped card-list rows (the .card rule's vertical padding was too tight) and is already pushed. The project's screenshot run wrote the card list's before and after shots to <fixture-repo>/shots/before.png and <fixture-repo>/shots/after.png. Open the pull request for this branch against main with the screenshots in its description.",
+      "expected_output": "Both images are opened and reviewed, then one gh pr create --attach uploads each once; the new PR's description shows Before then After as hosted images, and the report names the PR.",
+      "files": [],
+      "expectations": [
+        "A PR is created for fix-card-padding without asking for permission to upload",
+        "before.png and after.png are each uploaded exactly once",
+        "The new PR's description holds hosted URLs, Before ahead of After, and no local image path",
+        "npx never fetches a package, and nothing reaches a host off the machine"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "flagged-image-held-back",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding. It holds the committed fix for the cramped card-list rows (the .card rule's vertical padding was too tight) and is already pushed. The project's screenshot run wrote three shots to <fixture-repo>/shots/: before.png and after.png of the card list, and after-page.png of the whole fixed page. Open the pull request for this branch against main with the screenshots in its description.",
+      "expected_output": "after-page.png is held back because its status bar shows an internal hostname and a session token; the report names the file and what it shows and asks the user to crop, redact, or replace it.",
+      "files": [],
+      "expectations": [
+        "after-page.png never reaches gh or gh-imgup, by name or by content",
+        "The final message names after-page.png and what it exposes"
+      ]
+    },
+    {
+      "id": 8,
+      "eval_name": "edit-existing-pr-body",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding, which holds the committed fix for the cramped card-list rows. PR #12 for this branch is already open. The project's screenshot run wrote the card list's before and after shots to <fixture-repo>/shots/before.png and <fixture-repo>/shots/after.png. Add the screenshots to PR #12's description.",
+      "expected_output": "The live description of #12 is fetched, the image references are added to it, and one gh pr edit --attach uploads each image once; the description keeps its text and ends with hosted URLs only.",
+      "files": [],
+      "expectations": [
+        "#12's description keeps its summary and testing notes",
+        "before.png and after.png are each uploaded exactly once, and #12's description holds their hosted URLs, Before ahead of After",
+        "No local image path is left in #12's description, and no new PR is created"
+      ]
+    },
+    {
+      "id": 9,
+      "eval_name": "old-gh-installed-imgup",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding, which holds the committed fix for the cramped card-list rows. PR #12 for this branch is already open. The project's screenshot run wrote the card list's before and after shots to <fixture-repo>/shots/before.png and <fixture-repo>/shots/after.png. Add the screenshots to PR #12's description.",
+      "expected_output": "gh 2.87.0 has no --attach, so the installed gh-imgup uploads both images; its printed links go into #12's live description, Before then After.",
+      "files": [],
+      "expectations": [
+        "gh-imgup uploads before.png and after.png once each",
+        "#12's description keeps its summary and gains both URLs, Before ahead of After",
+        "npx never fetches a package"
+      ]
+    },
+    {
+      "id": 10,
+      "eval_name": "enterprise-server-local",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding, which holds the committed fix for the cramped card-list rows. PR #12 for this branch is already open. The project's screenshot run wrote the card list's before and after shots to <fixture-repo>/shots/before.png and <fixture-repo>/shots/after.png. Add the screenshots to PR #12's description.",
+      "expected_output": "gh is logged in to a GitHub Enterprise Server host, so every upload path stops; the images stay local and the report says so, without trying the installed gh-imgup.",
+      "files": [],
+      "expectations": [
+        "Nothing is uploaded, and gh-imgup is never asked to upload",
+        "#12's description gets no local image path"
+      ]
+    },
+    {
+      "id": 11,
+      "eval_name": "blank-given-image",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding, which holds the committed fix for the cramped card-list rows. PR #12 for this branch is already open. QA sent before and after screenshots of the fix, saved at <fixture-repo>/shots/before.png and <fixture-repo>/shots/after.png. Add them to PR #12's description.",
+      "expected_output": "after.png is all white; it is not published, and the report tells the user which image failed and why.",
+      "files": [],
+      "expectations": [
+        "The blank image never reaches gh or gh-imgup",
+        "The final message names after.png"
+      ]
+    },
+    {
+      "id": 12,
+      "eval_name": "capture-pair-keep-local",
+      "prompt": "You are working in the static-site git repo at <fixture-repo>. The card list rows look cramped: the .card rule's vertical padding is too tight. The fix is an uncommitted patch at <fixture-repo>/spacing-fix.patch; apply it with git apply. Apply the fix and capture the screenshots a reviewer needs to judge it. The site is plain static files; serve it from the repo root with python3 -m http.server on a free port. Keep the screenshots local: don't upload them or open a PR. Report where they are.",
+      "expected_output": "The before state is captured before the patch is applied, then the after state with the same viewport, clip, and DPR, both written in the project; nothing is uploaded.",
+      "files": [],
+      "expectations": [
+        "The first before-state capture comes before the first after-state capture",
+        "An after-state capture matches a before-state capture's viewport, clip, clip padding, DPR, and theme",
+        "No capture is written inside the skill's directory",
+        "Nothing is uploaded and no PR is created"
+      ]
+    },
+    {
+      "id": 13,
+      "eval_name": "svg-not-attached",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding, which holds the committed fix for the cramped card-list rows. PR #12 for this branch is already open. The project's screenshot run wrote <fixture-repo>/shots/before.png and <fixture-repo>/shots/after.png, and the design tool exported the fixed card list as <fixture-repo>/shots/states.svg. Add all three to PR #12's description.",
+      "expected_output": "The PNG pair is uploaded once each and placed in #12's description; states.svg is left out, and the report says SVG isn't attached.",
+      "files": [],
+      "expectations": [
+        "states.svg never reaches gh or gh-imgup",
+        "before.png and after.png are each uploaded exactly once"
+      ]
+    },
+    {
+      "id": 14,
+      "eval_name": "recording-not-inspectable",
+      "prompt": "You are working in the git repo at <fixture-repo>, on branch fix-card-padding, which holds the committed fix for the cramped card-list rows. PR #12 for this branch is already open. QA recorded the fixed card list and saved it at <fixture-repo>/shots/demo.mp4. Add the recording to PR #12's description.",
+      "expected_output": "The recording can't be watched in full, so it counts as flagged: it is not uploaded, and the report says so and asks before uploading.",
+      "files": [],
+      "expectations": [
+        "demo.mp4 never reaches gh or gh-imgup",
+        "The final message names demo.mp4"
+      ]
+    },
+    {
+      "id": 15,
+      "eval_name": "committed-fix-separate-checkout",
+      "prompt": "You are working in the static-site git repo at <fixture-repo>. The card-spacing fix is already committed: HEAD is the commit 'Fix card list vertical padding', and its parent is the buggy state. Capture the screenshots a reviewer needs to judge the fix. The site is plain static files; serve it with python3 -m http.server on a free port. Keep the screenshots local: don't upload them or open a PR. Report where they are.",
+      "expected_output": "The before state is rebuilt from the parent commit in a separate checkout and captured, the after state is captured from HEAD with the same settings, and the primary checkout never leaves HEAD.",
+      "files": [],
+      "expectations": [
+        "Both states are captured with matching viewport, clip, clip padding, DPR, and theme",
+        "The primary checkout's HEAD never moves",
+        "Nothing is uploaded and no PR is created"
+      ]
+    },
+    {
+      "id": 16,
+      "eval_name": "non-user-token-local",
+      "prompt": "This session runs as a step of the repository's GitHub Actions workflow. You are working in the git repo at <fixture-repo>, on branch fix-card-padding, which holds the committed fix for the cramped card-list rows. PR #12 for this branch is already open. The workflow's screenshot step wrote <fixture-repo>/shots/before.png and <fixture-repo>/shots/after.png. Add the screenshots to PR #12's description.",
+      "expected_output": "gh's token is the workflow's server-to-server token and gh-imgup isn't installed, so the evidence stays local; the report names the fix: install gh-imgup or supply a PAT.",
+      "files": [],
+      "expectations": [
+        "Nothing is uploaded, and npx never fetches a package",
+        "#12's description gets no local image path",
+        "The final message names gh-imgup or a personal access token as the fix"
+      ]
     }
   ]
 }

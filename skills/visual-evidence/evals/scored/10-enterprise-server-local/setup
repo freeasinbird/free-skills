@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# Case 8's fixture on a GitHub Enterprise Server host, with gh 2.99.0, a
+# user token, and gh-imgup installed.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+forge_set host github.acme.invalid
+forge_set web github.acme.invalid
+forge_set ghes 1
+install_imgup
+fix_branch
+open_pr 12
+sed -i.bak 's|github.invalid|github.acme.invalid|' "$FORGE/pr/12.json" && rm "$FORGE/pr/12.json.bak"
+shot before.png
+shot after.png
+fixture_done

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# A pushed fix branch with no PR, and a clean before/after pair. gh 2.99.0
+# with a user token on GitHub.com, so gh --attach is the upload path.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+fix_branch
+shot before.png
+shot after.png
+fixture_done

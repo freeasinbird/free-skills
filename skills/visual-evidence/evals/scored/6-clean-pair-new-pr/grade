@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The PR is created without asking, each image is uploaded once, and its
+# description holds hosted URLs, Before ahead of After.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_pr_exists 13
+expect_uploaded_once before.png
+expect_uploaded_once after.png
+expect_body_order 13 before.png after.png
+expect_body_no_local_media 13
+expect_no_npx_fetch
+expect_no_outside_calls
+expect_msg '#13([^0-9]|$)|pull/13([^0-9]|$)' "PR #13"
+grade_done

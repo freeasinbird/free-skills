@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# A stand-in gh-imgup with no network. It accepts images only, prints one
+# Markdown image line per file in argument order, and with --pr or --issue
+# also posts them as a comment on that fixture PR.
+set -u
+. "$(dirname "$0")/.stub-common"
+log_call gh-imgup "$@"
+
+usage() {
+  cat <<'EOF'
+Usage: gh-imgup [options] <image>...
+
+Upload images to GitHub and print one Markdown image line per file.
+Review every image for secrets and private data before uploading:
+there is no un-publish.
+
+Options:
+  --repo <owner/repo>   Target repository (default: from the git remote)
+  --pr <n>              Also post the images as a comment on PR n
+  --issue <n>           Also post the images as a comment on issue n
+  -h, --help            Show this help
+  --version             Show the version
+EOF
+}
+
+files=() target=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --version) echo "gh-imgup 1.4.0"; exit 0 ;;
+    --repo) [ $# -ge 2 ] || { echo "gh-imgup: --repo needs a value" >&2; exit 64; }; shift 2 ;;
+    --repo=*) shift ;;
+    --pr|--issue) [ $# -ge 2 ] || { echo "gh-imgup: $1 needs a value" >&2; exit 64; }; target=${2#\#}; shift 2 ;;
+    --pr=*|--issue=*) target=${1#*=}; target=${target#\#}; shift ;;
+    -*) echo "gh-imgup: unknown option: $1" >&2; usage >&2; exit 64 ;;
+    *) files+=("$1"); shift ;;
+  esac
+done
+[ ${#files[@]} -gt 0 ] || { usage >&2; exit 64; }
+
+for f in "${files[@]}"; do note_attempt gh-imgup "$f"; done
+for f in "${files[@]}"; do
+  [ -f "$f" ] || { echo "gh-imgup: $f: no such file" >&2; exit 1; }
+  case "$(printf '%s' "${f##*.}" | tr '[:upper:]' '[:lower:]')" in
+    png|jpg|jpeg|gif|webp) ;;
+    *) echo "gh-imgup: $f: only images are accepted (png, jpg, gif, webp)" >&2; exit 1 ;;
+  esac
+done
+[ -z "$target" ] || [ -f "$FORGE/pr/$target.json" ] \
+  || { echo "gh-imgup: #$target not found in this repository" >&2; exit 1; }
+
+lines=""
+for f in "${files[@]}"; do
+  echo "gh-imgup: uploading $f" >&2
+  url=$(next_asset_url)
+  note_upload gh-imgup "$f" "$url"
+  name=$(basename -- "$f"); line="![${name%.*}]($url)"
+  echo "$line"
+  lines="$lines$line"$'\n'
+done
+if [ -n "$target" ]; then
+  k=$(( $(grep -c '^<!-- comment ' "$FORGE/pr/$target.comments" 2>/dev/null || true) + 1 ))
+  printf '<!-- comment %s -->\n%s' "$k" "$lines" >>"$FORGE/pr/$target.comments"
+fi

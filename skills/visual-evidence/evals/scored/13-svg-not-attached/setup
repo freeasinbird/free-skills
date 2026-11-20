@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# Case 8's fixture plus states.svg, a vector export of the fixed card list.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+fix_branch
+open_pr 12
+shot before.png
+shot after.png
+shot states.svg
+fixture_done

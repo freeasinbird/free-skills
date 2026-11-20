@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# A stand-in npx with no network and no packages installed. It logs every
+# call; --no-install fails as npx does for a missing package, and anything
+# else fails as a registry fetch would offline.
+set -u
+FORGE=$(cd "$(dirname "$0")/../forge" && pwd -P)
+{ printf 'npx'; [ $# -eq 0 ] || printf ' %q' "$@"; printf '\n'; } >>"$FORGE/calls.log"
+for a in "$@"; do
+  if [ "$a" = --no-install ] || [ "$a" = --no ]; then
+    echo 'npm error npx canceled due to missing packages and no YES option' >&2
+    exit 1
+  fi
+done
+echo 'npm error code ENOTFOUND' >&2
+echo 'npm error network request to the registry failed, reason: getaddrinfo ENOTFOUND' >&2
+exit 1
