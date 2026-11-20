@@ -188,6 +188,9 @@ json_escape() {
       $'\n') out+='\n' ;;
       $'\t') out+='\t' ;;
       $'\r') out+='\r' ;;
+      # Printable ASCII skips the fork below: a job's failing tests run
+      # to thousands of bytes, and a fork per byte costs seconds.
+      [\ -~]) out+="$c" ;;
       *)
         o=$(( $(printf '%d' "'$c") & 255 ))
         if [ "$o" -ge 32 ] && [ "$o" -le 126 ]; then
