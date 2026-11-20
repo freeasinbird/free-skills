@@ -138,9 +138,12 @@ round writes one hypothesis per candidate, scores the batch in one run of the
 frozen check, and keeps at most its best candidate by the keep rule below.
 
 Each candidate tests one hypothesis. Write the hypothesis and the mechanism
-that should make it work before changing anything. Then make the change,
-score it from the frozen check, and run every guard. A candidate never edits
-the check, its inputs, or a guard, and never skips a test.
+that should make it work before changing anything. Then make the change and
+run every guard that costs less than a score, such as a lint. A candidate
+that fails one is reverted, or rejected for a set goal, without a score; in
+an attempt climb it still uses its attempt. Otherwise score it from the
+frozen check and run the remaining guards. A candidate never edits the
+check, its inputs, or a guard, and never skips a test.
 
 Check each candidate against the goal file's Constraints before scoring it.
 A candidate that breaches one is reverted, or rejected for a set goal,
