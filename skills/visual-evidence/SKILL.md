@@ -20,14 +20,10 @@ description: >-
 # Visual Evidence
 
 Capture screenshots that let a reviewer judge a visual change without reading
-the diff. Start early because the _before_ state usually disappears when the
-fix lands.
-
-This skill owns capture timing and craft. It also owns checking, reviewing,
-and uploading screenshots that already exist, whatever produced them. It
-produces clean, tightly framed evidence, then uploads it with `gh --attach`,
-or with an installed gh-imgup where gh can't upload. Without either, it stops
-at local files and says so.
+the diff, or check, review, and upload screenshots that already exist. Start
+early because the _before_ state usually disappears when the fix lands. Upload
+with `gh --attach`, or with an installed gh-imgup where gh can't; without
+either, stop at local files and say so.
 
 Follow this procedure:
 
@@ -43,31 +39,20 @@ Follow this procedure:
 9. Verify the rendered result.
 
 **Screenshots that already exist:** Start at step 6 when a project capture
-script, screenshot tests, the user, or QA already produced the images. Steps 1
-to 5 don't apply. Steps 6 to 9 do: check, review, upload, verify. A screen
-recording you were given enters the same way, and so does a single image with
-no pair.
+script, screenshot tests, the user, or QA already produced the images, or when
+you were given a recording or a single image. Steps 6 to 9 apply.
 
 ## When to Use It
 
-- **Visual implementation:** Use it for a UI bug, regression, restyle, new
-  surface, theme change, or any work judged by appearance.
-- **UI review:** Use it when opening or reviewing a PR that changes rendered
-  UI and screenshots would help the reviewer.
-- The user asks to "show the change", "add a screenshot", or "before/after".
-- **Screenshots in hand:** Use it when you hold screenshots or screen
-  recordings from any source and are about to put them on a PR or issue. That
-  covers "attach the screenshots", "upload the screenshots", and filling a
-  PR's Screenshots section.
-
-Suggest it proactively for visual work. Capturing the _before_ is cheap now and
-may be impossible later.
+Use it for any change judged by appearance, for a PR that changes rendered
+UI, and whenever you hold screenshots or recordings bound for a PR or issue.
+Suggest it proactively for visual work: capturing the _before_ is cheap now
+and may be impossible later.
 
 ## When Not to Use It
 
-- **Non-visual work:** Skip logic, backend, data, build, or configuration
-  changes that have no rendered output.
-- Docs or comments that don't change anything a user sees rendered.
+- **Non-visual work:** Skip changes with no rendered output, including docs
+  and comments that change nothing a user sees.
 - **Explicit gh-imgup request:** Leave a request to upload with gh-imgup by
   name to that tool's own instructions. Its review of each image still comes
   before the upload.
