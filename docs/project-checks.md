@@ -138,5 +138,9 @@ Run each suite when its stated trigger applies.
   `tracker-refresh.sh` changed (`./scripts/test-merge-cleanup-refresh.sh`)
 - Write validation matrix green when merge-cleanup's `tracker-write.sh` or
   `tracker-refresh.sh` changed (`./scripts/test-merge-cleanup-write.sh`)
+- Reconcile validation matrix green when merge-cleanup's
+  `tracker-reconcile.sh`, `tracker-write.sh`, `tracker-refresh.sh`, or
+  `reconciliation-ledger.sh` changed
+  (`./scripts/test-merge-cleanup-reconcile.sh`)
 - Scored-eval runner matrix green when `run-scored-eval.sh` changed
   (`./scripts/test-run-scored-eval.sh`)
