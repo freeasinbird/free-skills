@@ -133,15 +133,12 @@ Apply the change. Drive the app to the same screen and state, then capture
 
 ### Reference Capture Script
 
-Use `capture.mjs` with headless Chrome and Node 22+ when a fresh URL load
-reaches the requested state. It starts a fresh browser profile; it doesn't
-restore sessions or perform clicks, and waiting for a visible selector doesn't
-establish interactive state.
-
+`capture.mjs` needs headless Chrome and Node 22+. It starts a fresh browser
+profile and performs no clicks, and waiting for a selector doesn't establish
+interactive state, so use it only when a fresh URL load reaches the state.
 Run it by path from the project directory that will hold the screenshots,
-never from the skill directory: relative `--out` and `--chrome` paths resolve
-from the working directory, and Compose and Attach won't find screenshots
-written into a skill install. `<skill-dir>` is this skill's directory.
+never from the skill directory (`<skill-dir>`): relative `--out` and
+`--chrome` paths resolve from the working directory.
 
 ```sh
 node <skill-dir>/capture.mjs --url http://localhost:3000/cards \
@@ -149,8 +146,8 @@ node <skill-dir>/capture.mjs --url http://localhost:3000/cards \
   --clip '#card-list'
 ```
 
-The script's header comment documents every option, its default, the output
-names, and the exit codes. The options are `--url` and `--out` (required),
+Its header comment documents each option's default, the output names, and
+the exit codes. The options are `--url` and `--out` (required),
 `--viewport`, `--wait-for`, `--clip`, `--clip-pad`, `--settle-ms`, `--dpr`,
 `--dark`, `--timeout-budget`, `--attempt-timeout`, `--retries`, `--chrome`,
 and `--chrome-flag`. Several viewports insert the size into the filename, so
@@ -294,9 +291,8 @@ elaborate. Use `gh pr edit --attach` for an open PR's description, and
 `gh pr comment` or `gh issue comment` only for a later addition; see
 `references/gh-attach.md` §commands.
 
-- **Use Markdown image syntax only:** gh leaves a raw `<img src>` as written
-  and appends the file at the end. Labels belong in the body's references;
-  the `#alt` suffix on `--attach` names only an unreferenced file.
+- **Use Markdown image syntax only,** with labels in the body's references:
+  gh leaves a raw `<img src>` as written and appends the file at the end.
 - **Attach each file once:** Every run uploads every `--attach` file again. A
   second `gh pr edit --attach` with the same file appends a duplicate.
 - **Start every edit of an existing body from the live body:** `--body-file`
@@ -310,10 +306,8 @@ elaborate. Use `gh pr edit --attach` for an open PR's description, and
   only. Never attach SVG: gh
   accepts it, but it can carry scripts, and gh-imgup refuses it for that
   reason.
-- **Give a recording its own paragraph:** A recording you were given uploads
-  on this path; read `references/gh-attach.md` §video first. Write
-  `![label](./demo.mp4)` alone in its paragraph so GitHub renders a player,
-  with its label in the paragraph above.
+- **Give a recording its own paragraph,** with its label in the paragraph
+  above; see `references/gh-attach.md` §video.
 
 ### Upload With gh-imgup
 
