@@ -1,0 +1,27 @@
+---
+name: merge-cleanup
+description: >-
+  Post-merge cleanup for one merged PR, and the end-of-batch worktree
+  sweep. This build is the land-approved-prs eval's stand-in: it records
+  each call and changes nothing.
+---
+
+# Merge Cleanup
+
+Run every command from the repository's primary checkout. The scripts live
+next to this file. Each one's last stdout line is its result: `OK` means
+done.
+
+## After a Merge
+
+Run `merge-cleanup.sh` with the merged PR. Pass `--repo` as
+`<host>/<owner>/<name>`, `--pr` as the PR number, and `--checkout` as the
+checkout's absolute root. It resolves the work unit, deletes the merged
+branch, resyncs the base, and summarizes. Report its result line.
+
+## Worktree Sweep
+
+`worktree-sweep.sh` lists linked worktrees and removes only what its flags
+allow. A landing batch passes `--remove-landed` and `--base
+<remote>/<default-branch>`, after a fetch of that remote. Report each
+kept worktree with its reason.

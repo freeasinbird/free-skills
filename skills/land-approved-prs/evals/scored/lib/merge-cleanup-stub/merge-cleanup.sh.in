@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# The land-approved-prs eval's stand-in for merge-cleanup.sh: it records its
+# arguments and the time, changes nothing, and reports success. fixture.sh
+# installs it with @FORGE@ replaced by the fixture's forge directory.
+printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"@FORGE@/cleanup.log"
+echo "merge-cleanup: resolved the work unit, deleted the merged branch, resynced the base"
+echo 'OK cleanup {"branch_deleted":true,"base_resynced":true}'
