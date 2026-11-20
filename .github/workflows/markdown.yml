@@ -68,6 +68,7 @@ jobs:
           - test-compare-managed-blocks.sh
           - test-land.sh
           - test-landed-since.sh
+          - test-link-skills.sh
           - test-list-ready.sh
           - test-merge-cleanup-inventory.sh
           - test-merge-cleanup-landing.sh
