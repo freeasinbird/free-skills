@@ -161,36 +161,24 @@ decision of steps 1 and 2 in "One PR" to a subagent; otherwise do them inline.
 ## Readiness Filters
 
 Each filter exists for a stated reason, and adding or removing one is the
-owner's decision. `list-ready.sh` applies them cheapest first, in this
-order except that filter 7 runs right after filter 3, and names the first one
-a PR fails:
+owner's decision. `list-ready.sh` applies them and names the first one a PR
+fails:
 
 1. **Open and not a draft.** A draft is the author saying "not yet."
 2. **Targets the default branch.** A stacked PR becomes eligible when its
    parent merges and the forge retargets it.
-3. **Approved per the record and not handed back.** It carries the approval
-   label, a collaborator at or above the Approver permission added the latest
-   such label event, and it lacks the hand-back label.
+3. **Approved per the record and not handed back.** A collaborator at or
+   above the Approver permission added the latest approval label event, and
+   the PR lacks the hand-back label.
 4. **The head is the approved one, or this run pushed it.** The owner read a
-   specific version, so the script reconstructs it from push evidence.
-5. **No unresolved review threads.** An open thread is an open question, and
-   the owner may have approved before the last round posted.
-6. **The recorded reviewer's round is complete on the current head.** This
-   filter applies only when the record names a reviewer.
+   specific version, so the script reconstructs it from push evidence, never
+   from comments. A head recorded with `--pushed` counts only for its PR.
+5. **No unresolved review threads.** The owner may have approved before the
+   last round posted.
+6. **The recorded reviewer's round is complete on the current head,** when
+   the record names a reviewer.
 7. **Not a fork head.** The engine doesn't rebase or push another
-   repository's branch, so the list reports the case instead.
-
-Filter 4 works from push evidence, never from comments or commit order. The
-approval time T is the latest approval label event. The approved head H0 is
-the head of the newest pull-request CI run, or force-push, at or before T.
-The PR is ready only when its head is H0 or a head this run recorded for that
-PR with `--pr` and `--pushed`. A head recorded for one PR never exempts
-another, since two branches can point at one commit.
-
-A force-push after T that this run didn't record excludes the PR, even if the
-head later returns to H0. So does a PR whose H0 can't be found. GitHub runs no
-pull-request CI while a PR has a merge conflict, so a push to a conflicted PR
-can leave no evidence; the script excludes such a PR rather than guess.
+   repository's branch.
 
 An excluded PR needs no action from you, with one exception: a filter 4
 exclusion won't clear on its own, so hand that PR back. List every excluded PR
@@ -198,29 +186,23 @@ that still carries the approval label in the batch report, with its filter and
 detail, because the owner may be waiting on it.
 
 CI is deliberately not a filter. The engine checks CI on the exact commit it
-will merge, after any rebase, and a check on a stale head would say nothing
-about that commit.
+will merge, after any rebase.
 
 ## The Lock
 
 One lander runs per repository. Landing is serial on purpose: each PR is read
-against what the previous one landed. The engine also reads the base tip and
-merges in separate steps. Without branch protection that rejects merges onto a
-moved tip, only the lock stops another lander from merging in between.
+against what the previous one landed, and only the lock stops another lander
+from merging between the engine's base read and its merge.
 
-The lock is the ref `refs/land/lock` on the repository's remote. It points at
-an orphan commit naming the run, the machine, and the PR in progress, and its
-commit date is the heartbeat. The forge arbitrates it: a push leased on the
-ref's absence succeeds for exactly one lander.
+The lock is the ref `refs/land/lock` on the repository's remote, whose commit
+date is the heartbeat. `list-ready.sh` acquires it on the first non-empty
+list, refreshes it on every later list and `--pushed` record, and releases it
+on an empty fresh list or `--release <id>`.
 
-- **Acquire** on the first non-empty list.
-- **Heartbeat** on every later list and every `--pushed` record. Each moves
-  the ref with a lease on its previous value.
-- **Release** on an empty fresh list. `--release <id>` ends a batch early.
 - **Stale** means a heartbeat older than the record's stale age. That age
   must exceed the longest a live lander goes without listing: the engine's CI
   and merge caps times the number of allowed runs, plus two CI caps for a
-  `rerun` phase's two waits, a reviewer wait, and a margin.
+  `rerun` phase, a reviewer wait, and a margin.
 - **Never take over.** A lock held by another run stops the list as
   `lock-held`, or `lock-stale` when it is past the stale age. Report its run
   id, machine, and age, and stop.
@@ -257,19 +239,11 @@ the approval label yourself. Never run its `merge` phase on its own.
 <skill-dir>/landed-since.sh --repo <owner/name> --pr <n> --since <oid>
 ```
 
-The original fork point is the common ancestor of the default-branch parents
-of every commit the PR has had, across its current head and every head a force
-push replaced. On one line, that's the oldest of those parents. It doesn't
-move as the default branch advances or the author merges it in or rebases. A
-later base is no substitute: it skips exactly the landings the author's merge
-or rebase absorbed without anyone reading them against this PR. When a force
-push replaced a head the forge no longer has, the script stops
-`original-base-unknown`; hand the PR back.
-
-Use `--since` with the tip from your last read when re-reading after
-`rebased`. Base-advance checks see `LAND_PR`, `LAND_FROM`, and `LAND_TIP` in
-their environment. Their output and exit status are evidence for your
-judgment; the script decides nothing.
+Without `--since`, the range starts at the PR's original fork point, so it
+includes landings the author's merge or rebase absorbed. When the script stops
+`original-base-unknown`, hand the PR back. Use `--since` with the tip from your
+last read when re-reading after `rebased`. The base-advance checks' output and
+exit status are evidence for your judgment; the script decides nothing.
 
 ### Running the Engine
 
@@ -492,18 +466,14 @@ git fetch --prune <remote>
 <merge-cleanup-dir>/worktree-sweep.sh --remove-landed --base <remote>/<default-branch>
 ```
 
-`--remove-landed` removes a worktree only when it's clean, on a branch, and
-the sweep found that branch's landing merge. It keeps everything else, with a
-reason on its line: dirty worktrees, fresh branches with no landing merge, and
-detached `land-wt` worktrees. The last rule makes sweeping after the release
-safe. A lander that starts in that gap works in a `land-wt` worktree or on an
-unmerged branch, and the sweep removes neither. Never add `--remove` or
+`--remove-landed` removes only clean worktrees whose branch has a landing
+merge. It keeps dirty worktrees, unmerged branches, and detached `land-wt`
+worktrees, so a lander that starts after the release is safe. Never add `--remove` or
 `--remove-dirty`: what this sweep keeps is the owner's to remove. A `STOP` or
 `LOOKUP_FAILED` result goes in the batch report as it stands; never rerun the
 sweep with other flags.
 
-A session still open in a removed worktree loses its directory, as it would
-after the owner's own sweep. For each PR whose merge-cleanup stopped
+For each PR whose merge-cleanup stopped
 `head-worktree-present` and whose worktree the sweep removed, rerun
 merge-cleanup's procedure with the same arguments as "After the Merge." That
 deletes the local branch and retargets any stacked children. A removed
@@ -520,34 +490,30 @@ didn't sequence follow in approval order.
 
 ## Stacks
 
-Land a stack's parent like any other PR. The engine reports the open PRs
-based on its branch, in `check`'s `stacked_prs` and a stderr line from every
-phase, and continues: nothing it runs deletes the branch. The forge retargets
-each child onto the parent's base when the merged branch is deleted, and
-merge-cleanup retargets them itself before its own delete. The next
-`list-ready.sh` call then admits each approved child under filter 2. Name the
-children in the batch report as unblocked by the parent.
+Land a stack's parent like any other PR. The engine reports the open PRs based
+on its branch, in `check`'s `stacked_prs`, and continues. When the merged
+branch is deleted, the forge or merge-cleanup retargets each child onto the
+parent's base, and the next list admits each approved child under filter 2.
+Name the children in the batch report as unblocked by the parent.
 
-When the repository doesn't auto-delete merged branches and merge-cleanup
-stops `head-worktree-present` because it kept the parent's worktree, nothing
-deletes or retargets yet. The children stay based on the merged branch, and
-filter 2 keeps excluding them. Name them in the batch report as waiting on the
-owner's removal of that worktree; the cleanup run after it retargets them.
+When merge-cleanup stops `head-worktree-present` because it kept the parent's
+worktree, and the repository doesn't auto-delete merged branches, nothing
+retargets yet, so filter 2 keeps excluding the children. Name them in the batch
+report as waiting on the owner's removal of that worktree; the cleanup run after
+it retargets them.
 
-A child's turn after a rebased parent starts from the parent's pre-rebase
-commits. Its own `land` rebase drops the ones that match what merged, and the
-range-diff shows them dropping. A conflict there is a `rebase-conflict` and
-follows that stop's rule.
+A child's own `land` rebase drops the parent's pre-rebase commits that match
+what merged. A conflict there is a `rebase-conflict` and follows that stop's
+rule.
 
-A native GitHub stack (one managed with `gh stack`) must have linear history
-between its branches before it can merge. After `land` rebases only the
-parent, its `merge` may stop `merge-refused`. Hand the parent back naming the
-guard; the owner re-linearizes the stack with `gh stack rebase --upstack`.
+A native GitHub stack (one managed with `gh stack`) needs linear history
+between its branches, so the parent's `merge` may stop `merge-refused`. Hand
+the parent back naming the guard; the owner re-linearizes the stack with
+`gh stack rebase --upstack`.
 
-A cross-repository head still stops `stacked-prs`. Its children live in the
-head's repository, where neither the forge nor merge-cleanup can retarget them
-onto this base. Hand the parent back naming the guard; the owner retargets the
-children or merges the parent.
+A cross-repository head still stops `stacked-prs`, because neither the forge
+nor merge-cleanup can retarget its children onto this base. Hand the parent
+back naming the guard; the owner retargets the children or merges the parent.
 
 ## Recovery After a Dead Lander
 
