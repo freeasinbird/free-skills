@@ -8,8 +8,9 @@ description: >-
   "hill-climb X", "hillclimb", or "keep improving X until it scores Y", or asks
   to push a measurable score toward a target over many attempts. Not for a
   one-off council scoring request, an "improve X" edit with no score, a prompt
-  audit or edit with no score (prompt-crafter), a single eval run, a reflect request, or
-  "Plan #N".
+  audit or edit with no score (prompt-crafter), a single eval run, building
+  or proving a check before a climb (prepare-hill-climb), a reflect request,
+  or "Plan #N".
 ---
 
 # Hill-Climb
@@ -38,6 +39,10 @@ durable climb directory outside the repository, such as
 scratch space isn't enough, because the report gives a log path that must
 still exist. The goal file, the frozen check, and the attempt log all live
 there.
+
+When the climb directory already holds a draft goal file, such as one
+`prepare-hill-climb` left, read it instead of drafting one. Ask the owner
+for each field it leaves blank.
 
 Copy every limit the owner states, in the request or later before sign-off,
 into the goal file's Constraints, in the owner's words. List any limit you add apart from them,
@@ -127,6 +132,29 @@ These are the rules for a trustworthy check. Other skills cite this section.
    frozen copy, run against the candidate outside the working checkout. Verify
    the hash before each score; a mismatch is the "check is wrong" exit. Where
    the platform offers a read-only sandbox for scoring, use it.
+
+**Accept a proof record.** A proof record from `prepare-hill-climb`
+(`../prepare-hill-climb/references/proof-record.md` §proof-record) takes
+the place of steps 1 to 3 only when every condition below holds. Check them
+on the climb's branch, and create it first if it doesn't exist yet.
+
+- **Frozen copy.** The frozen copy in the climb directory hashes to the
+  record's frozen hash, by the record's hash command.
+- **Source.** The check's source files, at the commit the climb's branch
+  starts from, hash to the same value.
+- **Artifact.** The record's artifact paths are unchanged between its
+  baseline revision and that commit. A baseline revision that can't be
+  found fails this condition.
+- **Settings.** The signed-off goal file's Check runs the record's check
+  command with its settings, such as the model, and every environment pin
+  the record lists still holds.
+- **Panel.** For a council check, the first council call names the
+  recorded panel, and council reports no named member unreachable.
+
+On acceptance, copy the record's path, hash, noise band, baseline scores,
+and panel into the attempt log. When any condition fails, log and tell the
+owner which one, then prove the check by steps 1 to 3. Step 4 applies to
+every score either way.
 
 ## Run Attempts
 
