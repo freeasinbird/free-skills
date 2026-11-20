@@ -506,12 +506,18 @@ op_probe() { # op_probe <dir>: returns 0 and sets OP_FOUND when one is paused
   return 1
 }
 
-json_add() { # json_add <var> <path>: append a JSON string to a list body
-  local __cur
-  eval "__cur=\${$1}"
-  if [ -n "$__cur" ]; then __cur+=","; fi
-  __cur+="\"$(json_escape "$2")\""
-  printf -v "$1" '%s' "$__cur"
+json_add() { # json_add <array> <path>: append <path> to <array> as a JSON string
+  # An array append copies nothing built so far, where rebuilding one string
+  # per path grew quadratically with a long list.
+  json_escape_to "$2"
+  JSON_ESC="\"$JSON_ESC\""
+  eval "$1+=(\"\$JSON_ESC\")"
+}
+
+json_list() { # json_list <array>: set JSON_LIST to its items joined by commas
+  # The ${a[*]+...} form keeps bash 3.2 from calling an empty array unbound.
+  local IFS=,
+  eval "JSON_LIST=\${$1[*]+\"\${$1[*]}\"}"
 }
 
 # Is <path> disposable? It is when a leading run of its components matches a
@@ -608,7 +614,8 @@ match_declared() { # match_declared <worktree> <path> <ignored>
 # the lists are read here because the inventory stops without naming files.
 inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
   local path="$1" tmp rec xy p skip=false sparse=false sparse_cfg inv rc
-  local untracked="" modified="" ignored="" flagged="" disposable="" last_added="" op=null unref=null
+  local untracked=() modified=() ignored=() flagged=() disposable=() last_added="" op=null unref=null
+  local found name
   M_LAST="" M_IGNORED=$'\n' M_KEPT=$'\n'
   [ -z "$2" ] || unref="\"$2\""
   if op_probe "$path"; then op="\"$OP_FOUND\""; fi
@@ -657,6 +664,7 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     json_add flagged "$p"
   done < "$tmp"
   rm -f "$tmp"
+  found=$((${#untracked[@]} + ${#modified[@]} + ${#ignored[@]} + ${#flagged[@]}))
   inv=$("$INVENTORY" "$path" 2>&1)
   rc=$?
   case "$rc:$inv" in
@@ -670,7 +678,7 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     # the one before `git worktree remove`, which refuses untracked files
     # but deletes ignored ones, as it did before disposables existed.
     "2:STOP dirty "*)
-      if [ -n "$disposable" ] && [ -z "$untracked$modified$ignored$flagged" ]; then
+      if [ "${#disposable[@]}" -gt 0 ] && [ "$found" -eq 0 ]; then
         C_STATE=clean
       else
         C_STATE=dirty
@@ -681,10 +689,14 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
   esac
   # Either reader finding something makes it dirty; neither overrules the
   # other toward clean, except for the declared disposables above.
-  if [ "$op" != null ] || [ "$unref" != null ] || [ -n "$untracked$modified$ignored$flagged" ]; then
+  if [ "$op" != null ] || [ "$unref" != null ] || [ "$found" -gt 0 ]; then
     C_STATE=dirty
   fi
-  C_DETAIL="\"operation\":$op,\"unreferenced_head\":$unref,\"untracked\":[$untracked],\"modified\":[$modified],\"ignored\":[$ignored],\"flagged\":[$flagged],\"disposable\":[$disposable]"
+  C_DETAIL="\"operation\":$op,\"unreferenced_head\":$unref"
+  for name in untracked modified ignored flagged disposable; do
+    json_list "$name"
+    C_DETAIL+=",\"$name\":[$JSON_LIST]"
+  done
 }
 
 # The landing merge: the oldest first-parent merge of the base whose second

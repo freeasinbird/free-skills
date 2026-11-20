@@ -1141,5 +1141,21 @@ want_out '--remove-dirty'
 want_out '--remove-landed'
 want_out '--remove-head'
 
+# --- large listings ------------------------------------------------------------
+# The bounds are generous: these finish in seconds, and the sweep they guard
+# against took many minutes.
+
+scenario "a worktree of 20,000 untracked files is read in seconds"
+land feat
+(cd "$WT" && seq -f 'an-untracked-file-%05g.txt' 1 20000 | xargs touch)
+SECONDS=0
+run
+# Discriminating: the old sweep forked per character and copied the list per path.
+if [ "$SECONDS" -lt 30 ]; then ok; else bad "the dry run took ${SECONDS}s"; fi
+want_rc 0
+want_out '"untracked":["an-untracked-file-00001.txt","an-untracked-file-00002.txt",'
+want_out '"an-untracked-file-20000.txt"],"modified":[]'
+want_kept "$WT"
+
 echo "merge-cleanup sweep matrix: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
