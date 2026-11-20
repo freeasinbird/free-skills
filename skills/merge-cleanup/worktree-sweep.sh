@@ -208,8 +208,9 @@ INVENTORY="$(cd "$(dirname "$0")" && pwd)/worktree-inventory.sh"
 utf8_len() { # utf8_len <string> <byte index>: copied from worktree-inventory.sh
   local LC_ALL=C s="$1" i="$2" n b b2 need lo hi k
   n=${#s}
-  b=$(($(printf '%d' "'${s:i:1}") & 255))
-  if [ "$b" -lt 128 ]; then echo 1; return; fi
+  printf -v b '%d' "'${s:i:1}"
+  b=$((b & 255))
+  if [ "$b" -lt 128 ]; then U8_LEN=1; return; fi
   if [ "$b" -ge 194 ] && [ "$b" -le 223 ]; then need=1; lo=128; hi=191
   elif [ "$b" -eq 224 ]; then need=2; lo=160; hi=191
   elif [ "$b" -ge 225 ] && [ "$b" -le 236 ]; then need=2; lo=128; hi=191
@@ -218,22 +219,36 @@ utf8_len() { # utf8_len <string> <byte index>: copied from worktree-inventory.sh
   elif [ "$b" -eq 240 ]; then need=3; lo=144; hi=191
   elif [ "$b" -ge 241 ] && [ "$b" -le 243 ]; then need=3; lo=128; hi=191
   elif [ "$b" -eq 244 ]; then need=3; lo=128; hi=143
-  else echo 0; return
+  else U8_LEN=0; return
   fi
-  [ $((i + need)) -lt "$n" ] || { echo 0; return; }
+  [ $((i + need)) -lt "$n" ] || { U8_LEN=0; return; }
   for ((k = 1; k <= need; k++)); do
-    b2=$(($(printf '%d' "'${s:i+k:1}") & 255))
+    printf -v b2 '%d' "'${s:i+k:1}"
+    b2=$((b2 & 255))
     if [ "$k" -eq 1 ]; then
-      { [ "$b2" -ge "$lo" ] && [ "$b2" -le "$hi" ]; } || { echo 0; return; }
+      { [ "$b2" -ge "$lo" ] && [ "$b2" -le "$hi" ]; } || { U8_LEN=0; return; }
     else
-      { [ "$b2" -ge 128 ] && [ "$b2" -le 191 ]; } || { echo 0; return; }
+      { [ "$b2" -ge 128 ] && [ "$b2" -le 191 ]; } || { U8_LEN=0; return; }
     fi
   done
-  echo $((need + 1))
+  U8_LEN=$((need + 1))
 }
 
 json_escape() { # copied from worktree-inventory.sh, which explains the rules
-  local LC_ALL=C s="$1" out="" i=0 n c o len
+  json_escape_to "$1"
+  printf '%s' "$JSON_ESC"
+}
+
+json_escape_to() { # copied from worktree-inventory.sh
+  local LC_ALL=C s="$1" out="" i=0 n c o bs='\' q='"'
+  case "$s" in
+    *[![:print:]]*) ;;
+    *)
+      s=${s//"$bs"/"$bs$bs"}
+      JSON_ESC=${s//"$q"/"$bs$q"}
+      return
+      ;;
+  esac
   n=${#s}
   while [ "$i" -lt "$n" ]; do
     c="${s:i:1}"
@@ -244,15 +259,16 @@ json_escape() { # copied from worktree-inventory.sh, which explains the rules
       $'\t') out+='\t'; i=$((i + 1)); continue ;;
       $'\r') out+='\r'; i=$((i + 1)); continue ;;
     esac
-    o=$(($(printf '%d' "'$c") & 255))
-    if [ "$o" -lt 32 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
+    printf -v o '%d' "'$c"
+    o=$((o & 255))
+    if [ "$o" -lt 32 ]; then printf -v c '\\u%04x' "$o"; out+="$c"; i=$((i + 1)); continue; fi
     if [ "$o" -lt 128 ]; then out+="$c"; i=$((i + 1)); continue; fi
-    len=$(utf8_len "$s" "$i")
-    if [ "$len" -eq 0 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
-    out+="${s:i:len}"
-    i=$((i + len))
+    utf8_len "$s" "$i"
+    if [ "$U8_LEN" -eq 0 ]; then printf -v c '\\u%04x' "$o"; out+="$c"; i=$((i + 1)); continue; fi
+    out+="${s:i:U8_LEN}"
+    i=$((i + U8_LEN))
   done
-  printf '%s' "$out"
+  JSON_ESC="$out"
 }
 
 out_exact() { # out_exact <var> <cmd...>: capture stdout byte-exactly

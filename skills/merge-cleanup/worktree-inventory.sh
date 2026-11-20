@@ -51,15 +51,17 @@ command -v git >/dev/null 2>&1 \
 [ -n "${BASH_VERSION:-}" ] \
   || { echo "worktree-inventory.sh: needs bash for NUL-terminated reads" >&2; exit 69; }
 
-utf8_len() { # utf8_len <string> <byte index>: bytes in the valid UTF-8
-  # sequence starting there, or 0 where no valid sequence does. The
-  # second-byte ranges are RFC 3629's, so an overlong form, a surrogate, and
-  # anything past U+10FFFF all count as invalid, which is what a strict JSON
-  # reader does with them too.
+utf8_len() { # utf8_len <string> <byte index>: sets U8_LEN to the bytes in
+  # the valid UTF-8 sequence starting there, or 0 where no valid sequence
+  # does. The second-byte ranges are RFC 3629's, so an overlong form, a
+  # surrogate, and anything past U+10FFFF all count as invalid, which is what
+  # a strict JSON reader does with them too. It sets a variable, and reads
+  # each byte with printf -v, so no byte costs a subshell.
   local LC_ALL=C s="$1" i="$2" n b b2 need lo hi k
   n=${#s}
-  b=$(($(printf '%d' "'${s:i:1}") & 255))
-  if [ "$b" -lt 128 ]; then echo 1; return; fi
+  printf -v b '%d' "'${s:i:1}"
+  b=$((b & 255))
+  if [ "$b" -lt 128 ]; then U8_LEN=1; return; fi
   if [ "$b" -ge 194 ] && [ "$b" -le 223 ]; then need=1; lo=128; hi=191
   elif [ "$b" -eq 224 ]; then need=2; lo=160; hi=191
   elif [ "$b" -ge 225 ] && [ "$b" -le 236 ]; then need=2; lo=128; hi=191
@@ -68,22 +70,42 @@ utf8_len() { # utf8_len <string> <byte index>: bytes in the valid UTF-8
   elif [ "$b" -eq 240 ]; then need=3; lo=144; hi=191
   elif [ "$b" -ge 241 ] && [ "$b" -le 243 ]; then need=3; lo=128; hi=191
   elif [ "$b" -eq 244 ]; then need=3; lo=128; hi=143
-  else echo 0; return
+  else U8_LEN=0; return
   fi
-  [ $((i + need)) -lt "$n" ] || { echo 0; return; }
+  [ $((i + need)) -lt "$n" ] || { U8_LEN=0; return; }
   for ((k = 1; k <= need; k++)); do
-    b2=$(($(printf '%d' "'${s:i+k:1}") & 255))
+    printf -v b2 '%d' "'${s:i+k:1}"
+    b2=$((b2 & 255))
     if [ "$k" -eq 1 ]; then
-      { [ "$b2" -ge "$lo" ] && [ "$b2" -le "$hi" ]; } || { echo 0; return; }
+      { [ "$b2" -ge "$lo" ] && [ "$b2" -le "$hi" ]; } || { U8_LEN=0; return; }
     else
-      { [ "$b2" -ge 128 ] && [ "$b2" -le 191 ]; } || { echo 0; return; }
+      { [ "$b2" -ge 128 ] && [ "$b2" -le 191 ]; } || { U8_LEN=0; return; }
     fi
   done
-  echo $((need + 1))
+  U8_LEN=$((need + 1))
 }
 
-json_escape() {
-  local LC_ALL=C s="$1" out="" i=0 n c o len
+json_escape() { # json_escape <string>: print it escaped for a JSON string
+  json_escape_to "$1"
+  printf '%s' "$JSON_ESC"
+}
+
+json_escape_to() { # json_escape_to <string>: set JSON_ESC to json_escape's output
+  # Setting a variable lets a caller escaping many paths skip a subshell
+  # per path.
+  local LC_ALL=C s="$1" out="" i=0 n c o bs='\' q='"'
+  # Printable ASCII needs only \ and " escaped, and two substitutions do that
+  # without walking the string. [:print:] is the C locale's, so any control
+  # or non-ASCII byte takes the loop below. The replacements are quoted
+  # variables, a form bash 3.2 and bash 5 read the same way.
+  case "$s" in
+    *[![:print:]]*) ;;
+    *)
+      s=${s//"$bs"/"$bs$bs"}
+      JSON_ESC=${s//"$q"/"$bs$q"}
+      return
+      ;;
+  esac
   n=${#s}
   while [ "$i" -lt "$n" ]; do
     c="${s:i:1}"
@@ -94,8 +116,9 @@ json_escape() {
       $'\t') out+='\t'; i=$((i + 1)); continue ;;
       $'\r') out+='\r'; i=$((i + 1)); continue ;;
     esac
-    o=$(($(printf '%d' "'$c") & 255))
-    if [ "$o" -lt 32 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
+    printf -v o '%d' "'$c"
+    o=$((o & 255))
+    if [ "$o" -lt 32 ]; then printf -v c '\\u%04x' "$o"; out+="$c"; i=$((i + 1)); continue; fi
     if [ "$o" -lt 128 ]; then out+="$c"; i=$((i + 1)); continue; fi
     # A whole valid sequence is copied through: JSON is UTF-8, so those bytes
     # belong in the line as they are, where \u-escaping each one separately
@@ -104,12 +127,12 @@ json_escape() {
     # string can carry a byte that starts no valid sequence, so that byte is
     # escaped: the name it reports back is then lossy, which beats a line the
     # caller cannot parse when the verdict is a stop.
-    len=$(utf8_len "$s" "$i")
-    if [ "$len" -eq 0 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
-    out+="${s:i:len}"
-    i=$((i + len))
+    utf8_len "$s" "$i"
+    if [ "$U8_LEN" -eq 0 ]; then printf -v c '\\u%04x' "$o"; out+="$c"; i=$((i + 1)); continue; fi
+    out+="${s:i:U8_LEN}"
+    i=$((i + U8_LEN))
   done
-  printf '%s' "$out"
+  JSON_ESC="$out"
 }
 
 out_exact() { # out_exact <var> <cmd...>: capture stdout byte-exactly

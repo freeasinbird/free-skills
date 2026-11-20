@@ -506,6 +506,15 @@ want_out 'WORKTREE unmerged {"path":"'"$WT"'"'
 want_removed "$NL"
 want_kept "$WT"
 
+scenario "a quote, a backslash, a tab, and UTF-8 in a listed path are escaped"
+printf '*.log\n' >> "$REPO/.git/info/exclude"
+land feat
+for p in 'a"b.log' 'c\d.log' "e"$'\t'"f.log" 'é.log'; do : > "$WT/$p"; done
+run --remove
+want_rc 0
+want_out '"ignored":["a\"b.log","c\\d.log","e\tf.log","é.log"],"flagged":[]'
+want_kept "$WT"
+
 # --- the end-of-batch sweep (--remove-landed) ---------------------------------
 
 scenario "--remove-landed removes a landed clean branch"
