@@ -25,6 +25,10 @@ mkdir -p "$SHIMD" "$FIX/issue" "$FIX/comment"
 export FIX
 pass=0 fail=0
 REPO=github.invalid/acme/app
+# tracker-refresh.sh retries a failed read after 1 s and then 2 s; the
+# shim returns at once so the failing-read cases stay fast.
+printf '#!/bin/sh\n' >"$SHIMD/sleep"
+chmod +x "$SHIMD/sleep"
 
 ok() { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "FAIL: $CASE: $1" >&2; }
@@ -279,6 +283,23 @@ run --repo "$REPO" --issue 1
 want_rc 0; want_result "$WRITTEN"; want_writes 1; want_body "$TMP/fresh.md"
 want_err "tracker-refresh.sh: OK changed; ticked #10"
 grep -qF -- "issue edit 1 --repo $REPO --body-file" "$FIX/calls.log" && ok || bad "no body edit call"
+
+# A refresh that recovered from a transient read logs its retry first, so
+# the status line is the last stderr line, not the first.
+RETRY_LINE='tracker-refresh.sh: forge read failed (attempt 1 of 3): issue acme/app#11; retrying in 1s'
+CASE="a refresh that logged a retry is written"
+issue 1 OPEN "" "$TMP/stale.md"
+printf '#!/bin/sh\necho "%s" >&2\nexec bash "%s" "$@"\n' "$RETRY_LINE" \
+  "$ROOT/skills/merge-cleanup/tracker-refresh.sh" >"$TMP/stub-retry"
+TRACKER_REFRESH_SCRIPT="$TMP/stub-retry" run --repo "$REPO" --issue 1
+want_rc 0; want_result "$WRITTEN"; want_writes 1; want_body "$TMP/fresh.md"
+
+CASE="an OK line before the last stderr line is not a status: no write"
+issue 1 OPEN "" "$TMP/stale.md"
+printf '#!/bin/sh\nbash "%s" "$@"\necho "tracker-refresh.sh: STOP late" >&2\n' \
+  "$ROOT/skills/merge-cleanup/tracker-refresh.sh" >"$TMP/stub-late"
+TRACKER_REFRESH_SCRIPT="$TMP/stub-late" run --repo "$REPO" --issue 1
+want_rc 2; want_err "no OK status line"; want_writes 0; want_body "$TMP/stale.md"
 
 CASE="comment write is verified"
 issue 1 OPEN "" "$TMP/dep-none.md"

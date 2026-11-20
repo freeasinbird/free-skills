@@ -14,8 +14,8 @@
 # issue. The sequence:
 #   1. Read the tracker text.
 #   2. Run tracker-refresh.sh with the same --repo, --issue, and --comment. On
-#      a non-zero exit, empty stdout, or a stderr line that does not begin
-#      `tracker-refresh.sh: OK `, write nothing.
+#      a non-zero exit, empty stdout, or a last stderr line that does not
+#      begin `tracker-refresh.sh: OK `, write nothing.
 #   3. Take the refresh output as the text to write. With --edited, take FILE
 #      instead, for a project's own Startable now rule. REFRESH is the
 #      unedited tracker-refresh.sh output FILE was made from; when it differs
@@ -158,12 +158,12 @@ read_target() {
 holds() { { cat "$1"; printf '\n'; } | cmp -s - "$2"; }
 
 # refresh <out> <err>: run the refresh; set RRC to its exit code and RSTATUS
-# to its stderr status line.
+# to its stderr status line, the last line: read retries log before it.
 refresh() {
   bash "$REFRESH" --repo "$REPO_SPEC" --issue "$ISSUE" ${COMMENT:+--comment "$COMMENT"} \
     </dev/null >"$1" 2>"$2"
   RRC=$?
-  RSTATUS=$(sed -n 1p "$2")
+  RSTATUS=$(tail -n 1 "$2")
 }
 
 # Splice FILE's startable lines into the refresh output. The lines it may

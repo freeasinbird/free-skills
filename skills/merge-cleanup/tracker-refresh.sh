@@ -39,11 +39,14 @@
 #     other line stay as they are.
 #
 # Stdout is the refreshed text exactly, ready for `gh issue edit --body-file`
-# or a comment PATCH. One status line goes to stderr; it begins
-# `OK unchanged` when the tracker already matches its refresh and
-# `OK changed` otherwise, then lists what was ticked and double-bordered, the
-# startable set, and anything left that issue state does not support. Exit
-# codes:
+# or a comment PATCH. One status line goes to stderr, always as its last
+# line; it begins `OK unchanged` when the tracker already matches its
+# refresh and `OK changed` otherwise, then lists what was ticked and
+# double-bordered, the startable set, and anything left that issue state
+# does not support. A forge read that fails transiently (a timeout, a
+# dropped connection, truncated JSON, a 5xx, a rate limit) is tried up to
+# three times; each retry first logs one stderr line naming the read, so
+# those lines come before the status line. Exit codes:
 #   0   refreshed text printed, whether or not anything changed
 #   2   STOP: the tracker is closed, the comment is not on it, or the text is
 #       not on the shared tracker format (including a unit line, class line,
@@ -122,6 +125,52 @@ REPO_LC=$(printf '%s' "$REPO" | tr 'A-Z' 'a-z')
 
 stop() { echo "tracker-refresh.sh: STOP $1" >&2; exit 2; }
 lookup_failed() { echo "tracker-refresh.sh: LOOKUP_FAILED $1" >&2; exit 4; }
+
+# Forge reads, with land-approved-prs/landed-since.sh's bounded retry.
+# Copied, not shared: each skill installs on its own, so merge-cleanup
+# must not depend on land-approved-prs. Keep the classification, bound,
+# and backoff in step with that copy.
+# GH_ERR holds one attempt's stderr only to classify the failure; it is
+# never printed, since gh's error text can carry a response body. GH_OUT
+# holds one attempt's output, so a retry never follows a failed attempt's
+# partial output.
+GH_ERR="$TMPD/gh.err" GH_OUT="$TMPD/gh.out"
+# Go's http2debug trace prints the Authorization header unredacted. Drop
+# that one setting and keep any other GODEBUG setting gh may rely on. Go
+# turns the trace on when GODEBUG merely contains http2debug=1 or =2, so
+# drop every element that mentions it, however it is spaced or nested.
+GH_GODEBUG=$(printf '%s' "${GODEBUG:-}" | sed -E 's/(^|,)[^,]*http2debug[^,]*//g; s/^,//')
+# Is the failure in GH_ERR an answer rather than a blip? gh exits 1 for
+# every failure and names the HTTP status only in its stderr: gh api as
+# "gh: Not Found (HTTP 404)", gh pr as "HTTP 401: Bad credentials (url)",
+# and a GraphQL lookup of something absent as "GraphQL: Could not resolve
+# to ...". GitHub answers a rate limit with a 403 that names it, so that
+# 403 is transient.
+gh_err_permanent() {
+  grep -qi 'rate limit' "$GH_ERR" && return 1
+  grep -qE '\(HTTP (401|403|404|422)\)|^HTTP (401|403|404|422):|^GraphQL: Could not resolve to ' "$GH_ERR"
+}
+# gh_read <label> <gh args...>: run one forge read and print its output.
+# GH_DEBUG is set empty, not unset: gh falls back to the legacy DEBUG
+# variable when GH_DEBUG is unset, and debug output carries headers and
+# response bodies. A transient failure (a timeout, a dropped connection,
+# truncated JSON, a 5xx, a rate limit) is retried after 1 s and then 2 s,
+# with one stderr line per retry naming the read by its label; a permanent
+# one fails at once. Writes never come through here.
+GH_READ_ATTEMPTS=3
+gh_read() {
+  local label="$1" attempt=1 rc
+  shift
+  while :; do
+    GH_DEBUG= GODEBUG="$GH_GODEBUG" gh "$@" </dev/null >"$GH_OUT" 2>"$GH_ERR" \
+      && { cat -- "$GH_OUT"; return; }
+    rc=$?
+    { [ "$attempt" -lt "$GH_READ_ATTEMPTS" ] && ! gh_err_permanent; } || return "$rc"
+    echo "tracker-refresh.sh: forge read failed (attempt $attempt of $GH_READ_ATTEMPTS): $label; retrying in ${attempt}s" >&2
+    sleep "$attempt"
+    attempt=$((attempt + 1))
+  done
+}
 
 # One awk program serves three modes, so the reference grammar is defined
 # once. scan: list the Units lines. deps: list one unit body's dependency
@@ -724,13 +773,13 @@ issue_state() {
   if [ -z "$body" ] && [ -f "$cache" ]; then STATE=$(cat "$cache"); return; fi
   raw="$TMPD/raw"
   if [ -n "$body" ]; then
-    gh issue view "$num" --repo "$FORGE_HOST/$or" --json state,stateReason,body \
-      --jq '.state, (.stateReason // ""), .body' </dev/null >"$raw" 2>/dev/null \
+    gh_read "issue $key" issue view "$num" --repo "$FORGE_HOST/$or" \
+      --json state,stateReason,body --jq '.state, (.stateReason // ""), .body' >"$raw" \
       || lookup_failed "issue $key"
     tail -n +3 "$raw" >"$body"
   else
-    gh issue view "$num" --repo "$FORGE_HOST/$or" --json state,stateReason \
-      --jq '.state, (.stateReason // "")' </dev/null >"$raw" 2>/dev/null \
+    gh_read "issue $key" issue view "$num" --repo "$FORGE_HOST/$or" \
+      --json state,stateReason --jq '.state, (.stateReason // "")' >"$raw" \
       || lookup_failed "issue $key"
   fi
   case "$(sed -n 1p "$raw") $(sed -n 2p "$raw")" in
@@ -751,8 +800,9 @@ display() { # display <key>: the form a tracker in this repository writes
 }
 
 TEXT="$TMPD/text"
-gh issue view "$ISSUE" --repo "$REPO_SPEC" --json state,body --jq '.state, .body' \
-  >"$TMPD/tracker" 2>/dev/null || lookup_failed "tracker issue #$ISSUE"
+gh_read "tracker issue #$ISSUE" issue view "$ISSUE" --repo "$REPO_SPEC" \
+  --json state,body --jq '.state, .body' >"$TMPD/tracker" \
+  || lookup_failed "tracker issue #$ISSUE"
 case "$(sed -n 1p "$TMPD/tracker")" in
   OPEN) ;;
   CLOSED) stop "tracker #$ISSUE is closed; a closed tracker is never edited" ;;
@@ -761,8 +811,8 @@ esac
 if [ -z "$COMMENT" ]; then
   tail -n +2 "$TMPD/tracker" >"$TEXT"
 else
-  gh api --hostname "$FORGE_HOST" "repos/$REPO/issues/comments/$COMMENT" \
-    --jq '.issue_url, .body' >"$TMPD/comment" 2>/dev/null \
+  gh_read "comment $COMMENT" api --hostname "$FORGE_HOST" \
+    "repos/$REPO/issues/comments/$COMMENT" --jq '.issue_url, .body' >"$TMPD/comment" \
     || lookup_failed "comment $COMMENT"
   owner_url=$(sed -n 1p "$TMPD/comment" | tr 'A-Z' 'a-z')
   case "$owner_url" in
