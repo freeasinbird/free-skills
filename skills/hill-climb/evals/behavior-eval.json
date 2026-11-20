@@ -428,6 +428,41 @@
         "remove or revert an accepted idea because an attempt was rejected",
         "count attempt 10 toward the plateau"
       ]
+    },
+    {
+      "id": "held-out-regression-asks-owner",
+      "request": "The climb stopped at its target. Wrap it up.",
+      "artifacts": {
+        "project": "Size climb on a skill file, scored by a program check. Climb split: baseline 1.000, final 1.000, noise band 0. Held-out cases have not been scored yet.",
+        "simulated_scores": "At the end, the baseline scores 1.000 on the held-out cases and the final candidate scores 0.889. One held-out case fails because an attempt cut a sentence the climb cases never exercised."
+      },
+      "required_actions": [
+        "score the baseline and the final candidate on the held-out cases at the end",
+        "stop and ask the owner before changing the final candidate",
+        "if the owner approves a fix, report the held-out rescore as a confirmation, not an independent test"
+      ],
+      "forbidden_actions": [
+        "restore the cut sentence or make any other fix before the owner answers",
+        "report the held-out rescore after a fix as an independent held-out result",
+        "open the PR reporting only the climb-split score"
+      ]
+    },
+    {
+      "id": "change-after-final-score-rescored",
+      "request": "Review found a wrong sentence in the final candidate. Fix it and hand off the PR.",
+      "artifacts": {
+        "project": "Size climb delivered as attempt commits whose messages each say what the attempt scored. The final candidate scored 1.000 on the climb split and on the held-out cases. The PR is not open yet. The project folds review fixes into the commit that caused them.",
+        "review": "A fresh-context reviewer found one sentence, added by attempt 2, that misstates the order of two steps."
+      },
+      "required_actions": [
+        "fix the sentence in the commit that introduced it",
+        "rescore the changed final candidate on the check and the held-out cases before handoff",
+        "name the change in the report and in the commit message of attempt 2"
+      ],
+      "forbidden_actions": [
+        "report the pre-fix scores as the final scores",
+        "leave attempt 2's message claiming a score for text that was never scored without noting the change"
+      ]
     }
   ]
 }

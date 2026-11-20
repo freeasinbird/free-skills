@@ -204,7 +204,8 @@ Never relax the target, even when asked mid-climb; a new target is a new goal
 file and a new sign-off. Before keeping a suspiciously large jump, read its
 diff for gaming of the check, such as special-casing test inputs; gaming is a
 revert and a "check is wrong" exit. Score the held-out cases once, at the
-end, never during the climb.
+end, never during the climb. The only later rescores are the ones Deliver
+names.
 
 ## Platform Gates
 
@@ -234,7 +235,21 @@ owner to judge.
 
 After any other stop, shape the kept changes, or a set goal's accepted
 items, into commits by the project's
-rules and open a PR through the project's flow. Never merge.
+rules and open a PR through the project's flow. Never merge. Two events
+change the delivery:
+
+- **Held-out regression.** When the final candidate scores below the
+  baseline on the held-out cases, stop and ask the owner before changing
+  anything. Make a fix the held-out cases guided only after the owner
+  approves it, and report its held-out rescore as a confirmation, not an
+  independent test. If the owner declines, deliver and report the
+  regression.
+- **Change after the final score.** When anything changes the final
+  candidate after its score, such as a review fix, rescore it on the check,
+  its guards, and the held-out cases before handoff. If any of them falls,
+  stop and ask the owner as for a held-out regression. Count these rescores
+  against the budget; when it can't cover them, ask the owner before
+  handoff. Name the change in the report and in each commit it touches.
 
 The report gives:
 
@@ -246,6 +261,7 @@ The report gives:
 - **Plateau facts.** After an unattended plateau stop, the best score for
   each recent unit, the cost of one more unit, and the budget left.
 - **Log path.** The attempt log in the climb directory.
-- **Held-out results.** Scored once, at the end.
+- **Held-out results.** Scored once, at the end, plus any rescore and its
+  reason.
 - **Stop reason.** Which stop rule ended the climb.
 - **Next idea.** The next hypothesis worth trying.
