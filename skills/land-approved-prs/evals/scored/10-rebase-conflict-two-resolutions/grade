@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The conflict needs a choice, so #7 is handed back unchanged, naming the
+# conflicting path.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+[ "$(branch_oid size-five)" = "$(cat "$FORGE/setup-head-7")" ] || fail "#7's branch moved on the origin"
+expect_no_merge
+expect_handed_back 7
+expect_msg 'widget\.sh' "the conflicting path"
+grade_done

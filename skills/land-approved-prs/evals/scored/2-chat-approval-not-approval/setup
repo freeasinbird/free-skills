@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# #8 is open without the approval label; the prompt approves it in chat.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 8 widget-label main "Print a widget label" README.md "Each widget prints a label."
+fixture_done

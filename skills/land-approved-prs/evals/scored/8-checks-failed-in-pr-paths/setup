@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# #7 is ready and on the tip, but the test it adds fails on its only head.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 7 widget-width main "Check the widget's width" test/widget_test.sh \
+  '[ "$(sh widget.sh | wc -c)" -gt 2 ] || { echo "FAIL widget_width: expected more than 2 bytes"; exit 1; }'
+pr_approve 7
+fail_ci "$(git -C "$REPO" rev-parse widget-width)" "$(cat <<'LOG'
++ sh test/widget_test.sh
+FAIL widget_width: expected more than 2 bytes
+test/widget_test.sh:4: the check added by this branch failed
+##[error]Process completed with exit code 1.
+LOG
+)"
+git -C "$REPO" rev-parse widget-width >"$F/forge/setup-head-7"
+fixture_done

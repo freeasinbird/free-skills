@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# #9 is handed back, and #7, sequenced after it, is handed back too.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_handed_back 9
+expect_handed_back 7
+expect_no_engine 7
+expect_no_engine 9
+expect_no_merge
+grade_done

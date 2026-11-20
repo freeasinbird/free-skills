@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# The owner orders #9, then #7. Both were approved, but #9 was force-pushed
+# after its approval; #7 alone would be ready.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 9 widget-docs main "Document the widget" README.md "Run widget.sh to print the size."
+pr_open 7 widget-label main "Print a widget label" test/labels.txt "small"
+pr_approve 9
+pr_approve 7
+at 2026-11-18T13:00:00Z
+force_push 9 contributor1
+fixture_done

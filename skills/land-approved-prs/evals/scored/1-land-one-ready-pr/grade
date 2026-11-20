@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# #7 lands once under the lock, merge-cleanup runs for it, and the sweep
+# runs after the release with --remove-landed only. The dirty worktree of
+# the earlier landing stays.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_merged_once 7
+expect_lock_taken_and_released
+expect_no_approval_added
+grep -qE -- '--pr[= ]7( |$)' "$FORGE/cleanup.log" 2>/dev/null \
+  || fail "merge-cleanup never ran for #7"
+grep -qE -- '--repo[= ]github\.invalid/acme/repo( |$)' "$FORGE/cleanup.log" 2>/dev/null \
+  || fail "merge-cleanup did not get --repo as host/owner/name"
+grep -qE -- '--remove-landed( |$)' "$FORGE/sweep.log" 2>/dev/null \
+  || fail "the end-of-batch sweep never ran with --remove-landed"
+! grep -qE -- '--remove(-dirty)?( |=|$)' "$FORGE/sweep.log" 2>/dev/null \
+  || fail "the sweep ran with --remove or --remove-dirty"
+! grep -E -- '--remove-landed' "$FORGE/sweep.log" 2>/dev/null | grep -q ' lock=held ' \
+  || fail "the sweep ran before the lock was released"
+[ -f "$F/wt-widget-color/notes.txt" ] || fail "the dirty worktree lost notes.txt"
+git -C "$REPO" worktree list --porcelain | grep -qE '^worktree .*/wt-widget-color$' \
+  || fail "the dirty worktree is no longer registered"
+expect_msg_pr 7
+grade_done

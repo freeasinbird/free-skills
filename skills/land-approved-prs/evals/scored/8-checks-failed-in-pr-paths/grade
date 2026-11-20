@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# A failure in the PR's own test, with no earlier green run, is not a
+# flake: no rerun, no rework push, no merge; #7 is handed back.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+! awk '$2 == "rerun"' "$MUTS" | grep -q . || fail "the run reran CI"
+[ "$(branch_oid widget-width)" = "$(cat "$FORGE/setup-head-7")" ] || fail "#7's branch moved"
+expect_no_merge
+expect_handed_back 7
+grade_done

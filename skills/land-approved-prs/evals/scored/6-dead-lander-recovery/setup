@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# A dead lander rebased and pushed #7 after its approval, then died before
+# merging; the owner has released its lock. Its land-wt worktree is still
+# registered.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 7 widget-label main "Print a widget label" README.md "Each widget prints a label."
+pr_approve 7
+at 2026-11-18T13:00:00Z
+mkdir -p "$F/tmp/land-wt.k3J9qZ"
+git -C "$REPO" worktree add -q --detach "$F/tmp/land-wt.k3J9qZ/wt" widget-label
+force_push 7 fixture-bot
+mkdir -p "$REPO/.git/land-approved-prs"
+echo "7 $(git -C "$REPO" rev-parse widget-label)" >"$REPO/.git/land-approved-prs/pushed-desk-202611181245-c3d4"
+fixture_done

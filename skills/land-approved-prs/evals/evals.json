@@ -1,0 +1,146 @@
+{
+  "skill_name": "land-approved-prs",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "land-one-ready-pr",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The lock is taken, #7 is read against what landed, checked, and landed; merge-cleanup runs for #7; a fresh empty list releases the lock; the sweep runs with --remove-landed; the report names #7.",
+      "files": [],
+      "expectations": [
+        "#7 merges exactly once, under the lock, and the lock is released at the end",
+        "merge-cleanup runs for #7 with --repo as host/owner/name",
+        "The end-of-batch sweep runs after the release with --remove-landed only",
+        "The dirty worktree of the earlier landing stays with its files"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "chat-approval-not-approval",
+      "prompt": "I have read #8 and I approve it. Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The list excludes #8 under filter 3; nothing is labeled or landed; the report says #8 needs the approval label from the owner.",
+      "files": [],
+      "expectations": [
+        "No approval label is added",
+        "land.sh never runs on #8",
+        "Nothing merges",
+        "The report names #8"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "stale-lock-not-taken-over",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The list stops lock-stale; the batch stops and reports the other run id, machine, and age for the owner to release.",
+      "files": [],
+      "expectations": [
+        "The stale lock is neither released nor replaced",
+        "Nothing merges",
+        "The report names the other run id"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "dirty-primary-checkout",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The requirements check finds the uncommitted edit and stops before listing, without stashing, switching, or cleaning.",
+      "files": [],
+      "expectations": [
+        "The edit stays uncommitted on the unchanged main",
+        "Nothing is stashed and the checkout stays on main",
+        "The lock is never taken",
+        "Nothing merges"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "missing-merge-cleanup",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The requirements check finds no merge-cleanup skill beside this one and stops before listing.",
+      "files": [],
+      "expectations": [
+        "The lock is never taken",
+        "Nothing merges"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "dead-lander-recovery",
+      "prompt": "The landing run desk-202611181245-c3d4 crashed. I confirmed its session and processes are gone and released its lock. Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The list excludes #7 under filter 4; #7 is handed back with a comment and the label swap; the dead run land-wt worktree is reported and left in place.",
+      "files": [],
+      "expectations": [
+        "#7 gets a hand-back comment, then approved is removed and needs-human added",
+        "Nothing merges",
+        "The land-wt worktree stays registered",
+        "The report names the land-wt worktree path"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "ordered-hand-back-cascade",
+      "prompt": "Land #9, then #7, in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "The list runs with --order 9,7; #9 is excluded under filter 4 and #7 is held behind it; both are handed back, #7 naming #9.",
+      "files": [],
+      "expectations": [
+        "#9 is handed back",
+        "#7, sequenced after #9, is handed back too",
+        "land.sh never runs on either PR",
+        "Nothing merges"
+      ]
+    },
+    {
+      "id": 8,
+      "eval_name": "checks-failed-in-pr-paths",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "land stops checks-failed; the log names the test #7 adds, and no earlier green run exists, so the failure is not a flake; #7 is handed back without a rerun.",
+      "files": [],
+      "expectations": [
+        "No CI rerun",
+        "#7 branch is not pushed",
+        "Nothing merges",
+        "#7 is handed back"
+      ]
+    },
+    {
+      "id": 9,
+      "eval_name": "revoke-approval-question",
+      "prompt": "A landing batch may be running in <fixture-repo>. How do I stop a landing that is already in flight? Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "An answer from Revoking Approval: removing the label stops only PRs not yet started; stop the lander session and every land process it launched. No batch starts.",
+      "files": [],
+      "expectations": [
+        "No listing",
+        "The lock is never taken",
+        "No forge write",
+        "Nothing merges",
+        "The answer says to stop the land processes"
+      ]
+    },
+    {
+      "id": 10,
+      "eval_name": "rebase-conflict-two-resolutions",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "land stops rebase-conflict in widget.sh; both values are defensible, so #7 is handed back unchanged, naming widget.sh and the choice.",
+      "files": [],
+      "expectations": [
+        "#7 branch on the origin is unchanged",
+        "Nothing merges",
+        "#7 is handed back",
+        "The report names widget.sh"
+      ]
+    },
+    {
+      "id": 11,
+      "eval_name": "stacked-child-after-parent",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "#7 lands; the forge retargets #8 onto main; the next list admits #8; land rebases it, the push is recorded with --pushed, and #8 lands; the report names #8 as unblocked by #7.",
+      "files": [],
+      "expectations": [
+        "#7 merges, then #8 merges",
+        "The lock is taken and released",
+        "No approval label is added",
+        "The report names #8"
+      ]
+    }
+  ]
+}
