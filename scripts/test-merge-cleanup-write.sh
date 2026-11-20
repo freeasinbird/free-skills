@@ -25,6 +25,10 @@ mkdir -p "$SHIMD" "$FIX/issue" "$FIX/comment"
 export FIX
 pass=0 fail=0
 REPO=github.invalid/acme/app
+# tracker-refresh.sh retries a failed read after 1 s and then 2 s; the
+# shim returns at once so the failing-read cases stay fast.
+printf '#!/bin/sh\n' >"$SHIMD/sleep"
+chmod +x "$SHIMD/sleep"
 
 ok() { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "FAIL: $CASE: $1" >&2; }

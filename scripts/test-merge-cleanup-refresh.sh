@@ -32,7 +32,7 @@ bad() { fail=$((fail + 1)); echo "FAIL: $CASE: $1" >&2; }
 
 run() { # run <args...>: sets RC, OUT (file), ERR (file)
   OUT="$TMP/out" ERR="$TMP/err"
-  : >"$FIX/calls.log"
+  : >"$FIX/calls.log"; : >"$FIX/sleeps.log"; : >"$FIX/env.log"
   PATH="$SHIMD:$PATH" bash "$SUT" "$@" >"$OUT" 2>"$ERR"
   RC=$?
 }
@@ -52,6 +52,36 @@ startable_set() { # the startable text from the stderr status line
 want_call() {
   grep -qF -- "$1" "$FIX/calls.log" && ok || bad "no gh call matching '$1'"
 }
+want_calls() { # want_calls <n> <pattern>: exactly n gh calls match
+  local n
+  n=$(grep -cF -- "$2" "$FIX/calls.log")
+  [ "$n" -eq "$1" ] && ok || bad "$n gh calls matching '$2', want $1"
+}
+want_sleeps() { # want_sleeps <durations...>: the sleeps, in order
+  local got
+  got=$(tr '\n' ' ' <"$FIX/sleeps.log")
+  [ "$got" = "${*:+$* }" ] && ok || bad "slept '$got', want '$*'"
+}
+want_retries() { # want_retries <n>: n retry lines, then the status line last
+  local n
+  n=$(grep -c '^tracker-refresh.sh: forge read failed (attempt ' "$ERR")
+  [ "$n" -eq "$1" ] && ok || bad "$n retry lines, want $1: $(cat "$ERR")"
+}
+want_last() { # want_last <prefix>: the last stderr line begins with prefix
+  case "$(tail -n 1 "$ERR")" in "$1"*) ok ;; *) bad "last stderr line is not '$1...': $(cat "$ERR")" ;; esac
+}
+# fail_gh <pattern> <message> [count]: gh calls whose arguments contain
+# pattern fail with message on stderr, every time or count times.
+fail_gh() {
+  rm -f "$FIX"/fail-* "$FIX/gh-stderr"
+  printf '%s\n%s\n' "$1" "${3:-}" >"$FIX/fail-1"
+  printf '%s\n' "$2" >"$FIX/gh-stderr"
+}
+no_fail_gh() { rm -f "$FIX"/fail-* "$FIX/gh-stderr"; }
+
+# Retries sleep 1 s and then 2 s; the shim records the duration instead.
+printf '#!/bin/sh\nprintf "%%s\\n" "$1" >>"$FIX/sleeps.log"\n' >"$SHIMD/sleep"
+chmod +x "$SHIMD/sleep"
 
 # --- validation: no forge needed ---------------------------------------------
 printf '#!/bin/sh\necho "$*" >>"$FIX/calls.log"\nexit 1\n' >"$SHIMD/gh"
@@ -97,6 +127,40 @@ cat >"$SHIMD/gh" <<'GH'
 #!/usr/bin/env bash
 set -u
 echo "$*" >>"$FIX/calls.log"
+# Record the debug environment gh sees: GH_DEBUG unset, set empty, or set.
+if [ -z "${GH_DEBUG+set}" ]; then dbg=unset
+elif [ -z "$GH_DEBUG" ]; then dbg=empty
+else dbg=set; fi
+echo "GH_DEBUG=$dbg GODEBUG=${GODEBUG-}" >>"$FIX/env.log"
+# Real gh under GH_DEBUG (or the legacy DEBUG when GH_DEBUG is unset), and
+# Go whenever GODEBUG contains http2debug=1 or =2, write request headers to
+# stderr on every call.
+if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; } \
+   || [[ "${GODEBUG:-}" == *http2debug=[12]* ]]; then
+  echo "> Authorization: token SECRET-462" >&2
+fi
+# A fail-* file fails each call whose arguments contain its first line, as
+# real gh reports a failure: gh-stderr on stderr, exit 1. It also prints a
+# partial line to stdout, as a failed paginated read or an error body does,
+# so a retry that kept a failed attempt's output would change the result. A
+# count on the second line fails only that many matching calls, counted
+# down in a .left file, and then the call is served as usual.
+for f in "$FIX"/fail-*; do
+  [ -e "$f" ] || continue
+  case "$f" in *.left) continue ;; esac
+  pat='' times=''
+  { IFS= read -r pat; IFS= read -r times; } <"$f"
+  case "$*" in *"$pat"*) ;; *) continue ;; esac
+  if [ -n "$times" ]; then
+    [ -f "$f.left" ] || echo "$times" >"$f.left"
+    left=$(cat "$f.left")
+    [ "$left" -gt 0 ] || continue
+    echo $((left - 1)) >"$f.left"
+  fi
+  echo 'PARTIAL OUTPUT'
+  [ -f "$FIX/gh-stderr" ] && cat "$FIX/gh-stderr" >&2
+  exit 1
+done
 sub="$1" repo="" num="" path="" jqf="" prev=""
 for arg in "$@"; do
   case "$prev" in --repo) repo="$arg" ;; --jq) jqf="$arg" ;; esac
@@ -238,6 +302,78 @@ retracker
 run --repo "$REPO" --issue 1
 want_rc 0; want_out "$TMP/want.md"; want_err "OK unchanged; ticked none; double-bordered none"
 tracker "$TMP/lane-open.md"
+
+# --- forge read retries ---------------------------------------------------------
+# The fixture of "merge ticks ...": #11 is a unit read once, and the
+# tracker read is the only call with --json state,body.
+UNIT11='issue view 11 ' TRACKER_READ='--json state,body'
+lane_tracker 10 10 "$(SL i11,fs5)" '#11 (spine), acme/tools#5' >"$TMP/retry-want.md"
+
+CASE="a unit read recovers after two transient failures"
+fail_gh "$UNIT11" 'gh: Service Unavailable (HTTP 503)' 2
+run --repo "$REPO" --issue 1
+want_rc 0; want_out "$TMP/retry-want.md"; want_calls 3 "$UNIT11"; want_sleeps 1 2
+want_retries 2; want_last "tracker-refresh.sh: OK changed"
+want_err "forge read failed (attempt 1 of 3): issue acme/app#11; retrying in 1s"
+want_err "forge read failed (attempt 2 of 3): issue acme/app#11; retrying in 2s"
+grep -q 'Service Unavailable' "$ERR" && bad "quoted gh's stderr" || ok
+
+CASE="the tracker read recovers after a transient failure"
+fail_gh "$TRACKER_READ" 'gh: Bad Gateway (HTTP 502)' 1
+run --repo "$REPO" --issue 1
+want_rc 0; want_out "$TMP/retry-want.md"; want_calls 2 "$TRACKER_READ"; want_sleeps 1
+want_retries 1; want_last "tracker-refresh.sh: OK changed"
+want_err "forge read failed (attempt 1 of 3): tracker issue #1; retrying in 1s"
+
+CASE="a persistent transient failure is a lookup failure after three attempts"
+fail_gh "$UNIT11" 'gh: Service Unavailable (HTTP 503)'
+run --repo "$REPO" --issue 1
+want_rc 4; want_calls 3 "$UNIT11"; want_sleeps 1 2
+want_retries 2; want_last "tracker-refresh.sh: LOOKUP_FAILED issue acme/app#11"
+[ -s "$OUT" ] && bad "printed text on a lookup failure" || ok
+
+permanent() { # permanent <desc> <gh stderr>: fails on the first attempt
+  CASE="a permanent failure is not retried ($1)"
+  fail_gh "$UNIT11" "$2"
+  run --repo "$REPO" --issue 1
+  want_rc 4; want_calls 1 "$UNIT11"; want_sleeps; want_retries 0
+  want_last "tracker-refresh.sh: LOOKUP_FAILED issue acme/app#11"
+}
+permanent "GraphQL could not resolve" \
+  'GraphQL: Could not resolve to an issue or pull request with the number of 11. (repository.issue)'
+permanent "401" 'HTTP 401: Bad credentials (https://api.github.invalid/graphql)'
+permanent "plain 403" 'gh: Resource not accessible by integration (HTTP 403)'
+permanent "422" 'gh: Validation Failed (HTTP 422)'
+
+transient() { # transient <desc> <gh stderr>: retried, then served
+  CASE="a transient failure is retried ($1)"
+  fail_gh "$UNIT11" "$2" 1
+  run --repo "$REPO" --issue 1
+  want_rc 0; want_out "$TMP/retry-want.md"; want_calls 2 "$UNIT11"; want_sleeps 1
+  want_retries 1; want_last "tracker-refresh.sh: OK changed"
+}
+transient "rate-limit 403" 'gh: API rate limit exceeded for user ID 1. (HTTP 403)'
+transient "truncated JSON" 'unexpected end of JSON input'
+transient "no stderr" ''
+
+# Real gh prints request headers under GH_DEBUG, the legacy DEBUG when
+# GH_DEBUG is unset, or GODEBUG=http2debug; the shim prints a fake token
+# then. Every read must run with debug off, and no gh stderr may surface.
+debug_env() { # debug_env <desc> <want GODEBUG>
+  CASE="reads run with debug output off ($1)"
+  want_rc 0; want_out "$TMP/retry-want.md"; want_retries 1
+  grep -q SECRET-462 "$ERR" "$OUT" && bad "a debug header reached the output" || ok
+  [ -s "$FIX/env.log" ] && ! grep -qvxF "GH_DEBUG=empty GODEBUG=$2" "$FIX/env.log" \
+    && ok || bad "gh saw: $(sort -u "$FIX/env.log")"
+}
+fail_gh "$UNIT11" 'gh: Service Unavailable (HTTP 503)' 1
+GH_DEBUG=api GODEBUG='a=1, http2debug=2' run --repo "$REPO" --issue 1
+debug_env "GH_DEBUG and a spaced http2debug" a=1
+fail_gh "$UNIT11" 'gh: Service Unavailable (HTTP 503)' 1
+(unset GH_DEBUG; DEBUG=1 GODEBUG='http2debug=1,b=2' run --repo "$REPO" --issue 1; echo "$RC" >"$TMP/rc")
+RC=$(cat "$TMP/rc")
+debug_env "legacy DEBUG and a leading http2debug" b=2
+no_fail_gh
 
 CASE="non-unit node keeps its own startable class"
 lane_tracker '' '' "$(SL i10,i90,fs5)" '#10 (spine, contract), acme/tools#5' >"$TMP/nonunit.md"
@@ -779,6 +915,21 @@ jq -n --rawfile b "$TMP/flat.md" \
   >"$FIX/comment/777.json"
 run --repo "$REPO" --issue 1 --comment 777
 want_rc 0; want_out "$TMP/want.md"; want_call "api --hostname github.invalid repos/acme/app/issues/comments/777"
+
+CASE="the comment read recovers after a transient failure"
+fail_gh comments/777 'gh: Service Unavailable (HTTP 503)' 1
+run --repo "$REPO" --issue 1 --comment 777
+want_rc 0; want_out "$TMP/want.md"; want_calls 2 comments/777; want_sleeps 1
+want_retries 1; want_last "tracker-refresh.sh: OK"
+want_err "forge read failed (attempt 1 of 3): comment 777; retrying in 1s"
+
+CASE="a comment read answered 404 is not retried"
+fail_gh comments/777 'gh: Not Found (HTTP 404)'
+run --repo "$REPO" --issue 1 --comment 777
+want_rc 4; want_calls 1 comments/777; want_sleeps; want_retries 0
+want_last "tracker-refresh.sh: LOOKUP_FAILED comment 777"
+[ -s "$OUT" ] && bad "printed text on a lookup failure" || ok
+no_fail_gh
 
 CASE="comment on another issue is refused"
 jq -n --rawfile b "$TMP/flat.md" \
