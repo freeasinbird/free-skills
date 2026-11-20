@@ -109,8 +109,10 @@
 # matches that name at any depth; one with an interior / is anchored at the
 # root. An ignored path is disposable when a leading run of its components
 # matches an entry and that run is itself ignored; an untracked one never is.
-# A missing, empty, or comments-only file means no entries. Built in, with no
-# entry: an ignored file named .DS_Store, at any depth, is disposable.
+# A directory, not a repository, whose own .gitignore holds only a * (and
+# comments), as Hypothesis and uv write one, counts as ignored. A missing,
+# empty, or comments-only file means no entries. Built in, with no entry: an
+# ignored file named .DS_Store, at any depth, is disposable.
 # --remove-head has no base, so it reads no file and applies only the
 # built-in rule; the owner's sweep clears declared build output.
 #
@@ -590,6 +592,9 @@ match_declared() { # match_declared <worktree> <path> <ignored>
               git -C "$wt" -c core.fsmonitor=false check-ignore -q -- "./$prefix" \
                 < /dev/null 2>/dev/null
               rc=$?
+              if [ "$rc" -eq 1 ] && [ "$is_dir" = true ] && own_star_ignored "$wt" "$prefix"; then
+                rc=0
+              fi
               case "$rc" in
                 0) M_IGNORED+="$prefix"$'\n' ;;
                 1) M_KEPT+="$prefix"$'\n' ;;
@@ -611,6 +616,41 @@ match_declared() { # match_declared <worktree> <path> <ignored>
     prefix+="/"
   done
   return 1
+}
+
+# Tools such as Hypothesis (.hypothesis/) and uv (.venv/) ignore their own
+# directory with a * in a .gitignore inside it, so check-ignore without the
+# trailing / reads the directory as not ignored, and a declared entry for it
+# never matched. Such a directory counts as ignored only when git ignores
+# <dir>/ by the pattern * from <dir>/.gitignore and that file holds nothing
+# but *, comments, and blank lines. The * ignores every child, and git reads
+# no deeper .gitignore under an ignored directory, so no line anywhere can
+# re-include a path, a repository included; a ! line in this file could, so
+# any other line refuses the directory. Any other pattern for its contents,
+# such as cache/*, still doesn't answer for it. A repository at <dir> never
+# counts: a * in its own .gitignore must not make its commits disposable.
+own_star_ignored() { # own_star_ignored <worktree> <dir>
+  local wt="$1" dir="$2" tmp rc src="" _="" pat="" l=""
+  { [ -d "$wt/$dir" ] && [ ! -L "$wt/$dir" ]; } || return 1
+  { [ ! -e "$wt/$dir/.git" ] && [ ! -L "$wt/$dir/.git" ]; } || return 1
+  { [ -f "$wt/$dir/.gitignore" ] && [ ! -L "$wt/$dir/.gitignore" ]; } || return 1
+  while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in '*' | '' | '#'*) ;; *) return 1 ;; esac
+  done < "$wt/$dir/.gitignore" \
+    || lookup_failed gitignore "could not read $wt/$dir/.gitignore"
+  tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
+  # -z needs --stdin; its fields arrive whole whatever the name holds.
+  printf './%s/\0' "$dir" \
+    | git -C "$wt" -c core.fsmonitor=false check-ignore -v -z --stdin > "$tmp" 2>/dev/null
+  rc=${PIPESTATUS[1]}
+  case "$rc" in
+    0) ;;
+    1) rm -f "$tmp"; return 1 ;;
+    *) rm -f "$tmp"; lookup_failed check-ignore "could not check whether $wt/$dir/ is ignored" ;;
+  esac
+  { IFS= read -r -d '' src; IFS= read -r -d '' _; IFS= read -r -d '' pat; } < "$tmp" || true
+  rm -f "$tmp"
+  [ "$src" = "$dir/.gitignore" ] && [ "$pat" = "*" ]
 }
 
 # --ignored=matching lists an ignored directory holding nothing but empty

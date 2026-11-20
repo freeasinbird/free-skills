@@ -383,7 +383,9 @@ evidence, and show each with its source:
   package configuration such as mirrors, so never suggest it. Warn the owner that removal deletes everything under an entry.
 - **Ignored paths only.** An entry counts only where the part it names is
   itself ignored, so declaring `notes/` doesn't cover `notes/private/`
-  while only the latter is ignored. An untracked path is never disposable.
+  while only the latter is ignored. A directory whose own `.gitignore` holds
+  only a `*` and comments, such as `.hypothesis/` or a uv `.venv/`, counts
+  as ignored unless it's a repository. An untracked path is never disposable.
 
 Use this form, one literal entry per line:
 

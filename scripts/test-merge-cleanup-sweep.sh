@@ -30,6 +30,9 @@
 # inventory matrix. The large-listing cases were run against the sweep
 # before --ignored=matching and subshell-free escaping, and the
 # empty-directory case against a copy that lists every ignored dir/ record.
+# The own-* cases were run against copies without the own-* rule, without
+# its repository test, and without its read of the file. No case separates
+# its source-and-pattern check, which the file check always precedes.
 #
 # Usage: test-merge-cleanup-sweep.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -825,6 +828,96 @@ run --remove --remove-dirty
 want_rc 0
 want_out 'WORKTREE holds-repository'
 want_kept "$WT"   # discriminating: with the slash, the nested .gitignore answered ignored
+
+scenario "a repository at a declared directory whose own .gitignore holds * still holds it"
+disposables cache/
+land feat
+nested_repo cache
+printf '*\n' > "$WT/cache/.gitignore"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: accepting an own * without the repository test removes it
+
+scenario "a repository an own * file re-includes with ! still holds it"
+disposables cache/
+land feat
+mkdir -p "$WT/cache"
+printf '*\n!sub\n' > "$WT/cache/.gitignore"
+nested_repo cache/sub
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: trusting check-ignore's * without reading the file removes it
+
+scenario "a repository inside a directory an own * ignores is disposable, as under .build/"
+# A pip editable install from git checks the repository out under .venv/src/.
+disposables .venv/
+land feat
+mkdir -p "$WT/.venv/src"
+printf '*\n' > "$WT/.venv/.gitignore"
+nested_repo .venv/src/pkg
+run --remove --remove-dirty
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a declared directory ignored only by a * in its own .gitignore is disposable"
+# Hypothesis writes .hypothesis/.gitignore holding *, and nothing else
+# ignores the directory.
+disposables .hypothesis/
+land feat
+mkdir -p "$WT/.hypothesis/examples/ab"
+printf '*\n' > "$WT/.hypothesis/.gitignore"
+printf 'x\n' > "$WT/.hypothesis/examples/ab/c"
+run
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$WT"'"'   # discriminating: check-ignore without the slash kept it
+want_out '"ignored":[],"flagged":[],"disposable":[".hypothesis/"]'
+run --remove
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a nested uv .venv with no root rule is disposable"
+disposables .venv/
+land feat
+mkdir -p "$WT/app/.venv/bin" "$WT/app/.venv/lib/python/site"
+printf '*\n' > "$WT/app/.venv/.gitignore"
+: > "$WT/app/.venv/pyvenv.cfg"
+: > "$WT/app/.venv/bin/python"
+: > "$WT/app/.venv/lib/python/site/mod.py"
+run --remove
+want_rc 0
+want_out '"ignored":[],"flagged":[],"disposable":["app/.venv/"]'
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a path a ! line re-includes under an own * keeps the worktree dirty"
+disposables .hypothesis/
+land feat
+mkdir -p "$WT/.hypothesis"
+printf '*\n!keep\n' > "$WT/.hypothesis/.gitignore"
+printf 'db\n' > "$WT/.hypothesis/db"
+printf 'mine\n' > "$WT/.hypothesis/keep"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"untracked":[".hypothesis/keep"]'
+want_out '"disposable":[]'   # a ! line refuses the own-* rule
+want_kept "$WT"
+
+scenario "a pattern for a directory's contents outside it does not answer for it"
+disposables cache/
+ignore 'cache/*'
+land feat
+mkdir -p "$WT/cache"
+printf 'o\n' > "$WT/cache/a.o"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["cache/a.o"],"flagged":[],"disposable":[]'
+want_kept "$WT"   # no cache/.gitignore, so the file check refuses it
 
 scenario "a repository in an ignored directory under a declared one that is not ignored still holds it"
 disposables notes/

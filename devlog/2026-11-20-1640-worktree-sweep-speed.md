@@ -39,6 +39,23 @@ character. `json_add` also copied the whole list string once per path.
   `find` error keeps the record. Removing such a directory deletes no file.
   A declared empty directory now appears in `disposable`, which changes the
   report but not the verdict.
+- **Chose a narrow own-`*` rule over checking with a trailing slash.** The
+  owner added this to #471 after teloleo's cleanup: Hypothesis and uv ignore
+  their own directory with a `*` in a `.gitignore` inside it, so
+  `check-ignore ./.hypothesis` says not ignored and a declared
+  `.hypothesis/` never matched. Asking with the slash would fix that, but an
+  earlier review confirmed that form lets a `*` in a nested repository's own
+  `.gitignore` make the repository read as ignored, and `--remove-dirty`
+  then deletes its commits. The sweep now accepts a declared directory as
+  ignored only when `check-ignore -v ./<dir>/` names `<dir>/.gitignore` and
+  the pattern `*`, that file holds nothing but `*`, comments, and blank
+  lines, and `<dir>` holds no `.git`. With no `!` line, nothing under the
+  directory can be re-included, so a repository inside it is disposable,
+  as one under a declared `.build/` already was (a pip editable install
+  under `.venv/src/`). A root `cache/*` still doesn't answer for `cache/`;
+  the owner asked only for the own-`*` shape.
+- **Left `--remove-head` reading no disposables.** Passing it the pinned base
+  is a separate contract change on the deletion path, filed as #476.
 - **Chose a fast path plus `printf -v` over a different escaper.** Printable
   ASCII needs only `\` and `"` escaped, so two pattern substitutions handle
   it; any other string keeps the per-byte loop with `printf -v` instead of a
@@ -75,6 +92,15 @@ every file under it was ignored before too. `match_declared` answers for the
   undeclared ignored directories, an anchored entry, and an ignored
   symlink to a directory. No verdict moved toward clean, and
   `git check-ignore` confirmed every collapsed directory was ignored.
+- **A `!` line under an own `*` let a repository read as disposable:
+  confirmed, then fixed.** The second reviewer's case: `cache/` declared,
+  `cache/.gitignore` holding `*` then `!sub`, and a repository at
+  `cache/sub`. The first own-`*` rule trusted check-ignore's answer for
+  `cache/`, so `--remove-dirty` deleted the repository. Requiring the file
+  to hold only `*` closes it, and a matrix case covers it.
+- **Own-`*` source and pattern: disproved by a check.** The second reviewer
+  found `cache/*` at the root, `/*`, `**`, `.git/info/exclude`, a gitdir
+  file, a symlinked directory, and odd names all refused or held.
 
 Revisit when git changes what `--ignored=matching` collapses, or when the
 sweep's minimum git version drops below 2.16.
