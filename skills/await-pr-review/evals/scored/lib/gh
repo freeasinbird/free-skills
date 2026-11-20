@@ -1,0 +1,780 @@
+#!/usr/bin/env bash
+# Fixture forge for the scored await-pr-review eval: a stand-in for the
+# GitHub CLI that serves one repository from files and from the origin's git
+# state, and logs every call. It serves what watch-review.sh reads (REST
+# reviews, review comments, issue comments, reactions, and the GraphQL count
+# and thread queries) in the shapes scripts/test-watch-review.sh pins, and
+# widens them so an agent's own lookups work too. It started from the
+# land-approved-prs eval's stub, which derives PR heads from the origin's
+# ref log.
+#
+# The forge directory sits next to this file's directory (<fixture>/forge):
+#   host, slug         The only repository that exists (github.invalid,
+#                      acme/repo). A hostless OWNER/NAME resolves through
+#                      GH_HOST, as gh does; unset, it means github.com,
+#                      where the runner's dummy token is rejected.
+#   origin             The bare repository that plays the forge's git.
+#   repo.json          REST repository facts.
+#   pr/<N>.json        Stored PR facts. An open PR's head is read live from
+#                      the origin's branch, so a push shows at once.
+#   reviews/<N>.json   REST reviews, ascending.
+#   rcomments/<N>.json REST review comments, ascending; replies the agent
+#                      posts land here too.
+#   threads/<N>.json   Review threads: {id, isResolved, root} where root is
+#                      the id of the thread's first review comment.
+#   icomments/<N>.json Issue comments, including ones the agent posts.
+#   reactions/<N>.json PR-description reactions set up before the run.
+#   reviewer           The reviewer's response rule, as JSON:
+#                      {login, trigger: "push" | "command" | "none",
+#                      command}. After each push to an open PR's branch
+#                      (trigger push), or each post of exactly the command
+#                      text (trigger command), the reviewer leaves its
+#                      clean-pass reaction (+1) on that PR, dated one second
+#                      after the event. Only events after setup count, and
+#                      only the latest one shows, since GitHub keeps one +1
+#                      per user.
+#   ci/<oid>           Cached CI result for a commit: CI runs the commit's
+#                      own test.sh, so a fix turns it green.
+#   ref-updates.log    Written by the origin's hook; see fixture.sh.
+#   setup-ref-lines    How many ref-update lines setup wrote.
+#   calls.log          One line per call: "<head> <arguments>", where
+#                      <head> is the first 12 characters of PR #7's branch
+#                      tip when the call ran, so a grader can tell which
+#                      push a read followed.
+#   mutations.log      One line per forge write, in order: "<time> comment
+#                      <N> <id>", "<time> reply <N> <to-id> <id>",
+#                      "<time> resolve <thread>", "<time> merge <N>", and so
+#                      on.
+#
+# Anything else fails the way gh does.
+set -u
+FORGE=$(cd "$(dirname "$0")/../forge" && pwd) || exit 1
+HOST=$(cat "$FORGE/host")
+SLUG=$(cat "$FORGE/slug")
+ORIGIN=$(cat "$FORGE/origin")
+Z40=0000000000000000000000000000000000000000
+ME=fixture-bot
+# One call at a time: an agent's parallel calls would otherwise race on the
+# stored JSON and the id counter. No call sleeps, so waits are short; a lock
+# a killed call left behind is broken after about 30 seconds.
+LOCK="$FORGE/.lock"
+i=0
+until mkdir "$LOCK" 2>/dev/null; do
+  i=$((i + 1)); [ "$i" -lt 300 ] || { rm -rf "$LOCK"; i=0; }
+  sleep 0.1
+done
+
+og() { git --git-dir="$ORIGIN" "$@"; }
+# One line per call, so a multi-line argument (a GraphQL query) can't fake one.
+{ printf '%s ' "$(og rev-parse --verify --quiet refs/heads/feature 2>/dev/null | cut -c1-12 || echo -)"
+  printf '%s' "$*" | tr '\n' ' '; echo; } >>"$FORGE/calls.log"
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+die() { printf '%s\n' "$1" >&2; exit "${2:-1}"; }
+record() { printf '%s %s\n' "$(now)" "$*" >>"$FORGE/mutations.log"; }
+TMPS=()
+tmpf() { local t; t=$(mktemp); TMPS+=("$t"); printf '%s' "$t"; }
+trap 'rm -rf "${TMPS[@]+"${TMPS[@]}"}" "$LOCK"' EXIT
+jset() { # jset <file> <jq-update> [jq args...]
+  local f="$1" u="$2"; shift 2
+  jq "$@" "$u" "$f" >"$f.new" && mv "$f.new" "$f"
+}
+next_id() { # a fresh numeric id for anything the agent creates
+  local n
+  n=$(cat "$FORGE/next-id" 2>/dev/null || echo 5000)
+  echo $((n + 1)) >"$FORGE/next-id"
+  echo "$n"
+}
+
+# --- arguments ----------------------------------------------------------------
+sub="${1:-}"
+[ $# -eq 0 ] || shift
+verb=""
+case "$sub" in
+  api|""|--version|version) ;;
+  *) verb="${1:-}"; [ $# -eq 0 ] || shift ;;
+esac
+repo="" hostname="" json="" jqf="" body="" bodyset=false bodyfile="" method=""
+inputf="" state="" headf="" basef="" mmethod="" include=false paginate=false
+showcomments=false slurp=false watch=false cleanuptag=false reviewev=""
+fields=() pos=()
+while [ $# -gt 0 ]; do
+  a="$1"; shift
+  case "$a" in
+    --*=*) set -- "${a%%=*}" "${a#*=}" "$@"; continue ;;
+  esac
+  case "$a" in
+    --repo|-R) repo="${1:-}"; shift ;;
+    --hostname) hostname="${1:-}"; shift ;;
+    --json) json="${1:-}"; shift ;;
+    --jq|-q) jqf="${1:-}"; shift ;;
+    --body|-b) body="${1:-}"; bodyset=true; shift ;;
+    --body-file) bodyfile="${1:-}"; shift ;;
+    -F) if [ "$sub" = api ]; then
+          # A typed field reads key=@file or key=@- (stdin), as gh does.
+          kv="${1:-}"
+          case "${kv#*=}" in
+            @-) kv="${kv%%=*}=$(cat)" ;;
+            @*) v="${kv#*=}"; v=$(cat -- "${v#@}") || die "open ${kv#*=@}: no such file or directory"
+                kv="${kv%%=*}=$v" ;;
+          esac
+          fields+=("$kv")
+        else bodyfile="${1:-}"; fi; shift ;;
+    -f|--field|--raw-field) fields+=("${1:-}"); shift ;;
+    --input) inputf="${1:-}"; shift ;;
+    -X|--method) method=$(printf '%s' "${1:-}" | tr a-z A-Z); shift ;;
+    -H|--header) shift ;;
+    --head) headf="${1:-}"; shift ;;
+    --base|-B) basef="${1:-}"; shift ;;
+    --state|-s) state="${1:-}"; shift ;;
+    --title|-t|--limit|-L|--author|-A|--assignee|-a|--search|-S|--label|-l|--template|--cache|--preview|-p|--interval|-i|--match-head-commit|--subject|--add-label|--remove-label|--reviewer|--add-reviewer|--milestone)
+      case "$a" in
+        -i) if [ "$sub" = api ]; then include=true; continue; fi ;;
+      esac
+      shift ;;
+    --include) include=true ;;
+    --paginate) paginate=true ;;
+    --slurp) slurp=true ;;
+    --comments|-c) showcomments=true ;;
+    --watch) watch=true ;;
+    --cleanup-tag) cleanuptag=true ;;
+    --approve|--request-changes|--comment)
+      case "$a" in --approve) reviewev=APPROVE ;; --request-changes) reviewev=REQUEST_CHANGES ;; *) reviewev=COMMENT ;; esac ;;
+    --merge|-m|--squash|--rebase|-r) mmethod="${a#--}" ;;
+    --fail-fast|--required|--silent|--verbose|-v|--yes|-y|--delete-branch|-d|--auto|--admin|--patch|--exit-status|--web|-w|--draft|--fill|--no-color|--name-only) ;;
+    -*) die "unknown flag: $a
+Usage: gh $sub $verb [flags]" ;;
+    *) pos+=("$a") ;;
+  esac
+done
+# Read --input - once, so every later lookup sees the same body.
+if [ "$inputf" = - ]; then t=$(tmpf); cat >"$t"; inputf="$t"; fi
+P0="${pos[0]:-}"
+case "$P0" in
+  https://*/pull/[0-9]*|https://*/issues/[0-9]*)
+    u="${P0#https://}"; repo="${u%%/pull/*}"; repo="${repo%%/issues/*}"; P0="${u##*/}"; P0="${P0%%#*}" ;;
+esac
+
+# --- host and repository identity ---------------------------------------------
+check_host() {
+  case "$1" in
+    "$HOST") ;;
+    github.com) die "HTTP 401: Bad credentials (https://api.github.com/graphql)
+Try authenticating with:  gh auth login" ;;
+    *) die "error connecting to $1
+check your internet connection or https://githubstatus.com" ;;
+  esac
+}
+resolve_repo() {
+  local spec="${repo:-${GH_REPO:-}}" h s
+  case "$spec" in
+    "") die "none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use \`gh auth login\`" ;;
+    https://*) spec="${spec#https://}"; spec="${spec%.git}" ;;
+  esac
+  case "$spec" in
+    */*/*) h="${spec%%/*}"; s="${spec#*/}" ;;
+    */*) h="${GH_HOST:-github.com}"; s="$spec" ;;
+    *) die "expected the \"[HOST/]OWNER/REPO\" format, got \"$spec\"" ;;
+  esac
+  check_host "$h"
+  [ "$s" = "$SLUG" ] \
+    || die "GraphQL: Could not resolve to a Repository with the name '$s'. (repository)"
+}
+
+# --- output -------------------------------------------------------------------
+# Project to the requested --json fields (missing ones are null), then apply
+# --jq, as gh does.
+emit() { # emit <json-file>
+  local filter="."
+  [ -z "$json" ] || filter="{$(printf '%s' "$json" | tr -d ' ')}"
+  if [ -n "$jqf" ]; then jq "$filter" "$1" | jq -r "$jqf"; else jq "$filter" "$1"; fi
+}
+emit_list() { # emit_list <json-array-file>
+  [ -z "$json" ] || { jq "[.[] | {$(printf '%s' "$json" | tr -d ' ')}]" "$1" >"$1.p" && mv "$1.p" "$1"; }
+  if [ -n "$jqf" ]; then jq -r "$jqf" "$1"; else jq . "$1"; fi
+}
+# gh api output: --jq runs per page, as gh does; --slurp wraps pages.
+emit_api() { # emit_api <json-file>
+  if [ "$include" = true ]; then
+    printf 'HTTP/2.0 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nDate: %s\r\nX-Github-Request-Id: FIXTURE\r\n\r\n' \
+      "$(date -u '+%a, %d %b %Y %H:%M:%S GMT')"
+  fi
+  if [ -n "$jqf" ]; then jq -r "$jqf" "$1"
+  elif [ "$slurp" = true ]; then jq -s . "$1"
+  else jq . "$1"; fi
+}
+
+# --- reviewer and CI --------------------------------------------------------------
+gql_login() { printf '%s' "${1%\[bot\]}"; }
+# rx_events <N>: the times of the events the reviewer answers on PR N.
+rx_events() {
+  local n="$1" trig b setup
+  trig=$(jq -r '.trigger' "$FORGE/reviewer")
+  [ "$(jq -r '.state' "$FORGE/pr/$n.json")" = OPEN ] || return 0
+  case "$trig" in
+    push)
+      b=$(jq -r .headRefName "$FORGE/pr/$n.json")
+      setup=$(cat "$FORGE/setup-ref-lines" 2>/dev/null || echo 0)
+      tail -n +"$((setup + 1))" "$FORGE/ref-updates.log" \
+        | awk -v r="refs/heads/$b" -v z="$Z40" '$2 == r && $4 != z { print $1 }' ;;
+    command)
+      jq -r --slurpfile rv "$FORGE/reviewer" \
+        '.[] | select(.user.login != $rv[0].login and (.body | gsub("^\\s+|\\s+$"; "")) == $rv[0].command and (.fixture_setup | not)) | .created_at' \
+        "$FORGE/icomments/$n.json" ;;
+  esac
+}
+reactions_of() { # reactions_of <N> <out>: stored plus the reviewer's latest
+  local n="$1" last
+  last=$(rx_events "$n" | sort | tail -n 1)
+  if [ -z "$last" ]; then cp "$FORGE/reactions/$n.json" "$2"; return; fi
+  jq --arg t "$last" --slurpfile rv "$FORGE/reviewer" '
+    ($t | fromdateiso8601 + 1 | todateiso8601) as $at
+    | [.[] | select(.user.login != $rv[0].login or .content != "+1")]
+      + [{id: (9000 + ($at | fromdateiso8601) % 100000), node_id: "REA_fixture",
+          user: {login: $rv[0].login, type: "Bot"}, content: "+1", created_at: $at}]
+    | sort_by(.created_at)' "$FORGE/reactions/$n.json" >"$2"
+}
+# ci_of <oid>: pass or fail. CI runs the commit's own test.sh.
+ci_of() {
+  local oid="$1" d
+  if [ ! -f "$FORGE/ci/$oid" ]; then
+    d=$(mktemp -d); TMPS+=("$d")
+    og archive "$oid" | tar -x -C "$d"
+    if [ ! -f "$d/test.sh" ] || (cd "$d" && sh test.sh >/dev/null 2>&1); then
+      echo pass >"$FORGE/ci/$oid"
+    else
+      echo fail >"$FORGE/ci/$oid"
+    fi
+  fi
+  cat "$FORGE/ci/$oid"
+}
+ci_url() { printf 'https://%s/%s/actions/runs/%d/job/1' "$HOST" "$SLUG" "0x${1:0:7}"; }
+
+# --- PRs --------------------------------------------------------------------------
+pr_file() {
+  case "${1:-x}" in *[!0-9]*) die "GraphQL: Could not resolve to a PullRequest with the number of ${1:-?}. (repository.pullRequest)" ;; esac
+  [ -f "$FORGE/pr/$1.json" ] \
+    || die "GraphQL: Could not resolve to a PullRequest with the number of $1. (repository.pullRequest)"
+  printf '%s' "$FORGE/pr/$1.json"
+}
+pr_head() { # pr_head <N>: live while open, stored otherwise
+  local f="$FORGE/pr/$1.json"
+  if [ "$(jq -r .state "$f")" = OPEN ]; then
+    og rev-parse --verify --quiet "refs/heads/$(jq -r .headRefName "$f")^{commit}" \
+      || jq -r '.headRefOid // empty' "$f"
+  else
+    jq -r '.headRefOid // empty' "$f"
+  fi
+}
+# pr_full <N> <out-file>: the PR in gh's --json shape.
+pr_full() {
+  local n="$1" f head from commits='[]' files='[]' ci=pass rx
+  f=$(pr_file "$n") || exit 1
+  head=$(pr_head "$n")
+  if [ -n "$head" ] && og cat-file -e "$head^{commit}" 2>/dev/null; then
+    from=$(og merge-base "refs/heads/$(jq -r .baseRefName "$f")" "$head" 2>/dev/null || echo "")
+    if [ -n "$from" ]; then
+      commits=$(og log --reverse --format='%H%x09%s' "$from..$head" \
+        | jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {oid:.[0], messageHeadline:.[1]})')
+      files=$(og diff --numstat "$from" "$head" \
+        | jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {path:.[2], additions:(.[0] | tonumber? // 0), deletions:(.[1] | tonumber? // 0)})')
+    fi
+    ci=$(ci_of "$head")
+  fi
+  rx=$(tmpf); reactions_of "$n" "$rx"
+  jq --arg h "$head" --argjson c "$commits" --argjson fl "$files" --arg ci "$ci" \
+    --arg url "$(ci_url "${head:-0000000}")" \
+    --slurpfile rv "$FORGE/reviews/$n.json" --slurpfile ic "$FORGE/icomments/$n.json" \
+    --slurpfile rx "$rx" '
+    def gl: sub("\\[bot\\]$"; "");
+    .headRefOid = (if $h == "" then .headRefOid else $h end) | .commits = $c | .files = $fl
+    | .changedFiles = ($fl | length) | .mergeable = "MERGEABLE"
+    | .statusCheckRollup = [{__typename:"CheckRun", name:"test", status:"COMPLETED",
+        conclusion:(if $ci == "pass" then "SUCCESS" else "FAILURE" end), detailsUrl:$url, workflowName:"CI"}]
+    | .reviews = [$rv[0][] | {id:("PRR_" + (.id|tostring)), author:{login:(.user.login | gl)},
+        authorAssociation:"NONE", body, submittedAt:.submitted_at, state, commit:{oid:.commit_id}}]
+    | .latestReviews = .reviews
+    | .reviewDecision = "" | .reviewRequests = []
+    | .comments = [$ic[0][] | {id:("IC_" + (.id|tostring)), author:{login:(.user.login | gl)},
+        body, createdAt:.created_at, url:.html_url}]
+    | .reactionGroups = ([$rx[0][] | .content] | group_by(.) | map({content:(.[0]
+        | if . == "+1" then "THUMBS_UP" elif . == "-1" then "THUMBS_DOWN" else ascii_upcase end),
+        users:{totalCount:length}}))' "$f" >"$2"
+}
+pr_rest() { # pr_rest <full-pr-file>: the REST pulls shape
+  jq --arg slug "$SLUG" '{number, title, body, html_url:.url, url, node_id:("PR_" + (.number|tostring)),
+    state:(if .state == "OPEN" then "open" else "closed" end), draft:.isDraft,
+    merged:(.state == "MERGED"), merged_at:.mergedAt, created_at:.createdAt, updated_at:.createdAt,
+    commits:(.commits | length), changed_files:.changedFiles,
+    user:{login:.author.login, type:(.author.type // "User")},
+    head:{ref:.headRefName, sha:.headRefOid, repo:{full_name:$slug}},
+    base:{ref:.baseRefName, repo:{full_name:$slug}}}' "$1"
+}
+pr_human() { # pr_human <full-pr-file>
+  jq -r '"title:\t\(.title)\nstate:\t\(.state)\nauthor:\t\(.author.login)\nnumber:\t\(.number)\nurl:\t\(.url)\nbase:\t\(.baseRefName)\nhead:\t\(.headRefName) \(.headRefOid)\nreviews:\t\([.reviews[] | .author.login + " (" + .state + ")"] | join(", "))\n--\n\(.body // "")"' "$1"
+  [ "$showcomments" = false ] \
+    || jq -r '(.comments[] | "--\nauthor:\t\(.author.login)\n\(.body)"), (.reviews[] | "--\nreview by \(.author.login) (\(.state)):\n\(.body)")' "$1"
+}
+comment_add() { # comment_add <N> <body>: an issue comment by the agent
+  local f="$FORGE/icomments/$1.json" id at
+  [ -n "$2" ] || die "gh: Validation Failed (HTTP 422): body is missing"
+  id=$(next_id); at=$(now)
+  jset "$f" '. + [{id:$id, node_id:("IC_" + ($id|tostring)), user:{login:$me, type:"User"}, body:$b,
+      created_at:$at, updated_at:$at, html_url:($url + "#issuecomment-" + ($id|tostring))}]' \
+    --argjson id "$id" --arg b "$2" --arg at "$at" --arg me "$ME" --arg url "https://$HOST/$SLUG/pull/$1"
+  record "comment $1 $id"
+  # Which calls.log line made the comment, so a grader can order reads
+  # after it whatever CLI form posted it.
+  printf '%s %s\n' "$id" "$(wc -l <"$FORGE/calls.log" | tr -d ' ')" >>"$FORGE/comment-calls"
+  printf '%s' "$id"
+}
+reply_add() { # reply_add <N> <to-id> <body>: a review-comment reply by the agent
+  local n="$1" to="$2" f="$FORGE/rcomments/$1.json" id at root
+  root=$(jq -r --argjson to "$to" '.[] | select(.id == $to) | (.in_reply_to_id // .id)' "$f")
+  [ -n "$root" ] || die "gh: Not Found (HTTP 404)"
+  [ -n "$3" ] || die "gh: Validation Failed (HTTP 422): body is missing"
+  id=$(next_id); at=$(now)
+  jset "$f" '. as $all | ($all[] | select(.id == $root)) as $r
+    | $all + [{id:$id, node_id:("PRRC_" + ($id|tostring)), pull_request_review_id:null,
+        user:{login:$me, type:"User"}, body:$b, path:$r.path, line:$r.line, original_line:$r.line,
+        side:"RIGHT", commit_id:$r.commit_id, original_commit_id:$r.original_commit_id,
+        diff_hunk:$r.diff_hunk, in_reply_to_id:$root, created_at:$at, updated_at:$at,
+        html_url:($url + "#discussion_r" + ($id|tostring))}]' \
+    --argjson id "$id" --argjson root "$root" --arg b "$3" --arg at "$at" --arg me "$ME" \
+    --arg url "https://$HOST/$SLUG/pull/$n"
+  record "reply $n $to $id"
+  printf '%s' "$id"
+}
+body_text() { # the --body or --body-file text
+  if [ -n "$bodyfile" ]; then
+    if [ "$bodyfile" = - ]; then cat; else cat -- "$bodyfile" || die "open $bodyfile: no such file or directory"; fi
+  elif [ "$bodyset" = true ]; then printf '%s' "$body"
+  else die "must provide --body or --body-file when not running interactively"; fi
+}
+tag_delete() { # tag_delete <name>: the forge removes a tag
+  FIXTURE_ACTOR="$ME" og update-ref -d "refs/tags/$1" 2>/dev/null
+}
+
+# --- GraphQL ----------------------------------------------------------------------
+# gql_pr <N> <out>: one pull request in GraphQL's shape. Every field a query
+# might select is present; a client reads the ones it asked for.
+gql_pr() {
+  local n="$1" full rx
+  full=$(tmpf); pr_full "$n" "$full"
+  rx=$(tmpf); reactions_of "$n" "$rx"
+  jq --slurpfile rv "$FORGE/reviews/$n.json" --slurpfile rc "$FORGE/rcomments/$n.json" \
+    --slurpfile th "$FORGE/threads/$n.json" --slurpfile ic "$FORGE/icomments/$n.json" \
+    --slurpfile rx "$rx" --arg slug "$SLUG" '
+    def gl: sub("\\[bot\\]$"; "");
+    def gcomment: {id:("PRRC_" + (.id|tostring)), databaseId:.id, body, bodyText:.body,
+      author:{login:(.user.login | gl)}, createdAt:.created_at, updatedAt:.updated_at,
+      path, line, originalLine:.original_line, url:.html_url, diffHunk:.diff_hunk,
+      commit:{oid:.commit_id}, originalCommit:{oid:.original_commit_id},
+      replyTo:(if .in_reply_to_id then {databaseId:.in_reply_to_id, id:("PRRC_" + (.in_reply_to_id|tostring))} else null end),
+      pullRequestReview:(if .pull_request_review_id then {databaseId:.pull_request_review_id} else null end)};
+    def rcontent: if . == "+1" then "THUMBS_UP" elif . == "-1" then "THUMBS_DOWN" else ascii_upcase end;
+    . as $p
+    | ($th[0] | map(. as $t | {id, isResolved, isOutdated:false, isCollapsed:.isResolved,
+        resolvedBy:(if .isResolved then {login:"owner1"} else null end),
+        path:([$rc[0][] | select(.id == $t.root)][0].path),
+        line:([$rc[0][] | select(.id == $t.root)][0].line),
+        comments:([$rc[0][] | select(.id == $t.root or .in_reply_to_id == $t.root) | gcomment]
+          | {totalCount:length, pageInfo:{hasNextPage:false, endCursor:null}, nodes:.})})) as $threads
+    | {id:("PR_" + ($p.number|tostring)), number:$p.number, title:$p.title, body:$p.body, url:$p.url,
+       state:$p.state, isDraft:$p.isDraft, createdAt:$p.createdAt, author:$p.author,
+       headRefName:$p.headRefName, headRefOid:$p.headRefOid, baseRefName:$p.baseRefName,
+       baseRefOid:null, mergeable:"MERGEABLE", reviewDecision:null,
+       commits:{totalCount:($p.commits|length), nodes:[$p.commits[] | {commit:{oid, messageHeadline}}]},
+       reviews:([$rv[0][] | .id as $rid | {id:("PRR_" + (.id|tostring)), databaseId:.id, author:{login:(.user.login | gl)},
+           state, body, submittedAt:.submitted_at, url:.html_url, commit:{oid:.commit_id},
+           comments:{totalCount:([$rc[0][] | select(.pull_request_review_id == $rid)] | length)}}]
+         | {totalCount:length, pageInfo:{hasNextPage:false, endCursor:null}, nodes:.}),
+       latestReviews:{nodes:[$rv[0][] | {author:{login:(.user.login | gl)}, state, submittedAt:.submitted_at}]},
+       reactions:([$rx[0][] | {content:(.content | rcontent), user:{login:.user.login}, createdAt:.created_at}]
+         | {totalCount:length, pageInfo:{hasNextPage:false, endCursor:null}, nodes:.}),
+       reviewThreads:{totalCount:($threads|length), pageInfo:{hasNextPage:false, endCursor:null}, nodes:$threads},
+       comments:([$ic[0][] | {id:("IC_" + (.id|tostring)), databaseId:.id, body,
+           author:{login:(.user.login | gl)}, createdAt:.created_at, updatedAt:.updated_at, url:.html_url}]
+         | {totalCount:length, pageInfo:{hasNextPage:false, endCursor:null}, nodes:.}),
+       timelineItems:{totalCount:0, pageInfo:{hasNextPage:false, endCursor:null}, nodes:[]}}' "$full" >"$2"
+}
+gql_find() { # gql_find <regex>: the first match in the query or any field value
+  { printf '%s\n' "$q"; for kv in ${fields[@]+"${fields[@]}"}; do printf '%s\n' "${kv#*=}"; done; } \
+    | grep -oE "$1" | head -n 1
+}
+graphql() {
+  local out="$1" n tid body to all
+  q=""
+  for kv in ${fields[@]+"${fields[@]}"}; do [ "${kv%%=*}" != query ] || q="${kv#*=}"; done
+  [ -z "$inputf" ] || q=$(jq -r '.query // empty' "$inputf")
+  [ -n "$q" ] || die "GraphQL: a query is required"
+  case "$q" in
+    *mutation*)
+      # The fixture serves one operation per mutation; failing loudly beats
+      # silently dropping the rest of an aliased batch.
+      [ "$(printf '%s' "$q" | grep -oE '(un)?resolveReviewThread|addPullRequestReviewThreadReply|addPullRequestReviewComment' | wc -l)" -le 1 ] \
+        || die "GraphQL: the fixture forge takes one operation per mutation; send them one at a time"
+      case "$q" in
+        *unresolveReviewThread*|*resolveReviewThread*)
+          tid=$(gql_find 'PRRT_[A-Za-z0-9_]+')
+          for f in "$FORGE"/threads/*.json; do
+            if jq -e --arg t "$tid" 'any(.[]; .id == $t)' "$f" >/dev/null; then
+              case "$q" in
+                *unresolveReviewThread*) jset "$f" 'map(if .id == $t then .isResolved = false else . end)' --arg t "$tid"; record "unresolve $tid"
+                  jq -n --arg t "$tid" '{data:{unresolveReviewThread:{thread:{id:$t, isResolved:false}}}}' >"$out" ;;
+                *) jset "$f" 'map(if .id == $t then .isResolved = true else . end)' --arg t "$tid"; record "resolve $tid"
+                  jq -n --arg t "$tid" '{data:{resolveReviewThread:{thread:{id:$t, isResolved:true}}}}' >"$out" ;;
+              esac
+              return 0
+            fi
+          done
+          die "GraphQL: Could not resolve to a node with the global id of '${tid:-?}'. (resolveReviewThread)" ;;
+        *addPullRequestReviewThreadReply*|*addPullRequestReviewComment*)
+          # The body is the variable the query passes as body:, whatever its
+          # name, or an inline GraphQL string literal, which parses as a JSON
+          # string. ERE, not BRE alternation, so BSD and GNU agree.
+          body="" var=$(printf '%s' "$q" | grep -oE 'body: *\$[A-Za-z_][A-Za-z0-9_]*' | sed 's/.*\$//' | head -n 1)
+          if [ -n "$var" ]; then
+            body=$(field "$var")
+          else
+            body=$(printf '%s' "$q" | grep -oE 'body: *"([^"\\]|\\.)*"' | head -n 1 \
+              | sed 's/^body: *//' | jq -r . 2>/dev/null)
+          fi
+          tid=$(gql_find 'PRRT_[A-Za-z0-9_]+')
+          to=""
+          if [ -n "$tid" ]; then
+            for f in "$FORGE"/threads/*.json; do
+              to=$(jq -r --arg t "$tid" '.[] | select(.id == $t) | .root' "$f")
+              [ -z "$to" ] || { n=$(basename "$f" .json); break; }
+            done
+          else
+            to=$(gql_find 'PRRC_[0-9]+'); to="${to#PRRC_}"
+            for f in "$FORGE"/rcomments/*.json; do
+              ! jq -e --argjson c "${to:-0}" 'any(.[]; .id == $c)' "$f" >/dev/null || { n=$(basename "$f" .json); break; }
+            done
+          fi
+          [ -n "$to" ] && [ -n "${n:-}" ] || die "GraphQL: Could not resolve to a node. (addPullRequestReviewThreadReply)"
+          id=$(reply_add "$n" "$to" "$body") || exit 1
+          jq -n --arg id "PRRC_$id" '{data:{addPullRequestReviewThreadReply:{comment:{id:$id}}, addPullRequestReviewComment:{comment:{id:$id}}}}' >"$out"
+          return 0 ;;
+        *) record "graphql-mutation $(printf '%s' "$q" | grep -oE 'mutation[^{]*\{ *[A-Za-z]+' | awk '{print $NF}')"
+          die "GraphQL: this mutation is not available in the fixture" ;;
+      esac ;;
+  esac
+  # The PR number: the variable the query passes to pullRequest(number:),
+  # whatever its name, or a literal number.
+  n="" var=$(printf '%s' "$q" | grep -oE 'pullRequest\( *number: *\$[A-Za-z_][A-Za-z0-9_]*' | sed 's/.*\$//' | head -n 1)
+  if [ -n "$var" ]; then
+    n=$(field "$var")
+  else
+    n=$(printf '%s' "$q" | grep -oE 'pullRequest\( *number: *[0-9]+' | grep -oE '[0-9]+$' | head -n 1)
+  fi
+  pr=$(tmpf)
+  if [ -n "$n" ]; then pr_file "$n" >/dev/null || exit 1; gql_pr "$n" "$pr"; else echo null >"$pr"; fi
+  all=$(tmpf)
+  for f in "$FORGE"/pr/*.json; do gql_pr "$(jq -r .number "$f")" "$all.$(basename "$f")"; done
+  jq -s 'sort_by(.number) | reverse' "$all".*.json >"$all"
+  rm -f "$all".*.json
+  jq -n --slurpfile p "$pr" --slurpfile a "$all" --arg slug "$SLUG" --arg me "$ME" \
+    '{data:{viewer:{login:$me}, repository:{name:($slug|split("/")[1]), owner:{login:($slug|split("/")[0])},
+      nameWithOwner:$slug, defaultBranchRef:{name:"main"}, pullRequest:$p[0],
+      pullRequests:{totalCount:($a[0]|length), pageInfo:{hasNextPage:false, endCursor:null}, nodes:$a[0]}}}}' >"$out"
+}
+
+# --- commands -----------------------------------------------------------------
+case "$sub" in
+  ""|--version|version) echo "gh version 2.0.0-fixture"; exit 0 ;;
+  auth)
+    case "$verb" in status|token) ;; *) die "fixture gh: unsupported command: auth $verb" ;; esac
+    [ -z "$hostname" ] || check_host "$hostname"
+    if [ "$verb" = token ]; then echo "fixture-token-not-a-credential"
+    else printf '%s\n  ✓ Logged in to %s account %s (GH_TOKEN)\n' "$HOST" "$HOST" "$ME"; fi
+    exit 0 ;;
+
+  pr)
+    resolve_repo
+    case "$verb" in
+      view)
+        n="$P0"
+        if [ -n "$n" ] && [ "${n#*[!0-9]}" != "$n" ]; then
+          n=$(jq -s -r --arg b "$n" '[.[] | select(.headRefName == $b)] | sort_by(.number) | last | .number // empty' "$FORGE"/pr/*.json)
+        fi
+        [ -n "$n" ] || die "could not determine current branch: not on any branch"
+        out=$(tmpf); pr_full "$n" "$out" || exit 1
+        if [ -z "$json" ]; then pr_human "$out"; else emit "$out"; fi
+        exit 0 ;;
+      list)
+        out=$(tmpf)
+        for f in "$FORGE"/pr/*.json; do pr_full "$(jq -r .number "$f")" "$out.$(basename "$f")"; done
+        jq -s --arg st "${state:-open}" --arg h "$headf" --arg b "$basef" '
+          [.[] | select($st == "all"
+                   or ($st == "open" and .state == "OPEN")
+                   or ($st == "closed" and (.state == "CLOSED" or .state == "MERGED"))
+                   or ($st == "merged" and .state == "MERGED"))
+               | select($h == "" or .headRefName == $h)
+               | select($b == "" or .baseRefName == $b)] | sort_by(.number) | reverse' \
+          "$out".*.json >"$out"
+        rm -f "$out".*.json
+        if [ -n "$json" ] || [ -n "$jqf" ]; then emit_list "$out"
+        else jq -r '.[] | "\(.number)\t\(.title)\t\(.headRefName)\t\(.state)"' "$out"; fi
+        exit 0 ;;
+      diff)
+        f=$(pr_file "$P0") || exit 1
+        head=$(pr_head "$P0"); from=$(og merge-base "refs/heads/$(jq -r .baseRefName "$f")" "$head") || die "could not find pull request diff"
+        og diff "$from" "$head"; exit 0 ;;
+      checks)
+        n="$P0"
+        [ -n "$n" ] || n=7
+        pr_file "$n" >/dev/null || exit 1
+        head=$(pr_head "$n"); c=$(ci_of "$head")
+        out=$(tmpf)
+        jq -n --arg c "$c" --arg url "$(ci_url "$head")" \
+          '[{name:"test", workflow:"CI", event:"pull_request", state:(if $c == "pass" then "SUCCESS" else "FAILURE" end),
+             bucket:$c, link:$url, description:"", startedAt:"", completedAt:""}]' >"$out"
+        if [ -n "$json" ] || [ -n "$jqf" ]; then emit_list "$out"
+        else
+          [ "$c" = pass ] && echo "All checks were successful" || echo "Some checks were not successful"
+          printf '0 cancelled, %s failing, %s successful, 0 skipped, and 0 pending checks\n\n' \
+            "$([ "$c" = pass ] && echo 0 || echo 1)" "$([ "$c" = pass ] && echo 1 || echo 0)"
+          printf 'NAME\tDESCRIPTION\tELAPSED\tURL\n'
+          printf '%s test\t\t1m0s\t%s\n' "$([ "$c" = pass ] && echo ✓ || echo X)" "$(ci_url "$head")"
+        fi
+        [ "$c" = pass ] || exit 1
+        exit 0 ;;
+      comment)
+        pr_file "$P0" >/dev/null || exit 1
+        id=$(comment_add "$P0" "$(body_text)") || exit 1; echo "https://$HOST/$SLUG/pull/$P0#issuecomment-$id"; exit 0 ;;
+      review)
+        pr_file "$P0" >/dev/null || exit 1
+        record "review $P0 ${reviewev:-COMMENT}"; exit 0 ;;
+      merge)
+        pr_file "$P0" >/dev/null || exit 1
+        record "merge $P0 ${mmethod:-?}"
+        jset "$FORGE/pr/$P0.json" '.state = "MERGED" | .mergedAt = $at' --arg at "$(now)"
+        echo "✓ Merged pull request $SLUG#$P0" >&2; exit 0 ;;
+      close|reopen|ready|edit|lock|unlock|create)
+        record "pr-$verb ${P0:-?}"; exit 0 ;;
+      *) die "fixture gh: unsupported command: pr $verb" ;;
+    esac ;;
+
+  issue)
+    resolve_repo
+    case "$verb" in
+      list) out=$(tmpf); echo '[]' >"$out"
+        if [ -n "$json" ] || [ -n "$jqf" ]; then emit_list "$out"; fi; exit 0 ;;
+      view)
+        [ -f "$FORGE/pr/$P0.json" ] || die "GraphQL: Could not resolve to an issue or pull request with the number of ${P0:-?}. (repository.issue)"
+        out=$(tmpf); pr_full "$P0" "$out"
+        if [ -z "$json" ]; then pr_human "$out"; else emit "$out"; fi; exit 0 ;;
+      comment)
+        [ -f "$FORGE/pr/$P0.json" ] || die "GraphQL: Could not resolve to an issue or pull request with the number of ${P0:-?}. (repository.issue)"
+        id=$(comment_add "$P0" "$(body_text)") || exit 1; echo "https://$HOST/$SLUG/pull/$P0#issuecomment-$id"; exit 0 ;;
+      create)
+        record "issue-create"; echo "https://$HOST/$SLUG/issues/100"; exit 0 ;;
+      *) record "issue-$verb ${P0:-?}"; exit 0 ;;
+    esac ;;
+
+  release)
+    resolve_repo
+    case "$verb" in
+      list) echo "v1.0	Latest	v1.0	2026-11-01T00:00:00Z"; exit 0 ;;
+      view) echo "v1.0"; exit 0 ;;
+      delete)
+        record "release-delete ${P0:-?}"
+        [ "$cleanuptag" = false ] || tag_delete "$P0"
+        exit 0 ;;
+      *) record "release-$verb ${P0:-?}"; exit 0 ;;
+    esac ;;
+
+  run)
+    resolve_repo
+    case "$verb" in
+      list|view|watch) exit 0 ;;
+      *) record "run-$verb ${P0:-?}"; exit 0 ;;
+    esac ;;
+
+  repo)
+    case "$verb" in
+      view)
+        [ -z "$P0" ] || repo="$P0"
+        resolve_repo
+        out=$(tmpf)
+        jq '. + {nameWithOwner:.full_name, defaultBranchRef:{name:.default_branch}, url:.html_url}' "$FORGE/repo.json" >"$out"
+        if [ -n "$json" ]; then emit "$out"; else jq -r '"name:\t\(.full_name)\n--\nPrints widget labels."' "$out"; fi
+        exit 0 ;;
+      *) die "fixture gh: unsupported command: repo $verb" ;;
+    esac ;;
+
+  api)
+    check_host "${hostname:-${GH_HOST:-github.com}}"
+    path="${P0#/}"
+    [ -n "$path" ] || die "accepts 1 arg(s), received 0"
+    query=""
+    case "$path" in *\?*) query="${path#*\?}"; path="${path%%\?*}" ;; esac
+    if [ -z "$method" ]; then
+      if [ "${#fields[@]}" -gt 0 ] || [ -n "$inputf" ]; then method=POST; else method=GET; fi
+    fi
+    [ "$path" != graphql ] || method=POST
+    field() { # field <key>: the value of a -f/-F field or a query parameter
+      local kv
+      for kv in ${fields[@]+"${fields[@]}"}; do [ "${kv%%=*}" != "$1" ] || { printf '%s' "${kv#*=}"; return; }; done
+      [ -z "$inputf" ] || { jq -r --arg k "$1" '.[$k] // .variables[$k]? // empty' "$inputf" 2>/dev/null && return; }
+      printf '%s' "$query" | tr '&' '\n' | sed -n "s/^$1=//p" | head -n 1
+    }
+    out=$(tmpf)
+    if [ "$path" = graphql ]; then graphql "$out"; emit_api "$out"; exit 0; fi
+    case "$path" in
+      user) jq -n --arg me "$ME" '{login:$me, type:"User"}' >"$out"; emit_api "$out"; exit 0 ;;
+      rate_limit) echo '{"resources":{"core":{"limit":5000,"remaining":4999},"graphql":{"limit":5000,"remaining":4999}},"rate":{"limit":5000,"remaining":4999}}' >"$out"; emit_api "$out"; exit 0 ;;
+    esac
+    rest="${path#repos/}"
+    case "$rest" in "$SLUG"|"$SLUG"/*) ;; *) die "gh: Not Found (HTTP 404)" ;; esac
+    rest="${rest#"$SLUG"}"; rest="${rest#/}"
+    notfound() { die "gh: Not Found (HTTP 404)"; }
+    pnum() { local x="${1#*/}"; printf '%s' "${x%%/*}"; }
+    # --- writes ---
+    if [ "$method" != GET ]; then
+      case "$method:$rest" in
+        POST:issues/[0-9]*/comments)
+          n=$(pnum "$rest"); pr_file "$n" >/dev/null || notfound
+          id=$(comment_add "$n" "$(field body)") || exit 1
+          jq --argjson id "$id" '.[] | select(.id == $id)' "$FORGE/icomments/$n.json" >"$out" ;;
+        POST:pulls/[0-9]*/comments/[0-9]*/replies)
+          n=$(pnum "$rest"); to="${rest#pulls/$n/comments/}"; to="${to%%/*}"
+          pr_file "$n" >/dev/null || notfound
+          id=$(reply_add "$n" "$to" "$(field body)") || exit 1
+          jq --argjson id "$id" '.[] | select(.id == $id)' "$FORGE/rcomments/$n.json" >"$out" ;;
+        POST:pulls/[0-9]*/comments)
+          n=$(pnum "$rest"); pr_file "$n" >/dev/null || notfound
+          to=$(field in_reply_to)
+          if [ -n "$to" ]; then
+            id=$(reply_add "$n" "$to" "$(field body)") || exit 1
+            jq --argjson id "$id" '.[] | select(.id == $id)' "$FORGE/rcomments/$n.json" >"$out"
+          else
+            record "review-comment $n"; echo '{}' >"$out"
+          fi ;;
+        POST:pulls/[0-9]*/reviews)
+          n=$(pnum "$rest"); record "review $n $(field event)"; echo '{}' >"$out" ;;
+        PUT:pulls/[0-9]*/merge|POST:pulls/[0-9]*/merge)
+          n=$(pnum "$rest"); pr_file "$n" >/dev/null || notfound
+          record "merge $n $(field merge_method)"
+          jset "$FORGE/pr/$n.json" '.state = "MERGED" | .mergedAt = $at' --arg at "$(now)"
+          echo '{"merged":true}' >"$out" ;;
+        DELETE:git/refs/tags/*)
+          t="${rest#git/refs/tags/}"; record "tag-delete $t"; tag_delete "$t"; echo '{}' >"$out" ;;
+        DELETE:releases/*)
+          record "release-delete ${rest#releases/}"; echo '{}' >"$out" ;;
+        *) record "api $method $rest"; echo '{}' >"$out" ;;
+      esac
+      emit_api "$out"; exit 0
+    fi
+    # --- reads ---
+    page_of() { # page_of <array-file>: the requested page, or all with --paginate
+      local p pp
+      if [ "$paginate" = true ]; then return 0; fi
+      p=$(field page); pp=$(field per_page)
+      jq --argjson p "${p:-1}" --argjson pp "${pp:-30}" '.[($p - 1) * $pp : $p * $pp]' "$1" >"$1.pg" && mv "$1.pg" "$1"
+    }
+    case "$rest" in
+      "") cp "$FORGE/repo.json" "$out" ;;
+      events)
+        jq -R -s --arg slug "$SLUG" --arg z "$Z40" 'split("\n") | map(select(length > 0) | split(" "))
+          | to_entries | map(.key as $k | .value | select(.[1] | startswith("refs/heads/"))
+              | {id:("1000" + ($k|tostring)), type:"PushEvent", actor:{login:.[5]}, repo:{name:$slug},
+                 created_at:.[0], payload:{ref:.[1], before:.[2], head:.[3], size:1}})
+          | reverse' "$FORGE/ref-updates.log" >"$out"
+        page_of "$out" ;;
+      pulls)
+        st=$(field state)
+        for f in "$FORGE"/pr/*.json; do
+          pr_full "$(jq -r .number "$f")" "$out.full"; pr_rest "$out.full"
+        done | jq -s --arg st "${st:-open}" '[.[] | select($st == "all" or .state == $st)] | sort_by(.number) | reverse' >"$out"
+        rm -f "$out.full"; page_of "$out" ;;
+      pulls/comments/[0-9]*)
+        c="${rest#pulls/comments/}"; c="${c%%/*}"
+        jq -s --argjson c "$c" '[.[][] | select(.id == $c)] | first // empty' "$FORGE"/rcomments/*.json >"$out"
+        [ -s "$out" ] || notfound ;;
+      pulls/[0-9]*)
+        n=$(pnum "$rest")
+        [ -f "$FORGE/pr/$n.json" ] || notfound
+        case "$rest" in
+          pulls/"$n") pr_full "$n" "$out.full"; pr_rest "$out.full" >"$out"; rm -f "$out.full" ;;
+          pulls/"$n"/reviews) cp "$FORGE/reviews/$n.json" "$out"; page_of "$out" ;;
+          pulls/"$n"/reviews/[0-9]*/comments)
+            r="${rest#pulls/$n/reviews/}"; r="${r%%/*}"
+            jq --argjson r "$r" '[.[] | select(.pull_request_review_id == $r)]' "$FORGE/rcomments/$n.json" >"$out" ;;
+          pulls/"$n"/reviews/[0-9]*)
+            r="${rest#pulls/$n/reviews/}"
+            jq --argjson r "$r" '.[] | select(.id == $r)' "$FORGE/reviews/$n.json" >"$out"
+            [ -s "$out" ] || notfound ;;
+          pulls/"$n"/comments)
+            if [ "$(field direction)" = desc ]; then
+              jq 'sort_by(.created_at, .id) | reverse' "$FORGE/rcomments/$n.json" >"$out"
+            else
+              jq 'sort_by(.created_at, .id)' "$FORGE/rcomments/$n.json" >"$out"
+            fi
+            page_of "$out" ;;
+          pulls/"$n"/commits)
+            pr_full "$n" "$out.full"
+            jq '[.commits[] | {sha:.oid, commit:{message:.messageHeadline}}]' "$out.full" >"$out"; rm -f "$out.full" ;;
+          pulls/"$n"/files)
+            pr_full "$n" "$out.full"
+            jq '[.files[] | {filename:.path, additions, deletions, status:"modified"}]' "$out.full" >"$out"; rm -f "$out.full" ;;
+          pulls/"$n"/requested_reviewers) echo '{"users":[],"teams":[]}' >"$out" ;;
+          *) notfound ;;
+        esac ;;
+      issues/comments/[0-9]*)
+        c="${rest#issues/comments/}"; c="${c%%/*}"
+        jq -s --argjson c "$c" '[.[][] | select(.id == $c)] | first // empty' "$FORGE"/icomments/*.json >"$out"
+        [ -s "$out" ] || notfound ;;
+      issues/[0-9]*)
+        n=$(pnum "$rest")
+        [ -f "$FORGE/pr/$n.json" ] || notfound
+        case "$rest" in
+          issues/"$n")
+            jq '{number, title, body, html_url:.url, pull_request:{url:.url},
+                 state:(if .state == "OPEN" then "open" else "closed" end)}' "$FORGE/pr/$n.json" >"$out" ;;
+          issues/"$n"/comments)
+            jq 'map(del(.fixture_setup))' "$FORGE/icomments/$n.json" >"$out"; page_of "$out" ;;
+          issues/"$n"/reactions) reactions_of "$n" "$out"; page_of "$out" ;;
+          issues/"$n"/timeline|issues/"$n"/events)
+            b=$(jq -r .headRefName "$FORGE/pr/$n.json")
+            awk -v r="refs/heads/$b" '$2 == r && $5 == 1 { print $1, $4, $6 }' "$FORGE/ref-updates.log" \
+              | jq -R -s 'split("\n") | map(select(length > 0) | split(" ")
+                  | {event:"head_ref_force_pushed", created_at:.[0], commit_id:.[1], actor:{login:.[2]}})' \
+              | jq -s '(.[0] | map({event:"reviewed", state:(.state|ascii_downcase), submitted_at,
+                   created_at:.submitted_at, user, commit_id})) + .[1] | sort_by(.created_at)' \
+                  "$FORGE/reviews/$n.json" - >"$out"
+            page_of "$out" ;;
+          *) notfound ;;
+        esac ;;
+      commits/*/check-runs|commits/*/status|commits/*/statuses|commits/*/check-suites)
+        c="${rest#commits/}"; c="${c%%/*}"
+        oid=$(og rev-parse --verify --quiet "$c^{commit}") || die "gh: No commit found for SHA: $c (HTTP 422)"
+        r=$(ci_of "$oid")
+        case "$rest" in
+          */check-runs) jq -n --arg c "$r" --arg sha "$oid" --arg url "$(ci_url "$oid")" \
+            '{total_count:1, check_runs:[{id:1, name:"test", status:"completed",
+              conclusion:(if $c == "pass" then "success" else "failure" end), head_sha:$sha,
+              app:{slug:"github-actions"}, details_url:$url, html_url:$url}]}' >"$out" ;;
+          */check-suites) echo '{"total_count":0,"check_suites":[]}' >"$out" ;;
+          */status) jq -n --arg s "$oid" '{state:"pending", total_count:0, statuses:[], sha:$s}' >"$out" ;;
+          */statuses) echo '[]' >"$out" ;;
+        esac ;;
+      commits/*)
+        c="${rest#commits/}"
+        oid=$(og rev-parse --verify --quiet "$c^{commit}") || die "gh: No commit found for SHA: $c (HTTP 422)"
+        og log -1 --format='%H%x09%P%x09%s' "$oid" | jq -R 'split("\t") | {sha:.[0], parents:(.[1] | split(" ") | map({sha:.})), commit:{message:.[2]}}' >"$out" ;;
+      branches/*|git/ref/heads/*|git/refs/heads/*)
+        b="${rest#branches/}"; b="${b#git/ref/heads/}"; b="${b#git/refs/heads/}"
+        sha=$(og rev-parse --verify --quiet "refs/heads/$b") || notfound
+        case "$rest" in
+          branches/*) jq -n --arg b "$b" --arg s "$sha" '{name:$b, commit:{sha:$s}, protected:false}' >"$out" ;;
+          *) jq -n --arg b "$b" --arg s "$sha" '{ref:("refs/heads/"+$b), object:{sha:$s, type:"commit"}}' >"$out" ;;
+        esac ;;
+      releases|tags) echo '[{"tag_name":"v1.0","name":"v1.0"}]' >"$out" ;;
+      *) notfound ;;
+    esac
+    emit_api "$out"; exit 0 ;;
+
+  *) die "fixture gh: unsupported command: $sub" ;;
+esac

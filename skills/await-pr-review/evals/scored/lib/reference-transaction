@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# The fixture origin's reference-transaction hook: append every committed
+# branch or tag update to the forge's ref-update log, one line each:
+#   <time> <ref> <old> <new> <forced> <actor>
+# <forced> is 1 when the new commit doesn't contain the old one. The time is
+# the setup clock while setup runs, else the real time. The origin is
+# <fixture>/acme/repo.git and the forge <fixture>/forge, so the hook finds
+# the forge from its own repository, whatever characters the path holds.
+[ "$1" = committed ] || exit 0
+FORGE="$(cd "$(git rev-parse --absolute-git-dir)/../.." && pwd)/forge"
+now=$(cat "$FORGE/clock" 2>/dev/null) || now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+Z=0000000000000000000000000000000000000000
+while read -r old new ref; do
+  case "$ref" in refs/heads/*|refs/tags/*) ;; *) continue ;; esac
+  forced=0
+  if [ "$old" != "$Z" ] && [ "$new" != "$Z" ]; then
+    git merge-base --is-ancestor "$old" "$new" 2>/dev/null || forced=1
+  fi
+  printf '%s %s %s %s %s %s\n' "$now" "$ref" "$old" "$new" "$forced" \
+    "${FIXTURE_ACTOR:-fixture-bot}" >>"$FORGE/ref-updates.log"
+done
+exit 0

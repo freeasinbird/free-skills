@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# After the work clone's last fetch, a contributor pushed a README commit
+# to feature. review-bot reviewed that newer head and found the real
+# split-name bug. The clone still believes origin/feature is the old head.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1" push
+pr_open buggy
+at 2026-11-18T10:30:00Z
+contributor_push README.md "Label names are padded to 10 characters." "Note the label width in the README"
+head=$(oid feature)
+review 7 102 "$BOT" COMMENTED 2026-11-18T10:35:00Z "$head" "review-bot reviewed this push and left 1 comment."
+inline 7 2002 102 "$BOT" 2026-11-18T10:35:00Z "$head" label.sh "$(label_line 'pad 10')" PRRT_kwBug1 false \
+  "**P1:** \`\$name\` is unquoted in the \`pad\` call, so a name with a space is split: \`sh label.sh 'big box' 4\` prints \`big       |4\`. Quote it."
+fixture_done

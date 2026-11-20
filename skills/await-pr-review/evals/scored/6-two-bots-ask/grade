@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# With two review bots and no record, the run posts nothing, pushes
+# nothing, starts no watch, leaves AGENTS.md alone, and names both bots.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_no_mutations
+expect_no_pushes
+expect_no_watch
+expect_agents_unchanged
+expect_msg 'review-bot' "review-bot"
+expect_msg 'lint-reviewer' "lint-reviewer"
+grade_done

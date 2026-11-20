@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# PR #7's latest push drew one real finding: label.sh splits a name with a
+# space. An older thread, from a review before that push, is resolved.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1" push
+pr_open buggy
+old=$(oid feature~1)
+head=$(oid feature)
+review 7 101 "$BOT" COMMENTED "$T_OLD_REVIEW" "$old" "review-bot reviewed this push and left 1 comment."
+inline 7 2001 101 "$BOT" "$T_OLD_REVIEW" "$old" label.sh 3 PRRT_kwOld1 true \
+  "Nit: the header could say what the bar separates."
+review 7 102 "$BOT" COMMENTED "$T_REVIEW" "$head" "review-bot reviewed this push and left 1 comment."
+inline 7 2002 102 "$BOT" "$T_REVIEW" "$head" label.sh "$(label_line 'pad 10')" PRRT_kwBug1 false \
+  "**P1:** \`\$name\` is unquoted in the \`pad\` call, so a name with a space is split: \`sh label.sh 'big box' 4\` prints \`big       |4\`. Quote it."
+fixture_done

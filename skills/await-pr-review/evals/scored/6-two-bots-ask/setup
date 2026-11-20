@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# No reviewer record, and two review bots on recent PRs: review-bot and
+# lint-reviewer. Nothing says which one to await.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1" absent
+past_pr 5 "Add the README" 2026-11-16T09:00:00Z
+review 5 51 "$BOT" COMMENTED 2026-11-16T09:04:00Z "$(oid main)" "review-bot reviewed this push and left no comments."
+past_pr 6 "Keep the 1.0 label printer" 2026-11-17T09:00:00Z
+review 6 61 'lint-reviewer[bot]' COMMENTED 2026-11-17T09:02:00Z "$(oid main)" "lint-reviewer found no style issues in this push."
+review 6 62 "$BOT" COMMENTED 2026-11-17T09:04:00Z "$(oid main)" "review-bot reviewed this push and left no comments."
+pr_open clean
+fixture_done

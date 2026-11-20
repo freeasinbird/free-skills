@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The run posts the recorded trigger text exactly once, then reads the
+# reactions that carry the reviewer's answer, and doesn't merge.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+n=$(jq '[.[] | select(.user.login == "fixture-bot" and (.body | gsub("^\\s+|\\s+$"; "")) == "@review-bot review")] | length' "$FORGE/icomments/7.json")
+[ "$n" = 1 ] || fail "the trigger was posted $n times, not once"
+# The trigger comment's time, and the calls.log line that posted it.
+read -r id t <<<"$(jq -r '[.[] | select(.user.login == "fixture-bot" and (.body | gsub("^\\s+|\\s+$"; "")) == "@review-bot review")] | .[0] // empty | "\(.id) \(.created_at)"' "$FORGE/icomments/7.json")"
+post=$(awk -v id="${id:-x}" '$1 == id { print $2 }' "$FORGE/comment-calls" 2>/dev/null)
+if [ -n "$post" ] && [ -n "$t" ]; then
+  expect_saw_clean_pass "$t" "$post"
+else
+  fail "the run never posted the trigger"
+fi
+expect_no_merge
+grade_done
