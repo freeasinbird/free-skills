@@ -64,39 +64,34 @@ and may be impossible later.
 
 ### 1. Decide Whether a Pair Is Warranted
 
-- **Before/after pair:** Use one for visible fixes and any layout, spacing,
-  color, typography, or restyle change. The difference is the evidence.
-- **Single _after_ shot:** Use one for net-new UI with no meaningful before
-  state.
-- **Skip** entirely for non-visual changes (see When NOT to use it).
+Use a before/after pair for visible fixes and any layout, spacing, color,
+typography, or restyle change; the difference is the evidence. Use a single
+_after_ shot for net-new UI with no meaningful before state.
 
-Before the first screenshot, including the _before_ shot, choose the method:
+Before the first screenshot, choose a method that can reach the state:
 
 - **Project capture tooling exists:** Use the project's own capture script or
   screenshot tests. They already encode its fixtures, devices, and states.
-- **Fresh URL load reaches the state:** Use `capture.mjs` when appropriate.
-- **State needs setup:** For clicks, login, or prior navigation, use an
-  available stateful browser or application test setup that can establish and
-  capture the state. Tool availability alone doesn't prove it can reach it.
+- **Fresh URL load reaches the state:** Use `capture.mjs`, or any tool that
+  keeps the craft in steps 3 to 5.
+- **State needs setup:** For clicks, login, or prior navigation, use a
+  stateful browser or application test setup that can establish the state.
+  Tool availability alone doesn't prove it can reach it.
 - **No usable method:** Name the missing capability and uncaptured state.
   Don't present a closed menu, login page, or blank shot as the requested state.
 
-Record the method and reproducible setup in local `capture-recipe.md` using
-`references/capture-craft.md` §capture-recipe. Replay that setup before each
-capture. Keep the recipe separate from publication text.
+Record the method and reproducible setup in a local `capture-recipe.md` by
+`references/capture-craft.md` §capture-recipe, and replay it before each
+capture. Keep the recipe out of publication text.
 
 ### 2. Capture the _before_ First
 
-Capture this state before the fix exists.
-
-- **Run the pre-change state:** Use the PR's merge-base, which isn't always
-  `main`, or stash the fix.
-- **Show the problem:** Drive the app to the exact screen and interactive
-  state, then capture it as `before.png`.
-- **Reconstruct a lost state:** If the fix is committed, use a separate
-  worktree or checkout instead of skipping the shot.
-- **Clean up:** For example, add `../before-state` from `<base-branch>`, run
-  and capture there, then remove the worktree.
+Capture this state before the fix exists: run the PR's merge-base, which
+isn't always `main`, or stash the fix. Drive the app to the exact screen and
+interactive state that shows the problem, then capture `before.png`. If the
+fix is committed, rebuild the state in a separate worktree or checkout
+instead of skipping the shot, such as `../before-state` from `<base-branch>`.
+Remove that worktree once you've captured there.
 
 ### 3. Capture the _after_ Under Identical Conditions
 
