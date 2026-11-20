@@ -39,6 +39,10 @@ scratch space isn't enough, because the report gives a log path that must
 still exist. The goal file, the frozen check, and the attempt log all live
 there.
 
+Copy every limit the owner states, in the request or later before sign-off,
+into the goal file's Constraints, in the owner's words. List any limit you add apart from them,
+each with its source. The owner signs off on both.
+
 Show the goal file to the owner. Start no attempt, and change nothing in the
 repository, until the owner signs off. Then record the sign-off and the goal
 file's hash in the attempt log. The owner controls the goal file; never edit
@@ -138,6 +142,12 @@ that should make it work before changing anything. Then make the change,
 score it from the frozen check, and run every guard. A candidate never edits
 the check, its inputs, or a guard, and never skips a test.
 
+Check each candidate against the goal file's Constraints before scoring it.
+A candidate that breaches one is reverted, or rejected for a set goal,
+without a score. In a council-scored climb it never reaches the screen or the
+panel. A breaching candidate never counts as progress or as the best
+near-miss; in an attempt climb it still uses its attempt.
+
 - **Keep** the change only when it beats the current best by more than the
   noise band and every guard holds. A scored guard holds while it stays within
   its noise band of its baseline.
@@ -155,10 +165,11 @@ candidate. Stalls and
 the plateau count units without progress, never reverted or rejected
 candidates.
 
-Log every candidate in the climb directory: its unit, number, hypothesis,
-mechanism, change, score, guard results, and outcome (kept, reverted,
-accepted, or rejected). After each unit, log the best score, and for a set
-goal the best near-miss.
+Log every candidate in the climb directory: its unit, number, source (the
+climber, a judge's proposal, or a generator), hypothesis, mechanism, change,
+score, guard results, and outcome (kept, reverted, accepted, or rejected).
+For a breach, log the limit it broke in place of a score. After each unit,
+log the best score, and for a set goal the best near-miss.
 
 ## Check In When Stalled
 
