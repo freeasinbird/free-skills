@@ -80,7 +80,9 @@
 # state, operation, unreferenced_head (a detached HEAD no ref holds, or null),
 # and the untracked, modified, ignored, flagged, and disposable paths removal
 # would delete. disposable names each matched prefix once (app/.build/, not
-# every file under it); ignored holds only the ignored paths no entry matches.
+# every file under it); ignored holds only the ignored paths no entry
+# matches, and names a directory an ignore pattern matches once, with a
+# trailing / (.venv/, not every file under it).
 #
 # Then one result line, whose counts are worktrees, candidates, clean, dirty,
 # removed, and kept (candidates left in place), each worktree counted as its
@@ -528,7 +530,9 @@ json_list() { # json_list <array>: set JSON_LIST to its items joined by commas
 # it a directory, as status prints one; <ignored> is true when status
 # already reported <path> ignored. On a match, sets M_PREFIX to the shortest
 # such run, with a trailing / when it is a directory. M_LAST is the previous
-# match: `status -uall --ignored` lists every file under a build directory
+# match: `status --ignored=matching` lists a directory a pattern matches as
+# one record, but enters a directory that only its contents' pattern ignores
+# (a * in its own .gitignore, as in a uv .venv) and lists each entry in it,
 # together, so a path under the last directory prefix is answered without
 # walking it. M_IGNORED and M_KEPT cache check-ignore answers, newline
 # delimited. Callers reset all three for each worktree. Built in: an
@@ -609,6 +613,17 @@ match_declared() { # match_declared <worktree> <path> <ignored>
   return 1
 }
 
+# --ignored=matching lists an ignored directory holding nothing but empty
+# directories, which the per-file listing never did, and removing it deletes
+# no file. Such a record is skipped so it can't turn a clean worktree dirty;
+# a failed find counts as holding something.
+holds_entries() { # holds_entries <worktree> <status path>
+  local hit
+  case "$2" in */) ;; *) return 0 ;; esac
+  hit=$(find "$1/$2" ! -type d -print -quit 2>/dev/null) || return 0
+  [ -n "$hit" ]
+}
+
 # What removal would delete from a candidate. Sets C_STATE and C_DETAIL (the
 # operation and file-list fields of its line). The inventory decides clean;
 # the lists are read here because the inventory stops without naming files.
@@ -621,8 +636,13 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
   if op_probe "$path"; then op="\"$OP_FOUND\""; fi
   tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
   # -uall and core.fsmonitor=false for the reasons worktree-inventory.sh
-  # gives; -z so a path holding a newline arrives whole and unquoted.
-  git -C "$path" -c core.fsmonitor=false status -uall --porcelain --ignored -z \
+  # gives: an explicit untracked mode overrides status.showUntrackedFiles=no.
+  # -z so a path holding a newline arrives whole and unquoted.
+  # --ignored=matching lists a directory an ignore pattern matches once, as
+  # dir/, rather than every file under it, so an undeclared .venv/ is one
+  # record, not tens of thousands. A directory no pattern matches is still
+  # entered, so each ignored file in it, such as a .DS_Store, lists alone.
+  git -C "$path" -c core.fsmonitor=false status -uall --porcelain --ignored=matching -z \
     --ignore-submodules=none \
     > "$tmp" 2>/dev/null \
     || { rm -f "$tmp"; lookup_failed status "could not read the status of $path"; }
@@ -637,7 +657,7 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
         if match_disposable "$path" "$p" true; then
           [ "$M_PREFIX" = "$last_added" ] || json_add disposable "$M_PREFIX"
           last_added="$M_PREFIX"
-        else
+        elif holds_entries "$path" "$p"; then
           json_add ignored "$p"
         fi
         ;;

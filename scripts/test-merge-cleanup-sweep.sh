@@ -27,7 +27,9 @@
 # non-regular file; reading a comment as an entry, or skipping comments
 # before the whitespace check; applying the .DS_Store rule before the
 # entries; and without the NUL check. The newline case discriminates by construction, as in the
-# inventory matrix.
+# inventory matrix. The large-listing cases were run against the sweep
+# before --ignored=matching and subshell-free escaping, and the
+# empty-directory case against a copy that lists every ignored dir/ record.
 #
 # Usage: test-merge-cleanup-sweep.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -607,7 +609,7 @@ printf 'mine\n' > "$WT/.DS_Store/note"
 run --remove
 want_rc 0
 want_out 'WORKTREE dirty'
-want_out '"ignored":[".DS_Store/note"],"flagged":[],"disposable":[]'
+want_out '"ignored":[".DS_Store/"],"flagged":[],"disposable":[]'
 want_kept "$WT"   # discriminating: matching any part named .DS_Store removes it
 
 scenario "an untracked .DS_Store is never disposable"
@@ -638,7 +640,7 @@ printf 'o\n' > "$WT/.build/obj.o"
 run --remove
 want_rc 0
 want_out 'WORKTREE dirty'
-want_out '"ignored":[".build/obj.o"],"flagged":[],"disposable":[]'
+want_out '"ignored":[".build/"],"flagged":[],"disposable":[]'
 want_out '"disposables":[]'
 want_kept "$WT"
 
@@ -652,7 +654,7 @@ printf 'mine\n' > "$WT/notes/todo"
 run --remove
 want_rc 0
 want_out '"disposables":[".build/"]'
-want_out '"ignored":["notes/todo"],"flagged":[],"disposable":[".build/"]'
+want_out '"ignored":["notes/"],"flagged":[],"disposable":[".build/"]'
 want_kept "$WT"   # discriminating: reading a comment as an entry removes it
 
 scenario "a file of comments alone declares nothing"
@@ -678,7 +680,7 @@ printf 'o\n' > "$WT/.build/obj.o"
 run --remove
 want_rc 0
 want_out '"disposables":[]'
-want_out '"ignored":[".build/obj.o"],"flagged":[],"disposable":[".DS_Store"]'
+want_out '"ignored":[".build/"],"flagged":[],"disposable":[".DS_Store"]'
 want_kept "$WT"
 
 scenario "a .DS_Store under a declared directory reports the directory"
@@ -751,7 +753,7 @@ printf 'o\n' > "$WT/other/app/.build/o"
 run --remove
 want_rc 0
 want_out 'WORKTREE dirty'
-want_out '"ignored":["other/app/.build/o"],"flagged":[],"disposable":["app/.build/"]'
+want_out '"ignored":["other/app/.build/"],"flagged":[],"disposable":["app/.build/"]'
 want_kept "$WT"
 
 scenario "a directory-only entry does not match a file of that name"
@@ -1145,6 +1147,26 @@ want_out '--remove-head'
 # The bounds are generous: these finish in seconds, and the sweep they guard
 # against took many minutes.
 
+scenario "an undeclared ignored directory of 36,000 files is listed once"
+ignore big/
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir -p "$WT/big/sub"
+(cd "$WT/big/sub" && seq -f 'f%05g' 1 36000 | xargs touch)
+SECONDS=0
+run
+if [ "$SECONDS" -lt 30 ]; then ok; else bad "the dry run took ${SECONDS}s"; fi
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["big/"],"flagged":[]'   # discriminating: --ignored lists every file
+SECONDS=0
+run --remove-head feat --head-oid "$TIP"
+if [ "$SECONDS" -lt 30 ]; then ok; else bad "--remove-head took ${SECONDS}s"; fi
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["big/"],"flagged":[]'
+want_kept "$WT"
+
 scenario "a worktree of 20,000 untracked files is read in seconds"
 land feat
 (cd "$WT" && seq -f 'an-untracked-file-%05g.txt' 1 20000 | xargs touch)
@@ -1156,6 +1178,30 @@ want_rc 0
 want_out '"untracked":["an-untracked-file-00001.txt","an-untracked-file-00002.txt",'
 want_out '"an-untracked-file-20000.txt"],"modified":[]'
 want_kept "$WT"
+
+scenario "a declared disposable inside an undeclared ignored directory keeps it dirty"
+# The accepted cost of listing a matched directory once: out/ hides the
+# __pycache__/ inside it, so the worktree reads dirty where it once read clean.
+disposables __pycache__/
+ignore out/ __pycache__/
+land feat
+mkdir -p "$WT/out/__pycache__"
+: > "$WT/out/__pycache__/x.pyc"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["out/"],"flagged":[],"disposable":[]'
+want_kept "$WT"
+
+scenario "an undeclared ignored directory of empty directories leaves it clean"
+ignore build/
+land feat
+mkdir -p "$WT/build/sub"
+run --remove
+want_rc 0
+want_out '"ignored":[],"flagged":[],"disposable":[]'   # discriminating: listing every dir/ record keeps it
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
 
 echo "merge-cleanup sweep matrix: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
