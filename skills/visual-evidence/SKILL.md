@@ -113,10 +113,10 @@ Apply the change. Drive the app to the same screen and state, then capture
 
 ### 4. Framing & Cropping
 
-- **Crop to the change:** Use the affected component or region unless the
-  change is page-level. A full-screen shot buries the point in navigation and
-  browser chrome, and a later turn may re-read every irrelevant pixel. Even
-  for a page-level change, prefer the relevant section to the full page.
+- **Crop to the change:** Use the affected component or region, not the full
+  screen, whose chrome buries the point and costs context on every re-read.
+  Capture the full page only for a page-level change, such as overall layout
+  or cross-page spacing, and even then prefer the relevant section.
 - **Prefer element capture:** It gives a tight, deterministic frame, such as
   Playwright's `locator.screenshot()` or a CDP clip to the node's bounding
   box. Otherwise crop both full images to one fixed rectangle; see
@@ -130,9 +130,6 @@ Apply the change. Drive the app to the same screen and state, then capture
 - **Keep inline images legible:** GitHub renders the PR body at roughly 830 CSS
   px wide. Avoid extreme ratios and multi-thousand-pixel captures. Keep each
   image under 10 MB, and never export SVG.
-
-Any capture method that keeps tight framing, identical conditions, and
-deterministic state will do.
 
 ### Reference Capture Script
 
@@ -167,16 +164,13 @@ specification. Apply the same craft with another capture method.
 
 - **Stabilize the page:** Disable animations. Wait for network idle and for the
   target element to become visible.
-- **Set a wall-clock budget:** Agent shell tools commonly cap commands near two
-  minutes, and a hung wait can consume that cap and return nothing. Keep the
-  total budget below it, with per-attempt timeouts and retries, so a hang
-  reports an error. `capture.mjs` uses 90 seconds.
+- **Set a wall-clock budget:** Keep the total below the roughly two-minute cap
+  of agent shell tools, with per-attempt timeouts and retries, so a hung wait
+  reports an error instead of returning nothing. `capture.mjs` uses 90
+  seconds.
 - **Use stable data:** Prefer seeded or fixture data. Avoid timestamps, random
   values, and live customer data; fixture data also keeps secrets out of the
   frame.
-- **Review separately:** Clean capture doesn't replace the mandatory review
-  under Compose and Attach before every upload. Read it there instead of
-  relying on memory.
 
 ### 6. Check the Shots Before Handing Off
 
