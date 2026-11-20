@@ -61,6 +61,14 @@
 #                                nothing was decided from the empty result;
 #                                a failed forge read adds "stderr", the first
 #                                300 bytes of gh's error output
+# STOP checks-failed carries "failed", one entry per failed check:
+# {name, run_id, job_id, url}. An entry for a GitHub Actions job also
+# carries "failing_tests", up to 20 {name, line} objects read from the
+# job's Go test output ("line" is the test's first _test.go:N: line, at
+# most 300 bytes, absent when the log has none), plus
+# "failing_tests_omitted" when more tests failed. When the log can't be
+# fetched or names no Go test failure, the entry carries "log_error"
+# instead. A log never changes the result type or exit code.
 # Exit codes: 0 OK; 2 STOP; 4 LOOKUP_FAILED; 64 usage error; 69 gh
 # (GitHub CLI) not found on PATH.
 set -u
@@ -180,6 +188,9 @@ json_escape() {
       $'\n') out+='\n' ;;
       $'\t') out+='\t' ;;
       $'\r') out+='\r' ;;
+      # Printable ASCII skips the fork below: a job's failing tests run
+      # to thousands of bytes, and a fork per byte costs seconds.
+      [\ -~]) out+="$c" ;;
       *)
         o=$(( $(printf '%d' "'$c") & 255 ))
         if [ "$o" -ge 32 ] && [ "$o" -le 126 ]; then
@@ -225,11 +236,196 @@ stop() { # stop <guard> <detail>
   exit 2
 }
 # checks-failed also names each failed check, so the agent can fetch a
-# failed job's log without searching for it. CI_FAILED_JSON is ci_read's.
+# failed job's log without searching for it, and for a GitHub Actions job
+# it names the failing Go tests read from that log (job_log_fields).
+# CI_FAILED_ENTRIES and CI_FAILED_ENTRY_JOBS are ci_read's.
 stop_failed() { # stop_failed <detail>
-  echo "STOP checks-failed {\"detail\":\"$(json_escape "$1")\",\"failed\":$CI_FAILED_JSON}"
+  local i entry failed=""
+  for (( i = 0; i < ${#CI_FAILED_ENTRIES[@]}; i++ )); do
+    entry="${CI_FAILED_ENTRIES[i]}"
+    if [ "${CI_FAILED_ENTRY_JOBS[i]}" != - ]; then
+      job_log_fields "${CI_FAILED_ENTRY_JOBS[i]}"
+      # gh's tojson built the entry, so it ends in the object's own brace.
+      entry="${entry%\}}$LOG_FIELDS}"
+    fi
+    failed+=",$entry"
+  done
+  echo "STOP checks-failed {\"detail\":\"$(json_escape "$1")\",\"failed\":[${failed#,}]}"
   exit 2
 }
+
+# Read one GitHub Actions job's log and set LOG_FIELDS to the JSON members
+# stop_failed appends to its entry: ,"failing_tests":[{name, line}, ...],
+# plus ,"failing_tests_omitted":N when more than FAILING_TESTS_CAP tests
+# failed; or ,"log_error":"<why>" when the log can't be fetched or names no
+# Go test failure. "line" is the test's first _test.go:N: line, absent
+# when the log has none (a parent whose subtests failed). Every string is
+# cut to FAILURE_LINE_CAP bytes and goes through json_escape, so a log
+# can't break the one-line result. A failure here never becomes
+# LOOKUP_FAILED: the checks failed whatever the log says, and the agent
+# can still read the log itself.
+FAILING_TESTS_CAP=20 FAILURE_LINE_CAP=300
+job_log_fields() { # job_log_fields <job-id>
+  local why parsed total name line tests="" n=0
+  if ! gh_read api --allow-escape-sequences "repos/$REPO/actions/jobs/$1/logs" >"$GH_LOG"; then
+    why=$(tr -d '\0' < "$GH_ERR" | head -n 1 | head -c 300)
+    LOG_FIELDS=",\"log_error\":\"$(json_escape "could not fetch the job log: ${why:-gh exited nonzero}")\""
+    return
+  fi
+  if ! parsed=$(LC_ALL=C tr -d '\0' < "$GH_LOG" \
+      | LC_ALL=C awk -v esc=$'\033' -v bom=$'\357\273\277' \
+          -v max="$FAILING_TESTS_CAP" -v cap="$FAILURE_LINE_CAP" "$GO_FAILURES_AWK"); then
+    LOG_FIELDS=",\"log_error\":\"could not parse the job log\""
+    return
+  fi
+  {
+    IFS= read -r total
+    while IFS= read -r name && IFS= read -r line; do
+      tests+=",{\"name\":\"$(json_escape "$name")\""
+      [ "$line" = - ] || tests+=",\"line\":\"$(json_escape "${line#L}")\""
+      tests+="}"
+      n=$((n + 1))
+    done
+  } <<< "$parsed"
+  if [ "$n" -eq 0 ]; then
+    LOG_FIELDS=",\"log_error\":\"no Go test failure found in the log\""
+    return
+  fi
+  LOG_FIELDS=",\"failing_tests\":[${tests#,}]"
+  [ "$total" -le "$n" ] || LOG_FIELDS+=",\"failing_tests_omitted\":$((total - n))"
+}
+
+# The job-log parser. Input: a GitHub Actions job log, NUL bytes removed.
+# Output: the number of distinct failed tests, then for each of the first
+# max of them two lines: its name, then "L" and its first failure line, or
+# "-" when it has none. Both values are cut to cap bytes and hold no
+# newline, so the pairs read back unambiguously.
+#
+# Each line first loses the log's BOM, its timestamp, a trailing CR, and
+# ANSI escape sequences. go test -json events (lines starting with "{")
+# name a failed test by an "Action":"fail" event that carries "Test"; a
+# package-level fail event has none. Its failure line is the first output
+# event for the same package and test that holds a _test.go:N: line. When
+# the log has no such fail event, plain output is read in both orders Go
+# prints: with -v the failure line streams under "=== RUN", "=== CONT",
+# or "=== NAME <test>" before "--- FAIL: <test>"; without -v it follows
+# "--- FAIL: <test>", indented, before the next marker or unindented line.
+# A subtest counts as its own test. POSIX awk only: CI runs mawk or gawk,
+# and macOS runs BSD awk.
+GO_FAILURES_AWK='
+function unescape(s,    out, p, c, h, code, i) {
+  out = ""
+  while ((p = index(s, "\\")) > 0) {
+    out = out substr(s, 1, p - 1)
+    c = substr(s, p + 1, 1)
+    if (c == "n") out = out "\n"
+    else if (c == "t") out = out "\t"
+    else if (c == "r") out = out "\r"
+    else if (c == "b") out = out sprintf("%c", 8)
+    else if (c == "f") out = out sprintf("%c", 12)
+    else if (c == "u") {
+      h = tolower(substr(s, p + 2, 4))
+      code = 0
+      for (i = 1; i <= 4; i++) code = code * 16 + index("0123456789abcdef", substr(h, i, 1)) - 1
+      # Decode ASCII only; any other code point stays as escaped text.
+      if (h ~ /^[0-9a-f][0-9a-f][0-9a-f][0-9a-f]$/ && code > 0 && code < 128) {
+        out = out sprintf("%c", code)
+        s = substr(s, p + 6)
+        continue
+      }
+      out = out "\\u"
+    } else out = out c
+    s = substr(s, p + 2)
+  }
+  return out s
+}
+# The raw, still-escaped string value of "key" in one JSON event line.
+function jraw(s, key) {
+  if (!match(s, "\"" key "\":\"([^\"\\\\]|\\\\.)*\"")) return ""
+  return substr(s, RSTART + length(key) + 4, RLENGTH - length(key) - 5)
+}
+function emit(name, line, has,    p) {
+  gsub(/[\r\n]/, " ", name)
+  print substr(name, 1, cap)
+  if (!has) { print "-"; return }
+  gsub(csi, "", line)
+  if ((p = index(line, "\n")) > 0) line = substr(line, 1, p - 1)
+  if ((p = index(line, "\r")) > 0) line = substr(line, 1, p - 1)
+  sub(/^[ \t]+/, "", line)
+  print "L" substr(line, 1, cap)
+}
+BEGIN { csi = esc "\\[[0-?]*[ -/]*[@-~]"; jn = 0; pn = 0; cur = ""; pending = "" }
+{
+  l = $0
+  if (NR == 1 && index(l, bom) == 1) l = substr(l, length(bom) + 1)
+  sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9:.]*Z ?/, "", l)
+  sub(/\r$/, "", l)
+  gsub(csi, "", l)
+  if (substr(l, 1, 1) == "{") {
+    if (index(l, "\"Action\":\"fail\"") > 0) {
+      t = jraw(l, "Test")
+      if (t != "") {
+        k = jraw(l, "Package") SUBSEP t
+        if (!(k in jfailed)) { jfailed[k] = 1; jorder[++jn] = k; jname[k] = t }
+      }
+    } else if (index(l, "\"Action\":\"output\"") > 0 && l ~ /_test\.go:[0-9]+:/) {
+      t = jraw(l, "Test")
+      o = jraw(l, "Output")
+      if (t != "" && o ~ /_test\.go:[0-9]+:/) {
+        k = jraw(l, "Package") SUBSEP t
+        # 4096 escaped bytes always cover cap decoded bytes after the
+        # indent, and keep unescape linear on a huge output line.
+        if (!(k in jline)) jline[k] = substr(o, 1, 4096)
+      }
+    }
+    next
+  }
+  t = l
+  sub(/^[ \t]+/, "", t)
+  if (pending != "" && t == l) pending = ""
+  if (t ~ /^=== (RUN|CONT|NAME) /) {
+    cur = t
+    sub(/^=== [A-Z]+ +/, "", cur)
+    sub(/[ \t]+$/, "", cur)
+    pending = ""
+    # A new run of a name that has not failed drops a line kept from an
+    # earlier run: another package can hold a passing test of that name.
+    if (t ~ /^=== RUN / && !(cur in pfailed)) delete pline[cur]
+  } else if (substr(t, 1, 10) == "--- FAIL: ") {
+    n = substr(t, 11)
+    if ((p = index(n, " (")) > 0) n = substr(n, 1, p - 1)
+    cur = ""
+    pending = ""
+    if (n != "") {
+      if (!(n in pfailed)) { pfailed[n] = 1; porder[++pn] = n }
+      if (!(n in pline)) pending = n
+    }
+  } else if (t ~ /^--- (PASS|SKIP): /) {
+    cur = ""
+    pending = ""
+  } else if (t ~ /_test\.go:[0-9]+:/) {
+    if (pending != "") { pline[pending] = t; pending = "" }
+    else if (cur != "" && !(cur in pline)) pline[cur] = t
+  }
+}
+END {
+  if (jn > 0) {
+    print jn
+    for (i = 1; i <= jn && i <= max; i++) {
+      k = jorder[i]
+      if (k in jline) emit(unescape(jname[k]), unescape(jline[k]), 1)
+      else emit(unescape(jname[k]), "", 0)
+    }
+  } else {
+    print pn
+    for (i = 1; i <= pn && i <= max; i++) {
+      n = porder[i]
+      if (n in pline) emit(n, pline[n], 1)
+      else emit(n, "", 0)
+    }
+  }
+}
+'
 lookup_failed() { # lookup_failed <what> <detail>
   local excerpt="" extra=""
   [ -s "${GH_ERR:-}" ] && excerpt=$(tr -d '\0' < "$GH_ERR" | head -c 300)
@@ -244,7 +440,10 @@ lookup_failed() { # lookup_failed <what> <detail>
 # attempt's partial output (a page of a paginated read, an error body).
 GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
 GH_OUT=$(mktemp) || { rm -f -- "$GH_ERR"; lookup_failed tmp "mktemp failed"; }
-trap 'rm -f -- "$GH_ERR" "$GH_OUT"' EXIT
+# GH_LOG holds one fetched job log for stop_failed. A log can run to many
+# megabytes, so it lives in a file, never in a shell variable.
+GH_LOG=$(mktemp) || { rm -f -- "$GH_ERR" "$GH_OUT"; lookup_failed tmp "mktemp failed"; }
+trap 'rm -f -- "$GH_ERR" "$GH_OUT" "$GH_LOG"' EXIT
 # Go's http2debug trace prints the Authorization header unredacted. Drop
 # that one setting and keep any other GODEBUG setting gh may rely on. Go
 # turns the trace on when GODEBUG merely contains http2debug=1 or =2, so
@@ -1110,17 +1309,19 @@ forge_base_tip() { # sets FORGE_BASE_TIP to the forge's current tip of $BASE
 # CI_DETAIL to why, then returns 1; the caller decides whether to poll
 # again.
 #
-# Each failed check also becomes a JSON entry in CI_FAILED_JSON, built by
-# gh's jq so any check name stays escaped: {name, run_id, job_id, url}. A
-# GitHub Actions job's check-run id is its job id, and its details URL
+# Each failed check also becomes a JSON entry in CI_FAILED_ENTRIES, built
+# by gh's jq so any check name stays escaped: {name, run_id, job_id, url}.
+# CI_FAILED_ENTRY_JOBS holds each entry's job id at the same index, or "-".
+# A GitHub Actions job's check-run id is its job id, and its details URL
 # names its workflow run; any other check, and every failing commit
-# status, gets null ids, and CI_UNRERUNNABLE turns true because
+# status, gets null ids and "-", and CI_UNRERUNNABLE turns true because
 # `gh run rerun` cannot retry it. CI_FAILED_JOBS lists "<run> <job>" for
-# each failed Actions job.
+# each failed Actions job. Plain indexed arrays: macOS ships bash 3.2.
 ci_read() { # ci_read <oid>
   local oid="$1" runs status st concl run job entry name line total=0 bad="" waiting=""
-  local s_state="" s_total="" failed="" status_failed="" first=true
-  CI_FAILED_JSON="[]" CI_FAILED_JOBS="" CI_UNRERUNNABLE=false
+  local s_state="" s_total="" first=true
+  local status_failed=()
+  CI_FAILED_ENTRIES=() CI_FAILED_ENTRY_JOBS=() CI_FAILED_JOBS="" CI_UNRERUNNABLE=false
   # The entry sits before the name: every field before the name is never
   # empty, and an empty field would vanish from a tab-separated read.
   # tojson never emits a raw tab or newline, so the entry stays one field.
@@ -1148,7 +1349,7 @@ ci_read() { # ci_read <oid>
         success|neutral|skipped) ;;
         *)
           bad+=", $name ($concl)"
-          failed+=",$entry"
+          CI_FAILED_ENTRIES+=("$entry") CI_FAILED_ENTRY_JOBS+=("$job")
           if [ "$run" = - ]; then CI_UNRERUNNABLE=true
           else CI_FAILED_JOBS+="$run $job"$'\n'
           fi ;;
@@ -1169,7 +1370,7 @@ ci_read() { # ci_read <oid>
     if [ "$first" = true ]; then
       IFS=$'\t' read -r s_state s_total <<< "$line"; first=false; continue
     fi
-    [ -z "$line" ] || status_failed+=",$line"
+    [ -z "$line" ] || status_failed+=("$line")
   done <<< "$status"
   case "$s_total" in ''|*[!0-9]*)
     lookup_failed commit-status "unparseable status count for $oid: $s_total" ;;
@@ -1183,12 +1384,13 @@ ci_read() { # ci_read <oid>
       pending) waiting+=", commit statuses (pending)" ;;
       failure|error)
         bad+=", commit statuses ($s_state)"
-        failed+="$status_failed"
+        for line in ${status_failed[@]+"${status_failed[@]}"}; do
+          CI_FAILED_ENTRIES+=("$line") CI_FAILED_ENTRY_JOBS+=(-)
+        done
         CI_UNRERUNNABLE=true ;;
       *) lookup_failed commit-status "unexpected combined state for $oid: $s_state" ;;
     esac
   fi
-  CI_FAILED_JSON="[${failed#,}]"
   if [ -n "$bad" ]; then CI_STATE=failed; CI_DETAIL="${bad#, }"
   elif [ -n "$waiting" ]; then CI_STATE=pending; CI_DETAIL="${waiting#, }"
   elif [ "$total" -eq 0 ]; then CI_STATE=missing; CI_DETAIL="no check runs or commit statuses"
@@ -1313,9 +1515,9 @@ land_rebase() {
     rm -rf -- "$LAND_TMP_WT"; LAND_TMP_WT=""
     lookup_failed rebase "could not add a temporary worktree at $HEAD_OID"
   fi
-  # This replaces the startup EXIT trap, so it keeps removing GH_ERR and
-  # GH_OUT too.
-  trap 'remove_land_worktree; rm -f -- "$GH_ERR" "$GH_OUT"' EXIT
+  # This replaces the startup EXIT trap, so it keeps removing GH_ERR,
+  # GH_OUT, and GH_LOG too.
+  trap 'remove_land_worktree; rm -f -- "$GH_ERR" "$GH_OUT" "$GH_LOG"' EXIT
   err=$(mktemp) || lookup_failed rebase "mktemp failed"
   # Pin the settings that would let a rebase touch more than this commit:
   # autostash stashes and reapplies work, and updateRefs moves branches.

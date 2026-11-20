@@ -203,6 +203,9 @@ if [ "$sub" = api ]; then
         [ -f "$FIX/runs-read-once" ] && fixture="$FIX/runs-next.json"
         : > "$FIX/runs-read-once"
       fi ;;
+    */actions/jobs/*/logs)
+      # A job's raw log, served without --jq as the forge serves it.
+      job="${api%/logs}"; fixture="$FIX/job-${job##*/}.txt" ;;
     */git/ref/heads/*) fixture="$FIX/base-ref.json" ;;
     */pulls\?*) fixture="$FIX/fork-shared.json" ;;
     repos/*/*)
@@ -297,7 +300,7 @@ scenario() {
     "$FIX"/repo-read-once "$FIX"/rules-page2-fail "$FIX"/live-remote \
     "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr "$FIX"/fail-* \
     "$FIX"/runs-read-once "$FIX"/rerun-rc "$FIX"/rerun-env.log \
-    "$FIX"/rerun-registers-late "$FIX"/swap-armed
+    "$FIX"/rerun-registers-late "$FIX"/swap-armed "$FIX"/job-*.txt
   SCEN="$TMP/scen-$((pass + fail))"
   mkdir -p "$SCEN"
 }
@@ -1266,16 +1269,158 @@ want_rc 2
 want_out 'STOP checks-failed'
 want_no_call 'pr merge'
 
+# job_log_fx <job-id>: the job's log, from stdin, as the forge serves it.
+job_log_fx() { cat > "$FIX/job-$1.txt"; }
+# A -v log as GitHub serves it: a BOM, a timestamp on every line, and ANSI
+# colour. Each failure line streams under its test's === RUN or === CONT
+# before its --- FAIL, and parallel tests interleave. TestOK passes in one
+# package and fails in the next, so its passing log line must not stick.
+verbose_go_log() {
+  printf '\357\273\277'
+  sed 's/^/2026-11-20T10:00:01.1234567Z /' <<'LOG'
+##[group]Run go test -v ./...
+=== RUN   TestFoo
+=== PAUSE TestFoo
+=== RUN   TestBar
+=== PAUSE TestBar
+=== CONT  TestFoo
+=== CONT  TestBar
+    bar_test.go:30: bar went wrong
+=== CONT  TestFoo
+    foo_test.go:12: expected 1, got 2
+--- FAIL: TestBar (0.00s)
+--- FAIL: TestFoo (0.00s)
+=== RUN   TestOK
+    ok_test.go:5: just logging
+--- PASS: TestOK (0.00s)
+FAIL
+FAIL	example.com/pkg	0.012s
+=== RUN   TestOK
+    ok_test.go:9: failed in the other package
+--- FAIL: TestOK (0.00s)
+FAIL
+FAIL	example.com/other	0.003s
+##[error]Process completed with exit code 1.
+LOG
+}
+
 scenario "checks-failed names each failed Actions job by run and job"
 land_setup; land_fixtures
 checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)" \
   "$(actions_check '"success"' 102 502 lint)"
+verbose_go_log | sed $'s/expected 1/\033[31mexpected 1/' | job_log_fx 501
 run_sm "${LAND[@]}" --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP checks-failed'
 want_json '.failed == [{name:"test", run_id:101, job_id:501,
-  url:"https://github.invalid/owner/name/actions/runs/101/job/501"}]'
+  url:"https://github.invalid/owner/name/actions/runs/101/job/501",
+  failing_tests:[{name:"TestBar", line:"bar_test.go:30: bar went wrong"},
+                 {name:"TestFoo", line:"foo_test.go:12: expected 1, got 2"},
+                 {name:"TestOK", line:"ok_test.go:9: failed in the other package"}]}]'
+want_call 'api --allow-escape-sequences repos/owner/name/actions/jobs/501/logs'
+want_calls 1 'actions/jobs/'
 want_no_call 'pr merge'
+
+scenario "checks-failed reads a plain log's failure lines after --- FAIL"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)"
+long=$(printf 'x%.0s' $(seq 1 400))
+job_log_fx 501 <<LOG
+2026-11-20T10:00:01.0000000Z --- FAIL: TestA (0.00s)
+2026-11-20T10:00:01.0000000Z     --- FAIL: TestA/sub_case (0.00s)
+2026-11-20T10:00:01.0000000Z         a_test.go:10: sub failed
+2026-11-20T10:00:01.0000000Z --- FAIL: TestLong (0.01s)
+2026-11-20T10:00:01.0000000Z     long_test.go:3: $long
+2026-11-20T10:00:01.0000000Z     long_test.go:4: second line
+2026-11-20T10:00:01.0000000Z FAIL
+2026-11-20T10:00:01.0000000Z FAIL	example.com/pkg	0.01s
+LOG
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+want_json '.failed[0].failing_tests | map(.name) == ["TestA", "TestA/sub_case", "TestLong"]'
+want_json '.failed[0].failing_tests[0] | has("line") | not'
+want_json '.failed[0].failing_tests[1].line == "a_test.go:10: sub failed"'
+want_json '.failed[0].failing_tests[2].line | (length == 300 and startswith("long_test.go:3: xxx"))'
+want_json '.failed[0] | (has("log_error") or has("failing_tests_omitted")) | not'
+
+scenario "checks-failed reads go test -json events and skips package fails"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)"
+job_log_fx 501 <<'LOG'
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"run","Package":"example.com/a","Test":"TestJ"}
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"output","Package":"example.com/a","Test":"TestJ","Output":"=== RUN   TestJ\n"}
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"output","Package":"example.com/b","Test":"TestJ","Output":"    b_test.go:1: other package\n"}
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"output","Package":"example.com/a","Test":"TestJ","Output":"    j_test.go:7: got <nil>, want \u001b[31mred\u001b[0m\n"}
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"output","Package":"example.com/a","Test":"TestJ","Output":"--- FAIL: TestJ (0.00s)\n"}
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"fail","Package":"example.com/a","Test":"TestJ","Elapsed":0}
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"fail","Package":"example.com/a","Elapsed":0.01}
+2026-11-20T10:00:01.0000000Z {"Time":"t","Action":"pass","Package":"example.com/b","Test":"TestJ","Elapsed":0}
+2026-11-20T10:00:01.0000000Z ##[error]Process completed with exit code 1.
+LOG
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+want_json '.failed[0].failing_tests == [{name:"TestJ", line:"j_test.go:7: got <nil>, want red"}]'
+
+scenario "checks-failed reports log_error when the log names no Go test failure"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)"
+printf '2026-11-20T10:00:01.0000000Z npm ERR! lint failed\n' | job_log_fx 501
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+want_json '.failed[0].log_error == "no Go test failure found in the log"'
+want_json '.failed[0] | has("failing_tests") | not'
+
+scenario "a failed log fetch keeps checks-failed and reports log_error"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)"
+echo 'actions/jobs/501/logs' > "$FIX/fail-log"
+echo 'gh: Not Found (HTTP 404)' > "$FIX/gh-stderr"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_out 'STOP checks-failed'
+want_no_out 'LOOKUP_FAILED'
+want_json '.failed[0].log_error == "could not fetch the job log: gh: Not Found (HTTP 404)"'
+want_json '.failed[0] | has("failing_tests") | not'
+want_calls 1 'actions/jobs/'
+
+scenario "checks-failed lists at most 20 failing tests and counts the rest"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)"
+for i in $(seq 1 21); do
+  printf -- '--- FAIL: Test%02d (0.00s)\n    t_test.go:%d: failed\n' "$i" "$i"
+done | job_log_fx 501
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+want_json '.failed[0].failing_tests | (length == 20 and .[0].name == "Test01" and .[19].name == "Test20")'
+want_json '.failed[0].failing_tests_omitted == 1'
+
+scenario "a failing test's odd name and line stay escaped in the result"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)"
+job_log_fx 501 <<'LOG'
+{"Action":"output","Package":"p","Test":"TestQ/say_\"hi\"_\\_\tnow","Output":"    q_test.go:2: got \"a\\b\"\tthen \u0001 \u00e9\n"}
+{"Action":"fail","Package":"p","Test":"TestQ/say_\"hi\"_\\_\tnow","Elapsed":0}
+LOG
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 2
+got=$(printf '%s' "${OUT##*STOP checks-failed }" | jq -j '.failed[0].failing_tests[0].name' 2>/dev/null)
+[ "$got" = $'TestQ/say_"hi"_\\_\tnow' ] && ok || bad "the test name did not survive (got: $got)"
+got=$(printf '%s' "${OUT##*STOP checks-failed }" | jq -j '.failed[0].failing_tests[0].line' 2>/dev/null)
+[ "$got" = $'q_test.go:2: got "a\\b"\tthen \001 \\u00e9' ] && ok || bad "the failure line did not survive (got: $got)"
+
+scenario "the fetched job log is removed on exit"
+land_setup; land_fixtures
+checks_list_fx "$FIX/checks.json" "$(actions_check '"failure"' 101 501)"
+verbose_go_log | job_log_fx 501
+mkdir -p "$SCEN/tmpdir"
+OUT=$(cd "$WORK" && TMPDIR="$SCEN/tmpdir" PATH="$SHIMD:$PATH" bash "$SCRIPT" "${LAND[@]}" --head "$FEAT_OID" 2>"$FIX/stderr")
+RC=$?
+want_rc 2
+want_json '.failed[0].failing_tests | length == 3'
+[ -z "$(ls -A "$SCEN/tmpdir")" ] && ok || bad "temp files left behind: $(ls -A "$SCEN/tmpdir")"
 
 scenario "a failed check's name stays escaped in the failed array"
 land_setup; land_fixtures
@@ -1299,6 +1444,7 @@ want_out 'dry run'
 want_json '.failed == [
   {name:"external", run_id:null, job_id:null, url:"https://ci.invalid/build/9"},
   {name:"deploy/preview", run_id:null, job_id:null, url:"https://ci.invalid/9"}]'
+want_no_call 'actions/jobs'
 
 scenario "a green read waits for a second read before it passes"
 land_setup; land_fixtures
