@@ -51,6 +51,9 @@ repository.
 - `stacked-unit-branch-base`: Keep the brief's rule that a unit stacked on an
   open PR branches from that PR's branch and targets it.
 - `run-ends-without-report`: Free the slot and never restart the run.
+- `route-one-ends-after-launch`: On route 1, wait on threads only while an
+  issue is queued, then report the rest as running in their own threads. On
+  route 2, wait for every subagent to end.
 - `resumed-session`: Read the state file first and relaunch nothing.
 - `final-table-every-issue`: Report every listed issue in one table.
 
