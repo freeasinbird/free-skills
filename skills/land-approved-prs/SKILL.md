@@ -15,15 +15,12 @@ description: >-
 
 # Land Approved PRs
 
-The owner reads a PR and approves it. That is the owner's last decision about
-it. Later, the owner starts an agent in the repository's primary checkout and
-asks it to land the approved PRs. This skill tells that agent how.
-
-Scripts do the mechanical parts: take the landing lock, list the PRs that pass
-the readiness filters, and gather what has landed on the default branch since
-each PR was opened. The agent does the judging. It reads each ready PR against
-what landed, decides whether the PR still holds, and lands it. Anything that
-needs new work or a decision goes back to the owner.
+The owner reads a PR and approves it; that is their last decision about it.
+Later, the owner asks an agent in the repository's primary checkout to land
+the approved PRs. Scripts take the landing lock, list the ready PRs, and gather
+what landed since each PR was opened. You read each ready PR against what
+landed, decide whether it still holds, and land it. Anything that needs new
+work or a decision goes back to the owner.
 
 Never start a batch on your own. The owner starts each one.
 
@@ -36,32 +33,22 @@ missing, stop before listing and hand the batch to the owner. There is no prose
 fallback: the lock, the filters, and the landing engine exist only as
 scripts.
 
-Run from the repository's primary checkout, on its default branch, with a
-clean tree. If the checkout is on another branch or has changes, stop and tell
-the owner; don't stash, switch, or clean it. Every script call names the repository as `--repo owner/name`,
-taken from the project's forge record. Set `GH_HOST` to the recorded host when
-the CLI's default host differs.
+Run from the repository's primary checkout, on its default branch, with a clean
+tree. If the checkout is on another branch or has changes, stop and tell the
+owner; don't stash, switch, or clean it. Every script call names the repository
+as `--repo owner/name`, taken from the project's forge record. Set `GH_HOST` to
+the recorded host when the CLI's default host differs.
 
-The scripts live next to this file. Here, `<skill-dir>` is the directory that
-contains it:
-
-- `list-ready.sh` takes the lock and lists the ready PRs.
-- `landed-since.sh` prints what landed since a PR diverged and runs the
-  project's base-advance checks.
-- `land.sh` is the landing engine. It checks a PR, updates it onto the tip,
-  waits for CI on the exact commit, and merges. Its `rerun` phase retries a
-  flaky CI failure once.
+The scripts `list-ready.sh`, `landed-since.sh`, and the landing engine
+`land.sh` live in `<skill-dir>`, the directory that contains this file.
 
 ## Three Words
 
-Each of these words means one thing here:
-
-- **Land** is the procedure that gets a PR onto the default branch: update
-  it, verify it on the exact commit, merge, and clean up. Merge is only the
-  last git step. The engine's `land` phase does the first three, and
+- **Land** means update the PR onto the tip, verify it on the exact commit,
+  merge, and clean up. The engine's `land` phase does the first three, and
   merge-cleanup does the cleanup.
-- **Approved** is the owner's judgment that the PR may land as it stands. A
-  project expresses it the way its landing record says.
+- **Approved** is the owner's judgment that the PR may land as it stands,
+  expressed the way the landing record says.
 - **Ready** is what `list-ready.sh` computes: approved and passing every other
   filter. A PR can be approved and not ready.
 
@@ -132,9 +119,8 @@ message as approval.
    evidence. Read the list; never recompute it.
 3. **Land the first ready PR** by "One PR" below.
 4. **List again** after each PR lands or is handed back, never working from
-   an older list. Each landing changes the default branch, so an older list
-   plans against a branch that no longer exists. Listing also refreshes the
-   lock, picks up new approvals, and drops revoked ones.
+   an older list. Listing also refreshes the lock, picks up new approvals,
+   and drops revoked ones.
 5. **Stop on an empty fresh list.** That call also releases the lock. Then
    run "The End-of-Batch Sweep" and write the batch report. Any other end
    follows "Ending Early."
@@ -149,10 +135,7 @@ message as approval.
 Pass `--order` when the owner typed an order ("land #12, then #9"), and pass
 the same `--order` on every list in the batch; a list without it falls back to
 approval order. Pass `--base-remote <name>` when several remotes name the
-repository, and pass the same value to `landed-since.sh`. A remote
-whose fetch or push URL names another repository stops
-`remote-repo-mismatch`, because the lock and the landing record must come
-from the repository itself.
+repository, and pass the same value to `landed-since.sh`.
 
 Run the PRs in sequence in the main session, which owns the engine's waits.
 Where the platform supports delegation, hand only the bounded read and
@@ -199,10 +182,9 @@ date is the heartbeat. `list-ready.sh` acquires it on the first non-empty
 list, refreshes it on every later list and `--pushed` record, and releases it
 on an empty fresh list or `--release <id>`.
 
-- **Stale** means a heartbeat older than the record's stale age. That age
-  must exceed the longest a live lander goes without listing: the engine's CI
-  and merge caps times the number of allowed runs, plus two CI caps for a
-  `rerun` phase, a reviewer wait, and a margin.
+- **Stale** means a heartbeat older than the record's stale age, which must
+  exceed the longest a live lander goes without listing: the engine's caps
+  times its allowed runs, plus a `rerun` phase, a reviewer wait, and a margin.
 - **Never take over.** A lock held by another run stops the list as
   `lock-held`, or `lock-stale` when it is past the stale age. Report its run
   id, machine, and age, and stop.
@@ -220,9 +202,7 @@ the approval label yourself. Never run its `merge` phase on its own.
 ## One PR
 
 1. **Read it.** Title, body, diff, and review threads.
-2. **Read what landed.** Run `landed-since.sh`. It prints the default
-   branch's first-parent log with `--stat` from the PR's original fork point
-   to the tip, then runs the record's base-advance checks. Open any commit
+2. **Read what landed.** Run `landed-since.sh`. Open any commit
    that could bear on the PR, not only those touching the same paths, and
    decide whether the PR still holds.
 3. **If it holds, land it** with `land.sh`, acting on each stop as "Acting on
@@ -268,11 +248,12 @@ exact head, and the base hasn't moved; otherwise it stops. `rerun` runs only
 after `land` stops `checks-failed`, and never merges.
 
 Run `land` and `rerun` in the background with a completion wake where the
-platform offers one. Otherwise keep each command under the platform's limit
-on a single command: for `land`, `--ci-cap-minutes` plus `--cap-minutes`
-(30 and 15 by default); for `rerun`, twice `--ci-cap-minutes`. Either way, run the engine again on
-`checks-pending` or `checks-missing` at most three times before handing back.
-A `rerun` phase and the `land` run after it each count as one of those three.
+platform offers one. Otherwise keep each command under the platform's limit on a
+single command: for `land`, `--ci-cap-minutes` plus `--cap-minutes` (30 and 15
+by default); for `rerun`, twice `--ci-cap-minutes`. Either way, run the engine
+again on `checks-pending` or `checks-missing` at most three times before handing
+back. A `rerun` phase and the `land` run after it each count as one of those
+three.
 
 ### Acting on Each Stop
 
@@ -380,8 +361,8 @@ Rework a PR only when the landed change dictates the fix: a rename, a moved
 file, a changed signature, or a test that now needs the new fixture. Make the
 change in a worktree of the head branch outside the primary checkout, push it
 with a lease on the pinned head, record the push with `--pushed`, get it
-reviewed, wait for CI, then land. A failed lease means
-someone else pushed; hand back.
+reviewed, wait for CI, then land. A failed lease means someone else pushed;
+hand back.
 
 Stop instead when the fix needs something the PR's issue or body didn't call
 for, or a decision the landed change doesn't settle. Size is not the test. A
@@ -391,8 +372,7 @@ default branch; it may not extend what the PR does.
 
 ### Reviewing Rework
 
-A rework or a resolved conflict is a push of new work, so it gets the review
-any agent's push gets. Three cases:
+A rework or a resolved conflict is new work, so it gets a review:
 
 - **The project records an automated reviewer.** Wait for its completion
   signal on the reworked head, resolve any finding under the rework rule,
@@ -404,9 +384,8 @@ any agent's push gets. Three cases:
 - **No recorded reviewer, no delegation.** The owner is the reviewer: hand
   back with the range-diff in the comment.
 
-A clean rebase is outside this. It pushes no new work, CI reruns on the exact
-head, and the reviewed content is unchanged. Don't wait for a reviewer round
-on a merged head; read whatever posted when the batch ends.
+A clean rebase pushes no new work, so it needs none. Don't wait for a reviewer
+round on a merged head; read whatever posted when the batch ends.
 
 ### Hand-Back
 
@@ -437,10 +416,10 @@ Summarize. Run it from the same checkout and pass:
 
 Merge-cleanup removes the PR's head worktree itself when it's clean. Never
 remove a worktree any other way during a batch. If merge-cleanup stops
-`head-worktree-present`, it kept that worktree; record the path. Then do the parts it skipped that
-don't touch the worktree: fast-forward the checkout's default branch from the
-remote, and confirm the issues the PR closes actually closed. Leave the local
-branch; "The End-of-Batch Sweep" may free it.
+`head-worktree-present`, it kept that worktree; record the path. Then do the
+parts it skipped that don't touch the worktree: fast-forward the checkout's
+default branch from the remote, and confirm the issues the PR closes actually
+closed. Leave the local branch; "The End-of-Batch Sweep" may free it.
 
 Never print a bare `git worktree remove` line for the owner to paste: even
 without `--force`, it deletes the worktree's ignored files and exits 0. For a
@@ -466,19 +445,18 @@ git fetch --prune <remote>
 <merge-cleanup-dir>/worktree-sweep.sh --remove-landed --base <remote>/<default-branch>
 ```
 
-`--remove-landed` removes only clean worktrees whose branch has a landing
-merge. It keeps dirty worktrees, unmerged branches, and detached `land-wt`
-worktrees, so a lander that starts after the release is safe. Never add `--remove` or
+`--remove-landed` removes only clean worktrees whose branch has a landing merge.
+It keeps dirty worktrees, unmerged branches, and detached `land-wt` worktrees,
+so a lander that starts after the release is safe. Never add `--remove` or
 `--remove-dirty`: what this sweep keeps is the owner's to remove. A `STOP` or
 `LOOKUP_FAILED` result goes in the batch report as it stands; never rerun the
 sweep with other flags.
 
-For each PR whose merge-cleanup stopped
-`head-worktree-present` and whose worktree the sweep removed, rerun
-merge-cleanup's procedure with the same arguments as "After the Merge." That
-deletes the local branch and retargets any stacked children. A removed
-worktree whose PR this batch didn't land keeps its local branch; name it in
-the report so the owner can run merge-cleanup for it.
+For each PR whose merge-cleanup stopped `head-worktree-present` and whose
+worktree the sweep removed, rerun merge-cleanup's procedure with the same
+arguments as "After the Merge." That deletes the local branch and retargets any
+stacked children. A removed worktree whose PR this batch didn't land keeps its
+local branch; name it in the report so the owner can run merge-cleanup for it.
 
 ## Ordering
 
@@ -519,17 +497,15 @@ back naming the guard; the owner retargets the children or merges the parent.
 
 Once the owner has released a stale lock, the next run starts as usual. Report,
 and leave in place, any temporary worktree the dead run's `land` left
-registered, at a path ending in `land-wt.XXXXXX/wt`. It blocks nothing. The
-end-of-batch sweep leaves it, so the owner removes it with merge-cleanup's
+registered, at a path ending in `land-wt.XXXXXX/wt`. The end-of-batch sweep
+leaves it, so the owner removes it with merge-cleanup's
 manual worktree sweep. The PR the dead run was on is in one of three states:
 
 - **Not yet pushed:** it is still approved and starts over.
 - **Rebased and pushed, not merged:** its head is neither the approved head
   nor in the new run's push log, so filter 4 excludes it; hand it back. The
-  owner re-approves it by removing and re-adding the approval label, which
-  sets a new approval time: one gesture per crashed PR.
-- **Merged, not cleaned up:** run merge-cleanup on it, the same path as the
-  owner saying "PR merged, clean up."
+  owner re-approves it by removing and re-adding the approval label.
+- **Merged, not cleaned up:** run merge-cleanup on it.
 
 ## Revoking Approval
 
@@ -557,8 +533,7 @@ the lock. Its record and remote stops follow "Acting on Each Stop."
 ## Comments and the Batch Report
 
 Comment on a landed PR when anything changed beyond a clean rebase. Say what
-changed and why, and include the range-diff. For example: "Rebased onto #2052.
-Renamed the call in `foo.go` to match."
+changed and why, and include the range-diff.
 
 A hand-back comment says which step stopped, the guard or finding, and what
 the owner must decide. For a conflict, name the paths and the choice needed.
