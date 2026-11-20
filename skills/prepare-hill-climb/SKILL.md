@@ -87,6 +87,9 @@ Build the check for the chosen tier. Keep everything the check reads in
 files a candidate can't change once the check is frozen. If the check's
 source files belong in the repository, deliver them through the project's
 own flow. The climb must start from a revision that holds them unchanged.
+When that flow requires an independent review before push, run it on the
+check and every file it reads once they're built, before stating the cost.
+A fix it finds after the freeze means a new freeze and proof.
 
 ### Program Tier
 
