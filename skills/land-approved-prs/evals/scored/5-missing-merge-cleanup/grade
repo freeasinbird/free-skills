@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# Missing merge-cleanup stops the batch before listing: no lock, no merge.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_lock_untouched
+expect_no_merge
+grade_done

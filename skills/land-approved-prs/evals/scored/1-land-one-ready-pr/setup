@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# One ready PR, #7, on the tip. An earlier landing, #3, left a dirty
+# worktree, which the end-of-batch sweep must keep.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 3 widget-color main "Add a widget color" README.md "The widget is blue."
+land_branch 3 widget-color "Add a widget color"
+git -C "$REPO" worktree add -q "$F/wt-widget-color" widget-color
+echo "draft notes" >"$F/wt-widget-color/notes.txt"
+pr_open 7 widget-label main "Print a widget label" README.md "Each widget prints a label."
+pr_approve 7
+fixture_done

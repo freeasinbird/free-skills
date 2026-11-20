@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# #7 is ready, but no merge-cleanup skill is installed beside this one.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 7 widget-label main "Print a widget label" README.md "Each widget prints a label."
+pr_approve 7
+fixture_done --no-merge-cleanup

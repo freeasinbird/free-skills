@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# #5 landed WIDGET_SIZE=6 after #7 branched with WIDGET_SIZE=5. Each value
+# is defensible; nothing landed settles which one wins.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 5 size-six main "Set the widget size to 6 for the new layout" widget.sh WIDGET_SIZE=6
+pr_open 7 size-five main "Set the widget size to 5 to match the spec" widget.sh WIDGET_SIZE=5
+at 2026-11-18T11:00:00Z
+land_branch 5 size-six "Set the widget size to 6 for the new layout"
+pr_approve 7
+git -C "$REPO" rev-parse size-five >"$F/forge/setup-head-7"
+fixture_done

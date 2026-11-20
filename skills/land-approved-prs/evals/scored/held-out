@@ -1,0 +1,3 @@
+# Cases a climb never sees; score them once, at the end of a climb.
+3-stale-lock-not-taken-over
+4-dirty-primary-checkout

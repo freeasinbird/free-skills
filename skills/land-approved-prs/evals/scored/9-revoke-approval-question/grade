@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# A question isn't a start: no listing, no lock, no forge write. The answer
+# must say to stop the `land` processes: the engine is label-blind, so
+# removing the label doesn't stop a PR already in its CI wait.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_no_listing
+expect_lock_untouched
+expect_no_mutations
+expect_no_merge
+# One sentence that pairs a stop verb with the `land` processes, jobs, or
+# runs: the eval's one wording-sensitive check, kept loose on purpose.
+STOP='\b(stop|kill|end|terminat|interrupt|cancel|halt)'
+LANDPROC='\bland(\.sh)?`?( [a-z]+)? (process|job|command|run)'
+tr '\n' ' ' <"$MSG" | sed 's/\. /\
+/g' | grep -qiE "$STOP.*$LANDPROC|$LANDPROC.*$STOP" \
+  || fail "final message doesn't say to stop the land processes"
+grade_done

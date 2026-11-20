@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# #7's push isn't this run's, so filter 4 excludes it and it is handed
+# back. The dead run's land-wt worktree stays and is reported.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_handed_back 7
+expect_no_merge
+[ -d "$F/tmp/land-wt.k3J9qZ/wt" ] || fail "the dead run's land-wt worktree was removed"
+expect_worktree '/land-wt\.k3J9qZ/wt' "the dead run's land-wt worktree"
+expect_msg 'land-wt\.k3J9qZ' "the land-wt worktree's path"
+grade_done

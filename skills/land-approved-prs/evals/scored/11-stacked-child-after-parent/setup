@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# Parent #7 targets main; child #8 is based on #7's branch. Both approved.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 7 widget-api main "Add a widget API" README.md "Call widget.sh to get the size."
+pr_open 8 widget-api-docs widget-api "Document the widget API" README.md "The API prints one number."
+pr_approve 7
+pr_approve 8
+fixture_done

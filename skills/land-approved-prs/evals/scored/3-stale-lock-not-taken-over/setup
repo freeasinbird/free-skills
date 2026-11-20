@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# Another run's lock, past the 240-minute stale age, holds the origin. #7
+# is ready.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 7 widget-label main "Print a widget label" README.md "Each widget prints a label."
+pr_approve 7
+tree=$(git -C "$REPO" mktree </dev/null)
+lock=$(printf 'land lock\n\nrun: desk-202611181200-a1b2\nhost: desk\npr: 7\n' \
+  | GIT_COMMITTER_DATE=2026-11-18T12:05:00Z GIT_AUTHOR_DATE=2026-11-18T12:05:00Z \
+    GIT_AUTHOR_NAME=land-approved-prs GIT_AUTHOR_EMAIL=land-approved-prs@localhost \
+    GIT_COMMITTER_NAME=land-approved-prs GIT_COMMITTER_EMAIL=land-approved-prs@localhost \
+    git -C "$REPO" commit-tree "$tree")
+git -C "$REPO" push -q origin "$lock:refs/land/lock"
+fixture_done
