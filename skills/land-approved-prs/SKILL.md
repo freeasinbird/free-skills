@@ -304,109 +304,93 @@ A `rerun` phase and the `land` run after it each count as one of those three.
 
 Rerun the engine only where a bullet below says to. Never rerun it to get past
 any other stop, and never bypass a guard with force, reset, or a manual merge.
-The one CI rerun is the `checks-failed` exception below: it retries a
-classified flake, and `land` still merges only after every check passes on
-the same commit.
 
-- **`rebased`:** The default branch moved after your read, and the engine
-  pushed a rebased head. Record the `head_oid` from the `STOP rebased` result
-  with `list-ready.sh --pushed`; it is now the pinned head. Rerun
+- **`rebased`:** The engine pushed a rebased head. Record the result's
+  `head_oid` with `list-ready.sh --pushed`; it is now the pinned head. Rerun
   `landed-since.sh` with `--since` set to the `tip` from your last
-  `OK landed-since` result, and repeat step 2 on the new commits, because the
-  range-diff shows only this PR replayed. Then read the range-diff. A clean
-  rebase doesn't wait for the reviewer: read any finding already posted on
-  the new head once, then run `check` and `land` again.
+  `OK landed-since` result, repeat step 2 on the new commits, then read the
+  range-diff. A clean rebase doesn't wait for the reviewer: read any finding
+  already posted on the new head once, then run `check` and `land` again.
 - **`rebase-conflict` or `rebase-failed`:** The engine left the branch
-  unchanged. Rebase it by hand under the rework rule, in a worktree of the
-  head branch outside the primary checkout, taking only hunks the landed
-  change dictates. Use the branch's existing worktree, or add one and name it
-  in the batch report. If any hunk has two defensible resolutions, run
-  `git rebase --abort` there, hand back, and name the paths and the choice
-  needed. Otherwise push with a lease on the pinned head, record the push
-  with `--pushed`, and review it under "Reviewing Rework."
+  unchanged. Rebase it by hand under the rework rule, taking only hunks the
+  landed change dictates, in the head branch's existing worktree or a new one
+  outside the primary checkout that you name in the batch report. If any hunk
+  has two defensible resolutions, run `git rebase --abort` there, hand back,
+  and name the paths and the choice needed. Otherwise push with a lease on the
+  pinned head, record the push with `--pushed`, and review it under
+  "Reviewing Rework."
 - **`not-on-tip`:** A dry run found the head behind the tip. Run `land`
   without `--dry-run`.
-- **`ignored-clobber`:** Moving the head worktree would overwrite an ignored
-  file there. Hand back with the path; the worktree is its owner's.
-- **`base-moved`:** Another merge landed, or the PR was retargeted. If the
-  PR's base changed, list again and let filter 2 decide. Otherwise run
-  `check` and `land` again.
+- **`base-moved`:** If the PR's base changed, list again and let filter 2
+  decide. Otherwise run `check` and `land` again.
 - **`checks-failed`:** Read the failed jobs' logs and name the failing tests
-  or steps. The result's `failed` array names each failed check; for an entry
-  with a `run_id`, run
+  or steps. For each entry in the result's `failed` array with a `run_id`, run
   `gh run view <run_id> --job <job_id> --log-failed --repo <owner/name>`.
   Then classify the failure:
 
-  - **Infrastructure:** The runner was lost or cancelled, a setup step
-    failed, the network or a registry failed, or the forge returned a 5xx.
-    Rerun.
+  - **Infrastructure:** A lost or cancelled runner, a failed setup step, a
+    network or registry failure, or a forge 5xx. Rerun.
   - **Known flake:** Every failing test is named as flaky in an open issue in
     the project. Rerun, and comment on that issue with the run link.
-  - **Suspected flake:** The failure is outside the PR's diff paths and in no
-    package the diff touches, and the same check passed on the PR's previous
-    head. That head is the `old_head_oid` from this batch's `STOP rebased`,
-    or else the head before the pinned one in the PR's push history. Rerun.
-    If the rerun passes, file a flake issue naming the test and both runs, and
-    link it in the batch report.
+  - **Suspected flake:** The failure is outside the PR's diff paths and the
+    packages it touches, and the same check passed on the PR's previous head:
+    the `old_head_oid` from this batch's `STOP rebased`, or else the head
+    before the pinned one in the PR's push history. Rerun. If the rerun
+    passes, file a flake issue naming the test and both runs, and link it in
+    the batch report.
   - **Otherwise:** The failure is in the PR's paths, or no previous green run
     exists. Treat it under the rework rule, or hand back.
 
-  Rerun with `land.sh rerun` on the pinned head, then run `land` again on the
-  same head. The budget is one rerun per pinned head, and the engine enforces
-  it. A second failure on that head hands back, with both runs and the
-  classification in the comment, because a failure that repeats is evidence
-  against a flake. A rebase onto a new tip gets a fresh budget.
+  To rerun, run `land.sh rerun` on the pinned head, then `land` again on the
+  same head. The engine allows one rerun per pinned head; a rebase onto a new
+  tip gets a fresh one. A second failure on that head hands back, with both
+  runs and the classification in the comment, because a repeated failure is
+  evidence against a flake.
 
-- **`rerun-spent`, `rerun-unsupported`, `rerun-refused`, or
-  `rerun-unconfirmed`:** `rerun` retried nothing `land` can use. Hand back
-  naming the guard, with the classification and any run links. `rerun-spent`
-  means a failed run on the head was already rerun, by a lander or by hand.
-  `rerun-unsupported` means a failure can't be traced to a failed GitHub
-  Actions run: a check from another app, a commit status, or a check an
-  Actions workflow posted without a job link.
-- **`nothing-to-rerun`:** No GitHub Actions job on the head is failing any
-  more, so the failure cleared, for example after someone reran it. Run `land` again on the same
-  head; if it stops `checks-failed`, hand back.
+- **`nothing-to-rerun`:** The failure cleared, for example after someone
+  reran it. Run `land` again on the same head; if it stops `checks-failed`,
+  hand back.
 - **`checks-pending` or `checks-missing`:** Run the same phase again within
   the bound above, then hand back.
-- **`stacked-prs`:** The PR is the parent of a stack on a cross-repository
-  head. Hand back naming the guard; see "Stacks."
-- **`lease-failed`:** Someone else pushed to the branch after approval. Hand
-  back and say so.
-- **`pr-closed` or `pr-not-open`:** The PR closed or merged since the list.
-  List again.
 - **`no-local-branch` or `oid-mismatch`:** When the forge head is no longer
   the pinned head, list again. When it still is, and no worktree has the
   branch checked out with changes, update the local branch to the pinned head
   and run `check` again. Otherwise hand back.
+- **`pr-closed` or `pr-not-open`:** The PR closed or merged since the list.
+  List again.
 - **`dirty-tree`:** When the primary checkout has changes, end the batch as
   "Ending Early" says, without stashing or cleaning them. When the head
   branch's worktree has them, hand back with its path.
 - **`wrong-checkout`, `not-a-repo`, `remote-unresolved`, `remote-ambiguous`,
   `remote-repo-mismatch`, `pushurl-mismatch`, or `op-in-progress`:** The
   checkout or the invocation is wrong, not the PR, so don't hand the PR back.
-  Fix the invocation if you can. Otherwise end the batch as "Ending Early"
+  Fix the invocation if you can; otherwise end the batch as "Ending Early"
   says.
 - **`no-landing-record`, `bad-record`, `unsupported-mechanism`,
-  `queue-method`, or `queue-message`:**
-  The landing record or a repository setting is wrong, not the PR, and it
-  would stop every PR alike, so don't hand the PR back. End the batch as
-  "Ending Early" says, naming the guard and its detail.
-- **Any other `STOP`:** Hand back naming the guard.
+  `queue-method`, or `queue-message`:** The landing record or a repository
+  setting is wrong and would stop every PR alike, so don't hand the PR back.
+  End the batch as "Ending Early" says, naming the guard and its detail.
+- **`lease-failed`:** Someone else pushed to the branch after approval. Hand
+  back and say so.
+- **`ignored-clobber`:** Moving the head worktree would overwrite an ignored
+  file there. Hand back with the path; the worktree is its owner's.
+- **`stacked-prs`:** The PR is the parent of a stack on a cross-repository
+  head. Hand back naming the guard; see "Stacks."
+- **`rerun-spent`, `rerun-unsupported`, `rerun-refused`,
+  `rerun-unconfirmed`, or any other `STOP`:** Hand back naming the guard, with
+  any classification and run links. `rerun-spent` means a failed run on the
+  head was already rerun; `rerun-unsupported`, that a failure isn't a GitHub
+  Actions job.
 
 A read failure isn't a guard stop. `LOOKUP_FAILED` means a script couldn't
-read the forge or the remote. The scripts make up to three attempts at a forge
-read that fails transiently, and `land` keeps polling through a failed CI
-read, so a failure that reaches you persisted or isn't transient.
-
-Read the `stderr` key first, when present. A timeout, an HTTP 5xx, or a rate
-limit is transient: check that the forge and remote are reachable, then rerun
-the same script once. A 404, a permission error, or an authentication error
-won't clear on a rerun, so end the batch as "Ending Early" says and quote the
-error. With no `stderr` key, the failed read was git's, which the scripts
-don't retry, or gh said nothing; check reachability and rerun once. Never act
-on your own reading in place of the script's result. If the rerun fails, end
-the batch as "Ending Early" says.
+read the forge or the remote, after the scripts' own retries of a transient
+forge read. Read the `stderr` key first, when present. A timeout, an HTTP 5xx,
+or a rate limit is transient: check that the forge and remote are reachable,
+then rerun the same script once. A 404, a permission error, or an
+authentication error won't clear, so end the batch as "Ending Early" says and
+quote the error. With no `stderr` key, check reachability and rerun once.
+Never act on your own reading in place of the script's result. If the rerun
+fails, end the batch as "Ending Early" says.
 
 ### Ending Early
 
