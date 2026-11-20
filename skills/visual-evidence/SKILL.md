@@ -25,29 +25,17 @@ early because the _before_ state usually disappears when the fix lands. Upload
 with `gh --attach`, or with an installed gh-imgup where gh can't; without
 either, stop at local files and say so.
 
-Follow this procedure:
-
-1. Decide whether the change needs a pair or one _after_ shot, and choose a
-   capture method that can reach the required state.
-2. Capture the _before_ state before changing it.
-3. Capture the _after_ state under identical conditions.
-4. Frame both shots tightly and consistently.
-5. Make the capture deterministic.
-6. Open and check every shot.
-7. Review every image for secrets and private data.
-8. Upload and place the evidence.
-9. Verify the rendered result.
+Capture steps 1 to 5 under Capture the Before/After, check every shot in
+step 6, then review, upload, place, and verify under Compose and Attach.
 
 **Screenshots that already exist:** Start at step 6 when a project capture
 script, screenshot tests, the user, or QA already produced the images, or when
-you were given a recording or a single image. Steps 6 to 9 apply.
+you were given a recording or a single image.
 
 ## When to Use It
 
-Use it for any change judged by appearance, for a PR that changes rendered
-UI, and whenever you hold screenshots or recordings bound for a PR or issue.
-Suggest it proactively for visual work: capturing the _before_ is cheap now
-and may be impossible later.
+Use it as the frontmatter describes, and suggest it proactively for visual
+work: capturing the _before_ is cheap now and may be impossible later.
 
 ## When Not to Use It
 
