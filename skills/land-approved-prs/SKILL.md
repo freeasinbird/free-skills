@@ -292,8 +292,10 @@ judgment; the script decides nothing.
 
 ### Running the Engine
 
-Invoke the engine by path from the primary checkout. Run `check` first; it
-returns the verified head OID that `land` pins with `--head`:
+Invoke the engine by path from the primary checkout. Its header comment
+documents each phase's checks and its options, such as `--head-remote` and
+`--interval`. Run `check` first; it returns
+the verified head OID that `land` pins with `--head`:
 
 ```sh
 <skill-dir>/land.sh check --pr <n> --repo <owner/name>
@@ -306,56 +308,14 @@ list you took it from, or the OID you last recorded with `--pushed`. Land
 only a `check` that reports the pinned head. When it reports another, someone
 pushed after the list: list again and let filter 4 decide.
 
-`check` verifies that the PR is open, the tree is clean, and no git operation
-is paused. It also checks that no competing worktree layout exists, the head
-and base names don't collide, no other open PR shares the head branch, and
-any merge queue uses merge commits. Its `OK` result lists the open PRs
-stacked on the head branch as `stacked_prs`; see "Stacks."
-
-A private repository whose plan lacks rulesets, such as GitHub Free, counts
-as having no queue. GitHub refuses its branch-rules read with a plan-limit
-403, and that plan can't run a merge queue there. `check`, `land`, and
-`merge` all read the rules, and any other failed read still stops with
-`LOOKUP_FAILED queue-rules`.
-
-One `land` run is one round of three checks, and it merges only when all
-three pass:
-
-1. **On the tip.** It fetches the base. If the head doesn't contain the tip,
-   it rebases the head in a temporary detached worktree, pushes with a lease
-   on the reviewed head, and stops `rebased` before CI and the merge.
-2. **CI on the exact head.** It waits for every check run and commit status
-   on the head commit to finish green on two consecutive reads. No CI, or a
-   single green read, by the cap is a refusal.
-3. **Base unmoved.** Just before merging, it rereads the base tip from the
-   forge and refuses if the tip moved.
-
-When all three pass, `land` runs its `merge` phase: a real merge commit with a
-title-only message, followed by a wait until the forge reports the PR
-merged. Its `OK land` result names the merged head as `head_oid`.
-
-The engine's options:
-
-- `--base-remote <name>` and `--head-remote <name>` name the base or head
-  remote when several point at the repository.
-- `--interval <seconds>` spaces the CI, merged-state, and `rerun` polls
-  (default 10).
-- `--cap-minutes <n>` caps the wait for the merged state (default 15).
-- `--ci-cap-minutes <n>` caps the CI wait in `land` and each of `rerun`'s
-  two waits (default 30).
-- `--dry-run` reports `land`'s decision without rebasing, pushing, or
-  merging.
-
-`rerun` runs only after `land` stops `checks-failed`; see that stop below. It
-waits for every workflow run on the head to finish, because GitHub refuses to
-rerun a running one. It then reruns the failed jobs of each GitHub Actions run
-that owns a failing check and waits until the new jobs replace the failed
-check runs. It never merges.
+`land` merges only when the head contains the base tip, CI is green on that
+exact head, and the base hasn't moved; otherwise it stops. `rerun` runs only
+after `land` stops `checks-failed`, and never merges.
 
 Run `land` and `rerun` in the background with a completion wake where the
 platform offers one. Otherwise keep each command under the platform's limit
-on a single command: for `land`, `--ci-cap-minutes` plus `--cap-minutes`; for
-`rerun`, twice `--ci-cap-minutes`. Either way, run the engine again on
+on a single command: for `land`, `--ci-cap-minutes` plus `--cap-minutes`
+(30 and 15 by default); for `rerun`, twice `--ci-cap-minutes`. Either way, run the engine again on
 `checks-pending` or `checks-missing` at most three times before handing back.
 A `rerun` phase and the `land` run after it each count as one of those three.
 
@@ -446,7 +406,8 @@ the same commit.
   checkout or the invocation is wrong, not the PR, so don't hand the PR back.
   Fix the invocation if you can. Otherwise end the batch as "Ending Early"
   says.
-- **`no-landing-record`, `bad-record`, `queue-method`, or `queue-message`:**
+- **`no-landing-record`, `bad-record`, `unsupported-mechanism`,
+  `queue-method`, or `queue-message`:**
   The landing record or a repository setting is wrong, not the PR, and it
   would stop every PR alike, so don't hand the PR back. End the batch as
   "Ending Early" says, naming the guard and its detail.
@@ -652,44 +613,15 @@ the background, and a surviving `land` still merges when CI passes.
 
 ## Script Results
 
-Every script's last stdout line is the machine-readable result. Branch on it
-and on the exit code, never on the prose above it:
+Every script's last stdout line is the machine-readable result: `OK`,
+`STOP <guard>`, or `LOOKUP_FAILED`, each with JSON facts. Branch on it and on
+the exit code, never on the prose above it. Each script's header comment
+documents its results and exit codes. Exit 64 is a usage error: fix the call.
+Exit 69 means no `gh` on PATH: hand the batch to the owner.
 
-| Exit | Report                        | Meaning                                      |
-| ---- | ----------------------------- | -------------------------------------------- |
-| 0    | `OK <phase> {json}`           | Done; the JSON carries the facts             |
-| 2    | `STOP <guard> {json}`         | A guard fired; act on it as described        |
-| 4    | `LOOKUP_FAILED <what> {json}` | A read failed; unknown is never absence      |
-| 64   | Usage on stderr               | Bad or missing flags; fix the call           |
-| 69   | Note on stderr                | No `gh` on PATH; hand the batch to the owner |
-
-A `LOOKUP_FAILED` from a failed forge read adds a `stderr` key: the first 300
-bytes of gh's error output. The scripts retried a transient failure first, so
-the key quotes the last attempt. They turn off gh's and Go's debug output for
-these reads, so no request header reaches it.
-
-`list-ready.sh` reports `OK list` with `ready` and `excluded` arrays and the
-lock's state: `acquired`, `refreshed`, `released`, or `absent`. It reports
-`OK pushed` for a recorded push and `OK release` for a release. Its stops:
-
-- `lock-held` and `lock-stale`: another run holds the lock.
-- `lock-lost`: the lock moved under this run; stop the batch and report.
-- `lock-not-held`: a push was recorded without the lock.
-- `no-landing-record`, `bad-record`, or `unsupported-mechanism`: the record
-  is missing, malformed, or names an unimplemented mechanism.
-- `remote-unresolved`, `remote-ambiguous`, or `not-a-repo`: fix the
-  invocation.
-
-`land.sh`'s `STOP checks-failed` adds a `failed` array beside `detail`. Each
-entry names a failed check with `name`, `run_id`, `job_id`, and `url`. The
-IDs are `null` for a check that isn't a GitHub Actions job, and a failing
-commit status appears under its context name. `land.sh rerun` reports
-`OK rerun` with the `head_oid` and a `runs` array; each entry gives a rerun
-`run_id` and its `failed_jobs`.
-
-`landed-since.sh` reports `OK landed-since` with the range, the number of
-heads it examined, the commit count, and each check's exit status. It stops
-`original-base-unknown` when the original fork point can't be found.
+`list-ready.sh` stops `lock-lost` when the lock moved under this run: stop the
+batch and report. It stops `lock-not-held` when a push was recorded without
+the lock. Its record and remote stops follow "Acting on Each Stop."
 
 ## Comments and the Batch Report
 
