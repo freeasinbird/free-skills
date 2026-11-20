@@ -15,7 +15,7 @@ and grades in a session workspace outside the repository.
   audit (`prompt-crafter`), a single eval run, "reflect" (`reflect`), and
   `Plan #N` (`plan-work-unit`). Two more test edges: making one failing test
   pass, and an unrelated use of "hill climb".
-- `behavior-eval.json`: Twenty-eight cases, each with a `request`, `artifacts` that
+- `behavior-eval.json`: Thirty-three cases, each with a `request`, `artifacts` that
   describe the project, platform, and simulated scores or state, and nonempty
   `required_actions` and `forbidden_actions` lists.
 
@@ -67,6 +67,17 @@ and grades in a session workspace outside the repository.
   regression, and report a guided rescore as a confirmation.
 - `change-after-final-score-rescored`: Rescore after a review fix, and name
   the change in the report and its commit.
+- `request-limit-to-constraints`: Quote a limit stated in the request under
+  Constraints and show it for sign-off.
+- `climber-limit-needs-source`: List a climber-added limit apart from the
+  owner's, with its source and no stricter than it.
+- `repeated-unmeasured-fact`: Pause when the panel names the same unmeasured
+  fact in two rounds in a row, and offer the measurement beside one more
+  round.
+- `single-source-set-goal`: Name single-source candidates at a stall and
+  propose fresh-context generators within the budget.
+- `constraint-breach-rejected`: Reject a candidate that breaches a constraint
+  before the screen, and never count it as progress or near-miss.
 
 ## Rerunning Trigger Cases
 
@@ -128,7 +139,10 @@ expected = {
     "goal-file-changed-midclimb", "delivery-report-no-merge",
     "round-unit-at-intake", "rising-best-is-no-plateau",
     "proposed-candidates-hold-plateau", "plateau-checkin-offers-unit",
-    "set-goal-rejection-not-revert",
+    "set-goal-rejection-not-revert", "held-out-regression-asks-owner",
+    "change-after-final-score-rescored", "request-limit-to-constraints",
+    "climber-limit-needs-source", "repeated-unmeasured-fact",
+    "single-source-set-goal", "constraint-breach-rejected",
 }
 cases = fixture["cases"]
 assert len(cases) == len(expected)
@@ -143,7 +157,7 @@ for case in cases:
 triggers = json.loads(Path("skills/hill-climb/evals/trigger-eval.json").read_text())
 assert sum(t["should_trigger"] for t in triggers) == 8
 assert sum(not t["should_trigger"] for t in triggers) == 8
-print("Behavior fixture structure: passed (twenty-six unique cases); triggers 8/8")
+print("Behavior fixture structure: passed (thirty-three unique cases); triggers 8/8")
 PY
 ```
 
