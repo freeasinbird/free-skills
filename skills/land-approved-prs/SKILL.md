@@ -267,9 +267,11 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
   without `--dry-run`.
 - **`base-moved`:** If the PR's base changed, list again and let filter 2
   decide. Otherwise run `check` and `land` again.
-- **`checks-failed`:** Read the failed jobs' logs and name the failing tests
-  or steps. For each entry in the result's `failed` array with a `run_id`, run
-  `gh run view <run_id> --job <job_id> --log-failed --repo <owner/name>`.
+- **`checks-failed`:** Name the failing tests or steps. Each entry in the
+  result's `failed` array with a `job_id` names its failing Go tests in
+  `failing_tests`, each with its first failure line. When an entry has
+  `log_error` instead, or you need more context, read the job's log with
+  `gh api --allow-escape-sequences repos/<owner/name>/actions/jobs/<job_id>/logs`.
   Then classify the failure:
 
   - **Infrastructure:** A lost or cancelled runner, a failed setup step, a

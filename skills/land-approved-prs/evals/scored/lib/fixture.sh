@@ -233,8 +233,9 @@ fixture_done() {
     || { echo "fixture_done: primary checkout is not on main" >&2; return 1; }
 }
 
-# fail_ci <oid> <log>: CI on <oid> fails; `gh run view --log-failed` for
-# its run prints <log>.
+# fail_ci <oid> <log>: CI on <oid> fails; its job's log, through
+# `gh api .../actions/jobs/<id>/logs` or `gh run view --log-failed`, is
+# <log>.
 fail_ci() {
   echo failure >"$FORGE/ci/$1"
   printf '%s\n' "$2" >"$FORGE/ci/$1.log"

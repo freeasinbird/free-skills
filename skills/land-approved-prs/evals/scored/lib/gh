@@ -105,7 +105,7 @@ while [ $# -gt 0 ]; do
     --name-only) nameonly=true ;;
     --comments) showcomments=true ;;
     --slurp) slurp=true ;;
-    --paginate|--failed|--include|-i|--silent|--verbose|-v|--yes|-y|--delete-branch|--auto|--admin|--patch|--exit-status|--watch|--web|-W|--draft|--fill|--no-color) ;;
+    --paginate|--allow-escape-sequences|--failed|--include|-i|--silent|--verbose|-v|--yes|-y|--delete-branch|--auto|--admin|--patch|--exit-status|--watch|--web|-W|--draft|--fill|--no-color) ;;
     -*) die "unknown flag: $a
 Usage: gh $sub $verb [flags]" ;;
     *) pos+=("$a") ;;
