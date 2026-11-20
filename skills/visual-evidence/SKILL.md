@@ -121,59 +121,38 @@ Apply the change. Drive the app to the same screen and state, then capture
 - **Route, URL, and data:** Keep them fixed. Prefer seeded or fixture data to
   live or random data.
 - **Viewport, DPR, and zoom:** Fix all three instead of using the current
-  window settings.
-- **Desktop viewport:** Use 1280×720 as a default, or use the app's design
-  target.
-- **Mobile viewport:** Use a mobile size such as 390×844 for a mobile-specific
-  change.
+  window settings. Default to 1280×720 or the app's design target, a mobile
+  size such as 390×844 for a mobile change, and 2x DPR so text stays legible.
 - **Responsive change:** Capture desktop and mobile as one viewport matrix
-  when the tool supports it. Don't drive the app once per width.
-- **Responsive filenames:** Give each width its own pair, such as
-  `before-1280x720.png` and `after-1280x720.png`.
-- **Mobile filenames:** Name the other pair `before-390x844.png` and
-  `after-390x844.png`.
-- **DPR:** Prefer 2x so text stays legible when scaled down.
+  when the tool supports it, not once per width, with a pair per width such
+  as `before-1280x720.png` and `after-1280x720.png`.
 - **Theme:** Capture separate light and dark pairs when both appearances
   change.
 - **Interactive state:** Capture the default, hover, focus, active, error,
   empty, or loading state that demonstrates the change.
-- **Crop region:** Keep the same framing so the pair lines up side by side.
 
 ### 4. Framing & Cropping
 
 - **Crop to the change:** Use the affected component or region unless the
-  change is page-level, such as overall layout or cross-page spacing.
-- **Avoid noise:** A full-screen shot buries the point in navigation, browser
-  chrome, and unrelated UI.
-- **Keep context cost low:** A conversation may re-read an image on every
-  later turn. A tight crop avoids repeatedly spending context on irrelevant
-  pixels.
-- **Prefer element capture:** It gives a tight, deterministic frame.
-  - Playwright: `locator.screenshot()` / `elementHandle.screenshot()`, or
-    `page.screenshot({ clip: { x, y, width, height } })`.
-  - Chrome DevTools or CDP: read the node's bounding box and clip to it.
-  - OS screenshot tools: crop to one fixed rectangle and reuse it.
-- **No element capture:** Crop both full images to one fixed rectangle after
-  capture. See `references/capture-craft.md` §crop-tools for commands and tool
-  choices.
-- **Keep useful context:** Add a little padding. Remove irrelevant sidebars
-  and headers.
-- **Keep one landmark:** Show the component heading or part of an adjacent
-  element. Changed pixels alone look like a floating fragment.
-- **Match fixed crops:** Use the same rectangle for both shots.
-- **Match element crops:** Use the same element and padding. Its size may
-  change when the fix changes it.
+  change is page-level. A full-screen shot buries the point in navigation and
+  browser chrome, and a later turn may re-read every irrelevant pixel. Even
+  for a page-level change, prefer the relevant section to the full page.
+- **Prefer element capture:** It gives a tight, deterministic frame, such as
+  Playwright's `locator.screenshot()` or a CDP clip to the node's bounding
+  box. Otherwise crop both full images to one fixed rectangle; see
+  `references/capture-craft.md` §crop-tools.
+- **Keep useful context:** Add a little padding and one landmark, such as the
+  component heading, so the change doesn't look like a floating fragment.
+  Remove irrelevant sidebars and headers.
+- **Match the pair:** Use the same rectangle, or the same element and
+  padding, for both shots. An element's size may change when the fix
+  changes it.
 - **Keep inline images legible:** GitHub renders the PR body at roughly 830 CSS
-  px wide. Avoid extreme ratios and multi-thousand-pixel captures.
-- **Limit full-page capture:** Reserve it for page-level changes. Even then,
-  prefer the relevant section over the full page.
-- **Balance resolution and size:** Use enough resolution or DPR for legibility.
-  Keep each image under 10 MB, and never export SVG; see the limits under
-  Compose and Attach.
+  px wide. Avoid extreme ratios and multi-thousand-pixel captures. Keep each
+  image under 10 MB, and never export SVG.
 
-The named tools are examples, not requirements. Use any available capture
-method that preserves tight framing, identical conditions, and deterministic
-state.
+Any capture method that keeps tight framing, identical conditions, and
+deterministic state will do.
 
 ### Reference Capture Script
 
@@ -209,17 +188,15 @@ specification. Apply the same craft with another capture method.
 - **Stabilize the page:** Disable animations. Wait for network idle and for the
   target element to become visible.
 - **Set a wall-clock budget:** Agent shell tools commonly cap commands near two
-  minutes. A hung readiness wait can consume that cap and return nothing.
-- **Fail clearly:** Keep the total budget below the shell cap. Add per-attempt
-  timeouts and retries so a hung wait reports an error.
-- **Use the script default:** `capture.mjs` uses a 90-second total budget.
+  minutes, and a hung wait can consume that cap and return nothing. Keep the
+  total budget below it, with per-attempt timeouts and retries, so a hang
+  reports an error. `capture.mjs` uses 90 seconds.
 - **Use stable data:** Prefer seeded or fixture data. Avoid timestamps, random
-  values, and live customer data.
-- **Keep capture hygiene focused:** Make shots clean and comparable. Fixture
-  data also keeps secrets out of the frame.
-- **Apply upload hygiene separately:** Use the mandatory checklist under
-  Compose and Attach before every upload. Read it there instead of relying on
-  memory.
+  values, and live customer data; fixture data also keeps secrets out of the
+  frame.
+- **Review separately:** Clean capture doesn't replace the mandatory review
+  under Compose and Attach before every upload. Read it there instead of
+  relying on memory.
 
 ### 6. Check the Shots Before Handing Off
 
