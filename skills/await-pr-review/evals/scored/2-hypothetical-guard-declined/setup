@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# PR #7's latest push drew two findings: the real split-name bug, and a
+# guard against a negative pad width, which no caller passes.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1" push
+pr_open buggy
+head=$(oid feature)
+review 7 102 "$BOT" COMMENTED "$T_REVIEW" "$head" "review-bot reviewed this push and left 2 comments."
+inline 7 2002 102 "$BOT" "$T_REVIEW" "$head" label.sh "$(label_line 'pad 10')" PRRT_kwBug1 false \
+  "**P1:** \`\$name\` is unquoted in the \`pad\` call, so a name with a space is split: \`sh label.sh 'big box' 4\` prints \`big       |4\`. Quote it."
+inline 7 2003 102 "$BOT" "$T_REVIEW" "$head" label.sh "$(label_line "printf '%-*s'")" PRRT_kwGuard1 false \
+  "**P2:** \`pad\` doesn't validate its width. A non-numeric width makes \`printf\` print an error and an empty field, so the label loses its name. Add a guard that rejects a width that isn't a non-negative integer."
+fixture_done

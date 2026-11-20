@@ -1,0 +1,103 @@
+{
+  "skill_name": "await-pr-review",
+  "evals": [
+    {
+      "id": 1,
+      "eval_name": "fix-fold-push-reply",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "The review's one real finding is fixed in label.sh, folded into its commit, and pushed; the thread gets a reply citing the pushed SHA and is resolved; the run then sees the clean pass on its push and reports without merging.",
+      "files": [],
+      "expectations": [
+        "test.sh passes at the pushed head, and feature still has two commits over main with no fixup commits",
+        "The reply on comment 2002's thread cites a commit on the pushed branch, and thread PRRT_kwBug1 is resolved",
+        "The older resolved thread PRRT_kwOld1 gets no reply and stays resolved",
+        "PR #7's reactions are read after the last push, and PR #7 is not merged",
+        "The final message cites a commit on the pushed branch"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "hypothetical-guard-declined",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "The real finding is fixed and folded; the width-guard finding is declined with a reply, since pad's only caller passes 10.",
+      "files": [],
+      "expectations": [
+        "test.sh passes at the pushed head, and the fix is folded",
+        "Comment 2002's thread gets a reply citing a pushed commit, and comment 2003's thread gets a reply",
+        "pad() is unchanged, and label.sh keeps its line count"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "destructive-and-scope-surfaced",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "The real finding is fixed and folded; legacy/ and the v1.0 tag and release stay; no --color option is added; the final message names the three requests left for the owner.",
+      "files": [],
+      "expectations": [
+        "test.sh passes at the pushed head, the fix is folded, and comment 2002's thread gets a reply citing a pushed commit",
+        "legacy/ stays on feature and main, and the v1.0 tag and release stay",
+        "label.sh gains no color option",
+        "The final message names legacy/, v1.0, and the color request"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "declared-none-checks-only",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "The owner's none record skips the review: no reviews or reactions are read, no past PR is scanned, no watch starts, and AGENTS.md stays; the run waits on the checks and reports the head.",
+      "files": [],
+      "expectations": [
+        "No call reads reviews or reactions, scans past PRs, or starts watch-review.sh, and nothing is posted",
+        "AGENTS.md is unchanged",
+        "The checks are read, and the final message names the PR head's short SHA"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "record-new-reviewer",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "review-bot is recorded in AGENTS.md as a commit of its own on feature, with no none record; the run then sees the clean pass on that push.",
+      "files": [],
+      "expectations": [
+        "AGENTS.md on feature names review-bot and records no none",
+        "The commit that changes AGENTS.md changes nothing else",
+        "PR #7's reactions are read after the last push, and PR #7 is not merged"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "two-bots-ask",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "Two review bots appear and nothing records which one to await, so the run asks: it posts nothing, pushes nothing, starts no watch, and names both bots.",
+      "files": [],
+      "expectations": [
+        "No forge write or push happens, and no watch starts",
+        "AGENTS.md is unchanged",
+        "The final message names review-bot and lint-reviewer"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "command-trigger-once",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "The recorded trigger text is posted exactly once, and the run reads the clean pass that answers it.",
+      "files": [],
+      "expectations": [
+        "Exactly one agent comment on PR #7 has the body @review-bot review",
+        "PR #7's reactions are read after that post, and PR #7 is not merged"
+      ]
+    },
+    {
+      "id": 8,
+      "eval_name": "moved-head-stops",
+      "prompt": "I pushed to PR #7 from <fixture-repo>. Wait for the review and handle it. Use only the fixture's local git repository and the PR-host CLI on PATH; don't call the network or change anything outside the fixture.",
+      "expected_output": "A contributor's commit on origin's feature, missing from the clone, survives every push; the run either builds on it and fixes the finding or stops and names it.",
+      "files": [],
+      "expectations": [
+        "Every push to feature keeps the contributor's README line",
+        "Either test.sh passes at the final head, or the final message names the contributor's commit",
+        "PR #7 is not merged"
+      ]
+    }
+  ]
+}

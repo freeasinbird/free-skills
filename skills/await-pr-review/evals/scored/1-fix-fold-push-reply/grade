@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The real finding is fixed, folded, pushed, replied to with a pushed SHA,
+# and resolved without asking first; the run then looks for the clean pass
+# on its own push, leaves the older resolved thread alone, and doesn't merge.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_tests_pass
+expect_folded 2
+expect_reply_with_sha 2002
+expect_resolved PRRT_kwBug1
+expect_no_reply 2001
+expect_resolved PRRT_kwOld1
+expect_saw_clean_pass
+expect_no_merge
+cites_branch_sha "$(cat "$MSG")" || fail "final message cites no commit on the pushed branch"
+grade_done

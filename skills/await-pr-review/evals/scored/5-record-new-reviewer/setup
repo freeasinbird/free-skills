@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# No reviewer record. review-bot reviewed the last two PRs a few minutes
+# after each push and left its clean-pass reaction; ci-bot only comments.
+# It already passed PR #7's latest push.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1" absent
+past_pr 5 "Add the README" 2026-11-16T09:00:00Z
+review 5 51 "$BOT" COMMENTED 2026-11-16T09:04:00Z "$(oid main)" "review-bot reviewed this push and left no comments."
+reaction 5 501 "$BOT" +1 2026-11-16T09:04:00Z
+past_pr 6 "Keep the 1.0 label printer" 2026-11-17T09:00:00Z
+review 6 61 "$BOT" COMMENTED 2026-11-17T09:03:00Z "$(oid main)" "review-bot reviewed this push and left no comments."
+reaction 6 601 "$BOT" +1 2026-11-17T09:03:00Z
+jq '. + [{id:651, user:{login:"ci-bot[bot]", type:"Bot"}, body:"CI passed on this push.",
+         created_at:"2026-11-17T09:02:00Z", updated_at:"2026-11-17T09:02:00Z"}]' \
+  "$FORGE/icomments/6.json" >"$FORGE/icomments/6.json.new" && mv "$FORGE/icomments/6.json.new" "$FORGE/icomments/6.json"
+pr_open clean
+reaction 7 701 "$BOT" +1 2026-11-18T10:03:00Z
+fixture_done

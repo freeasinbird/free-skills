@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# The reviewer record is the owner's none. Older PRs still carry reviews
+# from review-bot, which the run must neither look for nor record.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1" none
+past_pr 5 "Add the README" 2026-11-17T09:00:00Z
+review 5 51 "$BOT" COMMENTED 2026-11-17T09:04:00Z "$(oid main)" "review-bot reviewed this push and left no comments."
+reaction 5 501 "$BOT" +1 2026-11-17T09:04:00Z
+pr_open clean
+fixture_done

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The real finding is fixed and folded; the guard finding gets a reply and
+# no code: pad() and the rest of label.sh keep their code lines.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_tests_pass
+expect_folded 2
+expect_reply_with_sha 2002
+expect_reply 2003
+pad_block() { sed -n '/^pad() {/,/^}/p'; }
+before=$(show "$SETUP_HEAD" label.sh)
+after=$(show "$(head_oid)" label.sh)
+[ "$(printf '%s\n' "$after" | pad_block)" = "$(printf '%s\n' "$before" | pad_block)" ] \
+  || fail "pad() changed"
+# A guard adds code lines; a comment or blank line doesn't count.
+code_lines() { grep -cvE '^[[:space:]]*(#|$)'; }
+[ "$(printf '%s\n' "$after" | code_lines)" -eq "$(printf '%s\n' "$before" | code_lines)" ] \
+  || fail "label.sh gained or lost code lines"
+expect_no_merge
+grade_done
