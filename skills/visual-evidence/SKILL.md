@@ -225,8 +225,9 @@ counts as an image throughout this section, unless a line says otherwise.
   different image. When in doubt, ask before uploading.
 
   A recording gets this checklist across its whole length, including any
-  audio. One frame or a preview isn't a review. Treat a recording you can't
-  inspect in full as flagged: say so, and ask before uploading.
+  audio. One frame, a preview, or frames you sample or extract with a tool
+  aren't a review. Treat a recording you can't inspect in full as flagged: say
+  so, and ask before uploading.
 
 ### Choose the Upload Path
 
