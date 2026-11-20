@@ -39,6 +39,10 @@ scratch space isn't enough, because the report gives a log path that must
 still exist. The goal file, the frozen check, and the attempt log all live
 there.
 
+Copy every limit the owner states, in the request or later before sign-off,
+into the goal file's Constraints, in the owner's words. List any limit you add apart from them,
+each with its source. The owner signs off on both.
+
 Show the goal file to the owner. Start no attempt, and change nothing in the
 repository, until the owner signs off. Then record the sign-off and the goal
 file's hash in the attempt log. The owner controls the goal file; never edit
@@ -138,6 +142,12 @@ that should make it work before changing anything. Then make the change,
 score it from the frozen check, and run every guard. A candidate never edits
 the check, its inputs, or a guard, and never skips a test.
 
+Check each candidate against the goal file's Constraints before scoring it.
+A candidate that breaches one is reverted, or rejected for a set goal,
+without a score. In a council-scored climb it never reaches the screen or the
+panel. A breaching candidate never counts as progress or as the best
+near-miss; in an attempt climb it still uses its attempt.
+
 - **Keep** the change only when it beats the current best by more than the
   noise band and every guard holds. A scored guard holds while it stays within
   its noise band of its baseline.
@@ -155,10 +165,11 @@ candidate. Stalls and
 the plateau count units without progress, never reverted or rejected
 candidates.
 
-Log every candidate in the climb directory: its unit, number, hypothesis,
-mechanism, change, score, guard results, and outcome (kept, reverted,
-accepted, or rejected). After each unit, log the best score, and for a set
-goal the best near-miss.
+Log every candidate in the climb directory: its unit, number, source (the
+climber, a judge's proposal, or a generator), hypothesis, mechanism, change,
+score, guard results, and outcome (kept, reverted, accepted, or rejected).
+For a breach, log the limit it broke in place of a score. After each unit,
+log the best score, and for a set goal the best near-miss.
 
 ## Check In When Stalled
 
@@ -168,6 +179,25 @@ progress: a missing tool, a slow check, a subproblem too large for one
 attempt. Turn each blocker into a proposal, either a tool to build or a
 separate climb with its own goal file. Show the proposals to the owner and
 build or start nothing until the owner approves it.
+
+**Repeated unmeasured fact.** In a council-scored climb, a fact nobody has
+measured is a blocker when the panel's reasons name it in two panel runs in
+a row, even while scores rise. Council's Scoring Contract doesn't promise reasons,
+so this applies only when the panel's output includes them, as with proposed
+candidates. Pause and propose the measurement with its cost, beside one more
+unit with its cost and the budget left. Run neither until the owner picks,
+and log the answer. An approved measurement counts against the budget and
+isn't a unit. Its result reaches the panel only through later candidates'
+text; changing the rubric or the brief needs a new goal file.
+
+**Single-source candidates.** For a set goal, when the climber wrote every
+candidate scored so far, the stall check-in says so. It offers fresh-context
+generators as a proposal, one lens each, with their runs counted against the
+budget. A generator run isn't a unit. Start none before the owner approves.
+
+State a measurement's or a generator's cost in the budget's own measure.
+When the budget counts only units, ask the owner how much an approved run
+uses, and log the answer.
 
 Check in at the latest before a plateau stop. Show the best score for each
 recent unit, the cost of one more unit, and the budget left, and offer one
@@ -219,13 +249,16 @@ names.
 - **Unattended runs** need a way to keep working without the owner present,
   such as a scheduled or background run. At a stall, an unattended run logs
   its proposals, builds and starts nothing, and keeps trying other kinds of
-  change until a stop. At a plateau it stops without asking and puts the
+  change until a stop. At a repeated unmeasured fact, it logs the proposed
+  measurement and its cost, runs nothing for it, and keeps trying other kinds
+  of change as at a stall. At a plateau it stops without asking and puts the
   check-in's three facts in its report: the best score for each recent unit,
   the cost of one more unit, and the budget left. Without the capability, run
   attended and check in at each stall. Every run stops at the budget.
-- **Fresh-context judges** need delegation that starts a fresh context.
-  Without it, a judge-only check is unavailable; use a program or reference
-  tier, or mark the goal not climbable.
+- **Fresh-context judges and generators** need delegation that starts a
+  fresh context. Without it, a judge-only check is unavailable; use a program
+  or reference tier, or mark the goal not climbable. The single-source
+  check-in still names the one source but offers no generators.
 
 ## Deliver
 
@@ -258,6 +291,8 @@ The report gives:
   how many were accepted and rejected, and the best near-miss.
 - **Unscored proposals.** After a budget stop, any proposed candidates left
   in the queue.
+- **Logged proposals.** After an unattended run, the proposals it logged but
+  didn't act on, including any measurement and its cost.
 - **Plateau facts.** After an unattended plateau stop, the best score for
   each recent unit, the cost of one more unit, and the budget left.
 - **Log path.** The attempt log in the climb directory.

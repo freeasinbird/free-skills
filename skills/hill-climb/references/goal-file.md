@@ -19,6 +19,8 @@ owner. A field left blank needs the owner's answer before sign-off.
   and the rule each item must meet to be accepted>
 - Unit: <attempt or round>
 - Guards: <checks that must not regress, each with its current result>
+- Constraints: <limits on the candidates themselves: each limit the owner
+  stated, quoted; then each limit the climber adds, with its source>
 - Check: <the command, reference, or rubric, and every file it reads>
 - Check tier: <program, reference, or council at rung 1 or 2>
 - Score rule: <for council, how member scores become one number>
@@ -48,6 +50,13 @@ Field notes:
 - **Guards.** List each guard with its baseline result, so a regression is
   plain. A scored guard holds while it stays within its noise band of that
   result.
+- **Constraints.** Quote each limit the owner stated, in the owner's words.
+  List any limit the climber adds apart from those, each naming its source:
+  a file and section, a decision note, or the owner's message. A
+  climber-added limit is never stricter than its source. Guards are checks
+  on the artifact that must not regress; Constraints limit what a candidate
+  may be. A candidate that breaches one is reverted, or rejected for a set
+  goal, and never scored.
 - **Check.** List the files the check reads that a candidate could change,
   such as tests, fixtures, and build targets. Freezing copies all of them.
   For council, the attempt log records the panel that proved the check. This
