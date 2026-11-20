@@ -54,6 +54,7 @@ skills:
 
 - **Claude Code**: `~/.claude/skills/<name>/`
 - **Codex**: `~/.agents/skills/<name>/`
+- **Antigravity**: `~/.gemini/config/skills/<name>/`
 
 The [quick install](#quick-install) above is the easiest path; use the methods
 below for manual setup or a git-tracked local clone.
@@ -75,8 +76,9 @@ ln -s "$PWD/skills/license-philosopher" ~/.claude/skills/license-philosopher
 ### Convenience: Link Every Skill From a Clone (macOS / Linux)
 
 Use `link-skills.sh` if you don't want Node or prefer symlinks from a local
-clone. The helper links every skill into Claude Code and Codex. It uses
-`~/.claude/skills` and `~/.agents/skills`, so one `git pull` refreshes both:
+clone. The helper links every skill into Claude Code, Codex, and
+Antigravity. It uses `~/.claude/skills`, `~/.agents/skills`, and
+`~/.gemini/config/skills`, so one `git pull` refreshes all three:
 
 ```sh
 git clone https://github.com/freeasinbird/free-skills.git
