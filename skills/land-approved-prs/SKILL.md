@@ -70,8 +70,7 @@ Each of these words means one thing here:
 A project records how approval is expressed in an unmanaged section of its
 `AGENTS.md`, shaped like its forge record. `list-ready.sh` reads it from the
 fetched default-branch tip, never from the working tree, so a branch can't
-loosen its own rules. The record is a run of bold-key bullets that starts at
-the Mechanism bullet:
+loosen its own rules:
 
 ```markdown
 - **Land approved PRs by label.** This project has the following landing
@@ -89,43 +88,25 @@ the Mechanism bullet:
   - **Consumer:** `land-approved-prs`.
 ```
 
-Each value is the first backticked span on its bullet:
+Each value is the first backticked span on its bullet. Keep the bullets
+together; the record ends at the first line of another shape, and the script
+stops `bad-record` on a malformed one:
 
-- **Mechanism** is `label`, the only mechanism this version lands. A review
-  approval or an armed auto-merge each needs its own contract first, so the
-  script stops `unsupported-mechanism` on them.
+- **Mechanism** is `label`, the only mechanism this version lands.
 - **Approval** and **Hand-back** name the two labels.
 - **Approver permission** is the lowest repository role whose label counts:
-  `write`, `maintain`, or `admin`. The script reads each label actor's role
-  from the collaborator permission endpoint: `role_name`, or for a custom
-  role the base role its `user.permissions` flags report, with the legacy
-  `permission` field as the last resort. A user with no role on the
-  repository, or only read access, never approves. The role is
-  the one held when the batch lists, not when the label was added. It has no
-  default: a record naming one Approver login stops `bad-record`.
-- **Stale lock age** defaults to 240 minutes when the bullet is absent. A
-  bullet without a backticked value stops `bad-record`.
-- **Base-advance checks** is `none`, bare or backticked, or a list of
-  backticked commands, run by `landed-since.sh`. Every backticked span on
-  this bullet runs as a command, so keep its prose free of backticks. It has
-  no default: a missing bullet, or a value with no backticked command, stops
-  `bad-record` rather than skip the checks.
+  `write`, `maintain`, or `admin`, as held when the batch lists.
+- **Stale lock age** defaults to 240 minutes.
+- **Base-advance checks** is `none` or a list of backticked commands that
+  `landed-since.sh` runs, so keep this bullet's prose free of backticks.
 - **Reviewer** is the automated reviewer's login without any `[bot]` suffix,
-  or `none`. It has no default: a missing or unparsed bullet stops
-  `bad-record` rather than drop filter 6. Only a bot account's summary
-  counts. The completion marker is the text that summary carries; it mirrors
-  the project's reviewer record.
+  or `none`. The completion marker is the text its summary carries.
 
-The record ends at the first line that is neither a bullet of this shape nor
-its four-space continuation, so keep its bullets together.
-
-Both labels must exist on the forge before a batch. Use `#0e8a16` as the
-default color for `approved` and `#d93f0b` for `needs-rework`. Keep a
-project's existing colors unless it wants these defaults. Replace
-`owner/name` with the project's repository and use the record's Approval and
-Hand-back names if they differ from the examples. Run the commands for
-missing labels. Add `--force` only to replace an existing label's color and
-description with the defaults below.
+Both labels must exist on the forge before a batch. Create any missing one
+with the commands below, using the record's label names and the project's
+repository. The default colors are `#0e8a16` for `approved` and `#d93f0b` for
+`needs-rework`. Keep a project's existing colors unless it wants these
+defaults, and add `--force` only to replace them.
 
 ```sh
 gh label create approved --repo owner/name --color 0e8a16 \
