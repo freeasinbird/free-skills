@@ -79,9 +79,7 @@
         "forge": "The repository has eight open issues labeled bug.",
         "platform": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed."
       },
-      "required_actions": [
-        "ask for the issue numbers"
-      ],
+      "required_actions": ["ask for the issue numbers"],
       "forbidden_actions": [
         "search or list forge issues to build the set",
         "start any planner or implementer before the owner answers"
@@ -246,10 +244,7 @@
         "dispatch #50",
         "list #51 as not dispatched because it waits on #50 in this batch, which needs a human merge"
       ],
-      "forbidden_actions": [
-        "dispatch #51 in this run",
-        "merge #50's PR"
-      ]
+      "forbidden_actions": ["dispatch #51 in this run", "merge #50's PR"]
     },
     {
       "id": "threads-before-subagents",
@@ -327,6 +322,29 @@
       "forbidden_actions": [
         "restart or relaunch #70",
         "open a PR or push for #70 from the orchestrator"
+      ]
+    },
+    {
+      "id": "route-one-ends-after-launch",
+      "request": "Presentation A and B: Plan and handle #80, #81, and #82, two at a time.",
+      "artifacts": {
+        "planners": "All three report startable with branch lines before any implementer ends.",
+        "implementers": "#80's run ends with a handoff report while #81 still runs. After #82 launches, #81 and #82 keep running.",
+        "platform_a": "A tool that starts top-level threads in a new worktree on a named branch and a tool that waits on a thread's end are listed, along with background subagents. plan-work-unit is listed.",
+        "platform_b": "Background subagents with completion notices and worktree isolation are listed. No top-level thread tool is listed. plan-work-unit is listed.",
+        "grading": "Grade each presentation in a separate fresh context."
+      },
+      "required_actions": [
+        "in A, wait on the running threads while #82 is queued, and start #82's thread when #80's ends",
+        "in A, send the final table once #82's thread has launched, listing #81 and #82 as running in their own threads with their thread links",
+        "in B, wait until the #81 and #82 subagents end before sending the final table",
+        "record each launch and completion in the state file"
+      ],
+      "forbidden_actions": [
+        "in A, wait on #81 or #82 after the queue is empty",
+        "in B, send the final table while an implementer subagent is still working",
+        "relaunch or restart any implementer",
+        "wait with a sleep loop or status poll"
       ]
     },
     {

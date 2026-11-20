@@ -123,6 +123,7 @@ Decide from every tool the session lists, loaded or not (see Requirements).
   - A tool that starts a new top-level thread.
   - A worktree of its own for that thread.
   - A wake on the thread's end, from a completion notice or a blocking wait.
+    It refills the window while issues are queued.
 
   Example: T3 Code `t3_thread_launch` with `workspaceStrategy`, waited on with
   `t3_thread_wait`. Take route 2, a background subagent, only when one of the
@@ -421,7 +422,22 @@ Fill the window by these rules:
   end the session, block on a wait instead. Don't stop the batch to summarize
   progress or to ask whether to continue.
 
-Send the report when no planner or implementer is still working:
+### End the Batch
+
+The batch ends when nothing it waits on is still working. Then send the
+report. What the batch waits on:
+
+- **Planners.** Every planner still working.
+- **Free slots.** Every running implementer while an issue is queued behind
+  it. Once the queue is empty, no launch is left to make.
+- **Subagents.** Every route 2 implementer still working, including one a
+  host refusal moved off route 1. Its report reaches the owner only through
+  you, so wait for its run to end.
+
+Once the queue is empty, stop waiting on route 1 threads. A top-level thread
+is a session the owner can open, read, and answer in, and it posts its own
+handoff or blocked report there. Report each one still working as running,
+with its thread link.
 
 - **Questions don't hold the report.** A delegate stopped on an owner question
   isn't working. The report lists open questions and any issue still queued
@@ -478,10 +494,13 @@ End with one table, one row per listed issue, in dispatch order:
 | #3268 | startable   | <thread link>  | #3301 | Ready for review             |
 | #3171 | held        | n/a            | n/a   | Not dispatched: <reason>     |
 | #3166 | startable   | <agent link>   | n/a   | Blocked: <blocker>           |
+| #3170 | startable   | <thread link>  | n/a   | Running in its own thread    |
 ```
 
-Use these states: ready for review, blocked (with the blocker), waiting on
-owner (with the question), queued (behind a held slot), not dispatched (with
-the reason), ended without a report, and unknown. Below the table, list any
-question still waiting on the owner. For a tracker, repeat the line of units
-left out.
+Use these states: ready for review, running in its own thread (route 1
+only), blocked (with the blocker), waiting on owner (with the question),
+queued (behind a held slot), not dispatched (with the reason), ended without a
+report, and unknown. Below the table, list any question still waiting on the
+owner. When a thread is still running, say that each thread reports in its
+own session and the batch doesn't track it further. For a tracker, repeat the
+line of units left out.
