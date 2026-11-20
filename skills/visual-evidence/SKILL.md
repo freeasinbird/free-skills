@@ -189,30 +189,28 @@ Open every image, whether you captured it or were given it. Don't publish
 evidence you haven't checked.
 
 - **Reject blank or truncated shots:** An all-white or zero-size image may
-  mean capture ran before render or matched no visible element.
-- **Fix empty shots:** Correct the wait or selector, then capture again.
+  mean capture ran before render or matched no visible element. Correct the
+  wait or selector, then capture again.
 - **Check subject and state:** Confirm the intended screen, component, and
   interactive state appear. The change, or the problem a lone bug shot
   reports, must be visible.
-- **Check comparability:** Match crop, viewport, and theme. Re-capture the odd
-  image under the other's conditions when the pair doesn't line up.
-- **Inspect dimensions:** Use ImageMagick `identify`, macOS
-  `sips -g pixelWidth -g pixelHeight`, or the capture tool's `WROTE` output.
-- **Match fixed crops exactly:** Their width and height must be identical.
-- **Explain element-size changes:** A padding or line-height fix may change
-  height. A wider button or column may change width.
-- **Match the CSS delta:** Any dimension change should roughly match the visual
-  change. Treat an unexplained difference as a non-comparable pair.
+- **Check comparability:** Match crop, viewport, and theme. When the pair
+  doesn't line up, re-capture the odd image under the other's conditions.
+  Read dimensions with ImageMagick `identify`, macOS
+  `sips -g pixelWidth -g pixelHeight`, or the `WROTE` output. Fixed crops
+  must match exactly; an element crop may change only as much as the fix
+  explains, such as a padding fix changing height. Treat an unexplained
+  difference as a non-comparable pair.
 - **Reject absurd sizes:** Re-capture a multi-thousand-pixel-tall scroll or a
   sub-100px sliver that lost the subject.
 - **Check a recording by watching it:** Confirm it shows the intended screen,
   state, and change. If you can't watch it, say so; the review under Compose
   and Attach treats it as flagged.
 - **Skip pair checks without a pair:** A single image or a recording has
-  nothing to match. The comparability and matching checks above don't apply
-  to it.
-- **Keep both checks:** This is the capture-quality pass. Apply the separate
-  secret review under Compose and Attach when you open every image again.
+  nothing to match.
+
+This is the capture-quality pass; the secret review under Compose and Attach
+is separate.
 
 Several checks above say to capture again. Sometimes you can't, because the
 image was given to you or its state is gone. Don't publish a failing image on
@@ -352,24 +350,18 @@ carries the same review.
 
 ### Place and Verify
 
-- **Place evidence in the PR description:** It is most visible there. Use a
-  comment for later additions or issues.
-- **Compose into the body:** On either path, put the evidence in the
-  description instead of leaving it in a trailing comment.
+- **Place evidence in the PR description:** It is most visible there, on
+  either path, instead of a trailing comment. Use a comment for later
+  additions or issues.
 - **Label every image:** Use **Before** and **After** for a pair, plus the
   state shown, such as "Empty state, dark mode." Label a single image by what
-  it shows; don't add a second image to make a pair.
-- **Show both palettes:** Include light and dark when both appearances change.
-- **Choose a concrete layout:** See
-  `references/capture-craft.md` §display-layout for side-by-side and stacked
-  layouts.
-- **Verify the rendered result:** Do this only after every image passes the
-  review and the upload succeeds.
-- **Check the rendered body:** Every image must load, and a recording must
-  show a player. Each label must sit with its image, and a pair must read from
-  Before to After.
-- **Trust the rendered view:** Correct raw Markdown can still produce a broken
-  image or layout.
+  it shows; don't add a second image to make a pair. Include light and dark
+  when both appearances change. See `references/capture-craft.md`
+  §display-layout for side-by-side and stacked layouts.
+- **Verify the rendered result:** After every image passes the review and the
+  upload succeeds, check the rendered body, not the raw Markdown. Every image
+  must load, and a recording must show a player. Each label must sit with its
+  image, and a pair must read from Before to After.
 
 ## Examples
 
