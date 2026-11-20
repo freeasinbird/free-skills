@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# The fix committed at HEAD of fix-card-padding; its parent has the bug.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+fix_branch
+fixture_done

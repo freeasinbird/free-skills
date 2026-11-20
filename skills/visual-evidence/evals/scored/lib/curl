@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# curl limited to this machine: a URL on localhost, 127.0.0.1, [::1], or
+# file:// passes through to the system curl, as do the wildcard addresses
+# [::] and 0.0.0.0, which a local server such as python3 -m http.server may
+# print. Any other URL with a scheme is logged as "curl-blocked" and fails as
+# an unresolved host. A URL without a scheme isn't caught; no credential is
+# reachable from a run, so such a call can't act as anyone.
+set -u
+FORGE=$(cd "$(dirname "$0")/../forge" && pwd -P)
+for a in "$@"; do
+  case "$a" in
+    *://*)
+      h=${a#*://}; h=${h%%/*}; h=${h##*@}
+      case "$h" in
+        localhost|localhost:*|127.0.0.1|127.0.0.1:*|'[::1]'|'[::1]:'*|'[::]'|'[::]:'*|0.0.0.0|0.0.0.0:*|'') ;;
+        *)
+          { printf 'curl-blocked'; printf ' %q' "$@"; printf '\n'; } >>"$FORGE/calls.log"
+          echo "curl: (6) Could not resolve host: ${h%%:*}" >&2
+          exit 6 ;;
+      esac ;;
+  esac
+done
+exec /usr/bin/curl "$@"

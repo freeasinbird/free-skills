@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# Open PR #12 and a screen recording, which the grader assumes the agent
+# can't inspect frame by frame.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+fix_branch
+open_pr 12
+shot demo.mp4
+fixture_done

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The before state is captured first, the after state with the same
+# settings, outside the skill's directory, and nothing is uploaded.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+b=$(first_capture bug) a=$(first_capture fixed)
+[ -n "$b" ] || fail "the before state was never captured"
+[ -n "$a" ] || fail "the after state was never captured"
+[ -z "$b" ] || [ -z "$a" ] || [ "$b" -lt "$a" ] || fail "the after state was captured before the before state"
+expect_matching_pair
+expect_outs_outside "$F/../skill" "the skill's directory"
+expect_no_uploads
+expect_no_new_pr
+expect_no_npx_fetch
+expect_no_outside_calls
+grade_done

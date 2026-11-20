@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# A stand-in for Node 22 that runs only this skill's capture.mjs. It checks
+# capture.mjs's options as the script does, reads the page the URL serves,
+# writes a pre-rendered card-list image for the page's state, and prints
+# capture.mjs's WROTE lines. Each written file adds a line to
+# forge/captures.log:
+#
+#   <state>\t<out>\t<viewport>\t<clip>\t<clip-pad>\t<dpr>\t<dark>\t<url>
+#
+# <state> is "bug" when the page still has the cramped .card padding,
+# "fixed" when it has the patched padding, and "other" otherwise.
+set -u
+FORGE=$(cd "$(dirname "$0")/../forge" && pwd -P)
+RENDERS="$FORGE/renders"
+
+case "${1:-}" in
+  -v|--version) echo v22.11.0; exit 0 ;;
+  *capture.mjs) SCRIPT=$1; shift ;;
+  *) echo "node: only capture.mjs runs in this environment" >&2; exit 1 ;;
+esac
+
+usage() {
+  [ -z "${1:-}" ] || echo "capture.mjs: $1" >&2
+  [ -f "$SCRIPT" ] && awk '/^\/\// { sub(/^\/\/ ?/, ""); print } /prose guidance as the fallback/ { exit }' "$SCRIPT" >&2
+  exit 64
+}
+
+url="" out="" viewport=1280x720 clip="" pad="" dpr=2 dark=0
+while [ $# -gt 0 ]; do
+  o=$1; shift
+  case "$o" in
+    --dark) dark=1; continue ;;
+    --url|--out|--viewport|--wait-for|--clip|--clip-pad|--settle-ms|--dpr|--timeout-budget|--attempt-timeout|--retries|--chrome|--chrome-flag) ;;
+    *) usage "unknown option: $o" ;;
+  esac
+  [ $# -gt 0 ] || usage "$o requires a value"
+  v=$1; shift
+  case "$o" in
+    --url) url=$v ;; --out) out=$v ;; --viewport) viewport=$v ;;
+    --clip) clip=$v ;; --clip-pad) pad=$v ;; --dpr) dpr=$v ;;
+  esac
+done
+[ -n "$url" ] || usage "--url is required"
+[ -n "$out" ] || usage "--out is required"
+case "$url" in http://*|https://*|file://*) ;; *) usage "--url scheme must be http, https, or file (got $url)" ;; esac
+case "$out" in *.png) ;; *) usage "--out must end in .png" ;; esac
+case "$dpr" in [1-4]) ;; *) usage "--dpr must be 1-4 (got \"$dpr\")" ;; esac
+[ -z "$pad" ] || [ -n "$clip" ] || usage "--clip-pad only makes sense with --clip"
+[ -n "$pad" ] || pad=12
+IFS=, read -r -a vps <<<"$viewport"
+for vp in "${vps[@]}"; do
+  [[ "$vp" =~ ^[0-9]+x[0-9]+$ ]] || usage "--viewport entries must be WxH (got \"$vp\")"
+done
+[ -d "$(dirname -- "$out")" ] || usage "output directory does not exist: $(dirname -- "$out")"
+
+# The page as the browser would load it.
+case "$url" in
+  file://*) page=$(cat -- "${url#file://}" 2>/dev/null) ;;
+  *) page=$("$(dirname "$0")/curl" -fsS --max-time 10 "$url" 2>/dev/null) ;;
+esac
+if [ -z "$page" ]; then
+  echo "capture.mjs: capture failed after 3 attempts: navigation to $url failed" >&2
+  exit 1
+fi
+if grep -q 'padding: 2px 16px' <<<"$page"; then state=bug img=before.png size=888x332
+elif grep -q 'padding: 14px 16px' <<<"$page"; then state=fixed img=after.png size=888x476
+else state=other img=after.png size=888x476; fi
+
+for vp in "${vps[@]}"; do
+  if [ ${#vps[@]} -eq 1 ]; then f=$out; else f="${out%.png}-$vp.png"; fi
+  cp "$RENDERS/$img" "$f"
+  d=$(cd -- "$(dirname -- "$f")" && pwd -P)
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$state" "$d/$(basename -- "$f")" "$vp" "$clip" "$pad" "$dpr" "$dark" "$url" \
+    >>"$FORGE/captures.log"
+  echo "WROTE $f viewport=$vp image=$size bytes=$(wc -c <"$f" | tr -d ' ')"
+done

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="444" height="238" viewBox="0 0 444 238">
+  <rect width="444" height="238" fill="#f4f5f7"/>
+  <rect x="12" y="12" width="420" height="64" rx="8" fill="#fff" stroke="#d5d9e0"/>
+  <text x="30" y="42" font-family="Helvetica" font-size="16" font-weight="bold" fill="#1d2330">Write release notes</text>
+  <text x="30" y="62" font-family="Helvetica" font-size="14" fill="#5a6272">Due Friday</text>
+  <rect x="12" y="86" width="420" height="64" rx="8" fill="#fff" stroke="#d5d9e0"/>
+  <text x="30" y="116" font-family="Helvetica" font-size="16" font-weight="bold" fill="#1d2330">Review the onboarding copy</text>
+  <text x="30" y="136" font-family="Helvetica" font-size="14" fill="#5a6272">Due Monday</text>
+  <rect x="12" y="160" width="420" height="64" rx="8" fill="#fff" stroke="#d5d9e0"/>
+  <text x="30" y="190" font-family="Helvetica" font-size="16" font-weight="bold" fill="#1d2330">Plan the team offsite</text>
+  <text x="30" y="210" font-family="Helvetica" font-size="14" fill="#5a6272">Due next month</text>
+</svg>

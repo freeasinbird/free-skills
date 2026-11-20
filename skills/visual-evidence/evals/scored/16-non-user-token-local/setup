@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# Case 8's fixture inside an Actions job: gh 2.99.0 with the workflow's
+# server-to-server token, and no gh-imgup.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+forge_set token ghs_
+forge_set token_source GITHUB_TOKEN
+forge_set login github-actions[bot]
+fix_branch
+open_pr 12
+shot before.png
+shot after.png
+fixture_done

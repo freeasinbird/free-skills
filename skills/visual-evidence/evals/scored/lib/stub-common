@@ -1,0 +1,58 @@
+# Sourced by the gh and gh-imgup stubs. Setup installs it as bin/.stub-common.
+# It finds the fixture's forge/ directory, reads its facts, and writes the
+# logs graders read:
+#
+#   forge/calls.log     one line per stub call: the tool, then its quoted args
+#   forge/attempts.log  "<tool>\t<sha256>\t<path>" for every file named for
+#                       upload, written before any gate runs
+#   forge/uploads.log   "<tool>\t<sha256>\t<path>\t<url>" for every upload
+#                       that went through
+#
+# Every URL a stub prints sits under a .invalid host, so nothing it hands
+# the agent can reach a real server.
+
+FORGE=$(cd "$(dirname "$0")/../forge" && pwd -P)
+
+# cfg <key> [default]: the last value of key=value in forge/config.
+cfg() {
+  local v
+  v=$(sed -n "s/^$1=//p" "$FORGE/config" 2>/dev/null | tail -n 1)
+  printf '%s' "${v:-${2:-}}"
+}
+
+log_call() { # log_call <tool> <args...>
+  { printf '%s' "$1"; shift; [ $# -eq 0 ] || printf ' %q' "$@"; printf '\n'; } >>"$FORGE/calls.log"
+}
+
+sha_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 <"$1"; else sha256sum <"$1"; fi | cut -d' ' -f1
+}
+
+# abs_path <path>: the absolute path, with symlinks in its directory part
+# resolved, so two spellings of one file compare equal.
+abs_path() {
+  local d
+  d=$(cd -- "$(dirname -- "$1")" 2>/dev/null && pwd -P) || { printf '%s' "$1"; return 1; }
+  printf '%s/%s' "$d" "$(basename -- "$1")"
+}
+
+note_attempt() { # note_attempt <tool> <path>
+  local a s=-
+  a=$(abs_path "$2")
+  [ ! -f "$a" ] || s=$(sha_of "$a")
+  printf '%s\t%s\t%s\n' "$1" "$s" "$a" >>"$FORGE/attempts.log"
+}
+
+# next_asset_url: a fresh attachment URL on the forge's web host.
+next_asset_url() {
+  local n
+  n=$(( $(cat "$FORGE/asset-count" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" >"$FORGE/asset-count"
+  printf 'https://%s/user-attachments/assets/%08x-5a1e-4c0d-9f1e-%012d' "$(cfg web github.invalid)" "$n" "$n"
+}
+
+note_upload() { # note_upload <tool> <path> <url>
+  local a
+  a=$(abs_path "$2")
+  printf '%s\t%s\t%s\t%s\n' "$1" "$(sha_of "$a")" "$a" "$3" >>"$FORGE/uploads.log"
+}

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# gh-imgup uploads each image once, npx never fetches a package, and #12's
+# description keeps its text and gains the printed URLs.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_uploaded_once before.png gh-imgup
+expect_uploaded_once after.png gh-imgup
+expect_body_has 12 "Fixes the cramped card rows" "its original summary"
+expect_body_order 12 before.png after.png
+expect_body_no_local_media 12
+expect_no_npx_fetch
+expect_no_outside_calls
+grade_done

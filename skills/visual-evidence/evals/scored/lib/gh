@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# A stand-in GitHub CLI for one repository, acme/widget, with no network.
+# Its facts come from forge/config (gh_version, host, web, ghes, token,
+# token_source, permission), and its PRs live in forge/pr/<n>.json with the
+# description in forge/pr/<n>.body and comments in forge/pr/<n>.comments.
+#
+# `--attach` behaves as in gh 2.99.0: older versions reject the flag, the
+# token, permission, and host gates fail with gh's own errors, and each
+# Markdown image or link whose target resolves to an attached file is
+# rewritten to a hosted URL. A file the body doesn't reference is appended.
+# The local body file is never rewritten.
+set -u
+. "$(dirname "$0")/.stub-common"
+log_call gh "$@"
+
+VERSION=$(cfg gh_version 2.99.0)
+HOST=$(cfg host github.com)
+WEB=$(cfg web github.invalid)
+TOKEN=$(cfg token gho_)
+SLUG=acme/widget
+REPO_URL="https://$WEB/$SLUG"
+mkdir -p "$FORGE/pr"
+
+die() { printf '%b\n' "$1" >&2; exit "${2:-1}"; }
+ver_ge() { [ "$(printf '%s\n%s\n' "$2" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)" = "$2" ]; }
+user_token() { case "$TOKEN" in gho_*|ghp_*|github_pat_*) return 0 ;; esac; return 1; }
+
+check_repo() {
+  case "${1:-}" in
+    ''|"$SLUG"|"$HOST/$SLUG"|"$WEB/$SLUG"|"https://$WEB/$SLUG"|"https://$WEB/$SLUG.git") ;;
+    *) die "GraphQL: Could not resolve to a Repository with the name '$1'. (repository)" ;;
+  esac
+}
+
+# --- arguments ---------------------------------------------------------------
+# One parser serves every subcommand: POS holds positionals, FLAG_<name>
+# the last value of a valued flag, ATTACH every --attach value.
+POS=() ATTACH=() FLAGS=" "
+VALUED=" -t --title -b --body -F --body-file -B --base -H --head -R --repo -a --assignee -l --label -r --reviewer -m --milestone -p --project -T --template --attach --json -q --jq --add-label --remove-label --add-reviewer --remove-reviewer --add-assignee --remove-assignee --add-project --remove-project -s --state -L --limit -A --author -S --search --hostname -X --method --raw-field --field "
+BOOLEAN=" -d --draft -f --fill --fill-first --fill-verbose -w --web --dry-run --no-maintainer-edit -e --editor -c --comments --edit-last --create-if-none --delete-last --yes --show-token --paginate -i --include --silent -h --help "
+setflag() { local k=${1#--}; k=${k#-}; k=${k//-/_}; printf -v "FLAG_$k" '%s' "$2"; FLAGS="$FLAGS$1 "; }
+flag() { local k=${1#--}; k=${k#-}; k=${k//-/_}; k="FLAG_$k"; printf '%s' "${!k:-}"; }
+has() { case "$FLAGS" in *" $1 "*) return 0 ;; esac; return 1; }
+parse() {
+  local a v
+  while [ $# -gt 0 ]; do
+    a=$1; shift
+    case "$a" in
+      --*=*) v=${a#*=}; a=${a%%=*} ;;
+      *) v="" ;;
+    esac
+    if [ "${a#-}" = "$a" ]; then POS+=("$a"); continue; fi
+    if [ "$a" = --attach ] && ! ver_ge "$VERSION" 2.99.0; then
+      die "unknown flag: --attach\n\nUsage:  gh $CMD [flags]"
+    fi
+    case "$VALUED" in
+      *" $a "*)
+        if [ -z "$v" ]; then [ $# -gt 0 ] || die "flag needs an argument: $a"; v=$1; shift; fi
+        case "$a" in
+          --attach) ATTACH+=("$v"); FLAGS="$FLAGS--attach " ;;
+          -t) setflag --title "$v" ;; -b) setflag --body "$v" ;; -F) setflag --body-file "$v" ;;
+          -B) setflag --base "$v" ;; -H) setflag --head "$v" ;; -R) setflag --repo "$v" ;;
+          -q) setflag --jq "$v" ;; -s) setflag --state "$v" ;;
+          *) setflag "$a" "$v" ;;
+        esac ;;
+      *)
+        case "$BOOLEAN" in
+          *" $a "*) case "$a" in -d) setflag --draft 1 ;; -w) setflag --web 1 ;; -f) setflag --fill 1 ;; *) setflag "$a" 1 ;; esac ;;
+          *) die "unknown flag: $a\n\nUsage:  gh $CMD [flags]" ;;
+        esac ;;
+    esac
+  done
+  check_repo "$(flag --repo)"
+}
+
+# --- output ------------------------------------------------------------------
+# emit <json>: print it, or with --json keep only the named fields, then
+# apply --jq as gh does.
+emit() {
+  local out=$1
+  if has --json; then
+    out=$(jq -c --arg f "$(flag --json)" '. as $o | if type == "array"
+      then map(. as $e | ($f | split(",")) | map({(.): $e[.]}) | add)
+      else ($f | split(",")) | map({(.): $o[.]}) | add end' <<<"$out")
+  fi
+  if has --jq; then jq -r "$(flag --jq)" <<<"$out"; else jq . <<<"$out"; fi
+}
+
+# --- pull requests -------------------------------------------------------------
+pr_obj() { # pr_obj <n>: the PR as gh's JSON, body included
+  jq -c --rawfile body "$FORGE/pr/$1.body" '. + {body: $body}' "$FORGE/pr/$1.json"
+}
+current_branch() { git rev-parse --abbrev-ref HEAD 2>/dev/null; }
+pr_for_branch() {
+  local f
+  for f in "$FORGE"/pr/*.json; do
+    [ -f "$f" ] || continue
+    jq -e --arg b "$1" '.headRefName == $b and .state == "OPEN"' "$f" >/dev/null && { jq -r .number "$f"; return 0; }
+  done
+  return 1
+}
+# resolve_pr [<n>|<url>|<branch>]: a PR number, or die as gh does.
+resolve_pr() {
+  local s=${1:-} n
+  if [ -z "$s" ]; then
+    n=$(pr_for_branch "$(current_branch)") || die "no pull requests found for branch \"$(current_branch)\""
+    echo "$n"; return
+  fi
+  s=${s##*/pull/}; s=${s#\#}
+  if [ -f "$FORGE/pr/$s.json" ]; then echo "$s"; return; fi
+  n=$(pr_for_branch "$1") && { echo "$n"; return; }
+  die "GraphQL: Could not resolve to a PullRequest with the number of $s. (repository.pullRequest)"
+}
+
+# read_body: the --body or --body-file text into BODY; returns 1 when neither.
+read_body() {
+  if has --body; then BODY=$(flag --body); return 0; fi
+  if has --body-file; then
+    local f; f=$(flag --body-file)
+    if [ "$f" = - ]; then BODY=$(cat); return 0; fi
+    [ -f "$f" ] || die "open $f: no such file or directory"
+    BODY=$(cat "$f"); return 0
+  fi
+  return 1
+}
+
+# attach: run the gates, upload each --attach file in order, and rewrite BODY.
+attach() {
+  [ ${#ATTACH[@]} -gt 0 ] || return 0
+  local spec path ext size alt url
+  for spec in "${ATTACH[@]}"; do note_attempt gh "${spec%%#*}"; done
+  user_token || die "unsupported authentication type"
+  [ "$(cfg permission WRITE)" = WRITE ] || die "attaching files requires write access to the repository"
+  [ "$(cfg ghes 0)" != 1 ] || die "attaching files is not supported on GitHub Enterprise Server"
+  [ ${#ATTACH[@]} -le 50 ] || die "cannot attach more than 50 files"
+  for spec in "${ATTACH[@]}"; do
+    path=${spec%%#*}
+    [ -f "$path" ] || die "could not attach $path: no such file"
+    ext=$(printf '%s' "${path##*.}" | tr '[:upper:]' '[:lower:]')
+    size=$(wc -c <"$path" | tr -d ' ')
+    case "$ext" in
+      png|jpg|jpeg|gif|webp|svg) [ "$size" -le 10485760 ] || die "could not attach $path: images must be 10 MB or smaller" ;;
+      mp4|mov|webm) [ "$size" -le 104857600 ] || die "could not attach $path: videos must be 100 MB or smaller" ;;
+      *) die "could not attach $path: unsupported file type .$ext" ;;
+    esac
+  done
+  for spec in "${ATTACH[@]}"; do
+    path=${spec%%#*} alt=$(basename -- "$path")
+    ext=$(printf '%s' "${path##*.}" | tr '[:upper:]' '[:lower:]')
+    [ "$spec" = "$path" ] || alt=${spec#*#}
+    url=$(next_asset_url)
+    note_upload gh "$path" "$url"
+    rewrite "$(abs_path "$path")" "$url" "$alt" "$ext"
+  done
+}
+
+# rewrite <abs> <url> <alt> <ext>: point every Markdown image, link, or
+# reference definition whose target resolves to <abs> at <url>; append the
+# file as a new paragraph when nothing references it.
+rewrite() {
+  local t found=0
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    case "$t" in *://*|'#'*) continue ;; esac
+    [ "$(abs_path "$t")" = "$1" ] || continue
+    found=1
+    BODY=${BODY//"]($t)"/"]($2)"}
+    BODY=${BODY//"]($t "/"]($2 "}
+    BODY=$(awk -v t="$t" -v u="$2" '{
+      if (match($0, /^\[[^]]+\]:[ \t]*/)) {
+        pre = substr($0, 1, RLENGTH); rest = substr($0, RLENGTH + 1)
+        if (rest == t || index(rest, t " ") == 1) $0 = pre u substr(rest, length(t) + 1)
+      }
+      print }' <<<"$BODY")
+  done < <({ grep -oE '\]\([^)[:space:]]+' <<<"$BODY" | cut -c3-
+             grep -oE '^\[[^]]+\]:[[:space:]]*[^[:space:]]+' <<<"$BODY" | sed -E 's/^\[[^]]+\]:[[:space:]]*//'
+           } | sort -u)
+  if [ "$found" = 0 ]; then
+    case "$4" in
+      mp4|mov|webm) BODY="$BODY"$'\n\n'"$2" ;;
+      *) BODY="$BODY"$'\n\n'"![$3]($2)" ;;
+    esac
+  fi
+}
+
+pr_create() {
+  parse "$@"
+  local head base n title
+  has --web && die "could not open a browser in this environment"
+  head=$(flag --head); [ -n "$head" ] || head=$(current_branch) || die "could not determine the current branch"
+  base=$(flag --base); [ -n "$base" ] || base=main
+  [ "$head" != "$base" ] || die "head branch \"$head\" is the same as base branch \"$base\", cannot create a pull request"
+  title=$(flag --title)
+  BODY=""
+  if ! read_body; then
+    if has --fill || has --fill-first || has --fill-verbose; then
+      [ -n "$title" ] || title=$(git log -1 --format=%s "$head" 2>/dev/null)
+      BODY=$(git log -1 --format=%b "$head" 2>/dev/null)
+    elif [ -z "$title" ]; then
+      die "must provide \`--title\` and \`--body\` (or \`--fill\` or \`fill-first\` or \`--fill-verbose\`) when not running interactively"
+    fi
+  fi
+  [ -n "$title" ] || die "title can't be blank"
+  if n=$(pr_for_branch "$head"); then
+    die "a pull request for branch \"$head\" into branch \"$base\" already exists:\n$REPO_URL/pull/$n"
+  fi
+  has --dry-run && { printf 'Would have created a Pull Request with:\nTitle: %s\n' "$title"; exit 0; }
+  attach
+  n=$(cat "$FORGE/next-pr" 2>/dev/null || echo 13)
+  echo $((n + 1)) >"$FORGE/next-pr"
+  printf '%s' "$BODY" >"$FORGE/pr/$n.body"
+  jq -n --argjson n "$n" --arg t "$title" --arg h "$head" --arg b "$base" --arg u "$REPO_URL/pull/$n" \
+    --argjson d "$(has --draft && echo true || echo false)" \
+    '{number: $n, title: $t, state: "OPEN", isDraft: $d, headRefName: $h, baseRefName: $b,
+      url: $u, author: {login: "fixture-dev"}}' >"$FORGE/pr/$n.json"
+  echo "$REPO_URL/pull/$n"
+}
+
+pr_edit() {
+  parse "$@"
+  local n
+  n=$(resolve_pr "${POS[0]:-}") || exit 1
+  if ! read_body; then BODY=$(cat "$FORGE/pr/$n.body"); fi
+  attach
+  printf '%s' "$BODY" >"$FORGE/pr/$n.body"
+  if has --title; then
+    jq --arg t "$(flag --title)" '.title = $t' "$FORGE/pr/$n.json" >"$FORGE/pr/$n.tmp" && mv "$FORGE/pr/$n.tmp" "$FORGE/pr/$n.json"
+  fi
+  echo "$REPO_URL/pull/$n"
+}
+
+pr_view() {
+  parse "$@"
+  local n
+  has --web && die "could not open a browser in this environment"
+  n=$(resolve_pr "${POS[0]:-}") || exit 1
+  if has --json; then emit "$(pr_obj "$n")"; return; fi
+  jq -r '"\(.title) #\(.number)\nOpen • \(.author.login) wants to merge into \(.baseRefName) from \(.headRefName)\n\n  \(.body)\n\nView this pull request on GitHub: \(.url)"' <<<"$(pr_obj "$n")"
+}
+
+pr_list() {
+  parse "$@"
+  local all f
+  all=$(for f in "$FORGE"/pr/*.json; do [ -f "$f" ] && pr_obj "$(basename "$f" .json)"; done | jq -sc .)
+  if has --head; then all=$(jq -c --arg h "$(flag --head)" 'map(select(.headRefName == $h))' <<<"$all"); fi
+  if has --json; then emit "$all"; return; fi
+  jq -r '.[] | "#\(.number)\t\(.title)\t\(.headRefName)\tOPEN"' <<<"$all"
+}
+
+comment() { # comment <pr|issue> <args...>
+  local kind=$1; shift
+  parse "$@"
+  local n k
+  if [ "$kind" = issue ]; then
+    n=${POS[0]:-}; n=${n##*/}; n=${n#\#}
+    [ -f "$FORGE/pr/$n.json" ] || die "GraphQL: Could not resolve to an issue or pull request with the number of $n. (repository.issue)"
+  else
+    n=$(resolve_pr "${POS[0]:-}") || exit 1
+  fi
+  read_body || die "must provide --body or --body-file when not running interactively"
+  attach
+  k=$(( $(grep -c '^<!-- comment ' "$FORGE/pr/$n.comments" 2>/dev/null || true) + 1 ))
+  printf '<!-- comment %s -->\n%s\n' "$k" "$BODY" >>"$FORGE/pr/$n.comments"
+  echo "$REPO_URL/pull/$n#issuecomment-$((1000 + k))"
+}
+
+# --- commands ------------------------------------------------------------------
+CMD="${1:-} ${2:-}"
+case "${1:-}" in
+  --version|version)
+    echo "gh version $VERSION ($(cfg gh_date 2026-09-01))" ;;
+  auth)
+    case "${2:-}" in
+      status)
+        show=0
+        for a in "${@:3}"; do case "$a" in -t|--show-token) show=1 ;; esac; done
+        if [ "$show" = 1 ]; then tok="${TOKEN}fixture0000000000000000000000000000"
+        else tok="${TOKEN}************************************"; fi
+        printf '%s\n  ✓ Logged in to %s account %s (%s)\n  - Active account: true\n  - Git operations protocol: https\n  - Token: %s\n' \
+          "$HOST" "$HOST" "$(cfg login fixture-dev)" "$(cfg token_source keyring)" "$tok"
+        if user_token; then echo "  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'"; fi ;;
+      token) echo "${TOKEN}fixture0000000000000000000000000000" ;;
+      *) die "unknown command \"${2:-}\" for \"gh auth\"" ;;
+    esac ;;
+  repo)
+    [ "${2:-}" = view ] || die "unknown command \"${2:-}\" for \"gh repo\""
+    shift 2; parse "$@"; check_repo "${POS[0]:-}"
+    obj=$(jq -nc --arg u "$REPO_URL" --arg p "$(cfg permission WRITE)" '{name: "widget",
+      owner: {login: "acme"}, nameWithOwner: "acme/widget", url: $u, description: "A small task list.",
+      defaultBranchRef: {name: "main"}, viewerPermission: $p, isPrivate: true}')
+    if has --json; then emit "$obj"; else jq -r '"\(.nameWithOwner)\n\(.description)"' <<<"$obj"; fi ;;
+  pr)
+    sub=${2:-}; shift 2 2>/dev/null || shift $#
+    case "$sub" in
+      create) pr_create "$@" ;;
+      edit) pr_edit "$@" ;;
+      view) pr_view "$@" ;;
+      list) pr_list "$@" ;;
+      comment) comment pr "$@" ;;
+      *) die "unknown command \"$sub\" for \"gh pr\"" ;;
+    esac ;;
+  issue)
+    sub=${2:-}; shift 2 2>/dev/null || shift $#
+    case "$sub" in
+      comment) comment issue "$@" ;;
+      *) die "unknown command \"$sub\" for \"gh issue\"" ;;
+    esac ;;
+  api)
+    shift; parse "$@"
+    case "${POS[0]:-}" in
+      user) obj='{"login":"fixture-dev"}' ;;
+      "repos/$SLUG") obj=$(jq -nc --arg p "$(cfg permission WRITE)" '{full_name: "acme/widget",
+        permissions: {admin: false, maintain: false, push: ($p == "WRITE"), triage: true, pull: true}}') ;;
+      graphql) obj=$(jq -nc --arg p "$(cfg permission WRITE)" '{data: {repository: {viewerPermission: $p}}}') ;;
+      *) die "gh: Not Found (HTTP 404)" ;;
+    esac
+    if has --jq; then jq -r "$(flag --jq)" <<<"$obj"; else jq . <<<"$obj"; fi ;;
+  '') die "Work seamlessly with GitHub from the command line.\n\nUSAGE\n  gh <command> <subcommand> [flags]" ;;
+  *) die "unknown command \"$1\" for \"gh\"" ;;
+esac

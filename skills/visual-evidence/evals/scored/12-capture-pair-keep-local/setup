@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# The page on main with its cramped padding, and the fix as an uncommitted
+# spacing-fix.patch.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+fix_patch
+fixture_done
