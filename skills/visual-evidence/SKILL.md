@@ -217,20 +217,18 @@ Compose and Attach keeps its own rule.
 ## Compose and Attach
 
 Apply the review below to every image before running any upload command.
-Then take the first upload path whose gate passes. Don't reimplement upload or
-invent another host. A recording you were given counts as an image throughout
-this section, unless a line says otherwise.
+Don't reimplement upload or invent another host. A recording you were given
+counts as an image throughout this section, unless a line says otherwise.
 
 - **Authorization:** Invoking this skill authorizes the upload once every image
-  passes the review below. Don't ask the user for permission to run the upload
-  command or to upload a reviewed image. Two things still override this: a
-  request to keep the images local, which ends the work at the files, and an
-  image the review flags. Stop and ask about a flagged image only.
-- **Review each image before uploading, and not only for "secrets."** This
-  review is mandatory here, on every upload path. Its checklist is held at
-  gh-imgup's own bar. The review comes before upload because there is no
-  un-publish. **This is the checklist to apply.** Don't substitute a softer or
-  narrower review. Open each image and check it for:
+  passes the review below; don't ask permission to upload a reviewed image.
+  Two things still override this: a request to keep the images local, which
+  ends the work at the files, and an image the review flags. Stop and ask
+  about a flagged image only.
+- **Review each image before uploading, and not only for "secrets."** It's
+  mandatory on every upload path, because there is no un-publish. Apply this
+  checklist, held at gh-imgup's own bar, not a softer or narrower one. Open
+  each image and check it for:
   - API keys, tokens, passwords, session cookies, `.env` contents
   - Internal hostnames, IPs, private URLs, infrastructure details
   - Customer or personal data (PII), real names, emails, account numbers
@@ -261,11 +259,10 @@ every path: keep the evidence local.
    - `attaching files is not supported on GitHub Enterprise Server`
 2. **gh-imgup, when it's already installed.** Check `command -v gh-imgup`, or
    `Get-Command gh-imgup` in PowerShell, then
-   `npx --no-install @freeasinbird/gh-imgup`. It's recommended, not required.
-   This is the path under the Actions `GITHUB_TOKEN`, where it's the only
-   option that needs no extra secret, and on gh older than 2.99.0. It uploads
-   only to `github.com`, so on GitHub Enterprise Cloud go to path 3 instead.
-   It accepts only images, so a recording goes to path 3 too.
+   `npx --no-install @freeasinbird/gh-imgup`. This is the path under the
+   Actions `GITHUB_TOKEN` and on gh older than 2.99.0. It uploads only to
+   `github.com`, so on GitHub Enterprise Cloud go to path 3 instead. It
+   accepts only images, so a recording goes to path 3 too.
    Never download it with `npx -y`; an approval reviewer blocks an unknown
    package with credential access.
 3. **Stop at local files.** Say so at handoff and name the fix: upgrade gh for
