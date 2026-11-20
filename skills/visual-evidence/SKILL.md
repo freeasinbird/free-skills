@@ -179,15 +179,13 @@ state.
 
 Use `capture.mjs` with headless Chrome and Node 22+ when a fresh URL load
 reaches the requested state. It starts a fresh browser profile; it doesn't
-restore sessions or perform clicks. Waiting for a visible selector doesn't
-establish interactive state. For state setup, follow the method decision above.
+restore sessions or perform clicks, and waiting for a visible selector doesn't
+establish interactive state.
 
-The script controls readiness waits, animations, color scheme, viewports, DPR,
-element clipping, retries, and a total timeout budget.
-
-Run it by path from the project directory that will hold the screenshots.
-`<skill-dir>` is this skill's directory, whose installed path varies by
-platform.
+Run it by path from the project directory that will hold the screenshots,
+never from the skill directory: relative `--out` and `--chrome` paths resolve
+from the working directory, and Compose and Attach won't find screenshots
+written into a skill install. `<skill-dir>` is this skill's directory.
 
 ```sh
 node <skill-dir>/capture.mjs --url http://localhost:3000/cards \
@@ -195,45 +193,16 @@ node <skill-dir>/capture.mjs --url http://localhost:3000/cards \
   --clip '#card-list'
 ```
 
-Don't change into the skill directory. Relative `--out` and `--chrome` paths
-resolve from the working directory, not the script directory.
+The script's header comment documents every option, its default, the output
+names, and the exit codes. The options are `--url` and `--out` (required),
+`--viewport`, `--wait-for`, `--clip`, `--clip-pad`, `--settle-ms`, `--dpr`,
+`--dark`, `--timeout-budget`, `--attempt-timeout`, `--retries`, `--chrome`,
+and `--chrome-flag`. Several viewports insert the size into the filename, so
+use the names its `WROTE` lines report; they also give the dimensions for the
+step 6 check.
 
-Running inside a global skill install writes screenshots into that install.
-The Compose and Attach step won't find them there.
-
-`--url` and `--out` are required; every other option has a default that
-suits an ordinary capture:
-
-| Option              | Default    | Effect                                                           |
-| ------------------- | ---------- | ---------------------------------------------------------------- |
-| `--viewport`        | `1280x720` | comma-separated list; widths ≤ 600 get Chrome's mobile emulation |
-| `--wait-for`        | none       | CSS selector to wait on until present and visible                |
-| `--clip`            | none       | CSS selector to crop to, its bounding box                        |
-| `--clip-pad`        | `12`       | px of context padding around `--clip`                            |
-| `--settle-ms`       | `500`      | quiet period after readiness, before the shot                    |
-| `--dpr`             | `2`        | device pixel ratio, 1 to 4                                       |
-| `--dark`            | off        | emulate `prefers-color-scheme: dark`                             |
-| `--timeout-budget`  | `90`       | total seconds across all viewports and retries                   |
-| `--attempt-timeout` | `30`       | per-attempt seconds, clamped to the remaining budget             |
-| `--retries`         | `2`        | extra attempts per viewport                                      |
-| `--chrome`          | autodetect | Chrome binary path (also read from `$CHROME`)                    |
-| `--chrome-flag`     | none       | repeatable extra Chrome flag, e.g. `--no-sandbox` in a container |
-
-**Output filenames depend on viewport count.** One viewport writes exactly
-`--out`. Several viewports insert the size before the extension.
-
-The example writes `after-1280x720.png` and `after-390x844.png`, never
-`after.png`. Use the names reported in the script's `WROTE` lines.
-
-Each `WROTE` line includes actual dimensions for the step 6 check. The default
-90-second `--timeout-budget` stays under the roughly two-minute cap common to
-agent shell tools.
-
-Exit 64 means invalid usage. Exit 69 means no usable Chrome or Node. Exit 1
-means capture failed after retries.
-
-On exit 69, the prose in steps 3 through 6 is the specification. Apply the
-same craft with another capture method.
+On exit 69 (no usable Chrome or Node), the prose in steps 3 through 6 is the
+specification. Apply the same craft with another capture method.
 
 ### 5. Determinism & Hygiene
 
