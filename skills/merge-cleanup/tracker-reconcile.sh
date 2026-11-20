@@ -316,8 +316,9 @@ observe_item() {
   rc=$?
   cat "$TMPD/refresh.err" >&2
   status=unverifiable
+  # The status line is stderr's last line: read retries log before it.
   if [ "$rc" -eq 0 ]; then
-    case "$(sed -n 1p "$TMPD/refresh.err")" in
+    case "$(tail -n 1 "$TMPD/refresh.err")" in
       "tracker-refresh.sh: OK unchanged"*) status=fresh ;;
       "tracker-refresh.sh: OK changed"*) status=stale ;;
     esac

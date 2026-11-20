@@ -369,6 +369,17 @@ want_err "tracker-refresh.sh: STOP tracker #1 is closed"
 want_row "observe|#1|unverifiable|$IN"
 want_row "skip|#2|an earlier observation stopped reconciliation|remaining"
 
+# tracker-refresh.sh logs each read retry on stderr before its status line.
+CASE="observed refresh that retried a read: status from the last line"
+current 1; tips "$A"
+printf '#!/bin/sh\n%s\n%s\nexit 0\n' \
+  'echo "tracker-refresh.sh: forge read failed (attempt 1 of 3): tracker issue #1; retrying in 1s" >&2' \
+  'echo "tracker-refresh.sh: OK unchanged" >&2' >"$TMP/rretry"
+plan "policy|$A|complete|initial" "plan|#1|noop|$IN"
+TRACKER_REFRESH_SCRIPT="$TMP/rretry" go
+want_rc 0; want_result complete; want_writes 0; want_ledger_ok
+want_row "observe|#1|fresh|$IN"
+
 CASE="a trace named - is a file, not stdin"
 stale 1; tips "$A"
 plan "policy|$A|complete|initial" "plan|#1|write|$IN"
