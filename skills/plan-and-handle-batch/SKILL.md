@@ -18,15 +18,13 @@ description: >-
 
 # Plan and Handle Batch
 
-Run a batch of issues from plan to review-ready PR. Every listed issue gets its
-own planner. Every startable plan gets its own implementer in an isolated
-checkout, up to a window of N running at once. The owner gets one status table
-at the end.
+Run a batch of issues from plan to review-ready PR: one planner per issue, one
+implementer per startable plan in an isolated checkout (up to N running at
+once), and one status table at the end.
 
-You are the orchestrator. You launch delegates, relay questions, keep the
-window full, keep the state file, and report. You never plan or implement in
-your own context: no issue or comment edits, and no branches, commits, or code
-changes in your own checkout.
+As orchestrator, you launch delegates, relay questions, keep the window full,
+keep the state file, and report. Never plan or implement yourself: no issue or
+comment edits, and no branches, commits, or code changes in your checkout.
 
 Follow this procedure:
 
@@ -42,42 +40,36 @@ Follow this procedure:
 
 Check three requirements before anything launches. Decide each from what the
 session lists and what is installed, never from guesswork about the platform.
-The examples show what meets a requirement; they don't choose a route (see
-Choose the Routes).
+Examples show what qualifies; they don't choose a route (see Choose the
+Routes).
 
-1. **Background delegation with a wake.** The session can start subagents or
-   threads that run in the background, and it learns when each one ends. A
-   completion notice or a blocking wait on a delegate counts as the wake. A
-   sleep loop or a status poll doesn't. Examples: Claude Code's `Agent` run in
-   the background with task notifications, Codex `spawn_agent` with
+1. **Background delegation with a wake.** The session can run background
+   subagents or threads and learn when each ends via a completion notice or
+   blocking wait (never a sleep loop or status poll). Examples: Claude Code
+   background `Agent` with notifications, Codex `spawn_agent` with
    `wait_agent`, T3 Code `delegate_task`, or a new top-level thread waited on
    with T3 Code `t3_thread_launch` and `t3_thread_wait`.
-2. **`plan-work-unit` for the planners.** The skill is listed in this session,
-   or installed beside this one as `../plan-work-unit/SKILL.md`.
-3. **An isolated checkout per implementer.** The platform can start each
-   implementer in its own worktree or checkout, or each implementer has a
-   shell and Git to create its own worktree. Examples: a new top-level thread
-   with a worktree workspace (T3 Code `t3_thread_launch` with
-   `workspaceStrategy`), or a subagent with worktree isolation (Claude Code
-   `isolation: "worktree"`).
+2. **`plan-work-unit` for planners.** Listed in this session, or installed
+   beside this skill as `../plan-work-unit/SKILL.md`.
+3. **An isolated checkout per implementer.** The platform gives each
+   implementer its own worktree or checkout (for example, T3 Code
+   `t3_thread_launch` with `workspaceStrategy`, or a Claude Code subagent with
+   `isolation: "worktree"`), or each implementer has a shell and Git to create
+   one.
 
 Decide each requirement this way:
 
-- **Listed means granted.** A listed tool meets its requirement unless a rule
-  forbids it.
-- **This invocation is the request.** A rule that limits delegation to
-  explicit requests doesn't fail a requirement.
+- **Listed means granted.** A listed tool qualifies unless a rule forbids it.
+- **This invocation is the request.** A rule limiting delegation to explicit
+  requests doesn't fail a requirement.
 - **Unfamiliar isn't missing.** Never fail a requirement because a tool name
   is unfamiliar.
-- **Named but unloaded counts as listed.** Some sessions name a tool but load
-  its definition only on demand.
-  - Before you decide a requirement or the route, load each such tool that
-    could start a thread, wait on one, or delegate in the background. Load it
-    through the platform's tool loader, even when a loaded tool already meets
-    the requirement. Where every listed tool is loaded, there is nothing to
-    load.
-  - A tool that fails to load isn't offered, and the failure is the reason.
-  - Never choose a tool because it's already loaded.
+- **Named but unloaded counts as listed.** Before deciding a requirement or
+  route, load every named-but-unloaded tool that can start or wait on a thread
+  or delegate in the background. Use the platform's tool loader even when a
+  loaded tool already qualifies; if every listed tool is loaded, skip loading.
+  A tool that fails to load isn't offered, with the failure as the reason.
+  Never choose a tool just because it's already loaded.
 
 On a miss, launch nothing and stop with this error, naming each missing part:
 
@@ -91,91 +83,76 @@ Never fall back to planning or implementing in your own context.
 
 ## Authorization
 
-Invoking this skill is the owner's assignment of `Plan #N` and `Handle #N` for
-each issue in the batch, and of nothing else. For a tracker, the batch is the
-set its rules resolve (`references/request-sources.md` §tracker). It authorizes launching the planners
-and implementers this file describes, without per-launch confirmation. Where a
-host starts new top-level threads only on the user's request, this invocation
-is that request. If the host still refuses, take the subagent route for that
-launch and the rest. Update the route in the state file with the refusal as
-its reason, and tell the owner in one line.
+Invoking this skill assigns `Plan #N` and `Handle #N` for each issue in the
+batch (for a tracker, the set resolved by `references/request-sources.md`
+§tracker), and nothing else. It authorizes launching planners and implementers
+without per-launch confirmation, and counts as the user's request where a host
+requires one for new top-level threads. If the host still refuses top-level
+threads, switch to route 2 for that launch and the rest, update the state file
+with the refusal as the reason, and tell the owner in one line.
 
-The assignment doesn't cover choosing, adding, or dropping issues beyond the
-rules under Read the Request, merging or landing, restarting an implementer
-run that ended, or work in another repository.
+This assignment doesn't authorize choosing, adding, or dropping issues beyond
+Read the Request, merging or landing, restarting an ended implementer run, or
+working in another repository.
 
-Don't route around an approval prompt the platform shows. If a launch is
-refused or fails, record the issue as not dispatched with the error, free its
-slot, and continue with the rest.
+Never route around a platform approval prompt. On a refused or failed launch,
+record the issue as not dispatched with the error, free its slot, and continue.
 
 ## Choose the Routes
 
-Before you read the request, choose how planners and implementers start.
-Decide from every tool the session lists, loaded or not (see Requirements).
+Before reading the request, choose how planners and implementers start from
+every tool the session lists, loaded or not (see Requirements).
 
-- **The planner tool.** Check whether the host's rules name a tool for
-  background delegation. Where they name one, start planners and route 2
-  implementers through it. Example: T3 Code sends background agents through
-  `delegate_task`, never a background `Agent`. Where the rules name none, use
-  any tool that meets requirement 1.
-- **The implementer route.** Route 1, a new top-level thread, is available
-  when the session lists all three of these:
-  - A tool that starts a new top-level thread.
-  - A worktree of its own for that thread.
-  - A wake on the thread's end, from a completion notice or a blocking wait.
-    It refills the window while issues are queued.
-
-  Example: T3 Code `t3_thread_launch` with `workspaceStrategy`, waited on with
-  `t3_thread_wait`. Take route 2, a background subagent, only when one of the
-  three is missing, and name the missing one as the reason.
-
-- **Not a reason for route 2.** A host rule that starts top-level threads only
-  on the user's request doesn't rule out route 1. This invocation is that
-  request (see Authorization). A host-named delegation tool doesn't rule it
-  out either; it governs background delegates, not top-level threads.
-- **Record both.** Write the route, the tool that starts implementers, the
-  route's reason, and the planner tool to the state file. Name them in the
-  opening message.
+- **Planner tool.** If host rules name a tool for background delegation (such
+  as T3 Code `delegate_task`, never background `Agent`), start planners and
+  route 2 implementers through it. Otherwise use any tool meeting requirement 1.
+- **Implementer route.** Prefer **route 1** (a new top-level thread) when the
+  session lists all three: a tool that starts a top-level thread, a dedicated
+  worktree for it, and a wake on thread end. The wake (a completion notice or
+  blocking wait) refills the window while issues are queued. Take **route 2**
+  (a background subagent, with worktree isolation where offered) only when one
+  of the three is missing, naming the missing piece as the reason.
+- **Not a reason for route 2.** A host rule requiring a user request for
+  top-level threads doesn't rule out route 1 (see Authorization). Neither does
+  a host-named delegation tool, which governs background delegates, not
+  top-level threads.
+- **Record both.** Write the route, implementer tool, route reason, and planner
+  tool to the state file, and name them in the opening message.
 
 ## Read the Request
 
 Read four things from the request's plain words:
 
-- **Issues.** An ordered list of issue numbers, or one tracker issue whose
-  units become the list (`references/request-sources.md` §tracker). The order
-  is the dispatch priority. Drop exact duplicates and keep the first position.
-- **Window.** The most implementations from this batch running at once. Read
-  it from words like "five at a time", "3 in parallel", "window of 4", or "one
-  at a time". With no number, use 3 and mark it as the default. If the window
-  words give two sizes, or a size that isn't a positive whole number, ask
-  before anything launches.
-- **Model and effort.** Optional, separately for planners and implementers.
-  Default: inherit the session's. Where the platform can't set one, say so in
-  the opening message.
-- **Repository.** One per batch: the session's project. If the request names
-  another repository's issues, say so and launch nothing.
+- **Issues.** An ordered list of issue numbers, or one tracker's units
+  (`references/request-sources.md` §tracker). Order sets dispatch priority;
+  drop exact duplicates, keeping the first position.
+- **Window.** Max batch implementations running at once, from plain words
+  ("five at a time", "3 in parallel", "window of 4", "one at a time"). Default
+  to 3 and mark it as the default. If the words give two sizes, or a size that
+  isn't a positive whole number, ask before launching anything.
+- **Model and effort.** Optional, separately for planners and implementers
+  (default: inherit the session's). Say in the opening message if the platform
+  can't set one.
+- **Repository.** The session's project only. If the request names another
+  repository's issues, say so and launch nothing.
 
-When the request names no issue numbers directly (for example, pointing at a
-set named earlier in the thread or describing issues by criteria), read
-`references/request-sources.md` §set-named-earlier before resolving it. When it
-points at a tracker issue or asks for its units, read
-`references/request-sources.md` §tracker before resolving it.
+For a request without direct issue numbers (an earlier list in the thread or
+criteria), read `references/request-sources.md` §set-named-earlier first. For a
+tracker issue or its units, read `references/request-sources.md` §tracker
+first.
 
 ### Occupied Issues
 
-Before anything launches, check every issue in the set for occupancy under
-the project's claim rules. Find those rules in its agent instructions, such as
-a Claiming section in AGENTS.md or the coordination document it points to.
-Read them before you check, and apply their lease expiry, release markers,
-and planning reservations as written.
+Before launching anything, read the project's claim rules (for example,
+AGENTS.md's Claiming section or the coordination doc it links) and check every
+issue using their lease expiry, release markers, and planning reservations as
+written.
 
-Leave out an occupied issue: one with an active claim, an active planning
-reservation, or an open PR that links it. Where the project defines no claim
-rules, an open PR that links the issue is the only sign. Planning an occupied
-issue would replace the plan its holder is working from.
-
-A left-out listed issue stays in the report as not dispatched: occupied, with
-the evidence. If nothing remains, launch nothing and say why.
+Leave out any issue with an active claim, active planning reservation, or
+linked open PR (planning it would overwrite its holder's plan). Without project
+claim rules, only a linked open PR marks occupancy. Report each left-out listed
+issue as not dispatched: occupied, with evidence; if none remain, launch
+nothing and say why.
 
 ## Opening Message
 
@@ -185,152 +162,125 @@ without waiting for a reply.
 
 ## Plan Every Issue
 
-Start one background planner per issue, all at once, through the planner tool
-you recorded. Planners don't count against the window. If the platform caps
-how many delegates run at once, start the rest as earlier planners finish. Read
-`references/templates.md` §planner-brief for the exact planner brief and
-fill-in rules. Record each report in the state file as it arrives. A planner
-that ends with neither a report nor a question is recorded as ended without a
-report and isn't dispatched.
+Start one background planner per issue, all at once, through the recorded
+planner tool; planners don't count against the window. If the platform caps
+concurrent delegates, start the rest as earlier planners finish. Read
+`references/templates.md` §planner-brief for the brief and fill-in rules.
+Record each report in the state file as it arrives; record a planner ending
+with neither report nor question as ended without a report, and don't dispatch
+it.
 
 ### Relay Planner Questions
 
-`plan-work-unit` asks a mid-planning question before any planning write, then
-stops. Ask the owner as soon as a question arrives. Group questions that arrive
-together, at most three per message. Lead each with the issue number and the
-planner's recommendation.
+`plan-work-unit` asks mid-planning questions before any planning write, then
+stops. Relay each question to the owner immediately, grouping concurrent
+questions up to three per message and leading each with the issue number and
+the planner's recommendation.
 
-Send the answer back to the same planner where the platform can re-enter a
-stopped delegate. Otherwise, start a fresh planner for that issue with the same
-brief and the owner's answer added. Don't answer for the owner.
+Return the owner's answer to the same planner where the platform can re-enter a
+stopped delegate; otherwise start a fresh planner with the same brief plus the
+answer. Never answer for the owner.
 
 ## Dispatch in a Rolling Window
 
 ### Queue Only Startable Plans
 
-An issue joins the dispatch queue only when its report's status line reads
-`#N planned, startable now`. Ignore the bold `Status.` lead word, a link on
-`#N`, and trailing punctuation when you match. Queue order
-follows the issue list, not finish order. Every other outcome stays out of the
-queue and goes in the report as not dispatched, with its reason:
+Queue an issue only when its report's status line reads
+`#N planned, startable now` (ignoring a bold `Status.` lead, a link on `#N`,
+and trailing punctuation). Follow the issue list's order, not finish order.
+Keep every other outcome out of the queue and report it as not dispatched with
+its reason:
 
 - `#N planned, blocked on #M until <event>`: blocked on #M, with the event.
 - `#N planned, startable but I'd hold: <reason>`: held, with the reason.
 - `#N planning blocked: <blocker>`: planning blocked, with the blocker.
 
-If the blocking issue #M is in this batch, the dependent issue still waits. #M
-needs a human merge first, so this run doesn't dispatch the dependent.
-
-If a startable report has no branch line, name the branch yourself from the
-project's branch-naming rule and the issue title. Naming a branch isn't
-planning.
+Even if blocking issue #M is in this batch, don't dispatch its dependent (#M
+needs a human merge first). If a startable report omits the branch line, name
+the branch from the project's branch-naming rule and issue title; naming a
+branch isn't planning.
 
 ### Start Each Implementer
 
-Each implementer works in its own checkout on the plan's branch. That branch
-starts from the freshly fetched default-branch tip. A unit whose Dependencies
-field stacks it on a PR that is still open starts from that PR's branch
-instead. Use the route you recorded under Choose the Routes:
+Each implementer works in its own checkout on the plan's branch, started from
+the freshly fetched default-branch tip (or from the base PR's branch when
+Dependencies stacks it on a still-open PR). Launch on the recorded route,
+passing implementer model and effort where supported, and record the thread or
+agent link in the state file at launch.
 
-1. **A new top-level thread** with its own worktree on the plan's branch, when
-   you can also wait on that thread's end. Send the kickoff sentence alone,
-   unless the checkout needs the branch setup. A stacked unit needs it when
-   the thread's worktree starts from the default branch.
-2. **A background subagent,** through the planner tool where the host names
-   one, with worktree isolation where the platform offers it. Send the
-   kickoff sentence and the brief in `references/templates.md`
-   §implementer-brief.
-
-Some platforms start a delegate's checkout from your commit or pick its branch
-name. There, the brief's branch setup is required, or the PR starts from a
-stale base. Where the platform gives a subagent no checkout of its own, the
-branch setup creates one as a new worktree.
-
-The kickoff's first line is always the sentence `plan-work-unit` hands off:
+The kickoff's first line is always `plan-work-unit`'s handoff sentence:
 
 ```text
 Handle #N, implementation plan in comments.
 ```
 
-On the subagent route, and on a thread that needs the branch setup, read
-`references/templates.md` §implementer-brief and append its block after that
-line.
-
-Pass the implementer model and effort where the platform takes them. Record
-the thread or agent link in the state file at launch.
+- **Route 1 (top-level thread):** Start its worktree on the plan's branch and
+  send that line alone, unless the checkout needs branch setup. Branch setup is
+  required when the platform starts it from your commit, picks its branch name,
+  or starts a stacked unit from the default branch.
+- **Route 2 (background subagent), or any thread needing branch setup:** Read
+  `references/templates.md` §implementer-brief and append its block after that
+  line. Branch setup is required there so the PR doesn't start from a stale
+  base, and it creates a worktree where a subagent gets no checkout of its own.
 
 ### Keep the Window Full
 
-Count a unit against the window from launch until its run ends. A run ends
-with one of these:
+Count a unit against the window from launch until its run ends, reading its
+final message as its report:
 
-- **Handoff report:** the PR is open and its checks are green. Ready for
-  review.
-- **Blocked report:** the implementer names its blocker.
-- **No report:** the run stopped without a report or a question. Record it as
-  ended without a report, and never restart it. A second run could duplicate
-  its branch or PR.
+- **Handoff report:** PR is open with green checks (ready for review).
+- **Blocked report:** Implementer names its blocker.
+- **No report:** Stopped without report or question. Record as ended without a
+  report and never restart it (a second run could duplicate its branch or PR).
 
-Read a thread's or subagent's final message as its report.
+An implementer stopping on an owner question keeps its slot: relay the question
+as for planners and return the answer. Where the platform can't re-enter it,
+the run has ended: free the slot, record it as waiting on owner, and give the
+owner the question and unit link to resume by hand.
 
-An implementer that stops on an owner question keeps its slot:
-
-- **Relay it.** Ask the owner as you do for planner questions, and return the
-  answer to that unit.
-- **No re-entry.** Where the platform can't re-enter that unit, its run has
-  ended. Free the slot, record it as waiting on owner, and give the owner the
-  question and the unit's link to resume it by hand.
-
-Fill the window by these rules:
-
-- **Start on a free slot.** Whenever a slot frees and the queue isn't empty,
-  start the next queued issue.
-- **Never exceed the window.** Count only this batch's implementers. Other
-  threads, other batches, and the planners don't count.
-- **Apply a new window going forward.** If the owner changes the window
-  mid-run, apply it to later launches. Never stop a running unit to meet it.
+- **Start on a free slot.** When a slot frees and the queue isn't empty, start
+  the next queued issue.
+- **Never exceed the window.** Count only this batch's implementers, not
+  planners, other batches, or other threads.
+- **Apply a new window going forward.** Apply mid-run window changes to later
+  launches only; never stop a running unit.
 
 ### Wait Without Polling
 
-- **Wake on completion.** Wait on completion notices or a blocking wait on a
-  delegate. Re-enter on any notice and act on that delegate's result.
-- **One delegate at a time.** Where the platform offers only a blocking wait
-  on one delegate at a time, use bounded waits on each running delegate in
-  turn.
-- **No polling.** Never use a sleep loop or a status poll.
-- **End a turn only where a notice wakes you.** Where yielding the turn would
-  end the session, block on a wait instead. Don't stop the batch to summarize
-  progress or to ask whether to continue.
+- **Wake on completion.** Wait on completion notices or a blocking delegate
+  wait; re-enter on any notice and act on its result.
+- **One delegate at a time.** Where the platform offers only a blocking wait on
+  one delegate at a time, rotate bounded waits across running delegates.
+- **No polling.** Never use a sleep loop or status poll.
+- **End a turn only where a notice wakes you.** Block on a wait if yielding
+  would end the session. Never pause the batch to summarize progress or ask
+  whether to continue.
 
 ### End the Batch
 
-The batch ends when nothing it waits on is still working. Then send the
-report. What the batch waits on:
+End the batch and send the report once nothing you wait on is still working:
 
-- **Planners.** Every planner still working.
-- **Free slots.** Every running implementer while an issue is queued behind
-  it. Once the queue is empty, no launch is left to make.
-- **Subagents.** Every route 2 implementer still working, including one a
-  host refusal moved off route 1. Its report reaches the owner only through
-  you, so wait for its run to end.
+- **Planners:** Every planner still working.
+- **Free slots:** Every running implementer while an issue is queued behind it.
+- **Subagents:** Every running route 2 implementer (including any moved off
+  route 1 by host refusal), since its report reaches the owner only through
+  you.
 
-Once the queue is empty, stop waiting on route 1 threads. A top-level thread
-is a session the owner can open, read, and answer in, and it posts its own
-handoff or blocked report there. Report each one still working as running,
-with its thread link.
+Once the queue is empty, stop waiting on route 1 threads. The owner can open,
+read, and answer each top-level thread directly, where it posts its own handoff
+or blocked report; report each still-working thread as running with its link.
 
 - **Questions don't hold the report.** A delegate stopped on an owner question
-  isn't working. The report lists open questions and any issue still queued
-  behind a held slot.
-- **A later answer resumes the run.** It resumes its unit and the window as
-  before, followed by an updated report.
+  isn't working; list open questions and any issue queued behind a held slot.
+- **A later answer resumes the run.** Resume that unit and the window as
+  before, then send an updated report.
 
 ## Keep a State File
 
 Keep one state file in the session's temporary workspace, never in the project
-tree. Read `references/state-file.md` §state-file for when to write it and what
-batch and per-issue fields to record. On a resumed or condensed session, read
-`references/state-file.md` §resumed-session before taking any action.
+tree. Read `references/state-file.md` §state-file for cadence and required
+fields. On a resumed or condensed session, read `references/state-file.md`
+§resumed-session before taking any action.
 
 ## Report
 
