@@ -21,12 +21,16 @@
 #                repository.
 #   --jobs       Runs in parallel (default 1).
 #
-# Case contract: `setup <fixture-dir>` builds the fixture; when it leaves a
-# <fixture-dir>/bin, that directory leads the agent's PATH. The agent starts
-# in <fixture-dir> with the case's evals.json prompt, `<fixture-repo>`
+# Case contract: `setup <fixture-dir>` builds the fixture with
+# SCORED_EVAL_STATE_DIR set to a per-run directory outside <fixture-dir> and
+# <fixture-dir>/.. for stub state, stub binaries, and grader inputs; the agent
+# never receives SCORED_EVAL_STATE_DIR. When <state-dir>/bin exists, it leads
+# the agent's PATH (with <fixture-dir>/bin kept as a fallback). The agent
+# starts in <fixture-dir> with the case's evals.json prompt, `<fixture-repo>`
 # replaced by <fixture-dir>/repo, behind "Read <skill-copy>/SKILL.md and follow
-# it." Then `grade <fixture-dir> <final-message-file>` exits 0 for a pass and
-# prints one line per failed assertion.
+# it." Then `grade <fixture-dir> <final-message-file>` runs with the same
+# SCORED_EVAL_STATE_DIR, exits 0 for a pass, and prints one line per failed
+# assertion.
 #
 # Isolation: every setup, agent, and grade runs in an emptied environment with
 # a fresh TMPDIR, an empty GH_CONFIG_DIR, a dummy GH_TOKEN, and a PATH of the
@@ -181,11 +185,14 @@ isolate() {
 }
 
 run_one() { # run_one <repeat> <case>: leaves status, cost, seconds in the run dir
-  local r="$1" c="$2" run fix prompt path start rc pid watchdog
+  local r="$1" c="$2" run fix state prompt path start rc pid watchdog
   run="$OUT/runs/r$r/$c"
   fix="$run/fixture"
-  mkdir -p "$fix" "$run/home" "$run/tmp" "$run/gh-config" "$run/skill"
-  if ! (isolate "$run" "$SYSPATH" "$run/home"; exec "$EVAL_DIR/scored/$c/setup" "$fix") \
+  state="$OUT/state/r$r/$c"
+  mkdir -p "$fix" "$state" "$run/home" "$run/tmp" "$run/gh-config" "$run/skill"
+  if ! (isolate "$run" "$SYSPATH" "$run/home"
+        export SCORED_EVAL_STATE_DIR="$state"
+        exec "$EVAL_DIR/scored/$c/setup" "$fix") \
       >"$run/setup.log" 2>&1; then
     echo error >"$run/status"; echo "setup failed" >"$run/grade.txt"; return
   fi
@@ -194,7 +201,8 @@ run_one() { # run_one <repeat> <case>: leaves status, cost, seconds in the run d
   prompt="Read $run/skill/$SKILL_NAME/SKILL.md and follow it. ${prompt//<fixture-repo>/$fix/repo}"
   printf '%s\n' "$prompt" >"$run/prompt.txt"
   path="$SYSPATH"
-  [ ! -d "$fix/bin" ] || path="$fix/bin:$SYSPATH"
+  [ ! -d "$fix/bin" ] || path="$fix/bin:$path"
+  [ ! -d "$state/bin" ] || path="$state/bin:$path"
   start=$(date +%s)
   # The subshell execs the agent, so $! is the agent and the watchdog can stop it.
   # Exporting the key here, not on a command line, keeps it out of process
@@ -235,7 +243,9 @@ run_one() { # run_one <repeat> <case>: leaves status, cost, seconds in the run d
   fi
   jq -r '.total_cost_usd // 0' "$run/agent.json" >"$run/cost"
   jq -r '.result // ""' "$run/agent.json" >"$run/message.txt"
-  if (isolate "$run" "$SYSPATH" "$run/home"; exec "$EVAL_DIR/scored/$c/grade" "$fix" "$run/message.txt") \
+  if (isolate "$run" "$SYSPATH" "$run/home"
+      export SCORED_EVAL_STATE_DIR="$state"
+      exec "$EVAL_DIR/scored/$c/grade" "$fix" "$run/message.txt") \
       >"$run/grade.txt" 2>&1; then
     echo pass >"$run/status"
   else
