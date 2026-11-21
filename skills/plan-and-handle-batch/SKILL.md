@@ -93,7 +93,7 @@ Never fall back to planning or implementing in your own context.
 
 Invoking this skill is the owner's assignment of `Plan #N` and `Handle #N` for
 each issue in the batch, and of nothing else. For a tracker, the batch is the
-set its rules resolve (see A Tracker). It authorizes launching the planners
+set its rules resolve (`references/request-sources.md` §tracker). It authorizes launching the planners
 and implementers this file describes, without per-launch confirmation. Where a
 host starts new top-level threads only on the user's request, this invocation
 is that request. If the host still refuses, take the subagent route for that
@@ -142,8 +142,8 @@ Decide from every tool the session lists, loaded or not (see Requirements).
 Read four things from the request's plain words:
 
 - **Issues.** An ordered list of issue numbers, or one tracker issue whose
-  units become the list (see A Tracker). The order is the dispatch priority.
-  Drop exact duplicates and keep the first position.
+  units become the list (`references/request-sources.md` §tracker). The order
+  is the dispatch priority. Drop exact duplicates and keep the first position.
 - **Window.** The most implementations from this batch running at once. Read
   it from words like "five at a time", "3 in parallel", "window of 4", or "one
   at a time". With no number, use 3 and mark it as the default. If the window
@@ -155,66 +155,11 @@ Read four things from the request's plain words:
 - **Repository.** One per batch: the session's project. If the request names
   another repository's issues, say so and launch nothing.
 
-### A Set Named Earlier
-
-The request may point at a set instead of giving numbers, such as "plan and
-handle those". Use the set only when the reference resolves to one list of
-issue numbers already written in the thread. Keep that list's order. Never
-search the forge to build the set, and never add to it or filter it.
-
-Ask which issues are meant, and launch nothing until the owner answers, when:
-
-- The reference could mean more than one list in the thread.
-- The set is described by criteria, not numbers.
-
-Examples:
-
-- **Resolves.** A triage reply listed "#12, #9, #15", then the owner says
-  "plan and handle those, two at a time". Run #12, #9, and #15 in that order.
-- **Ambiguous.** The thread holds a triage list and a later shortlist, then
-  "plan and handle those". Ask which list.
-- **Criteria.** "Plan and handle the open bugs." Ask for the issue numbers.
-
-### A Tracker
-
-The request may point at one tracker issue instead of listing issues, such as
-"plan and handle the startable units on #835, three at a time". Treat an issue
-as a tracker only when the request calls it one or asks for its units. The
-batch is the tracker's startable units that no one is working on yet.
-
-Resolve the set in three steps:
-
-1. **Compute the startable units.** Where you have a shell, `gh`, `awk`, and
-   `merge-cleanup` installed beside this skill, run its read-only
-   `tracker-refresh.sh` with `--repo <host/owner/name>` and `--issue <N>`. Add
-   `--comment <ID>` when the owner points at a tracker kept in a comment. The
-   `startable now` part of its stderr `OK` line is the set, and its `left`
-   part names held units. Where the script can't run, read the tracker's
-   **Startable now** bullet, and say in the opening message that it may be
-   stale.
-2. **Drop units that can't start here.** A tracker keeps a unit startable
-   until its PR merges, and the script doesn't check every condition. Leave
-   out a unit that:
-   - Is closed.
-   - Belongs to another repository.
-   - Is stacked on a PR that is neither open nor merged.
-3. **Put the critical path first.** Units whose nodes a thick arrow (`==>`)
-   joins in the tracker's diagram go first, then the rest. Keep the tracker's
-   Units order within each group.
-
-Every remaining unit gets a planner, including one that already has a plan.
-Its planner's report still decides whether it dispatches.
-
-Launch nothing, and say why, when:
-
-- **The tracker isn't readable as one.** It is closed, isn't on the shared
-  tracker format, or the script exits with a stop or a failed lookup. Report
-  the script's error, and ask for issue numbers where the format is the
-  problem.
-- **Nothing remains.** Report the tracker's reason and each unit left out.
-- **The source is unclear.** The request names a tracker without its number
-  or link, names two trackers, or adds listed issues to one. Ask which set is
-  meant.
+When the request names no issue numbers directly (for example, pointing at a
+set named earlier in the thread or describing issues by criteria), read
+`references/request-sources.md` §set-named-earlier before resolving it. When it
+points at a tracker issue or asks for its units, read
+`references/request-sources.md` §tracker before resolving it.
 
 ### Occupied Issues
 
@@ -234,69 +179,19 @@ the evidence. If nothing remains, launch nothing and say why.
 
 ## Opening Message
 
-Write the state file first (see Keep a State File). Then send one short
-message and start without waiting for a reply:
-
-```text
-Plan and handle batch: #3268, #3171, #3166 (3 issues, in dispatch order).
-Window: 3 implementations at a time (default; tell me a number to change it).
-Model: session model for planners and implementers.
-Planners: background delegates through <planner tool>.
-Implementers: new top-level threads with worktrees (route 1).
-State: <state file path>
-Starting 3 planners now.
-```
-
-On route 2, the implementer line names what route 1 lacked:
-
-```text
-Implementers: background subagents through <tool> (route 2: no tool waits
-on a thread's end).
-```
-
-List the issue numbers in dispatch order, even when the request already gave
-them, so the owner can stop a wrong set at once. Mark a default as a default.
-This holds for a set named earlier, once it resolves to one list. The route
-lines let the owner stop a wrong route before any implementer runs.
-
-When the check leaves issues out, add a line for them, each with its reason.
-For a tracker, also name it in the first line:
-
-```text
-Plan and handle batch: tracker #835, #897, #901, #910 (3 startable units,
-critical path first, in dispatch order).
-Left out: #899 (open PR #930), #905 (held: Blocker line in Dependencies).
-```
+Write the state file first (`references/state-file.md` §state-file). Then read
+`references/templates.md` §opening-message, send the opening message, and start
+without waiting for a reply.
 
 ## Plan Every Issue
 
 Start one background planner per issue, all at once, through the planner tool
 you recorded. Planners don't count against the window. If the platform caps
-how many delegates run at once, start the rest as earlier planners finish.
-Brief each planner with this text. Fill in `N`, the project's branch-naming
-rule, and the owner's request. Write a set named earlier, or a tracker's
-resolved units, out as its issue numbers:
-
-```text
-Plan #N
-
-The owner assigned this in their request: "<the owner's request>".
-
-Use the plan-work-unit skill. If it isn't available to you, read
-<path to plan-work-unit's SKILL.md> and follow it. Read the repository by
-revision, such as git show <sha>:<path>; never check out, switch, or edit
-the shared working tree. If you need an owner decision, stop before any
-planning write and return the question with your recommendation.
-
-When planning finishes or blocks, return the plan-work-unit report
-unchanged. After a finished report, end the same final message with one
-more line:
-Branch: <branch name for the implementation, following <branch rule>>
-```
-
-Leave out the path sentence when you don't know the path. Record each report
-in the state file as it arrives. A planner that ends with neither a report nor
-a question is recorded as ended without a report and isn't dispatched.
+how many delegates run at once, start the rest as earlier planners finish. Read
+`references/templates.md` §planner-brief for the exact planner brief and
+fill-in rules. Record each report in the state file as it arrives. A planner
+that ends with neither a report nor a question is recorded as ended without a
+report and isn't dispatched.
 
 ### Relay Planner Questions
 
@@ -343,7 +238,8 @@ instead. Use the route you recorded under Choose the Routes:
    the thread's worktree starts from the default branch.
 2. **A background subagent,** through the planner tool where the host names
    one, with worktree isolation where the platform offers it. Send the
-   kickoff sentence and the brief below.
+   kickoff sentence and the brief in `references/templates.md`
+   §implementer-brief.
 
 Some platforms start a delegate's checkout from your commit or pick its branch
 name. There, the brief's branch setup is required, or the PR starts from a
@@ -356,25 +252,9 @@ The kickoff's first line is always the sentence `plan-work-unit` hands off:
 Handle #N, implementation plan in comments.
 ```
 
-On the subagent route, and on a thread that needs the branch setup, add:
-
-```text
-The owner assigned this in their request: "<the owner's request>".
-
-Before you edit anything, claim the issue as the project's claim rules
-require, if it has any. If another claim wins, stop and return a blocked
-report. Then fetch the default branch from its remote and create
-branch <branch> from that exact tip, in your own checkout. If the issue's
-Dependencies field stacks it on a PR that is still open, start <branch> from
-that PR's branch instead, and open your PR against that branch. Where
-<branch> already exists with no commits of its own, reset it there. If you
-have no checkout of your own, create one with git worktree add on that
-branch. Work only in that checkout.
-
-If you need an owner decision, stop and return the question with your
-recommendation. When you finish, return the PR link and your handoff report,
-or your blocked report.
-```
+On the subagent route, and on a thread that needs the branch setup, read
+`references/templates.md` §implementer-brief and append its block after that
+line.
 
 Pass the implementer model and effort where the platform takes them. Record
 the thread or agent link in the state file at launch.
@@ -447,60 +327,12 @@ with its thread link.
 
 ## Keep a State File
 
-Keep one file in the session's temporary workspace, never in the project tree.
-Write the ordered issue list and the window before anything launches, so a
-later turn doesn't depend on the message that defined the set. Then update it
-at every launch, every report, and every relayed question.
-
-Record for the batch:
-
-- The repository, the ordered issue list, the window, and model choices.
-- The issues left out, with their reasons, and for a tracker its number.
-- The implementer route, the tool that starts implementers, the route's
-  reason, and the planner tool. On route 2, the reason names what route 1
-  lacked.
-
-Record for each issue:
-
-- The planner's thread or agent link, and its status line.
-- The branch from the planner's report.
-- The implementer's thread or agent link, and its PR.
-- Its state: planning, queued, running, waiting on owner, ready for review,
-  blocked, not dispatched, ended without a report, or unknown.
-
-On a resumed or condensed session, read the state file before anything else.
-Then follow these rules:
-
-- **No second implementer.** Never relaunch an implementer the file records
-  as launched.
-- **A planner only for an answer.** Relaunch a recorded planner only to carry
-  the owner's answer to its question.
-- **The recorded set stands.** Never resolve a tracker again. A unit that
-  became startable since then waits for a later batch.
-- **The recorded route stands.** Launch the remaining implementers on the
-  recorded route, and start any planner through the recorded tool. Don't
-  choose either again.
-- **Unknown stays unknown.** If the platform can't tell you whether a
-  recorded run is still going, report it as unknown rather than starting
-  another.
+Keep one state file in the session's temporary workspace, never in the project
+tree. Read `references/state-file.md` §state-file for when to write it and what
+batch and per-issue fields to record. On a resumed or condensed session, read
+`references/state-file.md` §resumed-session before taking any action.
 
 ## Report
 
-End with one table, one row per listed issue, in dispatch order:
-
-```text
-| Issue | Plan        | Implementation | PR    | State                        |
-| ----- | ----------- | -------------- | ----- | ---------------------------- |
-| #3268 | startable   | <thread link>  | #3301 | Ready for review             |
-| #3171 | held        | n/a            | n/a   | Not dispatched: <reason>     |
-| #3166 | startable   | <agent link>   | n/a   | Blocked: <blocker>           |
-| #3170 | startable   | <thread link>  | n/a   | Running in its own thread    |
-```
-
-Use these states: ready for review, running in its own thread (route 1
-only), blocked (with the blocker), waiting on owner (with the question),
-queued (behind a held slot), not dispatched (with the reason), ended without a
-report, and unknown. Below the table, list any question still waiting on the
-owner. When a thread is still running, say that each thread reports in its
-own session and the batch doesn't track it further. For a tracker, repeat the
-line of units left out.
+Read `references/templates.md` §report and end with its one status table,
+states, and post-table notes.
