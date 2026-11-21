@@ -66,12 +66,16 @@
 # reported moved instead, and a worktree on any other branch is not a
 # candidate and not printed.
 #
-# A candidate is clean when worktree-inventory.sh reports OK inventory and no
-# operation is paused in it and, for a detached one, a ref holds its HEAD;
-# anything else is dirty. The one exception is the project's disposables: an
-# inventory that stops only because the worktree holds ignored files still
+# A candidate is clean when worktree-inventory.sh reports OK inventory, no
+# operation is paused in it, it holds no resolvable ref under refs/worktree/ or
+# refs/bisect/, no unreferenced commit is reachable from HEAD reflog entries
+# recorded after HEAD first reached its current commit (ignoring refs/worktree/*
+# and refs/bisect/* as surviving refs), and, for a detached one, a ref holds its
+# HEAD; anything else is dirty. The one exception is the project's disposables:
+# an inventory that stops only because the worktree holds ignored files still
 # counts as clean when every file this script finds is an ignored path that a
-# disposables entry matches, or an ignored .DS_Store. A dirty branch candidate
+# disposables entry matches, or an ignored .DS_Store, and none of the other
+# checks above found anything. A dirty branch candidate
 # with no landing merge (no first-parent merge of the base whose second parent
 # is its tip) is never removed: a fast-forwarded branch and a branch that has
 # no commits of its own yet look the same, and the second may hold work in
@@ -86,8 +90,10 @@
 # --remove-head, moved, or other-branch when a recheck finds it switched.
 # A candidate's line carries merge (the landing merge's oid and subject, or "none found"),
 # state, operation, unreferenced_head (a detached HEAD no ref holds, or null),
-# and the untracked, modified, ignored, flagged, and disposable paths removal
-# would delete. disposable names each matched prefix once (app/.build/, not
+# the untracked, modified, ignored, flagged, and disposable paths removal
+# would delete, worktree_refs (resolvable refs/worktree/* and refs/bisect/*),
+# and reflog_commits (unreferenced commits reachable from post-HEAD reflog
+# entries). disposable names each matched prefix once (app/.build/, not
 # every file under it); ignored holds only the ignored paths no entry
 # matches, and names a directory an ignore pattern matches once, with a
 # trailing / (.venv/, not every file under it).
@@ -702,8 +708,10 @@ holds_entries() { # holds_entries <worktree> <status path>
 # operation and file-list fields of its line). The inventory decides clean;
 # the lists are read here because the inventory stops without naming files.
 inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
-  local path="$1" tmp rec xy p skip=false sparse=false sparse_cfg inv rc
-  local untracked=() modified=() ignored=() flagged=() disposable=() last_added="" op=null unref=null
+  local path="$1" tmp tmp_in rec xy p skip=false sparse=false sparse_cfg inv rc
+  local untracked=() modified=() ignored=() flagged=() disposable=()
+  local worktree_refs=() reflog_commits=() log_oids=()
+  local last_added="" op=null unref=null refname head_oid has_reflog head_log oid earliest idx
   local found name
   M_LAST="" M_IGNORED=$'\n' M_KEPT=$'\n'
   [ -z "$2" ] || unref="\"$2\""
@@ -757,8 +765,73 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     fi
     json_add flagged "$p"
   done < "$tmp"
+  # Per-worktree refs (refs/worktree/* and refs/bisect/*) live only in this
+  # worktree's git directory and are deleted with it.
+  git -C "$path" for-each-ref --format='%(refname)' refs/worktree/ refs/bisect/ \
+    > "$tmp" 2>/dev/null \
+    || { rm -f "$tmp"; lookup_failed refs "could not list worktree refs in $path"; }
+  while IFS= read -r refname; do
+    [ -n "$refname" ] || continue
+    json_add worktree_refs "$refname"
+  done < "$tmp"
+  # Commits reachable only from HEAD reflog entries recorded after HEAD first
+  # reached its current commit are lost with the worktree's logs/HEAD. Earlier
+  # entries (such as pre-merge amends and rebases) are skipped so ordinary
+  # merged PR worktrees stay clean.
+  head_oid=$(git -C "$path" rev-parse --verify --quiet HEAD 2>/dev/null) \
+    || { rm -f "$tmp"; lookup_failed head "could not read HEAD in $path"; }
+  has_reflog=false
+  # Under the files backend, an empty or unreadable logs/HEAD makes
+  # `git rev-list -g HEAD` fall back to the branch's shared reflog, and
+  # `git reflog exists HEAD` returns 1 for a symlinked logs/HEAD even though
+  # `rev-list -g HEAD` still reads it. Check logs/HEAD on disk first; fall
+  # back to `git reflog exists HEAD` when absent (including reftable).
+  out_exact head_log git -C "$path" rev-parse --git-path logs/HEAD \
+    || { rm -f "$tmp"; lookup_failed reflog "could not resolve HEAD reflog path in $path"; }
+  case "$head_log" in /*) ;; *) head_log="$path/$head_log" ;; esac
+  if [ -e "$head_log" ] || [ -L "$head_log" ]; then
+    [ -f "$head_log" ] && [ -r "$head_log" ] \
+      || { rm -f "$tmp"; lookup_failed reflog "could not read HEAD reflog $head_log"; }
+    [ ! -s "$head_log" ] || has_reflog=true
+  else
+    git -C "$path" reflog exists HEAD >/dev/null 2>&1
+    rc=$?
+    case "$rc" in
+      0) has_reflog=true ;;
+      1) has_reflog=false ;;
+      *) rm -f "$tmp"; lookup_failed reflog "could not check HEAD reflog in $path" ;;
+    esac
+  fi
+  if [ "$has_reflog" = true ]; then
+    git -C "$path" rev-list -g HEAD > "$tmp" 2>/dev/null \
+      || { rm -f "$tmp"; lookup_failed reflog "could not read HEAD reflog in $path"; }
+    earliest=-1
+    idx=0
+    while IFS= read -r oid; do
+      [ -n "$oid" ] || continue
+      log_oids[idx]="$oid"
+      [ "$oid" != "$head_oid" ] || earliest="$idx"
+      idx=$((idx + 1))
+    done < "$tmp"
+    if [ "$earliest" -gt 0 ]; then
+      tmp_in=$(mktemp) || { rm -f "$tmp"; lookup_failed mktemp "could not create a temporary file"; }
+      for ((idx = 0; idx < earliest; idx++)); do
+        [ "${log_oids[idx]}" = "$head_oid" ] || printf '%s\n' "${log_oids[idx]}"
+      done > "$tmp_in"
+      if [ -s "$tmp_in" ]; then
+        git -C "$path" rev-list --stdin --not --single-worktree --exclude='refs/worktree/*' --exclude='refs/bisect/*' --all \
+          < "$tmp_in" > "$tmp" 2>/dev/null \
+          || { rm -f "$tmp" "$tmp_in"; lookup_failed reflog "could not check HEAD reflog reachability in $path"; }
+        while IFS= read -r oid; do
+          [ -n "$oid" ] || continue
+          json_add reflog_commits "$oid"
+        done < "$tmp"
+      fi
+      rm -f "$tmp_in"
+    fi
+  fi
   rm -f "$tmp"
-  found=$((${#untracked[@]} + ${#modified[@]} + ${#ignored[@]} + ${#flagged[@]}))
+  found=$((${#untracked[@]} + ${#modified[@]} + ${#ignored[@]} + ${#flagged[@]} + ${#worktree_refs[@]} + ${#reflog_commits[@]}))
   inv=$("$INVENTORY" "$path" 2>&1)
   rc=$?
   case "$rc:$inv" in
@@ -787,7 +860,7 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     C_STATE=dirty
   fi
   C_DETAIL="\"operation\":$op,\"unreferenced_head\":$unref"
-  for name in untracked modified ignored flagged disposable; do
+  for name in untracked modified ignored flagged disposable worktree_refs reflog_commits; do
     json_list "$name"
     C_DETAIL+=",\"$name\":[$JSON_LIST]"
   done
