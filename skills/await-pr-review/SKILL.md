@@ -28,9 +28,9 @@ Invoking this skill authorizes its task-scoped review-loop actions without
 per-action or per-round confirmation. They are waiting for the reviewer;
 fixing accepted findings and folding them into their commits; pushing with
 the pinned lease and safeguards; verifying, replying, and resolving threads;
-and advancing the baseline to trigger or await the next pass. Folding
-rewrites history, which is covered only on the expected PR branch under the
-checkout and lease gates.
+and advancing the baseline to trigger or await the next pass. Folding's
+history rewrite is covered only on the expected PR branch, under the checkout
+and lease gates.
 
 The authorization stops at a destructive action outside that sequence, a
 failed pinned lease or other unmet safety precondition, material scope
@@ -95,14 +95,14 @@ Anchor the baseline to the host event that should produce the next pass (the
 open, ready, or push event, or a manual recheck's request time), never a
 commit time or a later clock read. Record the expected head, base branch, and
 base tip from the host; take `--repo` from the project's forge record, not a
-remote. Mechanics: `references/detection.md` §event-anchored-baselines.
+remote, per `references/detection.md` §event-anchored-baselines.
 
 ## 2. Identify and, If Needed, Request the Reviewer
 
 Prefer the project's recorded reviewer identity, trigger, and status signals;
 otherwise detect per `references/detection.md` §reviewer-identity-and-trigger.
-If several bot reviewers appear, or the trigger is unclear, ask rather than
-burning the wait cap. Record a newly observed reviewer or signal in the
+If several bot reviewers appear, or the trigger is unclear, ask instead of
+waiting. Record a newly observed reviewer or signal in the
 project's designated conventions section; only the owner records none.
 Request a command-triggered reviewer once, via `--request-comment`, never per
 poll. An unrecorded reviewer never delays the spawn.
