@@ -367,19 +367,13 @@ fi
 # backticked commands. Every backticked span is a command. A record that
 # can't be read, a missing bullet, or a value with no backticked command
 # stops rather than skip the checks.
-AGENTS_TEXT=$(git show "$TIP:AGENTS.md" 2>/dev/null) \
-  || stop no-landing-record "AGENTS.md is missing at $DEFAULT's tip, so there is no landing record"
-printf '%s\n' "$AGENTS_TEXT" | grep -q '^  - \*\*Mechanism:\*\* ' \
-  || stop no-landing-record "AGENTS.md at $DEFAULT's tip has no landing record (no Mechanism bullet)"
-checks=$(printf '%s\n' "$AGENTS_TEXT" | awk '
-  !started && /^  - \*\*Mechanism:\*\* / { started = 1 }
-  !started { next }
-  /^  - \*\*Base-advance checks:\*\* / { grab = 1; line = $0; sub(/^  - \*\*Base-advance checks:\*\* /, "", line); print line; next }
-  /^  - \*\*/ { grab = 0; next }
-  /^    [^ ]/ && grab { line = $0; sub(/^ +/, "", line); print line; next }
-  /^    [^ ]/ { next }
-  { exit }
-')
+LANDING_RECORD_HELPER="$(cd "$(dirname "$0")" && pwd)/landing-record.sh"
+[ -r "$LANDING_RECORD_HELPER" ] \
+  || lookup_failed record "landing-record.sh is missing beside $0"
+# shellcheck source=landing-record.sh
+. "$LANDING_RECORD_HELPER"
+read_landing_record "$TIP" "$DEFAULT"
+checks=$(record_value "Base-advance checks")
 [ -n "$checks" ] \
   || stop bad-record "the landing record needs a Base-advance checks bullet, none when the project has no checks"
 checks_json=""

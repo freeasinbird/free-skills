@@ -614,6 +614,182 @@ sed -i.bak 's/Base-advance checks:\*\* none\./Base-advance checks:** `touch plan
 ls_run --since "$C1"
 if [ -e "$WORK/planted" ]; then bad "checks are read from the default-branch tip, not the working tree"; else ok; fi
 
+# --- fail-closed Markdown landing-record reader (#436) ---
+
+push_agents() { # push_agents: replace AGENTS.md on remote main from stdin
+  rm -f "$SEED/AGENTS.md"
+  cat > "$SEED/AGENTS.md"
+  git -C "$SEED" add -A AGENTS.md
+  git -C "$SEED" commit -q --allow-empty -m "update agents"
+  git -C "$SEED" push -q "$SRV" main
+}
+
+new_repo
+push_agents <<'EOF'
+# Project
+
+```markdown
+  - **Mechanism:** `label`.
+  - **Approver permission:** `write`.
+  - **Base-advance checks:** `touch planted-fence`.
+  - **Consumer:** `land-approved-prs`.
+```
+EOF
+ls_run --since "$C1"
+expect_stop no-landing-record "a fenced Base-advance checks example alone stops no-landing-record"
+if [ -e "$WORK/planted-fence" ]; then bad "fenced example command must never execute"; else ok; fi
+
+push_agents <<'EOF'
+# Project
+
+<!--
+  - **Mechanism:** `label`.
+  - **Approver permission:** `write`.
+  - **Base-advance checks:** `touch planted-cmt`.
+  - **Consumer:** `land-approved-prs`.
+-->
+EOF
+ls_run --since "$C1"
+expect_stop no-landing-record "a commented Base-advance checks example alone stops no-landing-record"
+if [ -e "$WORK/planted-cmt" ]; then bad "commented example command must never execute"; else ok; fi
+
+push_agents <<'EOF'
+# Project
+
+```markdown
+  - **Mechanism:** `label`.
+  - **Approver permission:** `write`.
+  - **Base-advance checks:** `touch planted-before-fence`.
+  - **Consumer:** `land-approved-prs`.
+```
+
+- **Land approved PRs by label.** This project has the following landing record:
+
+  - **Mechanism:** `label`.
+  - **Approver permission:** `write`.
+  - **Base-advance checks:** `echo real-after-fence`.
+  - **Consumer:** `land-approved-prs`.
+EOF
+ls_run --since "$C1"
+expect_out "real-after-fence" "the real record after a fenced example runs its checks"
+if [ -e "$WORK/planted-before-fence" ]; then bad "fenced example before real record must never execute"; else ok; fi
+
+push_agents <<'EOF'
+# Project
+
+<!--
+  - **Mechanism:** `label`.
+  - **Approver permission:** `write`.
+  - **Base-advance checks:** `touch planted-before-cmt`.
+  - **Consumer:** `land-approved-prs`.
+-->
+
+- **Land approved PRs by label.** This project has the following landing record:
+
+  - **Mechanism:** `label`.
+  - **Approver permission:** `write`.
+  - **Base-advance checks:** `echo real-after-cmt`.
+  - **Consumer:** `land-approved-prs`.
+EOF
+ls_run --since "$C1"
+expect_out "real-after-cmt" "the real record after a commented example runs its checks"
+if [ -e "$WORK/planted-before-cmt" ]; then bad "commented example before real record must never execute"; else ok; fi
+
+push_agents <<'EOF'
+# Project
+
+```markdown
+unclosed fence
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** `touch planted-unclosed`.
+EOF
+ls_run --since "$C1"
+expect_stop bad-record "an unclosed fence stops bad-record in landed-since.sh"
+if [ -e "$WORK/planted-unclosed" ]; then bad "unclosed fence must never execute commands"; else ok; fi
+
+push_agents <<'EOF'
+# Project
+
+<details>
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** `touch planted-html`.
+</details>
+
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** none.
+EOF
+ls_run --since "$C1"
+expect_stop bad-record "a raw HTML block stops bad-record in landed-since.sh"
+if [ -e "$WORK/planted-html" ]; then bad "raw HTML block must never execute commands"; else ok; fi
+
+push_agents <<'EOF'
+- ```
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** `touch planted-bullet-fence`.
+
+  ```
+  ```
+EOF
+ls_run --since "$C1"
+expect_stop bad-record "a code fence opened on a bullet marker line stops bad-record in landed-since.sh"
+if [ -e "$WORK/planted-bullet-fence" ]; then bad "bullet-marker fenced command must never execute"; else ok; fi
+
+push_agents <<'EOF'
+- <script>
+
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** `touch planted-bullet-script`.
+
+  </script>.
+EOF
+ls_run --since "$C1"
+expect_stop bad-record "a raw HTML block opened on a bullet marker line stops bad-record in landed-since.sh"
+if [ -e "$WORK/planted-bullet-script" ]; then bad "bullet-marker raw HTML command must never execute"; else ok; fi
+
+push_agents <<'EOF'
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** `echo first-only`.
+
+    and also `touch planted-second-para`.
+EOF
+ls_run --since "$C1"
+expect_stop bad-record "a second paragraph in the last bullet stops bad-record rather than drop checks"
+if [ -e "$WORK/planted-second-para" ]; then bad "second paragraph command must not run"; else ok; fi
+
+rm -f "$SEED/AGENTS.md"
+cat > "$SEED/REAL.md" <<'EOF'
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** `touch planted-symlink`.
+EOF
+ln -s REAL.md "$SEED/AGENTS.md"
+git -C "$SEED" add REAL.md AGENTS.md
+git -C "$SEED" commit -q -m "symlink agents"
+git -C "$SEED" push -q "$SRV" main
+ls_run --since "$C1"
+expect_stop bad-record "a symlinked AGENTS.md stops bad-record in landed-since.sh"
+if [ -e "$WORK/planted-symlink" ]; then bad "symlinked AGENTS.md must never execute commands"; else ok; fi
+git -C "$SEED" rm -q REAL.md AGENTS.md
+git -C "$SEED" commit -q -m "cleanup symlink"
+git -C "$SEED" push -q "$SRV" main
+
+push_agents <<'EOF'
+  - **Mechanism:** `label`.
+  - **Base-advance checks:** none.
+EOF
+BADGIT="$TMP/badgit"
+mkdir -p "$BADGIT"
+REAL_GIT=$(command -v git)
+cat > "$BADGIT/git" <<GITSHIM
+#!/bin/sh
+if [ "\$1" = "cat-file" ] && [ "\$2" = "blob" ]; then exit 128; fi
+exec "$REAL_GIT" "\$@"
+GITSHIM
+chmod +x "$BADGIT/git"
+(cd "$WORK" && PATH="$BADGIT:$SHIMD:$PATH" bash "$SCRIPT" --repo owner/name --pr 5 --since "$C1") > "$TMP/out" 2> "$TMP/err"
+RC=$?
+LAST=$(tail -n 1 "$TMP/out")
+expect_lookup record "a failed git blob read stops LOOKUP_FAILED record in landed-since.sh"
+
 fi
 
 echo "landed-since matrix: $pass passed, $fail failed$([ "$skip" -eq 0 ] || echo ", behavior half skipped")"
