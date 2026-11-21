@@ -46,8 +46,9 @@ any watcher. **Default to one conductor subagent.** It owns steps 1 to 5 and
 wakes the main agent only for a judgment call, a convergence escalation, an
 armed rotation handoff, or its terminal ledger. Spawn it with the least
 inherited context the host allows and the brief in `references/conductor.md`
-§spawn-brief: the current task contract at spawn, with task-specific user
-constraints. Its one startup read is `references/conductor-brief.md`.
+§spawn-brief, which opens with the current task contract at spawn, including
+task-specific user constraints. Its one startup read is
+`references/conductor-brief.md`.
 
 **Apply one platform-neutral gate through four probes.** A conductor owns the
 exchange when all four grants hold on observable evidence, per
@@ -57,10 +58,11 @@ exchange when all four grants hold on observable evidence, per
    session (Claude Code `Agent` as an ordinary named background subagent; Codex
    `spawn_agent` with `fork_turns: "none"`) and no rule forbids it. Default:
    listed means granted. A rule disabling proactive delegation except on
-   request does not fail it; this skill supplies that request. "Higher-priority instruction" alone never
-   fails it. To fail it on a rule, explain why the rule's exceptions exclude
-   skill-mandated delegation. Then name the rule by source, or give a
-   non-sensitive paraphrase when disclosure is restricted.
+   request does not fail it; this skill supplies that request.
+   "Higher-priority instruction" alone never fails it. To fail it on a rule,
+   explain why the rule's exceptions exclude skill-mandated delegation. Then
+   name the rule by source, or give a non-sensitive paraphrase when
+   disclosure is restricted.
 2. **Wait-and-resume continuity.** Evidence: the subagent has a bounded
    foreground shell wait or a scheduled wake, and the host can re-enter it
    after a pause. Default: a shell in the subagent grants it.
@@ -82,8 +84,9 @@ Keep the exchange in the main agent only when a probe shows a grant concretely
 absent or forbidden, or when feedback in hand needs at most a couple of
 trivial operations. A typo fix, a reply, or a thread resolution qualifies. A
 small main context, a background shell, or a predicted clean or one-shot
-review is not an exception. Under main ownership, watch only while a reviewer wait remains.
-Before any main-owned watch, state the fallback exactly so:
+review is not an exception. Under main ownership, watch only while a reviewer
+wait remains; address feedback already in hand without a watcher. Before any
+main-owned watch, state exactly:
 
 ```text
 Conductor skipped: <specific failed grant or allowed exception>.
@@ -110,12 +113,13 @@ poll. An unrecorded reviewer never delays the spawn.
 ## 3. Wait for New Activity
 
 **Conductor-owned exchange.** Run `watch-review.sh` as a bounded foreground
-command inside the conductor, with caps and waits from
+command in the conductor, with caps and waits from
 [Cadence and Cap](references/detection.md#cadence-and-cap). Without a shell
 and host CLI, run an equivalent bounded foreground API or connector polling
-loop (`references/detection.md` §connector-or-api-polling), or use the
-scheduled same-conductor wake from grant 2. Never emit terminal completion
-merely to wait (`references/conductor.md` §stranded-conductor-recovery).
+loop (`references/detection.md` §connector-or-api-polling). When that loop
+cannot delay in-turn, use grant 2's scheduled same-conductor wake. Never emit
+terminal completion merely to wait
+(`references/conductor.md` §stranded-conductor-recovery).
 
 **Main-owned fallback only:** after the `Conductor skipped` line, pick the
 cheapest mechanism in `references/detection.md` §main-owned-mechanisms that
