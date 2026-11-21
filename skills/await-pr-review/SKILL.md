@@ -152,7 +152,7 @@ finding:
   with the final SHA, then resolve, per `references/review-response.md`
   §fold-push-verify-reply-resolve.
 
-These operations stay in the conductor. Under main ownership, delegate a
+These stay in the conductor. Under main ownership, delegate a
 fixer only under `references/review-response.md` §main-owned-fixer-choices.
 
 ## 5. Converge on a Rising Bar
@@ -169,29 +169,26 @@ judgment on thrash: a class recurring after a correct, complete fix, or fixes
 breeding new problems without net progress.
 
 From fix round 3, run `references/review-response.md` §hardening-check before
-each fix round and at every checkpoint. Its observable signals are most
-findings citing lines an earlier round added, recent fixes that are all
-hardening you traced no caller for, a diff growing without delivering the
-PR's What, and a flat finding count. Two mean the reviewer is reviewing your
-hardening. Fix what still passes both disposition questions and clears the
-bar; a round count alone never turns a reachable defect into a decline. List
-earlier hardening that fails either question as removal candidates and
-surface the ledger. A posted review is not evidence that work remains.
+each fix round and at every checkpoint. Two of its signals, such as recent
+fixes that are all hardening you traced no caller for, mean the reviewer is
+reviewing your hardening. A round count alone never turns a reachable defect
+into a decline. List earlier hardening that fails either question as removal
+candidates and surface the ledger. A posted review is not evidence that work
+remains.
 
-At about five blocker-sustained fix rounds, record a go/no-go checkpoint per
-`references/review-response.md` §thrash-and-checkpoints. A go names, in one
-line, the convergence evidence and blockers that passed the two disposition
-questions, then continues without asking. A no-go or materially uncertain
-call surfaces the ledger. Repeat at the same cadence while blockers continue.
+At about five blocker-sustained fix rounds, and at that cadence while
+blockers continue, record a go/no-go checkpoint per
+`references/review-response.md` §thrash-and-checkpoints. A go names the
+convergence evidence and blockers that passed the two disposition questions,
+then continues without asking; surface a no-go or materially uncertain call.
 
-Track finding classes across the exchange. A real second member, one passing
-both disposition questions, needs a root-cause hypothesis, widens the class
-one level, and earns one fresh-context adversarial refute pass where
-read-only delegation exists. A second member that fails either question is a
-hardening-check signal, not a class to widen. Repeated prose-clause findings
-earn an owner escalation toward a tested check.
+Track finding classes across the exchange. A real second member earns a
+root-cause hypothesis, one level of widening, and one refute pass. A second
+member that fails either question is a hardening-check signal, not a class to
+widen. Repeated prose-clause findings earn an owner escalation toward a tested
+check.
 
-Keep the same conductor through waits, surfaced pauses, and rounds. Elapsed
+Keep the same conductor through waits, surfaced pauses, and rounds; elapsed
 time, idle time, or poll count alone never forces replacement. Rotation arms
 after every third fix round and fires at the next quiescent boundary where a
 full fix round waits, per `references/conductor.md` §context-rotation.
