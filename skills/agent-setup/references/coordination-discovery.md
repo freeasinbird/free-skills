@@ -68,10 +68,10 @@ The baseline presumes a landing check. When a project has none, report the gap
 as a setup finding and offer the check the forge supports, such as the
 up-to-date rule. Never narrow concurrency to compensate: serializing starts
 throttles all work to guard a race that happens only at merge. Until the check
-exists, each merge repeats the base-moved recheck by hand, as the managed
-pull-requests block requires, and the owner's authorizations still set width.
-Merges run one at a time until then: start a merge's recheck only after the
-previous merge finishes, while development and PR starts stay parallel.
+exists, the owner's authorizations still set width, while development and PR
+starts stay parallel. Each merge follows the managed pull-requests rule
+(`docs/agent-workflow.md` §handing-off step 3 and §merge-and-resync step 1):
+repeat the base-moved recheck by hand, one merge at a time.
 
 Shapes 3 through 5 may combine: typed relations, stable named streams, and an
 integration spine solve different problems. A richer primary shape keeps any
