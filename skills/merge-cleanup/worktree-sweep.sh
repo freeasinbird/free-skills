@@ -658,6 +658,43 @@ match_declared() { # match_declared <worktree> <path> <ignored>
   return 1
 }
 
+has_dot_git() { # has_dot_git <dir>: any .git entry in any case
+  local e
+  for e in "$1"/.[gG][iI][tT]; do
+    case "${e##*/}" in
+      .[gG][iI][tT])
+        if [ -e "$e" ] || [ -L "$e" ]; then return 0; fi
+        ;;
+    esac
+  done
+  return 1
+}
+
+# Check git's on-disk is_git_directory() shape without running git against
+# untrusted config or tripping safe.directory. On a case-insensitive disk,
+# statting HEAD, objects, and refs folds case automatically, matching git.
+is_bare_repo() { # is_bare_repo <dir>: objects, refs or reftable, and a git HEAD
+  local d="$1" h="$1/HEAD" target="" line=""
+  [ -d "$d/objects" ] || return 1
+  { [ -d "$d/refs" ] || [ -d "$d/reftable" ]; } || return 1
+  if [ -L "$h" ]; then
+    target=$(readlink -- "$h" 2>/dev/null) || target=""
+    case "$target" in refs/*) return 0 ;; esac
+  fi
+  [ -f "$h" ] || return 1
+  [ -r "$h" ] || return 0
+  IFS= read -r -n 100 line < "$h" 2>/dev/null || [ -n "$line" ] || return 1
+  line="${line%$'\r'}"
+  case "$line" in
+    ref:*) return 0 ;;
+    '' | *[!0-9a-fA-F]*) return 1 ;;
+  esac
+  case "${#line}" in
+    40 | 64) return 0 ;;
+  esac
+  return 1
+}
+
 # Tools such as Hypothesis (.hypothesis/) and uv (.venv/) ignore their own
 # directory with a * in a .gitignore inside it, so check-ignore without the
 # trailing / reads the directory as not ignored, and a declared entry for it
@@ -671,8 +708,9 @@ match_declared() { # match_declared <worktree> <path> <ignored>
 # counts: a * in its own .gitignore must not make its commits disposable.
 own_star_ignored() { # own_star_ignored <worktree> <dir>
   local wt="$1" dir="$2" tmp rc src="" _="" pat="" l=""
-  { [ -d "$wt/$dir" ] && [ ! -L "$wt/$dir" ]; } || return 1
-  { [ ! -e "$wt/$dir/.git" ] && [ ! -L "$wt/$dir/.git" ]; } || return 1
+  { [ -d "$wt/$dir" ] && [ ! -L "$wt/$dir" ] && [ -r "$wt/$dir" ]; } || return 1
+  ! has_dot_git "$wt/$dir" || return 1
+  ! is_bare_repo "$wt/$dir" || return 1
   { [ -f "$wt/$dir/.gitignore" ] && [ ! -L "$wt/$dir/.gitignore" ]; } || return 1
   while IFS= read -r l || [ -n "$l" ]; do
     case "$l" in '*' | '' | '#'*) ;; *) return 1 ;; esac
@@ -932,31 +970,55 @@ holds_submodule() { # holds_submodule <path>: sets HELD to what it holds
   [ -n "$HELD" ]
 }
 
-# Any other .git below the root is a nested repository, untracked or ignored,
-# whose commits may exist nowhere else; status names only its directory, and
-# under an ignored directory not even that. git never tracks a .git path.
-# The one exception is a repository inside an ignored directory that a
-# disposables entry matches, such as a package manager's checkout under
-# .build/: the project declared it disposable. An untracked one never is.
+# Any other .git (in any case) or bare repository below the root is a nested
+# repository, untracked or ignored, whose commits may exist nowhere else;
+# status names only its directory, and under an ignored directory not even
+# that. git never tracks a .git path. The one exception is a repository inside
+# an ignored directory that a disposables entry matches, such as a package
+# manager's checkout under .build/: the project declared it disposable. An
+# untracked one never is.
 holds_repository() { # holds_repository <path>: sets HELD to the first one
-  local path="$1" tmp g dir
+  local path="$1" tmp g rel dir
   HELD=""
   M_LAST="" M_IGNORED=$'\n' M_KEPT=$'\n'
   tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
-  # -prune: a nested .git is never searched, so its unreadable objects do not
-  # fail the run. Without entries the first one decides, as before.
+  # -prune on .[gG][iI][tT]: a nested .git or .GIT is never searched, so its
+  # unreadable objects do not fail the run, and the worktree's own ./.git is
+  # pruned without printing. Never -quit on HEAD: a plain HEAD file must not
+  # stop the search before a real nested repository is seen.
   if [ "$N_DISPOSABLES" -gt 0 ]; then
-    find "$path" -mindepth 2 -name .git -prune -print0 > "$tmp" 2>/dev/null
+    (
+      cd -- "$path" \
+        && find . -mindepth 1 \
+          \( -name '.[gG][iI][tT]' -prune \( -path './.git' -o -print0 \) \) \
+          -o \( -name '[hH][eE][aA][dD]' \( -type f -o -type l \) -print0 \)
+    ) > "$tmp" 2>/dev/null
   else
-    find "$path" -mindepth 2 -name .git -prune -print0 -quit > "$tmp" 2>/dev/null
+    (
+      cd -- "$path" \
+        && find . -mindepth 1 \
+          \( -name '.[gG][iI][tT]' -prune \( -path './.git' -o -print0 -quit \) \) \
+          -o \( -name '[hH][eE][aA][dD]' \( -type f -o -type l \) -print0 \)
+    ) > "$tmp" 2>/dev/null
   fi \
     || { rm -f "$tmp"; lookup_failed find "could not search $path for nested repositories"; }
   while IFS= read -r -d '' g; do
-    dir="${g#"$path"/}"
-    dir="${dir%.git}"
-    match_disposable "$path" "$dir" false && continue
-    HELD="$g"
-    break
+    rel="${g#./}"
+    case "$rel" in
+      .[gG][iI][tT] | */.[gG][iI][tT])
+        dir="${rel%.[gG][iI][tT]}"
+        match_disposable "$path" "$dir" false && continue
+        HELD="$path/$rel"
+        break
+        ;;
+      */*)
+        dir="${rel%/*}"
+        is_bare_repo "$path/$dir" || continue
+        match_disposable "$path" "$dir/" false && continue
+        HELD="$path/$dir"
+        break
+        ;;
+    esac
   done < "$tmp"
   rm -f "$tmp"
   [ -n "$HELD" ]
