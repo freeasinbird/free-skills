@@ -80,7 +80,9 @@
 # state, operation, unreferenced_head (a detached HEAD no ref holds, or null),
 # and the untracked, modified, ignored, flagged, and disposable paths removal
 # would delete. disposable names each matched prefix once (app/.build/, not
-# every file under it); ignored holds only the ignored paths no entry matches.
+# every file under it); ignored holds only the ignored paths no entry
+# matches, and names a directory an ignore pattern matches once, with a
+# trailing / (.venv/, not every file under it).
 #
 # Then one result line, whose counts are worktrees, candidates, clean, dirty,
 # removed, and kept (candidates left in place), each worktree counted as its
@@ -107,8 +109,10 @@
 # matches that name at any depth; one with an interior / is anchored at the
 # root. An ignored path is disposable when a leading run of its components
 # matches an entry and that run is itself ignored; an untracked one never is.
-# A missing, empty, or comments-only file means no entries. Built in, with no
-# entry: an ignored file named .DS_Store, at any depth, is disposable.
+# A directory, not a repository, whose own .gitignore holds only a * (and
+# comments), as Hypothesis and uv write one, counts as ignored. A missing,
+# empty, or comments-only file means no entries. Built in, with no entry: an
+# ignored file named .DS_Store, at any depth, is disposable.
 # --remove-head has no base, so it reads no file and applies only the
 # built-in rule; the owner's sweep clears declared build output.
 #
@@ -208,8 +212,9 @@ INVENTORY="$(cd "$(dirname "$0")" && pwd)/worktree-inventory.sh"
 utf8_len() { # utf8_len <string> <byte index>: copied from worktree-inventory.sh
   local LC_ALL=C s="$1" i="$2" n b b2 need lo hi k
   n=${#s}
-  b=$(($(printf '%d' "'${s:i:1}") & 255))
-  if [ "$b" -lt 128 ]; then echo 1; return; fi
+  printf -v b '%d' "'${s:i:1}"
+  b=$((b & 255))
+  if [ "$b" -lt 128 ]; then U8_LEN=1; return; fi
   if [ "$b" -ge 194 ] && [ "$b" -le 223 ]; then need=1; lo=128; hi=191
   elif [ "$b" -eq 224 ]; then need=2; lo=160; hi=191
   elif [ "$b" -ge 225 ] && [ "$b" -le 236 ]; then need=2; lo=128; hi=191
@@ -218,22 +223,36 @@ utf8_len() { # utf8_len <string> <byte index>: copied from worktree-inventory.sh
   elif [ "$b" -eq 240 ]; then need=3; lo=144; hi=191
   elif [ "$b" -ge 241 ] && [ "$b" -le 243 ]; then need=3; lo=128; hi=191
   elif [ "$b" -eq 244 ]; then need=3; lo=128; hi=143
-  else echo 0; return
+  else U8_LEN=0; return
   fi
-  [ $((i + need)) -lt "$n" ] || { echo 0; return; }
+  [ $((i + need)) -lt "$n" ] || { U8_LEN=0; return; }
   for ((k = 1; k <= need; k++)); do
-    b2=$(($(printf '%d' "'${s:i+k:1}") & 255))
+    printf -v b2 '%d' "'${s:i+k:1}"
+    b2=$((b2 & 255))
     if [ "$k" -eq 1 ]; then
-      { [ "$b2" -ge "$lo" ] && [ "$b2" -le "$hi" ]; } || { echo 0; return; }
+      { [ "$b2" -ge "$lo" ] && [ "$b2" -le "$hi" ]; } || { U8_LEN=0; return; }
     else
-      { [ "$b2" -ge 128 ] && [ "$b2" -le 191 ]; } || { echo 0; return; }
+      { [ "$b2" -ge 128 ] && [ "$b2" -le 191 ]; } || { U8_LEN=0; return; }
     fi
   done
-  echo $((need + 1))
+  U8_LEN=$((need + 1))
 }
 
 json_escape() { # copied from worktree-inventory.sh, which explains the rules
-  local LC_ALL=C s="$1" out="" i=0 n c o len
+  json_escape_to "$1"
+  printf '%s' "$JSON_ESC"
+}
+
+json_escape_to() { # copied from worktree-inventory.sh
+  local LC_ALL=C s="$1" out="" i=0 n c o bs='\' q='"'
+  case "$s" in
+    *[![:print:]]*) ;;
+    *)
+      s=${s//"$bs"/"$bs$bs"}
+      JSON_ESC=${s//"$q"/"$bs$q"}
+      return
+      ;;
+  esac
   n=${#s}
   while [ "$i" -lt "$n" ]; do
     c="${s:i:1}"
@@ -244,15 +263,16 @@ json_escape() { # copied from worktree-inventory.sh, which explains the rules
       $'\t') out+='\t'; i=$((i + 1)); continue ;;
       $'\r') out+='\r'; i=$((i + 1)); continue ;;
     esac
-    o=$(($(printf '%d' "'$c") & 255))
-    if [ "$o" -lt 32 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
+    printf -v o '%d' "'$c"
+    o=$((o & 255))
+    if [ "$o" -lt 32 ]; then printf -v c '\\u%04x' "$o"; out+="$c"; i=$((i + 1)); continue; fi
     if [ "$o" -lt 128 ]; then out+="$c"; i=$((i + 1)); continue; fi
-    len=$(utf8_len "$s" "$i")
-    if [ "$len" -eq 0 ]; then out+=$(printf '\\u%04x' "$o"); i=$((i + 1)); continue; fi
-    out+="${s:i:len}"
-    i=$((i + len))
+    utf8_len "$s" "$i"
+    if [ "$U8_LEN" -eq 0 ]; then printf -v c '\\u%04x' "$o"; out+="$c"; i=$((i + 1)); continue; fi
+    out+="${s:i:U8_LEN}"
+    i=$((i + U8_LEN))
   done
-  printf '%s' "$out"
+  JSON_ESC="$out"
 }
 
 out_exact() { # out_exact <var> <cmd...>: capture stdout byte-exactly
@@ -490,12 +510,18 @@ op_probe() { # op_probe <dir>: returns 0 and sets OP_FOUND when one is paused
   return 1
 }
 
-json_add() { # json_add <var> <path>: append a JSON string to a list body
-  local __cur
-  eval "__cur=\${$1}"
-  if [ -n "$__cur" ]; then __cur+=","; fi
-  __cur+="\"$(json_escape "$2")\""
-  printf -v "$1" '%s' "$__cur"
+json_add() { # json_add <array> <path>: append <path> to <array> as a JSON string
+  # An array append copies nothing built so far, where rebuilding one string
+  # per path grew quadratically with a long list.
+  json_escape_to "$2"
+  JSON_ESC="\"$JSON_ESC\""
+  eval "$1+=(\"\$JSON_ESC\")"
+}
+
+json_list() { # json_list <array>: set JSON_LIST to its items joined by commas
+  # The ${a[*]+...} form keeps bash 3.2 from calling an empty array unbound.
+  local IFS=,
+  eval "JSON_LIST=\${$1[*]+\"\${$1[*]}\"}"
 }
 
 # Is <path> disposable? It is when a leading run of its components matches a
@@ -506,7 +532,9 @@ json_add() { # json_add <var> <path>: append a JSON string to a list body
 # it a directory, as status prints one; <ignored> is true when status
 # already reported <path> ignored. On a match, sets M_PREFIX to the shortest
 # such run, with a trailing / when it is a directory. M_LAST is the previous
-# match: `status -uall --ignored` lists every file under a build directory
+# match: `status --ignored=matching` lists a directory a pattern matches as
+# one record, but enters a directory that only its contents' pattern ignores
+# (a * in its own .gitignore, as in a uv .venv) and lists each entry in it,
 # together, so a path under the last directory prefix is answered without
 # walking it. M_IGNORED and M_KEPT cache check-ignore answers, newline
 # delimited. Callers reset all three for each worktree. Built in: an
@@ -564,6 +592,9 @@ match_declared() { # match_declared <worktree> <path> <ignored>
               git -C "$wt" -c core.fsmonitor=false check-ignore -q -- "./$prefix" \
                 < /dev/null 2>/dev/null
               rc=$?
+              if [ "$rc" -eq 1 ] && [ "$is_dir" = true ] && own_star_ignored "$wt" "$prefix"; then
+                rc=0
+              fi
               case "$rc" in
                 0) M_IGNORED+="$prefix"$'\n' ;;
                 1) M_KEPT+="$prefix"$'\n' ;;
@@ -587,19 +618,71 @@ match_declared() { # match_declared <worktree> <path> <ignored>
   return 1
 }
 
+# Tools such as Hypothesis (.hypothesis/) and uv (.venv/) ignore their own
+# directory with a * in a .gitignore inside it, so check-ignore without the
+# trailing / reads the directory as not ignored, and a declared entry for it
+# never matched. Such a directory counts as ignored only when git ignores
+# <dir>/ by the pattern * from <dir>/.gitignore and that file holds nothing
+# but *, comments, and blank lines. The * ignores every child, and git reads
+# no deeper .gitignore under an ignored directory, so no line anywhere can
+# re-include a path, a repository included; a ! line in this file could, so
+# any other line refuses the directory. Any other pattern for its contents,
+# such as cache/*, still doesn't answer for it. A repository at <dir> never
+# counts: a * in its own .gitignore must not make its commits disposable.
+own_star_ignored() { # own_star_ignored <worktree> <dir>
+  local wt="$1" dir="$2" tmp rc src="" _="" pat="" l=""
+  { [ -d "$wt/$dir" ] && [ ! -L "$wt/$dir" ]; } || return 1
+  { [ ! -e "$wt/$dir/.git" ] && [ ! -L "$wt/$dir/.git" ]; } || return 1
+  { [ -f "$wt/$dir/.gitignore" ] && [ ! -L "$wt/$dir/.gitignore" ]; } || return 1
+  while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in '*' | '' | '#'*) ;; *) return 1 ;; esac
+  done < "$wt/$dir/.gitignore" \
+    || lookup_failed gitignore "could not read $wt/$dir/.gitignore"
+  tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
+  # -z needs --stdin; its fields arrive whole whatever the name holds.
+  printf './%s/\0' "$dir" \
+    | git -C "$wt" -c core.fsmonitor=false check-ignore -v -z --stdin > "$tmp" 2>/dev/null
+  rc=${PIPESTATUS[1]}
+  case "$rc" in
+    0) ;;
+    1) rm -f "$tmp"; return 1 ;;
+    *) rm -f "$tmp"; lookup_failed check-ignore "could not check whether $wt/$dir/ is ignored" ;;
+  esac
+  { IFS= read -r -d '' src; IFS= read -r -d '' _; IFS= read -r -d '' pat; } < "$tmp" || true
+  rm -f "$tmp"
+  [ "$src" = "$dir/.gitignore" ] && [ "$pat" = "*" ]
+}
+
+# --ignored=matching lists an ignored directory holding nothing but empty
+# directories, which the per-file listing never did, and removing it deletes
+# no file. Such a record is skipped so it can't turn a clean worktree dirty;
+# a failed find counts as holding something.
+holds_entries() { # holds_entries <worktree> <status path>
+  local hit
+  case "$2" in */) ;; *) return 0 ;; esac
+  hit=$(find "$1/$2" ! -type d -print -quit 2>/dev/null) || return 0
+  [ -n "$hit" ]
+}
+
 # What removal would delete from a candidate. Sets C_STATE and C_DETAIL (the
 # operation and file-list fields of its line). The inventory decides clean;
 # the lists are read here because the inventory stops without naming files.
 inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
   local path="$1" tmp rec xy p skip=false sparse=false sparse_cfg inv rc
-  local untracked="" modified="" ignored="" flagged="" disposable="" last_added="" op=null unref=null
+  local untracked=() modified=() ignored=() flagged=() disposable=() last_added="" op=null unref=null
+  local found name
   M_LAST="" M_IGNORED=$'\n' M_KEPT=$'\n'
   [ -z "$2" ] || unref="\"$2\""
   if op_probe "$path"; then op="\"$OP_FOUND\""; fi
   tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
   # -uall and core.fsmonitor=false for the reasons worktree-inventory.sh
-  # gives; -z so a path holding a newline arrives whole and unquoted.
-  git -C "$path" -c core.fsmonitor=false status -uall --porcelain --ignored -z \
+  # gives: an explicit untracked mode overrides status.showUntrackedFiles=no.
+  # -z so a path holding a newline arrives whole and unquoted.
+  # --ignored=matching lists a directory an ignore pattern matches once, as
+  # dir/, rather than every file under it, so an undeclared .venv/ is one
+  # record, not tens of thousands. A directory no pattern matches is still
+  # entered, so each ignored file in it, such as a .DS_Store, lists alone.
+  git -C "$path" -c core.fsmonitor=false status -uall --porcelain --ignored=matching -z \
     --ignore-submodules=none \
     > "$tmp" 2>/dev/null \
     || { rm -f "$tmp"; lookup_failed status "could not read the status of $path"; }
@@ -614,7 +697,7 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
         if match_disposable "$path" "$p" true; then
           [ "$M_PREFIX" = "$last_added" ] || json_add disposable "$M_PREFIX"
           last_added="$M_PREFIX"
-        else
+        elif holds_entries "$path" "$p"; then
           json_add ignored "$p"
         fi
         ;;
@@ -641,6 +724,7 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     json_add flagged "$p"
   done < "$tmp"
   rm -f "$tmp"
+  found=$((${#untracked[@]} + ${#modified[@]} + ${#ignored[@]} + ${#flagged[@]}))
   inv=$("$INVENTORY" "$path" 2>&1)
   rc=$?
   case "$rc:$inv" in
@@ -654,7 +738,7 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     # the one before `git worktree remove`, which refuses untracked files
     # but deletes ignored ones, as it did before disposables existed.
     "2:STOP dirty "*)
-      if [ -n "$disposable" ] && [ -z "$untracked$modified$ignored$flagged" ]; then
+      if [ "${#disposable[@]}" -gt 0 ] && [ "$found" -eq 0 ]; then
         C_STATE=clean
       else
         C_STATE=dirty
@@ -665,10 +749,14 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
   esac
   # Either reader finding something makes it dirty; neither overrules the
   # other toward clean, except for the declared disposables above.
-  if [ "$op" != null ] || [ "$unref" != null ] || [ -n "$untracked$modified$ignored$flagged" ]; then
+  if [ "$op" != null ] || [ "$unref" != null ] || [ "$found" -gt 0 ]; then
     C_STATE=dirty
   fi
-  C_DETAIL="\"operation\":$op,\"unreferenced_head\":$unref,\"untracked\":[$untracked],\"modified\":[$modified],\"ignored\":[$ignored],\"flagged\":[$flagged],\"disposable\":[$disposable]"
+  C_DETAIL="\"operation\":$op,\"unreferenced_head\":$unref"
+  for name in untracked modified ignored flagged disposable; do
+    json_list "$name"
+    C_DETAIL+=",\"$name\":[$JSON_LIST]"
+  done
 }
 
 # The landing merge: the oldest first-parent merge of the base whose second

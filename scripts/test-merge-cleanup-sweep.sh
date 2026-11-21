@@ -27,7 +27,12 @@
 # non-regular file; reading a comment as an entry, or skipping comments
 # before the whitespace check; applying the .DS_Store rule before the
 # entries; and without the NUL check. The newline case discriminates by construction, as in the
-# inventory matrix.
+# inventory matrix. The large-listing cases were run against the sweep
+# before --ignored=matching and subshell-free escaping, and the
+# empty-directory case against a copy that lists every ignored dir/ record.
+# The own-* cases were run against copies without the own-* rule, without
+# its repository test, and without its read of the file. No case separates
+# its source-and-pattern check, which the file check always precedes.
 #
 # Usage: test-merge-cleanup-sweep.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -506,6 +511,15 @@ want_out 'WORKTREE unmerged {"path":"'"$WT"'"'
 want_removed "$NL"
 want_kept "$WT"
 
+scenario "a quote, a backslash, a tab, and UTF-8 in a listed path are escaped"
+printf '*.log\n' >> "$REPO/.git/info/exclude"
+land feat
+for p in 'a"b.log' 'c\d.log' "e"$'\t'"f.log" 'é.log'; do : > "$WT/$p"; done
+run --remove
+want_rc 0
+want_out '"ignored":["a\"b.log","c\\d.log","e\tf.log","é.log"],"flagged":[]'
+want_kept "$WT"
+
 # --- the end-of-batch sweep (--remove-landed) ---------------------------------
 
 scenario "--remove-landed removes a landed clean branch"
@@ -598,7 +612,7 @@ printf 'mine\n' > "$WT/.DS_Store/note"
 run --remove
 want_rc 0
 want_out 'WORKTREE dirty'
-want_out '"ignored":[".DS_Store/note"],"flagged":[],"disposable":[]'
+want_out '"ignored":[".DS_Store/"],"flagged":[],"disposable":[]'
 want_kept "$WT"   # discriminating: matching any part named .DS_Store removes it
 
 scenario "an untracked .DS_Store is never disposable"
@@ -629,7 +643,7 @@ printf 'o\n' > "$WT/.build/obj.o"
 run --remove
 want_rc 0
 want_out 'WORKTREE dirty'
-want_out '"ignored":[".build/obj.o"],"flagged":[],"disposable":[]'
+want_out '"ignored":[".build/"],"flagged":[],"disposable":[]'
 want_out '"disposables":[]'
 want_kept "$WT"
 
@@ -643,7 +657,7 @@ printf 'mine\n' > "$WT/notes/todo"
 run --remove
 want_rc 0
 want_out '"disposables":[".build/"]'
-want_out '"ignored":["notes/todo"],"flagged":[],"disposable":[".build/"]'
+want_out '"ignored":["notes/"],"flagged":[],"disposable":[".build/"]'
 want_kept "$WT"   # discriminating: reading a comment as an entry removes it
 
 scenario "a file of comments alone declares nothing"
@@ -669,7 +683,7 @@ printf 'o\n' > "$WT/.build/obj.o"
 run --remove
 want_rc 0
 want_out '"disposables":[]'
-want_out '"ignored":[".build/obj.o"],"flagged":[],"disposable":[".DS_Store"]'
+want_out '"ignored":[".build/"],"flagged":[],"disposable":[".DS_Store"]'
 want_kept "$WT"
 
 scenario "a .DS_Store under a declared directory reports the directory"
@@ -742,7 +756,7 @@ printf 'o\n' > "$WT/other/app/.build/o"
 run --remove
 want_rc 0
 want_out 'WORKTREE dirty'
-want_out '"ignored":["other/app/.build/o"],"flagged":[],"disposable":["app/.build/"]'
+want_out '"ignored":["other/app/.build/"],"flagged":[],"disposable":["app/.build/"]'
 want_kept "$WT"
 
 scenario "a directory-only entry does not match a file of that name"
@@ -814,6 +828,96 @@ run --remove --remove-dirty
 want_rc 0
 want_out 'WORKTREE holds-repository'
 want_kept "$WT"   # discriminating: with the slash, the nested .gitignore answered ignored
+
+scenario "a repository at a declared directory whose own .gitignore holds * still holds it"
+disposables cache/
+land feat
+nested_repo cache
+printf '*\n' > "$WT/cache/.gitignore"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: accepting an own * without the repository test removes it
+
+scenario "a repository an own * file re-includes with ! still holds it"
+disposables cache/
+land feat
+mkdir -p "$WT/cache"
+printf '*\n!sub\n' > "$WT/cache/.gitignore"
+nested_repo cache/sub
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_kept "$WT"   # discriminating: trusting check-ignore's * without reading the file removes it
+
+scenario "a repository inside a directory an own * ignores is disposable, as under .build/"
+# A pip editable install from git checks the repository out under .venv/src/.
+disposables .venv/
+land feat
+mkdir -p "$WT/.venv/src"
+printf '*\n' > "$WT/.venv/.gitignore"
+nested_repo .venv/src/pkg
+run --remove --remove-dirty
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a declared directory ignored only by a * in its own .gitignore is disposable"
+# Hypothesis writes .hypothesis/.gitignore holding *, and nothing else
+# ignores the directory.
+disposables .hypothesis/
+land feat
+mkdir -p "$WT/.hypothesis/examples/ab"
+printf '*\n' > "$WT/.hypothesis/.gitignore"
+printf 'x\n' > "$WT/.hypothesis/examples/ab/c"
+run
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$WT"'"'   # discriminating: check-ignore without the slash kept it
+want_out '"ignored":[],"flagged":[],"disposable":[".hypothesis/"]'
+run --remove
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a nested uv .venv with no root rule is disposable"
+disposables .venv/
+land feat
+mkdir -p "$WT/app/.venv/bin" "$WT/app/.venv/lib/python/site"
+printf '*\n' > "$WT/app/.venv/.gitignore"
+: > "$WT/app/.venv/pyvenv.cfg"
+: > "$WT/app/.venv/bin/python"
+: > "$WT/app/.venv/lib/python/site/mod.py"
+run --remove
+want_rc 0
+want_out '"ignored":[],"flagged":[],"disposable":["app/.venv/"]'
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a path a ! line re-includes under an own * keeps the worktree dirty"
+disposables .hypothesis/
+land feat
+mkdir -p "$WT/.hypothesis"
+printf '*\n!keep\n' > "$WT/.hypothesis/.gitignore"
+printf 'db\n' > "$WT/.hypothesis/db"
+printf 'mine\n' > "$WT/.hypothesis/keep"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"untracked":[".hypothesis/keep"]'
+want_out '"disposable":[]'   # a ! line refuses the own-* rule
+want_kept "$WT"
+
+scenario "a pattern for a directory's contents outside it does not answer for it"
+disposables cache/
+ignore 'cache/*'
+land feat
+mkdir -p "$WT/cache"
+printf 'o\n' > "$WT/cache/a.o"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["cache/a.o"],"flagged":[],"disposable":[]'
+want_kept "$WT"   # no cache/.gitignore, so the file check refuses it
 
 scenario "a repository in an ignored directory under a declared one that is not ignored still holds it"
 disposables notes/
@@ -1131,6 +1235,66 @@ want_rc 0
 want_out '--remove-dirty'
 want_out '--remove-landed'
 want_out '--remove-head'
+
+# --- large listings ------------------------------------------------------------
+# The bounds are generous: these finish in seconds, and the sweep they guard
+# against took many minutes.
+
+scenario "an undeclared ignored directory of 36,000 files is listed once"
+ignore big/
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir -p "$WT/big/sub"
+(cd "$WT/big/sub" && seq -f 'f%05g' 1 36000 | xargs touch)
+SECONDS=0
+run
+if [ "$SECONDS" -lt 30 ]; then ok; else bad "the dry run took ${SECONDS}s"; fi
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["big/"],"flagged":[]'   # discriminating: --ignored lists every file
+SECONDS=0
+run --remove-head feat --head-oid "$TIP"
+if [ "$SECONDS" -lt 30 ]; then ok; else bad "--remove-head took ${SECONDS}s"; fi
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["big/"],"flagged":[]'
+want_kept "$WT"
+
+scenario "a worktree of 20,000 untracked files is read in seconds"
+land feat
+(cd "$WT" && seq -f 'an-untracked-file-%05g.txt' 1 20000 | xargs touch)
+SECONDS=0
+run
+# Discriminating: the old sweep forked per character and copied the list per path.
+if [ "$SECONDS" -lt 30 ]; then ok; else bad "the dry run took ${SECONDS}s"; fi
+want_rc 0
+want_out '"untracked":["an-untracked-file-00001.txt","an-untracked-file-00002.txt",'
+want_out '"an-untracked-file-20000.txt"],"modified":[]'
+want_kept "$WT"
+
+scenario "a declared disposable inside an undeclared ignored directory keeps it dirty"
+# The accepted cost of listing a matched directory once: out/ hides the
+# __pycache__/ inside it, so the worktree reads dirty where it once read clean.
+disposables __pycache__/
+ignore out/ __pycache__/
+land feat
+mkdir -p "$WT/out/__pycache__"
+: > "$WT/out/__pycache__/x.pyc"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"ignored":["out/"],"flagged":[],"disposable":[]'
+want_kept "$WT"
+
+scenario "an undeclared ignored directory of empty directories leaves it clean"
+ignore build/
+land feat
+mkdir -p "$WT/build/sub"
+run --remove
+want_rc 0
+want_out '"ignored":[],"flagged":[],"disposable":[]'   # discriminating: listing every dir/ record keeps it
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
 
 echo "merge-cleanup sweep matrix: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
