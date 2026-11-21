@@ -43,15 +43,14 @@ permission gate these safeguards already cover.
 
 Decide who owns the exchange before you read feedback, wait on CI, or start
 any watcher. **Default to one conductor subagent.** It owns steps 1 to 5 and
-wakes the main agent only for a judgment call, a no-go or uncertain
-convergence escalation, an armed rotation handoff, or its terminal ledger.
-Spawn it with the least inherited context the host exposes and the brief in
-`references/conductor.md` §spawn-brief, which opens with the current task
-contract at spawn, including task-specific user constraints. Its one startup
-read is `references/conductor-brief.md`.
+wakes the main agent only for a judgment call, a convergence escalation, an
+armed rotation handoff, or its terminal ledger. Spawn it with the least
+inherited context the host allows and the brief in `references/conductor.md`
+§spawn-brief: the current task contract at spawn, with task-specific user
+constraints. Its one startup read is `references/conductor-brief.md`.
 
 **Apply one platform-neutral gate through four probes.** A conductor owns the
-exchange when all four grants hold, each decided from observable evidence per
+exchange when all four grants hold on observable evidence, per
 `references/conductor.md` §probes.
 
 1. **Write-capable delegation.** Evidence: a spawn tool is listed in this
@@ -68,13 +67,12 @@ exchange when all four grants hold, each decided from observable evidence per
 3. **Completion notification.** Evidence: the host notifies the main agent when
    a background subagent ends, or offers a blocking wait on it. Default: a
    listed spawn tool grants it. After the spawn, end your turn only where that
-   signal re-enters you; in a headless run, block on the conductor, since
+   signal re-enters you; a headless run blocks on the conductor, since
    yielding ends the session.
 4. **Checkout isolation or exclusivity.** Evidence: `git worktree list` shows
    the PR branch in a worktree only the conductor will touch, or the spawn call
-   can create one. Otherwise the main agent makes no edit, commit, PR-branch
-   fetch, rebase, or push until the terminal ledger. Default: grant
-   exclusivity.
+   can create one. Default: grant exclusivity: the main agent makes no edit,
+   commit, PR-branch fetch, rebase, or push until the terminal ledger.
 
 A probe you cannot run is not a failed grant: take the default and note the
 gap in the brief. Never infer a failed grant from an unfamiliar tool name.
@@ -131,10 +129,9 @@ zero means the round is not clean.
 
 ## 4. Address Feedback
 
-Read `references/review-response.md` §disposition-rules before changing the
-branch; its gates are part of this workflow. After any wait or resume, pass
-`references/conductor.md` §checkout-gate before any write. Then handle every
-finding:
+Read `references/review-response.md` §disposition-rules first; its gates
+bind. After any wait or resume, pass `references/conductor.md` §checkout-gate
+before any write. Then handle every finding:
 
 - Evaluate it on its merits. A finding that asks for a guard or other
   behavioral change is real only when you can name what produces the failing
@@ -150,8 +147,8 @@ finding:
   with the final SHA, then resolve, per `references/review-response.md`
   §fold-push-verify-reply-resolve.
 
-These stay in the conductor. Under main ownership, delegate a
-fixer only under `references/review-response.md` §main-owned-fixer-choices.
+These stay in the conductor. Under main ownership, delegate a fixer only
+under `references/review-response.md` §main-owned-fixer-choices.
 
 ## 5. Converge on a Rising Bar
 
