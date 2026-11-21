@@ -288,8 +288,10 @@ change.
   changes; it doesn't check whether the solution is correct.
 - **Integrate the PR with the base as its landing check requires.** Follow
   `docs/agent-workflow.md` §handing-off step 3, which says when a base move
-  calls for another check. A landing check reruns CI, not review; a refresh
-  you push restarts the review watch.
+  calls for another check. Without a landing check, merge PRs one at a time:
+  start each merge's base-moved recheck only after the previous merge
+  finishes, while development and PR starts stay parallel. A landing check
+  reruns CI, not review; a refresh you push restarts the review watch.
 - **Use fresh eyes for substantive review.** Reviewing your own work in the
   same conversation shares the author's blind spots. A review in a fresh
   conversation is more independent. A bot from another provider or a human is
