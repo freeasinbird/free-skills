@@ -99,7 +99,7 @@ that permits only one target still restricts the whole operation. If no such
 restriction exists and the forge supports the writes, proceed.
 
 Once a planning write persists, a later failure is not a precondition error.
-It is the partial unsafe state covered under Replan.
+It is the partial unsafe state covered under `references/replan.md` §replan.
 
 ## Check Occupancy
 
@@ -117,7 +117,8 @@ the only sign. Planning an occupied issue would replace the plan or contract
 its holder is working from.
 
 When the assigned issue is occupied, stop before inspection and before any
-write. Send the blocked report (see Blocked or Paused) with the Status
+write. Send the blocked report (see
+`references/handoff-report.md` §blocked-or-paused) with the Status
 `#N planning blocked: occupied by <claim or PR>`. Name every claim and PR you
 found, and say what clears each: the holder releases, the claim expires, or
 the PR closes or merges. Planning can proceed only once all of them clear.
@@ -179,7 +180,7 @@ A coordination record written in step 5 is a planning write like the others.
 On a partner issue, change only the record: append it or edit that one field,
 and leave the rest of the issue as it was. Follow Use Safe Write Hygiene, and
 confirm both issues by reread. When the record lands in the selected contract record and a
-stale plan exists, retire that plan first, as Replan requires.
+stale plan exists, retire that plan first, as `references/replan.md` §replan requires.
 
 Current forge records supply issue state, authorization, and coordination
 evidence. Source-based claims about those boundaries still come from the
@@ -187,9 +188,9 @@ selected tree. An unchecked mutable checkout cannot stand in for that tree.
 
 If no available route can read the selected tree, report planning blocked and
 name the missing source access as a grounding gap. Do not substitute another
-checkout or publish an unsupported contract or replacement plan. Apply Blocked
-Replan when a prior plan needs invalidation. This is not a write-precondition
-error.
+checkout or publish an unsupported contract or replacement plan. Apply
+`references/replan.md` §blocked-replan when a prior plan needs invalidation.
+This is not a write-precondition error.
 
 ## Write the Contract and Plan Plainly
 
@@ -204,25 +205,8 @@ project's own format or from this skill. They are project wording, so
 write-plainly leaves them alone: plain prose rewrites the sentences under a
 heading, never the heading itself.
 
-When no such skill is available, follow these rules instead:
-
-- Lead with the point. Put the decision, blocker, or change first, and the
-  reason after it.
-- Keep a coherent thought connected, including its needed cause, contrast,
-  or qualification. Split sentences when that helps the reader.
-- Use ordinary words and active verbs: "edit," "run," "fix," not
-  "remediate," "surface," or "make a determination."
-- Cut agent jargon and process language. Say what changes, where, and what
-  stays the same. Don't restate the issue in project-management terms.
-- Name the exact path, command, or interface when the reader has to go there.
-  Keep those identifiers exact.
-- Keep every requirement, caveat, number, step, and relationship, including
-  scope and whose actions or beliefs are described. Explain consequences
-  from supplied context; don't invent facts or certainty.
-- Cut empty repetition; keep parallel wording and stable terms when they
-  help the reader follow the plan.
-- Write for a fresh task. Restore the context a later reader needs; a chat
-  reply can lean on the conversation, a plan comment can't.
+When no such skill is available, read and follow the fallback rules in
+`references/plan-comment.md` §plain-writing-fallback.
 
 ## Complete the Authoritative Contract
 
@@ -241,61 +225,12 @@ Reconcile stale claims against the repository first. If code reality changes
 the scope, update the contract instead of letting the plan contradict it. If
 an owner decision is needed, record the precise blocker.
 
-### Check a Written Dependencies Field
+After writing or changing a Dependencies field (including on a partner issue
+when planning changed its coordination record), read and follow
+`references/dependencies-check.md` §dependencies-check before posting the plan.
 
-After writing or changing a Dependencies field, check the persisted field
-before posting the plan. This includes a partner issue's Dependencies field
-when planning changed its coordination record. Check only fields planning
-wrote or changed.
-
-Run the project's documented check for the field first. Otherwise, use
-merge-cleanup's bundled `tracker-refresh.sh` when the issue or project records
-name a shared-format tracker that lists the unit. Do not search the forge for
-trackers beyond those records. When neither check applies, there is nothing
-to run or report.
-
-The fallback requires a shell, an authenticated `gh`, and merge-cleanup
-installed beside this skill. Run `../merge-cleanup/tracker-refresh.sh` relative
-to this skill's directory with `--repo <host/owner/name> --issue <tracker>`.
-Add `--comment <ID>` when the tracker is in a comment. The script only reads.
-Discard its stdout; never write the refreshed text to the tracker, which is
-outside the planning mutation surface.
-
-The fallback reads only unit issue bodies. It cannot verify a Dependencies
-field in a separate contract record. Report that field under **Not verified**
-unless a project check covers that record.
-
-On exit 0, inspect the stderr status line for each changed unit's
-`<ref> held: <reason>`. A `Blocker line in Dependencies` hold is a stated field,
-not a parse failure. Any other held reason for that unit is a parse failure.
-Other units' holds do not reject this unit's field. Exit 2 or 4 means the
-check could not complete, not that the field passed. Treat any other nonzero
-exit as an unsuccessful check too.
-
-Fix a rejected field to the project's shape, using typed entries or a bare
-`none` as applicable. Move notes and planning subsections out of the
-Dependencies section. Rerun the check after the write. If it still rejects
-the field, or the required shape is unclear, report planning blocked with the
-check's message. Do not post the plan or report finished while a field is
-known to fail its check.
-
-When an applicable check cannot run, name the field, the check, and the
-missing capability or failed lookup under **Not verified**. This includes a
-missing shell, `gh`, or sibling merge-cleanup installation for the fallback.
-Never report an unchecked field as passing.
-
-### Blocked Replan
-
-When a blocker prevents a truthful replacement plan, follow these steps. An
-occupied issue is the exception: write nothing and leave its plan as it is
-(see Check Occupancy).
-
-1. Edit the old plan to mark it blocked and name the invalidating fact. If
-   editing is unavailable, post one linked invalidation comment.
-2. Reread the exact plan. Confirm it is visibly blocked or deprecated and no
-   competing plan remains current.
-3. Report failed verification as an unsafe state that needs manual action.
-4. Do not invent a replacement only to retire a stale plan.
+When a blocker prevents a truthful replacement plan on an unoccupied issue,
+read and follow `references/replan.md` §blocked-replan.
 
 A complete contract may describe a unit whose implementation is blocked. A
 known dependency or ordering blocker does not stop the planning handoff.
@@ -335,25 +270,10 @@ use the template in `references/plan-comment.md` §plan-comment. Either shape
 keeps the five parts above and writes their prose under Write the Contract and
 Plan Plainly.
 
-### Replan
-
 Search the issue for an existing implementation-plan comment before posting.
-Use retirement-first when evidence shows that the current plan is invalid:
-
-1. Retire the exact current plan before publishing its replacement. Mark it
-   blocked or deprecated, then confirm the retirement by reread. Update the
-   contract if needed only after the old plan is non-current.
-2. Edit the retired comment into the replacement when the forge supports it.
-   Otherwise, post one superseding comment that links the retired plan and
-   identifies itself as the only current plan. Never leave competing current
-   comments.
-3. If a later write or verification fails, stop with the old plan non-current.
-   Report the partial unsafe state and include the prepared replacement text.
-   State that planning is blocked, not complete.
-
-Never rely on a later replacement write to retire stale instructions. Use any
-available forge API, CLI, or interface without assuming a platform-specific
-tool.
+When evidence shows that the current plan is invalid, read and follow
+`references/replan.md` §replan to retire it before changing the contract or
+publishing a replacement.
 
 ## Use Safe Write Hygiene
 
@@ -378,88 +298,15 @@ Before a finished report, verify that the selected authoritative record
 contains the complete contract. Separately verify that the issue has one
 unambiguous current plan. For every Dependencies field planning wrote, confirm
 that any applicable check passed, or name it under **Not verified** when it
-could not run. If verification fails, report the unsafe state under Blocked
-instead.
+could not run. If verification fails, report the unsafe state under
+`references/handoff-report.md` §blocked-or-paused instead.
 
-### Finished
-
-Write the report in this order, with bold lead words and no headings or
-tables. Aim for 120 to 200 words. Omit a part only where its rule says so.
-
-1. **Status.** One line in one of three forms, linking the issue once:
-
-   - Startable: `#N planned, startable now`.
-   - Implementation blocked: `#N planned, blocked on #M until <event>`.
-   - Held: `#N planned, startable but I'd hold: <reason>`.
-
-   Name the contract record here only when it is not the issue body. Status
-   already says planning finished, so add no separate statement that
-   implementation was not started.
-
-2. **Result.** One or two sentences on what the change does once built, in
-   behavior terms, not record terms. Mention size or shape only when it
-   changes a decision, such as a proposed split or a contract unit.
-3. **What planning changed.** Up to four one-line bullets. Cover corrections
-   to the issue's premise, scope added or removed, an approach chosen where
-   the issue left it open, and dependencies reconciled. Also name any
-   coordination record, assessment, or other issue or tracker you edited,
-   with the issues it is on. Write "Nothing beyond completing the contract"
-   when that is true.
-4. **Your call.** Up to three bullets, each a choice you made that the owner
-   can veto, naming the chosen default. Assumptions that don't change the
-   plan stay in the contract. Omit when there are none.
-5. **Not verified.** Up to two bullets of claims the plan rests on that you
-   read but did not run, or write-safety gaps that no reread closes, such as
-   a whole-body write that could lose a concurrent edit. If the default
-   branch advanced during planning, say so in one line and recommend
-   verification or a replan. An unchecked-occupancy line (see Check
-   Occupancy) doesn't count toward the two. Do not reinspect and republish
-   here. Omit when there is nothing to report.
-6. **Kickoff.** The kickoff prompt for a fresh implementation task, with the
-   real issue number in place of `N`:
-
-   ```text
-   Handle #N, implementation plan in comments.
-   ```
-
-   This prompt is for the user to send; sending it is the separate
-   implementation assignment. If an implementation blocker or hold remains,
-   precede the prompt with one clause saying when it applies, such as "after
-   #M merges" or "once you settle X".
-
-Leave out the record locations, the grounding revision, the plan's steps, and
-read-back narration. The plan comment carries the grounding revision.
-
-### Blocked or Paused
-
-A blocked report keeps **Status** and **What planning changed**. Status says
-planning is blocked, not finished, and names the precise blocker, as in
-`#N planning blocked: <blocker>`. This differs from a finished plan whose
-implementation waits on another unit.
-
-- Add one line on what clears the block.
-- Give the recommended action before any options.
-- Verify any required prior-plan invalidation before reporting.
-- If the prior plan remains actionable, report its location as an unsafe
-  state, unless the block is occupancy (see Check Occupancy).
-- Never hand off an incomplete authoritative record.
-- Omit the implementation kickoff prompt.
-
-A mid-planning question leads with your recommendation, then asks the
-question, then stops. Send no partial report with it. Ask it only before any
-planning write persists; after one does, report Blocked instead.
-
-### Platform Gates
-
-- **End on the report.** The report is the final message of the operation.
-  Where the platform can end a turn on background work, the report must
-  still be the last message.
-- **Compress any recap box.** Where the platform shows a recap box, its recap
-  is Status, Result, and What planning changed in three sentences. For a
-  blocked report, it is Status, what clears the block, and the
-  recommendation. Its question is a pending Your call item, or nothing.
-- **Propose no task or session card.** Where the platform offers task or
-  session cards, do not propose one. The kickoff prompt is the only handoff.
+- **Finished handoff:** read and follow `references/handoff-report.md`
+  §finished.
+- **Blocked or paused handoff (or mid-planning question):** read and follow
+  `references/handoff-report.md` §blocked-or-paused.
+- **Platform gates:** apply `references/handoff-report.md` §platform-gates to
+  every handoff report.
 
 Precondition errors never reach this section. After a finished, blocked, or
 paused handoff, do not continue into implementation in the same operation.

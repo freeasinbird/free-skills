@@ -67,3 +67,25 @@ language.
 1. Edit `src/parser.ts`: replace the tokenizer behind `parse()`. The exported
    signature and output format stay the same.
 ```
+
+## §plain-writing-fallback
+
+When no such skill is available, follow these rules instead:
+
+- Lead with the point. Put the decision, blocker, or change first, and the
+  reason after it.
+- Keep a coherent thought connected, including its needed cause, contrast,
+  or qualification. Split sentences when that helps the reader.
+- Use ordinary words and active verbs: "edit," "run," "fix," not
+  "remediate," "surface," or "make a determination."
+- Cut agent jargon and process language. Say what changes, where, and what
+  stays the same. Don't restate the issue in project-management terms.
+- Name the exact path, command, or interface when the reader has to go there.
+  Keep those identifiers exact.
+- Keep every requirement, caveat, number, step, and relationship, including
+  scope and whose actions or beliefs are described. Explain consequences
+  from supplied context; don't invent facts or certainty.
+- Cut empty repetition; keep parallel wording and stable terms when they
+  help the reader follow the plan.
+- Write for a fresh task. Restore the context a later reader needs; a chat
+  reply can lean on the conversation, a plan comment can't.
