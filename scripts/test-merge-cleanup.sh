@@ -771,6 +771,98 @@ want_out 'dirty: not clean; --remove-head removes only a clean worktree'
 want_ref "$ORIGIN" refs/heads/feature
 [ -e "$HEAD_WT" ] && ok || bad "dirty linked worktree was removed"
 
+# The base's .worktree-disposables, read at the base tip the cleanup fetches.
+base_disposables() { # base_disposables <line...>: commit it on main in $SEED and push
+  printf '%s\n' "$@" >"$SEED/.worktree-disposables"
+  git -C "$SEED" add .worktree-disposables
+  git -C "$SEED" commit -qm disposables
+  git -C "$SEED" push -q origin main
+}
+# A linked head worktree whose only leftover is an ignored .venv/. The
+# exclude is shared by every worktree; the feature tree lacks main's files.
+venv_head_worktree() {
+  git -C "$WORK" switch -q main
+  git -C "$WORK" branch -f feature origin/feature
+  HEAD_WT="$SCEN/head-wt"
+  git -C "$WORK" worktree add -q "$HEAD_WT" feature
+  printf '.venv/\n' >>"$WORK/.git/info/exclude"
+  mkdir "$HEAD_WT/.venv"
+  echo x >"$HEAD_WT/.venv/pyvenv.cfg"
+}
+
+SCENARIO="a head worktree holding only a declared disposable is removed"
+setup_same merge
+base_disposables .venv/
+git -C "$WORK" fetch -q origin
+venv_head_worktree
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 0
+want_out '"worktree":"removed_clean"'
+want_out '"remote_branch":"deleted"'
+want_no_ref "$ORIGIN" refs/heads/feature
+# Discriminating: the code at 1f6f0c5 stops head-worktree-present.
+[ ! -e "$HEAD_WT" ] && ok || bad "head worktree with a declared disposable survived"
+
+SCENARIO="the disposables file is read at the freshly fetched base tip"
+setup_same merge
+venv_head_worktree
+# Pushed after $WORK last fetched, so only a fresh fetch sees the entry.
+base_disposables .venv/
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 0
+want_out '"worktree":"removed_clean"'
+# Discriminating: a copy that reads the stale tracking ref keeps it.
+[ ! -e "$HEAD_WT" ] && ok || bad "the fresh base tip's entry was not applied"
+
+SCENARIO="an ignored leftover the base doesn't declare keeps the head worktree"
+setup_same merge
+venv_head_worktree
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 2
+want_out 'STOP head-worktree-present'
+want_out '"worktree":"owner_removal_required"'
+want_ref "$ORIGIN" refs/heads/feature
+[ -e "$HEAD_WT" ] && ok || bad "undeclared ignored leftover was removed"
+
+SCENARIO="the head branch's own disposables file gains nothing"
+setup_same merge
+git -C "$SEED" switch -q feature
+printf '.venv/\n' >"$SEED/.worktree-disposables"
+git -C "$SEED" add .worktree-disposables
+git -C "$SEED" commit -qm "head's own disposables"
+HEAD_OID=$(git -C "$SEED" rev-parse HEAD)
+git -C "$SEED" push -q origin feature
+git -C "$SEED" switch -q main
+# Merged with the main side's version, so the base declares nothing.
+git -C "$SEED" merge -q --no-ff -s ours feature -m "merged again"
+git -C "$SEED" push -q origin main
+git -C "$WORK" fetch -q origin
+write_pr acme/repo acme/repo feature "$HEAD_OID" false >"$FIX/pr.json"
+venv_head_worktree
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 2
+want_out 'STOP head-worktree-present'
+want_ref "$ORIGIN" refs/heads/feature
+# Discriminating: a copy that reads the merged head's file removes it.
+[ -e "$HEAD_WT" ] && ok || bad "the head's own disposables file was applied"
+
+SCENARIO="a bad disposables file on the base stops bad-record before mutation"
+setup_same merge
+base_disposables .venv/ '*.pyc'
+venv_head_worktree
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 2
+want_out 'STOP bad-record'
+want_out '"worktree":"owner_removal_required"'
+want_out "entry '*.pyc'"
+want_ref "$ORIGIN" refs/heads/feature
+[ -e "$HEAD_WT" ] && ok || bad "head worktree removed despite a bad base file"
+
 SCENARIO="ambiguous suffix ref stops the leased deletion"
 setup_same merge
 git --git-dir="$ORIGIN" update-ref refs/heads/refs/heads/feature "$HEAD_OID"

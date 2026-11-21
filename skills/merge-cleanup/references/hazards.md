@@ -36,10 +36,11 @@ Two bare-name resolution holes open just before a deletion:
 
 A bare fetch or pull refspec is exposed the same way.
 
-Relied on by step 1 (qualifying every ref it resolves or compares), step 3
-(the qualified base-fetch refspec), step 4 (the qualified `git ls-remote
---heads` pattern that reads the remote head), and `base-landing-plan.sh`,
-which reports a same-named tag and qualifies both ref reads for this reason.
+Relied on by step 1 (qualifying every ref it resolves or compares) and by
+steps 2 and 3 (the qualified base-fetch refspec, in the worktree preflight and
+the resync). Also relied on by step 4 (the qualified `git ls-remote --heads`
+pattern that reads the remote head), and by `base-landing-plan.sh`, which
+reports a same-named tag and qualifies both ref reads for this reason.
 
 ---
 
@@ -454,7 +455,10 @@ Relied on by the worktree preflight: step 2's `worktree_scan`, which finds a
 linked worktree still holding the head branch. The preflight removes it
 through `worktree-sweep.sh --remove-head` only when it's clean, and passes the
 caller's starting directory as `--caller-dir`, so a removal never takes the
-directory the session stands in. Otherwise the preflight stops for the owner.
+directory the session stands in. Before the sweep judges the worktree, the
+preflight fetches the base from its verified remote and passes that tip as
+`--disposables-at`, so the clean test applies the base's current
+`.worktree-disposables`, never the merged head's copy. Otherwise the preflight stops for the owner.
 When the base branch is checked out in another linked worktree, it instead
 directs the caller to rerun with that worktree as `--checkout` rather than
 remove it.

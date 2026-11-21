@@ -9,7 +9,8 @@
 # Usage:
 #   worktree-sweep.sh [--base <ref>] [--remove [--remove-dirty] | --remove-landed]
 #     [--caller-dir <dir>]
-#   worktree-sweep.sh --remove-head <branch> --head-oid <oid> [--caller-dir <dir>]
+#   worktree-sweep.sh --remove-head <branch> --head-oid <oid>
+#     [--disposables-at <oid>] [--caller-dir <dir>]
 #   worktree-sweep.sh --help
 #
 #   --base <ref>     the ref a branch must be merged into. Default: the
@@ -38,6 +39,13 @@
 #                    worktrees on that branch. With --base, --remove,
 #                    --remove-dirty, or --remove-landed, a usage error.
 #   --head-oid <oid> the full object name the branch must be at. Required by
+#                    --remove-head, and a usage error without it.
+#   --disposables-at <oid>
+#                    the full object name of the commit whose disposables
+#                    file --remove-head applies. The caller vouches that it
+#                    is a reviewed base commit; merge-cleanup passes the base
+#                    tip it just fetched. It is only read, never tested for
+#                    ancestry or a landing merge. Optional with
 #                    --remove-head, and a usage error without it.
 #   --caller-dir <dir>
 #                    a directory the caller stands in, such as a shell's
@@ -113,8 +121,9 @@
 # comments), as Hypothesis and uv write one, counts as ignored. A missing,
 # empty, or comments-only file means no entries. Built in, with no entry: an
 # ignored file named .DS_Store, at any depth, is disposable.
-# --remove-head has no base, so it reads no file and applies only the
-# built-in rule; the owner's sweep clears declared build output.
+# --remove-head has no base, so it reads the file only at the
+# --disposables-at commit; without that flag it reads no file and applies
+# only the built-in rule.
 #
 # STOP bad-record refuses the file when it is not a regular file (a
 # symlink's blob is its target's name), holds a NUL byte or a carriage
@@ -143,10 +152,10 @@ case "${1:-}" in
 esac
 
 BASE_OPT="" REMOVE=false REMOVE_DIRTY=false REMOVE_LANDED=false
-HEAD_BRANCH="" HEAD_OID_OPT="" CALLER_OPT=""
+HEAD_BRANCH="" HEAD_OID_OPT="" DISPOSABLES_AT_OPT="" CALLER_OPT=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --remove-head | --head-oid | --caller-dir)
+    --remove-head | --head-oid | --disposables-at | --caller-dir)
       [ $# -ge 2 ] || { echo "worktree-sweep.sh: $1 requires a value" >&2; usage; }
       case "$2" in
         '' | -*) echo "worktree-sweep.sh: $1 needs a value, not '$2'" >&2; usage ;;
@@ -154,6 +163,7 @@ while [ $# -gt 0 ]; do
       case "$1" in
         --remove-head) HEAD_BRANCH="$2" ;;
         --head-oid) HEAD_OID_OPT="$2" ;;
+        --disposables-at) DISPOSABLES_AT_OPT="$2" ;;
         --caller-dir) CALLER_OPT="$2" ;;
       esac
       shift 2 ;;
@@ -196,8 +206,20 @@ if [ -n "$HEAD_BRANCH" ]; then
     40 | 64) ;;
     *) echo "worktree-sweep.sh: --head-oid must be a full lowercase hex object name" >&2; usage ;;
   esac
+  if [ -n "$DISPOSABLES_AT_OPT" ]; then
+    case "$DISPOSABLES_AT_OPT" in
+      *[!0-9a-f]*) echo "worktree-sweep.sh: --disposables-at must be a full lowercase hex object name" >&2; usage ;;
+    esac
+    case "${#DISPOSABLES_AT_OPT}" in
+      40 | 64) ;;
+      *) echo "worktree-sweep.sh: --disposables-at must be a full lowercase hex object name" >&2; usage ;;
+    esac
+  fi
 elif [ -n "$HEAD_OID_OPT" ]; then
   echo "worktree-sweep.sh: --head-oid only qualifies --remove-head" >&2
+  usage
+elif [ -n "$DISPOSABLES_AT_OPT" ]; then
+  echo "worktree-sweep.sh: --disposables-at only qualifies --remove-head" >&2
   usage
 fi
 
@@ -321,9 +343,17 @@ git rev-parse --git-dir >/dev/null 2>&1 \
   || lookup_failed repository "not inside a git repository"
 
 # Pin the base once, so every worktree in the run is judged against the same
-# commit even if a fetch lands mid-run. --remove-head needs none.
+# commit even if a fetch lands mid-run. --remove-head needs none; its
+# --disposables-at commit only names where the disposables file is read, so
+# BASE_NAME stays empty and no base-branch, ancestry, or landing test uses it.
 if [ "$MODE" = remove-head ]; then
-  :
+  if [ -n "$DISPOSABLES_AT_OPT" ]; then
+    # The equality test keeps a ref named like an oid, or a tag that peels
+    # to another commit, from standing in for the commit the caller named.
+    BASE_OID=$(git rev-parse --verify --quiet "$DISPOSABLES_AT_OPT^{commit}" 2>/dev/null) \
+      && [ "$BASE_OID" = "$DISPOSABLES_AT_OPT" ] \
+      || stop no-base "--disposables-at $DISPOSABLES_AT_OPT is not a local commit; fetch the base first"
+  fi
 elif [ -n "$BASE_OPT" ]; then
   BASE_NAME="$BASE_OPT"
 else
@@ -390,17 +420,21 @@ bad_entry() {
 # Read the disposables file before any worktree, so a bad one stops the run
 # with nothing judged or removed. ls-tree tells a missing file from a failed
 # read, which must stop the run rather than read as no entries; --full-tree
-# finds the root's file from any subdirectory. --remove-head reads none:
-# the merged head's copy may hold entries the base has since dropped.
+# finds the root's file from any subdirectory. --remove-head reads it only
+# at the --disposables-at commit its caller pinned, the newest base tip the
+# project reviewed, and never from the merged head: the head's copy may hold
+# entries the base has since dropped. Without that flag it reads none.
 DECL=.worktree-disposables
+DECL_AT="$BASE_NAME"
+[ -n "$DECL_AT" ] || DECL_AT="$BASE_OID"
 decl_refuse() { # decl_refuse <why>
   rm -f "$record_tmp"
-  stop bad-record "$DECL at $BASE_NAME $1"
+  stop bad-record "$DECL at $DECL_AT $1"
 }
 record_tmp="" decl_entry=""
-if [ "$MODE" != remove-head ]; then
+if [ -n "$BASE_OID" ]; then
   decl_entry=$(git ls-tree --full-tree "$BASE_OID" -- "$DECL" 2>/dev/null) \
-    || lookup_failed record "could not list $DECL at $BASE_NAME"
+    || lookup_failed record "could not list $DECL at $DECL_AT"
 fi
 if [ -n "$decl_entry" ]; then
   case "$decl_entry" in
@@ -409,7 +443,7 @@ if [ -n "$decl_entry" ]; then
   esac
   record_tmp=$(mktemp) || lookup_failed mktemp "could not create a temporary file"
   git cat-file blob "$BASE_OID:$DECL" > "$record_tmp" 2>/dev/null \
-    || { rm -f "$record_tmp"; lookup_failed record "could not read $DECL at $BASE_NAME"; }
+    || { rm -f "$record_tmp"; lookup_failed record "could not read $DECL at $DECL_AT"; }
   # read drops a NUL (bash 5) or ends the line at it (bash 3.2), changing the
   # entry. A file, not a pipe: cmp can exit at the first difference and
   # kill tr.
@@ -421,7 +455,7 @@ if [ -n "$decl_entry" ]; then
   case "$rc" in
     0) ;;
     1) decl_refuse "holds a NUL byte" ;;
-    *) rm -f "$record_tmp"; lookup_failed record "could not read $DECL at $BASE_NAME" ;;
+    *) rm -f "$record_tmp"; lookup_failed record "could not read $DECL at $DECL_AT" ;;
   esac
   n=0
   while IFS= read -r line || [ -n "$line" ]; do

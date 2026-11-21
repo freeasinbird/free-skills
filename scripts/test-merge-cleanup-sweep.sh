@@ -30,6 +30,10 @@
 # inventory matrix. The large-listing cases were run against the sweep
 # before --ignored=matching and subshell-free escaping, and the
 # empty-directory case against a copy that lists every ignored dir/ record.
+# The --disposables-at cases were run against the sweep at 1f6f0c5, which
+# rejects the flag, and against copies that keep the reader's mode gate,
+# read origin/HEAD's file instead, read the head's file, or skip the test
+# that the resolved commit is the oid given.
 # The own-* cases were run against copies without the own-* rule, without
 # its repository test, and without its read of the file. No case separates
 # its source-and-pattern check, which the file check always precedes.
@@ -1129,6 +1133,103 @@ want_out '"disposables":[]'
 want_out 'WORKTREE dirty'
 want_kept "$WT"   # discriminating: a copy that reads origin/main's file removes it
 
+scenario "--remove-head applies the file at --disposables-at"
+disposables .venv/
+ignore .venv/
+BASE=$(git -C "$REPO" rev-parse main)
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir "$WT/.venv"
+printf 'x\n' > "$WT/.venv/pyvenv.cfg"
+run --remove-head feat --head-oid "$TIP" --disposables-at "$BASE"
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_out '"disposable":[".venv/"]'
+want_out "\"base_oid\":\"$BASE\",\"mode\":\"remove-head\",\"disposables\":[\".venv/\"]"
+want_removed "$WT"   # discriminating: the code at 1f6f0c5 rejects the flag; a copy that keeps the reader's mode gate keeps it
+
+scenario "--disposables-at reads its own commit, not origin/HEAD"
+disposables .build/
+OLD=$(git -C "$REPO" rev-parse main)
+G "$REPO" rm -q .worktree-disposables
+G "$REPO" commit -m "drop the disposables"
+sync_origin
+NEW=$(git -C "$REPO" rev-parse main)
+ignore .build/
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove-head feat --head-oid "$TIP" --disposables-at "$NEW"
+want_rc 0
+want_out '"disposables":[]'
+want_out 'WORKTREE dirty'
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP" --disposables-at "$OLD"
+want_rc 0
+want_out '"disposables":[".build/"]'
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"   # discriminating: a copy that reads origin/HEAD keeps it
+
+scenario "--disposables-at at a commit without the file reads none, though origin/HEAD has one"
+OLD=$(git -C "$REPO" rev-parse main)
+disposables .build/
+ignore .build/
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove-head feat --head-oid "$TIP" --disposables-at "$OLD"
+want_rc 0
+want_out '"disposables":[]'
+want_out 'WORKTREE dirty'
+want_kept "$WT"   # discriminating: a copy that reads origin/HEAD removes it
+
+scenario "--remove-head never reads the head branch's own file"
+printf '.build/\n' > "$WT/.worktree-disposables"
+G "$WT" add .worktree-disposables
+G "$WT" commit -m "head's own disposables"
+ignore .build/
+BASE=$(git -C "$REPO" rev-parse main)
+TIP=$(git -C "$REPO" rev-parse feat)
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+run --remove-head feat --head-oid "$TIP" --disposables-at "$BASE"
+want_rc 0
+want_out '"disposables":[]'
+want_out 'WORKTREE dirty'
+want_kept "$WT"   # discriminating: a copy that reads the head or the worktree removes it
+
+scenario "--remove-head stops on a bad file at --disposables-at before any worktree is read"
+disposables .build/ '*.pyc'
+BASE=$(git -C "$REPO" rev-parse main)
+TIP=$(git -C "$REPO" rev-parse feat)
+run --remove-head feat --head-oid "$TIP" --disposables-at "$BASE"
+want_rc 2
+want_out "STOP bad-record"
+want_out ".worktree-disposables at $BASE line 2, entry '*.pyc'"
+case "$OUT" in *WORKTREE*) bad "a worktree was judged" ;; *) ok ;; esac
+want_kept "$WT"
+
+scenario "--remove-head stops no-base when --disposables-at is not a local commit"
+TIP=$(git -C "$REPO" rev-parse feat)
+MISSING=$(printf 'not stored\n' | git -C "$REPO" hash-object --stdin)
+run --remove-head feat --head-oid "$TIP" --disposables-at "$MISSING"
+want_rc 2
+want_out "STOP no-base"
+want_out "--disposables-at $MISSING is not a local commit"
+case "$OUT" in *WORKTREE*) bad "a worktree was judged" ;; *) ok ;; esac
+want_kept "$WT"
+# A ref named like an oid, or an annotated tag, peels to a commit with
+# another name; only the named commit itself counts.
+OIDLIKE=$(printf 'a%.0s' $(seq 64))
+G "$REPO" branch "$OIDLIKE" main
+G "$REPO" tag -a -m tagged base-tag main
+TAG=$(git -C "$REPO" rev-parse refs/tags/base-tag)
+for at in "$OIDLIKE" "$TAG"; do
+  run --remove-head feat --head-oid "$TIP" --disposables-at "$at"
+  want_rc 2
+  want_out "STOP no-base"
+  want_kept "$WT"   # discriminating: without the equality test both resolve
+done
+
 scenario "--remove-head keeps a branch that moved past the head"
 TIP=$(git -C "$REPO" rev-parse feat)
 printf 'g\n' > "$WT/g.txt"
@@ -1174,6 +1275,19 @@ run --remove-head feat --head-oid "$(printf '%s' "$TIP" | tr a-f A-F)"
 want_rc 64
 run --remove-head feat --head-oid "$TIP" --caller-dir "$SCEN/missing"
 want_rc 4
+BASE=$(git -C "$REPO" rev-parse main)
+run --disposables-at "$BASE"
+want_rc 64
+run --remove --disposables-at "$BASE"
+want_rc 64
+run --remove-landed --disposables-at "$BASE"
+want_rc 64
+run --remove-head feat --head-oid "$TIP" --disposables-at
+want_rc 64
+run --remove-head feat --head-oid "$TIP" --disposables-at "${BASE:0:12}"
+want_rc 64
+run --remove-head feat --head-oid "$TIP" --disposables-at "$(printf '%s' "$BASE" | tr a-f A-F)"
+want_rc 64
 want_kept "$WT"
 
 scenario "a removal git refuses stops the run and attempts nothing after it"
