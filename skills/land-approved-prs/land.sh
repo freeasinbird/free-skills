@@ -1859,7 +1859,10 @@ phase_merge() {
   queue_message_check
   local err
   err=$(mktemp) || lookup_failed merge "mktemp failed"
-  if ! gh pr merge "$PR" --repo="$REPO" --merge \
+  # A write, not a read: one attempt, kept outside gh_read, and its stderr
+  # is quoted in STOP merge-refused, so gh's and Go's debug output stays
+  # off as for every forge read.
+  if ! GH_DEBUG= GODEBUG="$GH_GODEBUG" gh pr merge "$PR" --repo="$REPO" --merge \
       --match-head-commit="$HEAD_OID" \
       --subject="$title (#$PR)" --body="" 2>"$err"; then
     local detail; detail=$(tr -d '\0' < "$err" | tail -c 300); rm -f "$err"

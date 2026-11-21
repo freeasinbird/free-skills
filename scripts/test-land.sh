@@ -244,6 +244,7 @@ elif [ "$sub" = run ]; then
   fi
   exit 0
 elif [ "$sub" = pr ] && [ "${verb:-}" = merge ]; then
+  printf 'GH_DEBUG=%s GODEBUG=%s\n' "${GH_DEBUG-<unset>}" "${GODEBUG-<unset>}" >> "$FIX/merge-env.log"
   rc=0
   [ -f "$FIX/merge-rc" ] && rc=$(cat "$FIX/merge-rc")
   [ "$rc" -eq 0 ] || echo "merge refused by fixture" >&2
@@ -296,7 +297,7 @@ chmod +x "$SHIMD/gh"
 SCENARIO=""
 scenario() {
   SCENARIO="$1"
-  rm -f "$FIX"/*.json "$FIX"/calls.log "$FIX"/merge-rc \
+  rm -f "$FIX"/*.json "$FIX"/calls.log "$FIX"/merge-rc "$FIX"/merge-env.log \
     "$FIX"/repo-read-once "$FIX"/rules-page2-fail "$FIX"/live-remote \
     "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr "$FIX"/fail-* \
     "$FIX"/runs-read-once "$FIX"/rerun-rc "$FIX"/rerun-env.log \
@@ -953,6 +954,42 @@ echo 1 > "$FIX/merge-rc"
 run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
 want_rc 2
 want_out 'STOP merge-refused'
+
+# STOP merge-refused quotes gh pr merge's stderr tail, so it gets the
+# same debug suppression as gh_read and phase_rerun across every debug
+# variable form gh and Go honor, while preserving unrelated GODEBUG flags.
+for debug in GH_DEBUG=api DEBUG=api GODEBUG=netdns=go,http2debug=2 \
+  'GODEBUG=netdns=go, http2debug=1' GODEBUG=x=http2debug=2; do
+  scenario "a refused merge under $debug puts no request header in STOP merge-refused"
+  std_setup; std_fixtures
+  printf '{"title":"T"}' > "$FIX/title.json"
+  echo 1 > "$FIX/merge-rc"
+  unset GH_DEBUG DEBUG GODEBUG
+  export "$debug"
+  run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
+  unset "${debug%%=*}"
+  want_rc 2
+  want_out 'STOP merge-refused'
+  want_out 'merge refused by fixture'
+  want_no_out 'SECRET-313'
+  case "$debug" in
+    GODEBUG=netdns=go*) want_env='GH_DEBUG= GODEBUG=netdns=go' ;;
+    *) want_env='GH_DEBUG= GODEBUG=' ;;
+  esac
+  grep -qxF "$want_env" "$FIX/merge-env.log" && ok \
+    || bad "merge ran with unexpected debug env ($(cat "$FIX/merge-env.log" 2>/dev/null), want '$want_env')"
+done
+
+scenario "a succeeding merge under debug settings also strips http2debug and keeps netdns"
+std_setup; std_fixtures
+printf '{"title":"T"}' > "$FIX/title.json"
+unset GH_DEBUG DEBUG GODEBUG
+GH_DEBUG=api DEBUG=api GODEBUG=netdns=go,http2debug=2 \
+  run_sm merge --pr 83 --repo owner/name --head "$FEAT_OID"
+want_rc 0
+want_out 'OK merge'
+grep -qxF 'GH_DEBUG= GODEBUG=netdns=go' "$FIX/merge-env.log" && ok \
+  || bad "succeeding merge ran with unexpected debug env ($(cat "$FIX/merge-env.log" 2>/dev/null))"
 
 scenario "a PR sharing the head after check still stops the merge"
 std_setup; std_fixtures
