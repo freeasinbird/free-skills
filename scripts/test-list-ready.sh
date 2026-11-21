@@ -861,6 +861,480 @@ git -C "$TMP/seed" push -q "$SRV" main
 lr --run r1
 expect_stop no-landing-record "the record is read from the fetched tip, which no longer has it"
 
+# --- fail-closed Markdown landing-record reader (#436) ---
+
+push_agents() { # push_agents: replace AGENTS.md on remote main from stdin
+  rm -f "$TMP/seed/AGENTS.md"
+  cat > "$TMP/seed/AGENTS.md"
+  git -C "$TMP/seed" add -A AGENTS.md
+  git -C "$TMP/seed" commit -q --allow-empty -m "update agents"
+  git -C "$TMP/seed" push -q "$SRV" main
+}
+
+RECORD_MAINTAIN=$(printf '%s\n' "$RECORD_DEFAULT" | sed '/Approver permission/s/`write`/`maintain`/')
+
+new_repo ""
+collaborator writer write
+pr_add 1 feat/one "$H1"; ci_run feat/one 2026-10-01T01:00:00Z "$H1"; reviewed 1 "$H1"
+labeled 1 2026-10-02T00:00:00Z writer
+
+push_agents <<EOF
+# Project
+
+\`\`\`markdown
+$RECORD_DEFAULT
+\`\`\`
+EOF
+lr --run r1
+expect_stop no-landing-record "a backtick-fenced example alone stops no-landing-record"
+
+push_agents <<EOF
+# Project
+
+~~~markdown
+$RECORD_DEFAULT
+~~~
+EOF
+lr --run r1
+expect_stop no-landing-record "a tilde-fenced example alone stops no-landing-record"
+
+push_agents <<EOF
+# Project
+
+- Example:
+
+  \`\`\`markdown
+$RECORD_DEFAULT
+  \`\`\`
+EOF
+lr --run r1
+expect_stop no-landing-record "a two-space list-indented fenced example alone stops no-landing-record"
+
+push_agents <<EOF
+# Project
+
+<!--   - **Mechanism:** \`label\`. -->
+EOF
+lr --run r1
+expect_stop no-landing-record "a single-line commented example alone stops no-landing-record"
+
+push_agents <<EOF
+# Project
+
+<!--
+$RECORD_DEFAULT
+-->
+EOF
+lr --run r1
+expect_stop no-landing-record "a multi-line commented example alone stops no-landing-record"
+
+push_agents <<EOF
+# Project
+
+\`\`\`markdown
+$RECORD_DEFAULT
+\`\`\`
+
+- **Land approved PRs by label.** This project has the following landing record:
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_excluded 1 3 "a fenced example before the real record is skipped" "below the recorded maintain"
+
+push_agents <<EOF
+# Project
+
+<!--
+$RECORD_DEFAULT
+-->
+
+- **Land approved PRs by label.** This project has the following landing record:
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_excluded 1 3 "a commented example before the real record is skipped" "below the recorded maintain"
+
+push_agents <<EOF
+# Project
+
+<!-- managed:start -->
+
+- **Claim shape:**
+
+  \`\`\`markdown
+  <!-- work-claim:v1 -->
+$RECORD_DEFAULT
+  \`\`\`
+
+<!--
+\`\`\`markdown
+$RECORD_DEFAULT
+-->
+
+- **Land approved PRs by label.** This project has the following landing record:
+
+$RECORD_MAINTAIN
+
+<!-- managed:end -->
+EOF
+lr --run r1
+expect_excluded 1 3 "comment inside fence and fence inside comment do not break reading the real record" "below the recorded maintain"
+
+# CRLF AGENTS.md passes cleanly.
+printf '# Project\r\n\r\n%s\r\n' "$RECORD_MAINTAIN" | sed 's/$/\r/' | sed 's/\r\r$/\r/' | push_agents
+lr --run r1
+expect_excluded 1 3 "CRLF AGENTS.md passes cleanly" "below the recorded maintain"
+
+# Fail-closed ambiguous and malformed layouts.
+push_agents <<EOF
+$RECORD_MAINTAIN
+
+\`\`\`markdown
+unclosed fence
+EOF
+lr --run r1
+expect_stop bad-record "an unclosed fenced code block stops bad-record"
+
+push_agents <<EOF
+<!--
+unclosed comment
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "an unclosed HTML comment stops bad-record"
+
+push_agents <<EOF
+<!--
+<!-- nested
+-->
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a nested <!-- inside a comment stops bad-record"
+
+push_agents <<EOF
+Stray closer -->
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "an orphan --> stops bad-record"
+
+push_agents <<EOF
+<!-->
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "short ambiguous <!--> stops bad-record"
+
+push_agents <<EOF
+<!--->
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "short ambiguous <!---> stops bad-record"
+
+push_agents <<EOF
+Text <!-- mid-line unclosed
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a mid-line unclosed <!-- stops bad-record"
+
+push_agents <<EOF
+<!-- comment --> trailing text
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "trailing non-whitespace on a line-start comment closer stops bad-record"
+
+push_agents <<EOF
+Unbalanced \`code <!-- comment -->
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "an unbalanced backtick span on a line with <!-- stops bad-record"
+
+push_agents <<EOF
+> <!-- unclosed on blockquote
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "an unbalanced <!-- on a blockquote line stops bad-record"
+
+push_agents <<EOF
+    \`\`\`markdown
+    indented fence
+    \`\`\`
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a 4-space indented fence outside an active fence stops bad-record"
+
+push_agents <<EOF
+  \`\`\`markdown
+  body
+    \`\`\`
+  \`\`\`
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a 4-space matching closer inside a 2-space fence stops bad-record"
+
+push_agents <<EOF
+  \`\`\`markdown
+  body
+     \`\`\`
+  \`\`\`
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a 5-space matching closer inside a 2-space fence stops bad-record"
+
+push_agents <<EOF
+<pre>
+$RECORD_DEFAULT
+</pre>
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a raw HTML <pre> block stops bad-record"
+
+push_agents <<EOF
+<details>
+$RECORD_DEFAULT
+</details>
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a raw HTML <details> block stops bad-record"
+
+push_agents <<EOF
+---
+title: unclosed
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "unclosed line-1 --- front matter stops bad-record"
+
+push_agents <<EOF
+[ref]: https://example.com
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a link reference definition immediately before the record stops bad-record"
+
+push_agents <<EOF
+$RECORD_DEFAULT
+
+## Second
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "duplicate visible landing records stop bad-record"
+
+push_agents <<EOF
+$RECORD_MAINTAIN
+  - **Approval:** \`other\`.
+EOF
+lr --run r1
+expect_stop bad-record "duplicate keys within a landing record stop bad-record"
+
+push_agents <<EOF
+  * **Mechanism:** \`label\`.
+  - **Approval:** \`approved\`.
+EOF
+lr --run r1
+expect_stop bad-record "a non-canonical Mechanism bullet with * marker stops bad-record"
+
+push_agents <<EOF
+- **Mechanism:** \`label\`.
+  - **Approval:** \`approved\`.
+EOF
+lr --run r1
+expect_stop bad-record "a non-canonical Mechanism bullet at 0-space indent stops bad-record"
+
+push_agents <<EOF
+  - **Mechanism**: \`label\`.
+  - **Approval:** \`approved\`.
+EOF
+lr --run r1
+expect_stop bad-record "a non-canonical Mechanism bullet with colon outside bold stops bad-record"
+
+push_agents <<EOF
+  - **Mechanism:** \`label\`.
+  - **Approval:** \`approved\`,
+  lazy continuation line.
+  - **Hand-back:** \`needs-human\`.
+  - **Approver permission:** \`maintain\`.
+  - **Reviewer:** \`none\`.
+EOF
+lr --run r1
+expect_stop bad-record "a lazy continuation inside a record stops bad-record"
+
+push_agents <<EOF
+  - **Mechanism:** \`label\`.
+  - **Approval:** \`approved\`.
+    - nested sub-bullet
+  - **Hand-back:** \`needs-human\`.
+  - **Approver permission:** \`maintain\`.
+  - **Reviewer:** \`none\`.
+EOF
+lr --run r1
+expect_stop bad-record "a nested sub-bullet inside a record stops bad-record"
+
+push_agents <<EOF
+  - **Mechanism:** \`label\`.
+  <!-- comment inside record -->
+  - **Approval:** \`approved\`.
+  - **Hand-back:** \`needs-human\`.
+  - **Approver permission:** \`maintain\`.
+  - **Reviewer:** \`none\`.
+EOF
+lr --run r1
+expect_stop bad-record "an HTML comment inside a record stops bad-record"
+
+push_agents <<EOF
+- \`\`\`
+$RECORD_DEFAULT
+
+  \`\`\`
+  \`\`\`
+EOF
+lr --run r1
+expect_stop bad-record "a code fence opened on a bullet marker line stops bad-record"
+
+push_agents <<EOF
+- <script>
+
+$RECORD_DEFAULT
+
+  </script>.
+EOF
+lr --run r1
+expect_stop bad-record "a raw HTML block opened on a bullet marker line stops bad-record"
+
+push_agents <<EOF
+> \`\`\`markdown
+> $RECORD_DEFAULT
+> \`\`\`
+EOF
+lr --run r1
+expect_stop bad-record "a code fence opened on a blockquote line stops bad-record"
+
+push_agents <<EOF
+$RECORD_MAINTAIN
+
+    continued second paragraph of last bullet.
+EOF
+lr --run r1
+expect_stop bad-record "a four-space continuation paragraph after the record stops bad-record"
+
+push_agents <<EOF
+$RECORD_MAINTAIN
+
+  - **Stale lock age:** \`30\` minutes.
+EOF
+lr --run r1
+expect_stop bad-record "a loose-list record bullet after a blank line stops bad-record"
+
+push_agents <<EOF
+$RECORD_MAINTAIN
+
+   - **Stale lock age:** \`30\` minutes.
+EOF
+lr --run r1
+expect_stop bad-record "a 3-space loose sibling bullet after a blank line stops bad-record"
+
+push_agents <<EOF
+  - **Mechanism:** \`review\` (see note]: below)
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a Mechanism bullet containing ]: is not skipped as a link reference"
+
+push_agents <<EOF
+> - **Mechanism:** \`review\`.
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a blockquoted Mechanism bullet stops bad-record"
+
+push_agents <<EOF
+  - **Mechanism\\:** \`review\`.
+
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "an escaped-colon Mechanism bullet stops bad-record"
+
+push_agents <<EOF
+<source src=a>trailing
+$RECORD_MAINTAIN
+EOF
+lr --run r1
+expect_stop bad-record "a cmark-gfm <source> HTML block stops bad-record"
+
+# File-level checks: symlink, NUL byte, bare CR, UTF-8 BOM.
+rm -f "$TMP/seed/AGENTS.md"
+printf '%s\n' "$RECORD_MAINTAIN" > "$TMP/seed/REAL.md"
+ln -s REAL.md "$TMP/seed/AGENTS.md"
+git -C "$TMP/seed" add REAL.md AGENTS.md
+git -C "$TMP/seed" commit -q -m "symlink agents"
+git -C "$TMP/seed" push -q "$SRV" main
+lr --run r1
+expect_stop bad-record "a symlinked AGENTS.md stops bad-record"
+git -C "$TMP/seed" rm -q REAL.md AGENTS.md
+git -C "$TMP/seed" commit -q -m "cleanup symlink"
+git -C "$TMP/seed" push -q "$SRV" main
+
+printf '# Project\n\0\n%s\n' "$RECORD_MAINTAIN" | push_agents
+lr --run r1
+expect_stop bad-record "a NUL byte in AGENTS.md stops bad-record"
+
+printf '# Project\n%s\rtrailing\n' "$RECORD_MAINTAIN" | push_agents
+lr --run r1
+expect_stop bad-record "a bare CR in AGENTS.md stops bad-record"
+
+printf '\357\273\277# Project\n\n%s\n' "$RECORD_MAINTAIN" | push_agents
+lr --run r1
+expect_stop bad-record "a leading UTF-8 BOM in AGENTS.md stops bad-record"
+
+# Failed git read stops LOOKUP_FAILED record (exit 4), not no-landing-record.
+printf '# Project\n\n%s\n' "$RECORD_MAINTAIN" | push_agents
+BADGIT="$TMP/badgit"
+mkdir -p "$BADGIT"
+REAL_GIT=$(command -v git)
+cat > "$BADGIT/git" <<GITSHIM
+#!/bin/sh
+if [ "\$1" = "ls-tree" ]; then exit 128; fi
+exec "$REAL_GIT" "\$@"
+GITSHIM
+chmod +x "$BADGIT/git"
+(cd "$WORK" && PATH="$BADGIT:$SHIMD:$PATH" bash "$SCRIPT" --repo owner/name --run r1) > "$TMP/out" 2> "$TMP/err"
+RC=$?
+LAST=$(tail -n 1 "$TMP/out")
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED record "* ]]; then ok
+else bad "a failed git ls-tree stops LOOKUP_FAILED record (exit 4), got exit $RC: $LAST"; fi
+
 # --- read failures ---
 
 new_repo

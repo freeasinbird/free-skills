@@ -251,29 +251,12 @@ DEFAULT=$(gh_read api "repos/$REPO" --jq .default_branch) \
 git fetch -q --no-tags -- "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$DEFAULT" 2>/dev/null \
   || lookup_failed base-fetch "could not fetch $DEFAULT from $REMOTE"
 
-# The record is the run of "  - **Key:** value" bullets that starts at the
-# Mechanism bullet, with four-space continuation lines joined on. Prints
-# "key<TAB>value" per bullet.
-record_lines() {
-  awk '
-    !started && /^  - \*\*Mechanism:\*\* / { started = 1 }
-    !started { next }
-    /^  - \*\*[^*]+:\*\* / {
-      if (key != "") print key "\t" val
-      line = $0; sub(/^  - \*\*/, "", line)
-      key = line; sub(/:\*\*.*$/, "", key)
-      val = line; sub(/^[^*]+:\*\* /, "", val)
-      next
-    }
-    /^    [^ ]/ && key != "" { line = $0; sub(/^ +/, "", line); val = val " " line; next }
-    { exit }
-    END { if (key != "") print key "\t" val }
-  '
-}
-AGENTS_TEXT=$(git show "refs/remotes/$REMOTE/$DEFAULT:AGENTS.md" 2>/dev/null) \
-  || stop no-landing-record "AGENTS.md is missing at $DEFAULT's tip, so there is no landing record"
-RECORD=$(printf '%s\n' "$AGENTS_TEXT" | record_lines)
-[ -n "$RECORD" ] || stop no-landing-record "AGENTS.md at $DEFAULT's tip has no landing record (no Mechanism bullet)"
+LANDING_RECORD_HELPER="$(cd "$(dirname "$0")" && pwd)/landing-record.sh"
+[ -r "$LANDING_RECORD_HELPER" ] \
+  || lookup_failed record "landing-record.sh is missing beside $0"
+# shellcheck source=landing-record.sh
+. "$LANDING_RECORD_HELPER"
+read_landing_record "refs/remotes/$REMOTE/$DEFAULT" "$DEFAULT"
 
 # Repository roles from lowest to highest. The approval label counts when
 # its actor's role is at or above the recorded Approver permission.
@@ -281,7 +264,6 @@ permission_rank() { # permission_rank <role>: -1 for a role outside the order
   case "$1" in admin) echo 4 ;; maintain) echo 3 ;; write) echo 2 ;; triage) echo 1 ;; read) echo 0 ;; *) echo -1 ;; esac
 }
 
-record_value() { printf '%s\n' "$RECORD" | awk -F'\t' -v k="$1" '$1 == k { print $2; exit }'; }
 first_span() { printf '%s' "$1" | sed -n 's/^[^`]*`\([^`]*\)`.*$/\1/p'; }
 record_span() { first_span "$(record_value "$1")"; }
 
