@@ -40,6 +40,9 @@
 # The worktree-ref and post-HEAD reflog cases were run against the sweep at
 # fabd2ed, which removes worktrees holding refs/worktree/*, refs/bisect/*, or
 # post-HEAD unreferenced reflog commits.
+# The bare-repository and .GIT cases were run against the pre-#437 sweep at
+# fabd2ed (-name .git only) and against own_star_ignored() without its bare
+# and case-variant .git guards.
 #
 # Usage: test-merge-cleanup-sweep.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -396,6 +399,126 @@ run --remove --remove-dirty
 want_rc 0
 want_out 'WORKTREE holds-repository'
 want_kept "$WT"   # discriminating: status names only vendor/
+
+scenario "an untracked bare repository keeps its worktree"
+land feat
+git init -q --bare "$WT/store.git"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/store.git"
+want_kept "$WT"   # discriminating: -name .git missed bare repositories
+
+scenario "a bare repository without a .git suffix keeps its worktree"
+land feat
+git init -q --bare "$WT/backup"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/backup"
+want_kept "$WT"   # discriminating: -name .git missed bare repositories
+
+scenario "a reftable bare repository keeps its worktree"
+land feat
+git init -q --bare --ref-format=reftable "$WT/reftable.git"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/reftable.git"
+want_kept "$WT"   # discriminating: -name .git missed reftable bare repositories
+rm -rf "$WT/reftable.git/refs"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/reftable.git"
+want_kept "$WT"   # also works when only reftable/ exists without a stub refs/
+
+scenario "a bare repository inside an undeclared ignored directory keeps its worktree"
+land feat
+printf 'vendor/\n' > "$WT/.gitignore"
+mkdir -p "$WT/vendor"
+git init -q --bare "$WT/vendor/store.git"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/vendor/store.git"
+want_kept "$WT"   # discriminating: -name .git missed bare repositories
+
+scenario "an untracked .GIT repository keeps its worktree, even with unreadable objects"
+land feat
+git -C "$WT" init -q -b main nested
+printf 'n\n' > "$WT/nested/n.txt"
+G "$WT/nested" add .
+G "$WT/nested" commit -m "only in the .GIT repository"
+mv "$WT/nested/.git" "$WT/nested/.tmpgit"
+mv "$WT/nested/.tmpgit" "$WT/nested/.GIT"
+chmod 000 "$WT/nested/.GIT/objects"
+run --remove --remove-dirty
+chmod 755 "$WT/nested/.GIT/objects"
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/nested/.GIT"
+want_kept "$WT"   # discriminating: -name .git missed .GIT and did not prune it
+
+scenario "a .GIT file or symlink keeps its worktree"
+land feat
+mkdir -p "$WT/linked"
+printf 'gitdir: /nowhere\n' > "$WT/linked/.GIT"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/linked/.GIT"
+want_kept "$WT"   # discriminating: -name .git missed .GIT gitfiles
+rm -rf "$WT/linked"
+mkdir -p "$WT/sym"
+ln -s /nowhere "$WT/sym/.GiT"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/sym/.GiT"
+want_kept "$WT"   # discriminating: -name .git missed case-variant .git symlinks
+
+scenario "a .GIT repository inside an undeclared ignored directory keeps its worktree"
+land feat
+printf 'vendor/\n' > "$WT/.gitignore"
+mkdir -p "$WT/vendor"
+git -C "$WT/vendor" init -q -b main lib
+mv "$WT/vendor/lib/.git" "$WT/vendor/lib/.tmpgit"
+mv "$WT/vendor/lib/.tmpgit" "$WT/vendor/lib/.GIT"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/vendor/lib/.GIT"
+want_kept "$WT"   # discriminating: -name .git missed .GIT inside ignored dirs
+
+scenario "plain HEAD files do not trigger holds-repository or hide later repositories"
+printf 'ref: refs/heads/main\n' > "$WT/HEAD"
+mkdir -p "$WT/docs" "$WT/fake/objects" "$WT/fake/refs"
+printf 'ref: refs/heads/main\n' > "$WT/docs/HEAD"
+printf 'not a git head\n' > "$WT/fake/HEAD"
+: > "$WT/fake/objects/keep"
+: > "$WT/fake/refs/keep"
+G "$WT" add HEAD docs/HEAD fake/HEAD fake/objects/keep fake/refs/keep
+G "$WT" commit -m "add non-repository HEAD files"
+land feat
+run --remove
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a non-repository HEAD file does not stop finding a later nested repository"
+land feat
+mkdir -p "$WT/a"
+printf 'plain head\n' > "$WT/a/HEAD"
+git -C "$WT" init -q -b main z/nested
+printf 'z\n' > "$WT/z/nested/z.txt"
+G "$WT/z/nested" add .
+G "$WT/z/nested" commit -m "only here"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/z/nested/.git"
+want_kept "$WT"
 
 scenario "a detached land-wt HEAD that no ref holds is dirty, not clean"
 G "$REPO" worktree add --detach "$SCEN/land-wt.Ab12Cd/wt" main
@@ -846,6 +969,48 @@ want_rc 0
 want_out 'WORKTREE holds-repository'
 want_kept "$WT"   # discriminating: accepting an own * without the repository test removes it
 
+scenario "a bare repository at a declared directory whose own .gitignore holds * still holds it"
+disposables cache/
+land feat
+git init -q --bare "$WT/cache"
+printf '*\n' > "$WT/cache/.gitignore"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/cache"
+want_kept "$WT"   # discriminating: -name .git and own_star_ignored() without is_bare_repo remove it
+
+scenario "a .GIT repository at a declared directory whose own .gitignore holds * still holds it"
+disposables cache/
+land feat
+nested_repo cache
+mv "$WT/cache/.git" "$WT/cache/.tmpgit"
+mv "$WT/cache/.tmpgit" "$WT/cache/.GIT"
+printf '*\n' > "$WT/cache/.gitignore"
+run --remove --remove-dirty
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/cache/.GIT"
+want_kept "$WT"   # discriminating: -name .git and own_star_ignored() without has_dot_git remove it
+
+scenario "bare and .GIT repositories inside a declared ignored directory stay disposable"
+disposables .build/
+ignore .build/
+land feat
+mkdir -p "$WT/.build/checkouts"
+git init -q --bare "$WT/.build/store.git"
+git -C "$WT/.build/checkouts" init -q -b main pkg
+mv "$WT/.build/checkouts/pkg/.git" "$WT/.build/checkouts/pkg/.tmpgit"
+mv "$WT/.build/checkouts/pkg/.tmpgit" "$WT/.build/checkouts/pkg/.GIT"
+run
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$WT"'"'
+want_out '"disposable":[".build/"]'
+run --remove
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
 scenario "a repository an own * file re-includes with ! still holds it"
 disposables cache/
 land feat
@@ -942,12 +1107,23 @@ ignore notes/private/
 land feat
 mkdir -p "$WT/notes/private"
 printf 'mine\n' > "$WT/notes/private/todo.md"
-git init -q --bare "$WT/notes/private/store.git"
 run --remove-landed
 want_rc 0
 want_out 'WORKTREE dirty'
 want_out '"disposable":[]'
-want_kept "$WT"   # discriminating: matching notes/ alone removed it, bare repository and all
+want_kept "$WT"   # discriminating: matching notes/ alone removed it
+
+scenario "a bare repository under a declared directory that is not ignored holds it"
+disposables notes/
+ignore notes/private/
+land feat
+mkdir -p "$WT/notes/private"
+git init -q --bare "$WT/notes/private/store.git"
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE holds-repository'
+want_out "$WT/notes/private/store.git"
+want_kept "$WT"   # discriminating: -name .git left it as WORKTREE dirty instead of holds-repository
 
 scenario "a repository under the narrower of two declared directories is disposable"
 disposables notes/ notes/private/
