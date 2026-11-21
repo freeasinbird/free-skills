@@ -117,10 +117,10 @@ Run each suite when its stated trigger applies.
   changed (`./scripts/test-capture.sh`)
 - Landing engine matrix green when land-approved-prs' `land.sh` changed
   (`./scripts/test-land.sh`)
-- Readiness-list matrix green when land-approved-prs' `list-ready.sh`
-  changed (`./scripts/test-list-ready.sh`)
-- Landed-since matrix green when land-approved-prs' `landed-since.sh`
-  changed (`./scripts/test-landed-since.sh`)
+- Readiness-list matrix green when land-approved-prs' `list-ready.sh` or
+  `landing-record.sh` changed (`./scripts/test-list-ready.sh`)
+- Landed-since matrix green when land-approved-prs' `landed-since.sh` or
+  `landing-record.sh` changed (`./scripts/test-landed-since.sh`)
 - Link-skills matrix green when `link-skills.sh` changed
   (`./scripts/test-link-skills.sh`)
 - Reconciliation validation matrix green when merge-cleanup's
