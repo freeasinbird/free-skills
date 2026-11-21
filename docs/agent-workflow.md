@@ -116,13 +116,60 @@ follow this full sequence:
    real: after the final push,
    `git status --porcelain --untracked-files=all` in it prints nothing. The
    flag keeps a `status.showUntrackedFiles` setting from hiding files.
-   Scratch files belong outside the checkout, so move or delete your own and
-   leave files you didn't create.
+   Scratch files belong outside the checkout, so move or delete your own in
+   it and in the recorded checkouts below, and leave files you didn't create.
    A file that belongs in the PR means another commit and push, which
    restarts the review watch (step 2), unless the approver has already
-   approved the PR: then push nothing, as the freeze below says. Anything
-   you must leave goes under **Left for you**, by path; a clean result needs
-   no mention.
+   approved the PR: then push nothing, as the freeze below says.
+
+   Then clean up the extra checkouts and temporary local branches recorded
+   under finish-line step 3. Act only on recorded items. Never touch the PR's
+   head worktree or branch, the primary checkout, anything not on the record,
+   or a checkout a running delegate still uses. Keep a recorded checkout whose
+   branch or detached HEAD commit no longer matches its record, since its
+   path may now hold another unit's work. Fetch first, and remove a
+   checkout before deleting its branch.
+
+   - **Checkout.** Remove it only when all of these hold:
+     - **Hidden state.** Where the merge-cleanup skill is installed, its
+       `worktree-inventory.sh <path>` exits 0 with `OK inventory`. Otherwise,
+       `git -C <path> status --porcelain --untracked-files=all --ignored`
+       prints nothing and `git -C <path> ls-files -v` prints only `H` rows.
+       Any other tag, including a sparse checkout's `S`, means keep.
+     - **No lock or operation.** `git worktree list --porcelain` shows no
+       `locked` line for it, and plain `git -C <path> status` names no
+       operation in progress, such as a rebase, am, merge, cherry-pick,
+       revert, or bisect.
+     - **Contained history.** Its HEAD, on a branch or detached, and every
+       commit `git -C <path> log -g --format=%H HEAD --` lists pass the
+       branch proof below, and `git -C <path> for-each-ref refs/worktree/`
+       prints nothing. Removal deletes the HEAD reflog and per-worktree refs.
+
+     Then run `git worktree remove <path>` from another checkout, without
+     `--force`. Removal alone isn't a safety check: it deletes ignored and
+     index-flagged files without refusing, and it succeeds from inside the
+     target.
+
+   - **Branch.** Delete it with `git branch -D -- <branch>` only when its tip
+     is contained: `git merge-base --is-ancestor refs/heads/<branch> <ref>`
+     succeeds for the PR head or the default-branch tip. For a checkout's
+     HEAD or reflog commit, pass that commit instead. Use both refs as just
+     fetched, never a stale remote-tracking ref. `git branch -d` alone isn't
+     proof, since it checks against the branch's upstream when one is set.
+     Neither is `git cherry`, whose patch IDs ignore whitespace. A pre-fold
+     or rebased copy fails this proof, so it stays.
+   - **Delegates.** When you brief a delegate that may create a checkout or
+     branch, ask it to name each one in its return. Record them, and run
+     these checks after it returns. Don't ask it to remove anything.
+   - **Host-owned checkouts.** Some hosts create and own checkouts, such as
+     thread or session worktrees. Run the read-only checks above first. When
+     they pass, use the host's own removal control if it offers one, and run
+     `git worktree remove` on a host-owned path only when the host documents
+     that as safe. Otherwise, or without git worktree commands, keep it.
+
+   Keep anything unproven rather than deciding on judgment. A kept item, and
+   anything else you must leave, goes under **Left for you**, by path; a
+   clean result needs no mention.
 
    End the turn with this report as its final message. Give the parts below
    in this order, each with its bold lead words, and use no headings or
@@ -145,8 +192,10 @@ follow this full sequence:
    4. **Left for you.** Up to three bullets on what the owner must do besides
       merge. Each is a thread that needs their word, a check only they can
       run, a follow-up filed as #N or still to file, or a sibling PR to
-      refresh after this one lands. A file left in the worktree goes here
-      too, by path. Omit when none.
+      refresh after this one lands. A file left in a checkout goes here
+      too, by path. Kept temporary artifacts take one more grouped bullet,
+      one per line as `path (branch): reason`. Those lines don't count toward
+      the word target. Omit when none.
    5. **Skipped.** Up to two bullets, each a workflow step not run and why:
       the review watch a `none` reviewer record skipped (step 1), screenshots
       not captured or not uploaded (with the error), or a check not run. Omit
@@ -154,9 +203,10 @@ follow this full sequence:
 
    Leave out what the PR, its threads, and CI already show. That covers check
    names and counts, the review exchange, other SHAs, and head or audit lines.
-   It also covers the worktree path, branch cleanup, the decision note, the
-   fresh-session reminder for review rounds, and "I left it unmerged."
-   Leave merging, branch cleanup, and `main` resync to the approver.
+   It also covers the PR's head worktree path, post-merge branch cleanup, the
+   decision note, the fresh-session reminder for review rounds, and "I left
+   it unmerged." Leave merging, post-merge branch cleanup, and `main` resync
+   to the approver.
 
    Three platform gates apply:
 
