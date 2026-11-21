@@ -803,7 +803,9 @@ inspect() { # inspect <path> <unreferenced detached HEAD, or empty>
     esac
   fi
   if [ "$has_reflog" = true ]; then
-    git -C "$path" rev-list -g HEAD > "$tmp" 2>/dev/null \
+    # The `--` keeps a worktree file named HEAD from making the revision
+    # ambiguous, which would fail the whole sweep.
+    git -C "$path" rev-list -g HEAD -- > "$tmp" 2>/dev/null \
       || { rm -f "$tmp"; lookup_failed reflog "could not read HEAD reflog in $path"; }
     earliest=-1
     idx=0

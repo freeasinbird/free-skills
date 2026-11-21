@@ -1712,6 +1712,31 @@ want_out 'WORKTREE dirty {"path":"'"$WT"'"'
 want_out "\"reflog_commits\":[\"$WIP\"]"
 want_kept "$WT"
 
+scenario "a worktree file named HEAD does not stop the HEAD reflog read"
+printf 'h\n' > "$WT/HEAD"
+G "$WT" add HEAD
+G "$WT" commit -m "add a HEAD file"
+land feat
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE removed {"path":"'"$WT"'"'
+want_out '"state":"clean"'
+want_removed "$WT"   # discriminating: 037740e exits 4 with LOOKUP_FAILED reflog
+
+scenario "a worktree file named HEAD does not hide a post-HEAD reflog commit"
+printf 'h\n' > "$WT/HEAD"
+G "$WT" add HEAD
+G "$WT" commit -m "add a HEAD file"
+land feat
+G "$WT" commit --allow-empty -m wip
+WIP=$(git -C "$WT" rev-parse HEAD)
+G "$WT" reset --hard HEAD~1
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out "\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"
+
 if git init -q --ref-format=reftable "$TMP/reftable-probe" 2>/dev/null; then
   rm -rf "$TMP/reftable-probe"
   NAME="reftable backend detects refs/worktree/*, refs/bisect/*, and post-HEAD reflog commits"
