@@ -16,9 +16,11 @@
 # When a linked worktree still checks out the head branch, it first removes
 # that worktree through worktree-sweep.sh --remove-head, which removes it only
 # when it is clean, at the merged head, and doesn't hold the directory this
-# script was started from. Otherwise, or with --keep-worktree, it stops before
-# mutation for the worktree's owner. It never closes issues or interprets
-# project post-merge policy.
+# script was started from. The worktree counts as clean when its only
+# leftovers are ignored paths that .worktree-disposables declares at the base
+# tip, freshly fetched for that check, or ignored .DS_Store files. Otherwise,
+# or with --keep-worktree, it stops before mutation for the worktree's owner.
+# It never closes issues or interprets project post-merge policy.
 #
 # Last line on stdout is the machine-readable result. Every result payload has
 # the same fields, including dispositions for steps that did not start:
@@ -1186,21 +1188,33 @@ check_consumers() {
 # Remove the merged head's linked worktree, or stop for its owner. A clean
 # worktree at the forge-verified merged head holds nothing the merge didn't
 # keep, so removing it loses only the checkout. worktree-sweep.sh owns the
-# clean test and rechecks it just before removing.
-remove_head_worktree() { # remove_head_worktree <path>
-  local path="$1" out rc last kept
+# clean test and rechecks it just before removing. Its disposables file is
+# read at the base tip fetched here from the verified base remote: the newest
+# list the project reviewed onto its base, so an entry dropped after the
+# merge no longer counts. The merged head's own copy is never read.
+remove_head_worktree() { # remove_head_worktree <path> <base-fetch-url>
+  local path="$1" base_url="$2" base_tip out rc last kept
   WORKTREE_DISPOSITION=owner_removal_required
   [ "$KEEP_WORKTREE" != true ] \
     || stop head-worktree-present "linked head worktree $path was kept: --keep-worktree"
   [ -n "$CALLER_DIR" ] \
     || stop head-worktree-present "linked head worktree $path was kept: the caller's working directory could not be read"
+  remote_namespace_check "$BASE_REMOTE"
+  git_pinned_url "" "$base_url" fetch -- @PINNED_URL@ \
+    "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+    || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
+  base_tip=$(git rev-parse --verify --quiet "refs/remotes/$BASE_REMOTE/$BASE^{commit}" 2>/dev/null) \
+    || lookup_failed base-fetch "could not read fetched $BASE from $BASE_REMOTE"
   out=$("$SWEEP" --remove-head "$BRANCH" --head-oid "$HEAD_OID" \
-    --caller-dir "$CALLER_DIR" 2>&1); rc=$?
+    --disposables-at "$base_tip" --caller-dir "$CALLER_DIR" 2>&1); rc=$?
   last=$(printf '%s\n' "$out" | tail -n 1)
   case "$rc:$last" in
     "0:OK sweep "*) ;;
     "2:STOP remove-failed "*)
       stop head-worktree-present "git refused to remove linked head worktree $path: $last" ;;
+    # Only fixing the file on the base clears it, so a retry can't pass.
+    "2:STOP bad-record "*)
+      stop bad-record "linked head worktree $path was kept: $last" ;;
     *) lookup_failed head-worktree "worktree-sweep.sh could not judge $path (exit $rc): $last" ;;
   esac
   worktree_scan "refs/heads/$BRANCH"
@@ -1217,7 +1231,7 @@ phase_cleanup() {
   local local_tip base_symbolic_rc=0 initial_base_id="" initial_head_id=""
   local head_worktree="" base_wt="" head_target="" head_label="" head_is_remote=false
   local hr_fid ls_out ls_rc remote_oid="" line_oid line_ref exact=0 decoys=0
-  local base_fetch_url="" head_fetch_url=""
+  local base_fetch_url="" head_fetch_url="" initial_base_url=""
   local local_disposition="" push_match_rc
 
   INCOMPLETE_STEP=preflight
@@ -1258,6 +1272,7 @@ phase_cleanup() {
 
   resolve_base_remote
   initial_base_id="$CHECKED_REMOTE_ID"
+  initial_base_url="$CHECKED_REMOTE_URL"
   if [ -n "$HEAD_REMOTE_OPT" ]; then
     remote_repo_check "$HEAD_REMOTE_OPT" head "$HEAD_REPO" "$HEAD_CLONE_ID" "$HEAD_SSH_ID"
     initial_head_id="$CHECKED_REMOTE_ID"
@@ -1272,7 +1287,7 @@ phase_cleanup() {
   # After every read-only check, so a run that any of them stops has removed
   # nothing.
   [ "$WORKTREE_DISPOSITION" != owner_removal_required ] \
-    || remove_head_worktree "$head_worktree"
+    || remove_head_worktree "$head_worktree" "$initial_base_url"
   case "$PLAN_VERB,$PLAN_CREATE" in
     checkout,false)
       git checkout --no-overwrite-ignore "$BASE" >/dev/null 2>&1 \

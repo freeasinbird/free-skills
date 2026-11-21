@@ -92,11 +92,14 @@ The script pins the merged PR's facts, rejects unsafe state, lands on the base
 branch and fully resyncs it, then deletes the remote head under an OID lease,
 retargeting a same-repository stacked PR first. Last, it deletes the local
 head and prunes. The resync finishes before branch deletion, so a later stop
-still leaves a current base. It first removes the linked worktree
-holding the head branch only when that worktree is clean, at the merged head,
-and doesn't hold your working directory; otherwise it stops
-`head-worktree-present` for the owner. It leaves an absent base branch for
-the owner to create and keeps `branch.<name>` config.
+still leaves a current base. It leaves an absent base branch for the owner
+to create and keeps `branch.<name>` config.
+
+Before any of that, it removes the linked worktree holding the head branch
+only when that worktree is clean, at the merged head, and doesn't hold your
+working directory; otherwise it stops `head-worktree-present` for the owner.
+Ignored paths that `.worktree-disposables` declares at the base tip, fetched
+just before that check, don't make the worktree dirty.
 
 It calls `base-landing-plan.sh --format nul` internally; never parse that
 helper's JSON to recreate the sequence. `worktree-inventory.sh
@@ -116,10 +119,12 @@ Exit 64 is a usage error, and exit 69 a missing runtime, which may print no
 ledger. Every JSON payload carries every step's disposition. Report completed
 ones even when a later step stopped: a resynced base isn't a failed cleanup
 because remote deletion was refused. The `worktree` field reads
-`removed_clean` after a removal and `owner_removal_required` after the stop. A
-`local_branch` value ending in `_config_retained` means the ref is gone and
-same-named branch config was left on purpose; don't report it as config
-removal.
+`removed_clean` after a removal and `owner_removal_required` after the stop.
+`STOP bad-record` means the base's `.worktree-disposables` breaks the file's
+grammar; the worktree and remote head stay in place until the owner fixes the
+file on the base branch and you rerun. A `local_branch` value ending in
+`_config_retained` means the ref is gone and same-named branch config was left
+on purpose; don't report it as config removal.
 
 To retry, resolve the stated guard and rerun the whole script with the same
 PR and checkout; completed deletions are idempotent. Never run the remaining
@@ -323,8 +328,8 @@ candidate too. Removal deletes files, ignored ones included.
 
 `--base '<ref>'` names the base when `refs/remotes/origin/HEAD` doesn't, and
 `--caller-dir '<dir>'` keeps the worktree that holds `<dir>`.
-`--remove-head '<branch>' --head-oid '<oid>'` is merge-cleanup.sh's own call;
-never run it by hand. `--help` gives the candidate rules, the
-`.worktree-disposables` file's grammar (read at the base commit; an ignored
-`.DS_Store` is always disposable), each `WORKTREE` disposition, and the result
-lines.
+`--remove-head '<branch>' --head-oid '<oid>' --disposables-at '<oid>'` is
+merge-cleanup.sh's own call; never run it by hand. `--help` gives the
+candidate rules, the `.worktree-disposables` file's grammar (read at the base
+commit; an ignored `.DS_Store` is always disposable), each `WORKTREE`
+disposition, and the result lines.

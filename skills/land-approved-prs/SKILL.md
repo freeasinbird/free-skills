@@ -403,7 +403,10 @@ Summarize. Run it from the same checkout and pass:
 
 Merge-cleanup removes the PR's head worktree itself when it's clean. Never
 remove a worktree any other way during a batch. If merge-cleanup stops
-`head-worktree-present`, it kept that worktree; record the path. Then do the
+`head-worktree-present`, it kept that worktree; record the path. Its
+`bad-record` stop means the base's `.worktree-disposables` is malformed, not
+the landing record: it kept the worktree too, so record the path and report
+the file to the owner. In either case, do the
 parts it skipped that don't touch the worktree: fast-forward the checkout's
 default branch from the remote, and confirm the issues the PR closes actually
 closed. Leave the local branch; "The End-of-Batch Sweep" may free it.
