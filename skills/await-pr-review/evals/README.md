@@ -64,15 +64,19 @@ check=<sha256>`. Each run directory keeps the agent's `transcript.jsonl`
 
 Each `scored/<id>-<eval_name>/` holds two executables. `setup <fixture-dir>`
 builds the fixture, and `grade <fixture-dir> <final-message-file>` exits 0
-on a pass, printing one line per failed assertion. The prompt is the case's
-`evals.json` entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
+on a pass, printing one line per failed assertion. Both receive
+`SCORED_EVAL_STATE_DIR` pointing to a per-run `<state-dir>` outside
+`<fixture-dir>` and `<fixture-dir>/..`. The runner never exports
+`SCORED_EVAL_STATE_DIR` to the agent. The prompt is the case's `evals.json`
+entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
 
-Graders check only program-visible facts. They read the forge's call and
-mutation logs, its stored threads and replies, and the origin's refs and
-ref-update log. They also check the files on the pushed head, whether that
-head's `test.sh` passes, and facts in the final message, such as a commit
-SHA or a bot's login. No model
-judges a run, and no check reads wording.
+Stub binaries live under `<state-dir>/bin` (leading the agent's `PATH`), and
+stub state and grader logs live under `<state-dir>/forge`. Graders check
+only program-visible facts. They read the forge's call and mutation logs,
+its stored threads and replies, and the origin's refs and ref-update log.
+They also check the files on the pushed head, whether that head's `test.sh`
+passes, and facts in the final message, such as a commit SHA or a bot's
+login. No model judges a run, and no check reads wording.
 
 `scored/lib/` holds the shared parts:
 
@@ -84,10 +88,11 @@ judges a run, and no check reads wording.
   timeline, the `Date` header of `gh api -i rate_limit`, review-thread
   replies, and `resolveReviewThread`. Any other host or slug fails as gh
   would. It logs every call, with PR #7's head at the time, to
-  `forge/calls.log`, and every write to `forge/mutations.log`.
+  `<state-dir>/forge/calls.log`, and every write to
+  `<state-dir>/forge/mutations.log`.
 - **`reference-transaction`:** the origin's hook. It logs every branch and
-  tag update to `forge/ref-updates.log`, which the forge reads for PR heads,
-  push events, force-push events, and the reviewer's response.
+  tag update to `<state-dir>/forge/ref-updates.log`, which the forge reads
+  for PR heads, push events, force-push events, and the reviewer's response.
 - **`fixture.sh`:** builds the origin, the work clone on PR #7's branch, its
   AGENTS.md forge and reviewer records, and the reviews, threads, and
   reactions each case starts with, at fixed times.
@@ -181,6 +186,8 @@ Before a climb, copy `scripts/run-scored-eval.sh` and this whole `evals`
 directory into the climb directory and score from that copy. The `check=`
 hash covers the runner and every file under `--eval-dir`, by relative path,
 so the copy hashes the same as the source. Record it, and compare each
-score's `check=` with it; a mismatch means the check changed. Measured
-scores, noise, and cost go in the climb's proof record and the decision
-note, never in this directory, since any edit here changes the hash.
+score's `check=` with it; a mismatch means the check changed. Any edit to
+the runner or this directory changes `check=` and requires a new freeze and
+proof before the next climb. Measured scores, noise, and cost go in the
+climb's proof record and the decision note, never in this directory, since
+any edit here changes the hash.

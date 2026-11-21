@@ -289,14 +289,19 @@ check=<sha256>`. Each run directory keeps the agent's `transcript.jsonl`
 
 Each `scored/<id>-<eval_name>/` holds two executables. `setup <fixture-dir>`
 builds the fixture, and `grade <fixture-dir> <final-message-file>` exits 0
-on a pass, printing one line per failed assertion. The prompt is the case's
-`evals.json` entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
+on a pass, printing one line per failed assertion. Both receive
+`SCORED_EVAL_STATE_DIR` pointing to a per-run `<state-dir>` outside
+`<fixture-dir>` and `<fixture-dir>/..`. The runner never exports
+`SCORED_EVAL_STATE_DIR` to the agent. The prompt is the case's `evals.json`
+entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
 
-Graders check only program-visible facts: the stubs' call, attempt,
-upload, and capture logs, the fixture PRs' descriptions, git state, and
-facts in the final message, such as a file name. No model judges a run. A
-fixture image counts by its content as well as its name, so a renamed copy
-of a flagged image still fails.
+Stub binaries live under `<state-dir>/bin` (leading the agent's `PATH`), and
+stub state and logs live under `<state-dir>/forge`. Graders check only
+program-visible facts: the stubs' call, attempt, upload, and capture logs,
+the fixture PRs' descriptions, git state, and facts in the final message,
+such as a file name. No model judges a run. A fixture image counts by its
+content as well as its name, so a renamed copy of a flagged image still
+fails.
 
 `scored/lib/` holds the shared parts:
 
@@ -309,7 +314,7 @@ of a flagged image still fails.
   gh 2.99.0: older versions reject the flag, the token, permission, and
   Enterprise Server gates fail with gh's errors, and the body it stores has
   each referenced local path rewritten to a hosted URL. A case sets its
-  version, host, and token in `forge/config`.
+  version, host, and token in `<state-dir>/forge/config`.
 - **`gh-imgup`:** a stand-in gh-imgup that accepts images only and prints
   one Markdown image line per file. Only cases 9 and 10 install it.
 - **`node`:** runs only `capture.mjs`. It checks the script's options as
@@ -411,7 +416,10 @@ Before a climb, copy `scripts/run-scored-eval.sh` and this whole `evals`
 directory into the climb directory and score from that copy. The `check=`
 hash covers the runner and every file under `--eval-dir`, by relative path,
 so the copy hashes the same as the source. Record it, and compare each
-score's `check=` with it; a mismatch means the check changed.
+score's `check=` with it; a mismatch means the check changed. Any edit to
+the runner or this directory, including moving fixture state into
+`SCORED_EVAL_STATE_DIR`, changes `check=` and requires a new freeze and
+proof before the next climb.
 
 Measured scores, noise, and cost live in the climb's proof record and the
 decision note that added this eval, not here: this README sits inside the

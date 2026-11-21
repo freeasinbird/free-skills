@@ -198,14 +198,19 @@ check=<sha256>`. Each run directory keeps the agent's `transcript.jsonl`,
 
 Each `scored/<id>-<eval_name>/` holds two executables. `setup <fixture-dir>`
 builds the fixture, and `grade <fixture-dir> <final-message-file>` exits 0
-on a pass, printing one line per failed assertion. The prompt is the case's
-`evals.json` entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
+on a pass, printing one line per failed assertion. Both receive
+`SCORED_EVAL_STATE_DIR` pointing to a per-run `<state-dir>` outside
+`<fixture-dir>` and `<fixture-dir>/..`. The runner never exports
+`SCORED_EVAL_STATE_DIR` to the agent. The prompt is the case's `evals.json`
+entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
 
-Graders check only program-visible facts: the stub's call log, the
-fixture's refs, worktrees, and files, and facts in the final message, such
-as an issue number or path. No model judges a run. A grader never matches
-wording, so a rewritten `SKILL.md` keeps its score when it keeps the
-behavior.
+Stub binaries live under `<state-dir>/bin` (leading the agent's `PATH`),
+stub state and logs live under `<state-dir>/forge`, and setup staging lives
+under `<state-dir>/base-files`. Graders check only program-visible facts:
+the stub's call log, the fixture's refs, worktrees, and files, and facts in
+the final message, such as an issue number or path. No model judges a run.
+A grader never matches wording, so a rewritten `SKILL.md` keeps its score
+when it keeps the behavior.
 
 `scored/lib/` holds the shared parts:
 
@@ -263,7 +268,10 @@ Before a climb, copy `scripts/run-scored-eval.sh` and this whole `evals`
 directory into the climb directory and score from that copy. The `check=`
 hash covers the runner and every file under `--eval-dir`, by relative path,
 so the copy hashes the same as the source. Record it, and compare each
-score's `check=` with it; a mismatch means the check changed.
+score's `check=` with it; a mismatch means the check changed. Any edit to
+the runner or this directory, including moving fixture state into
+`SCORED_EVAL_STATE_DIR`, changes `check=` and requires a new freeze and
+proof before the next climb.
 
 ### Measured Results
 
