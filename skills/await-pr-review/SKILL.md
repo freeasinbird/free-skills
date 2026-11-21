@@ -177,13 +177,12 @@ blockers continue, record a go/no-go checkpoint per
 convergence evidence and blockers that passed the two disposition questions,
 then continues without asking; surface a no-go or materially uncertain call.
 
-Track finding classes across the exchange. A real second member earns a
-root-cause hypothesis, one level of widening, and one refute pass. A second
-member that fails either question is a hardening-check signal, not a class to
-widen. Repeated prose-clause findings earn an owner escalation toward a tested
-check.
+Track finding classes per `references/review-response.md`'s Finding-Class
+Recurrence. A second member that fails either question is a hardening-check
+signal, not a class to widen. Repeated prose-clause findings earn an owner
+escalation toward a tested check.
 
-Keep the same conductor through waits, surfaced pauses, and rounds; elapsed
+Keep the same conductor through waits, pauses, and rounds; elapsed
 time, idle time, or poll count alone never forces replacement. Rotation arms
 after every third fix round and fires at the next quiescent boundary where a
 full fix round waits, per `references/conductor.md` §context-rotation.
