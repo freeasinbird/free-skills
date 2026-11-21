@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # The land-approved-prs eval's stand-in for merge-cleanup.sh: it records its
-# arguments and the time, changes nothing, and reports success. fixture.sh
-# installs it with @FORGE@ replaced by the fixture's forge directory.
-printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"@FORGE@/cleanup.log"
+# arguments and the time, changes nothing, and reports success. It resolves
+# forge/ from SCORED_EVAL_STATE_DIR or next to the gh stub on PATH, so no
+# state path sits in the copied skill directory.
+if [ -n "${SCORED_EVAL_STATE_DIR:-}" ]; then
+  FORGE="$SCORED_EVAL_STATE_DIR/forge"
+else
+  gh_bin=$(command -v gh 2>/dev/null) || exit 1
+  FORGE=$(cd "$(dirname "$gh_bin")/../forge" && pwd) || exit 1
+fi
+printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$FORGE/cleanup.log"
 echo "merge-cleanup: resolved the work unit, deleted the merged branch, resynced the base"
 echo 'OK cleanup {"branch_deleted":true,"base_resynced":true}'

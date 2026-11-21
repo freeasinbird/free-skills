@@ -9,4 +9,4 @@ standard_agents
 fixture_repos
 fixture_pr 12
 printf 'Ship widget v2.\n' | fixture_issue 12 OPEN "" "Widget v2"
-rm "$F/bin/gh"
+rm "$BIN/gh"

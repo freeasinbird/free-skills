@@ -5,7 +5,7 @@
 # scripts/test-list-ready.sh, scripts/test-land.sh, and
 # scripts/test-landed-since.sh, widened so an agent's own lookups work too.
 #
-# The forge directory sits next to this file's directory (<fixture>/forge):
+# The forge directory sits next to this file's directory (<state-dir>/forge):
 #   host, slug         The only repository that exists (github.invalid,
 #                      acme/repo). A hostless OWNER/NAME resolves through
 #                      GH_HOST, as gh does; unset, it means github.com,

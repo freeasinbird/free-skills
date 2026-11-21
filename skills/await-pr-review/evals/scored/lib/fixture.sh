@@ -18,11 +18,12 @@
 #                       to feature that the work clone doesn't fetch
 #   fixture_done        stop the clock and mark where setup ended
 #
-# Layout under <fixture-dir>: `repo` is the work clone (the prompt's
-# <fixture-repo>), on a clean feature branch. `acme/repo.git` plays the
-# forge's git. `forge/` holds the stub's facts and logs, and `bin/gh` is the
-# stub. Every host is github.invalid and every remote is a local path, so
-# nothing can reach a real forge.
+# Layout: under <fixture-dir>, `repo` is the work clone (the prompt's
+# <fixture-repo>) on a clean feature branch, and `acme/repo.git` plays the
+# forge's git. Under SCORED_EVAL_STATE_DIR (outside <fixture-dir>), `forge/`
+# holds the stub's facts and logs, and `bin/gh` is the stub. Every host is
+# github.invalid and every remote is a local path, so nothing can reach a
+# real forge.
 #
 # The origin's reference-transaction hook appends each branch and tag
 # update to forge/ref-updates.log as "<time> <ref> <old> <new> <forced>
@@ -106,15 +107,32 @@ EOF
   reviewer_record "$1"
 }
 
+state_dir() { # state_dir <fixture-dir>: require SCORED_EVAL_STATE_DIR outside it
+  local f_real s_real
+  [ -n "${SCORED_EVAL_STATE_DIR:-}" ] || { echo "SCORED_EVAL_STATE_DIR must be set" >&2; return 1; }
+  [ -d "$SCORED_EVAL_STATE_DIR" ] || { echo "SCORED_EVAL_STATE_DIR is not a directory: $SCORED_EVAL_STATE_DIR" >&2; return 1; }
+  f_real=$(cd "$1" && pwd -P) || return 1
+  s_real=$(cd "$SCORED_EVAL_STATE_DIR" && pwd -P) || return 1
+  case "$s_real/" in
+    "$f_real/"*) echo "SCORED_EVAL_STATE_DIR must be outside fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  case "$f_real/" in
+    "$s_real/"*) echo "SCORED_EVAL_STATE_DIR must not contain fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  STATE="$s_real"
+}
+
 fixture_init() {
   F=$(cd "$1" && pwd)
-  FORGE="$F/forge"
+  state_dir "$F"
+  FORGE="$STATE/forge"
+  BIN="$STATE/bin"
   ORIGIN="$F/acme/repo.git"
   REPO="$F/repo"
-  mkdir -p "$F/bin" "$FORGE/pr" "$FORGE/reviews" "$FORGE/rcomments" "$FORGE/threads" \
+  mkdir -p "$BIN" "$FORGE/pr" "$FORGE/reviews" "$FORGE/rcomments" "$FORGE/threads" \
     "$FORGE/icomments" "$FORGE/reactions" "$FORGE/ci" "$F/acme"
-  cp "$LIB/gh" "$F/bin/gh"
-  chmod +x "$F/bin/gh"
+  cp "$LIB/gh" "$BIN/gh"
+  chmod +x "$BIN/gh"
   printf '%s\n' "$HOST" >"$FORGE/host"
   printf '%s\n' "$SLUG" >"$FORGE/slug"
   printf '%s\n' "$ORIGIN" >"$FORGE/origin"
@@ -251,7 +269,7 @@ past_pr() { # past_pr <N> <title> <time>: a merged PR whose head is main's first
 # contributor_push <file> <line> <subject>: another person pushes a commit
 # to feature at the clock's time, from a clone the run never sees.
 contributor_push() {
-  local c="$F/.contrib"
+  local c="$STATE/.contrib"
   git clone -q -b feature "$ORIGIN" "$c"
   git_id "$c"
   git -C "$c" config user.name "Contributor One"

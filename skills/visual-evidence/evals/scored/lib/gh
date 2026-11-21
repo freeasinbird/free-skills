@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # A stand-in GitHub CLI for one repository, acme/widget, with no network.
-# Its facts come from forge/config (gh_version, host, web, ghes, token,
-# token_source, permission), and its PRs live in forge/pr/<n>.json with the
-# description in forge/pr/<n>.body and comments in forge/pr/<n>.comments.
+# Its facts come from <state-dir>/forge/config (gh_version, host, web, ghes,
+# token, token_source, permission), and its PRs live in
+# <state-dir>/forge/pr/<n>.json with the description in
+# <state-dir>/forge/pr/<n>.body and comments in
+# <state-dir>/forge/pr/<n>.comments.
 #
 # `--attach` behaves as in gh 2.99.0: older versions reject the flag, the
 # token, permission, and host gates fail with gh's own errors, and each

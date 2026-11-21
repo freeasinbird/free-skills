@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # The land-approved-prs eval's stand-in for worktree-sweep.sh: it records the
 # time, whether the origin still holds the landing lock, and its arguments,
-# lists the linked worktrees as kept, and removes nothing. fixture.sh installs it with @FORGE@ replaced by the fixture's
-# forge directory.
+# lists the linked worktrees as kept, and removes nothing. It resolves
+# forge/ from SCORED_EVAL_STATE_DIR or next to the gh stub on PATH, so no
+# state path sits in the copied skill directory.
+if [ -n "${SCORED_EVAL_STATE_DIR:-}" ]; then
+  FORGE="$SCORED_EVAL_STATE_DIR/forge"
+else
+  gh_bin=$(command -v gh 2>/dev/null) || exit 1
+  FORGE=$(cd "$(dirname "$gh_bin")/../forge" && pwd) || exit 1
+fi
+ORIGIN=$(cat "$FORGE/origin")
 lock=free
-git --git-dir="@FORGE@/../acme/repo.git" show-ref --verify --quiet refs/land/lock && lock=held
-printf '%s lock=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$lock" "$*" >>"@FORGE@/sweep.log"
+git --git-dir="$ORIGIN" show-ref --verify --quiet refs/land/lock && lock=held
+printf '%s lock=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$lock" "$*" >>"$FORGE/sweep.log"
 kept=""
 first=true
 while IFS= read -r line; do

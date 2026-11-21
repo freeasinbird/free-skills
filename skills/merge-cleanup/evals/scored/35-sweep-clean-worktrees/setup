@@ -27,7 +27,7 @@ git -C "$repo" add wip.txt
 git -C "$repo" commit -qm "Work in progress"
 git -C "$repo" switch -q main
 git -C "$repo" worktree add -q "$F/wt-wip" wip
-merge="$F/merge"
+merge="$STATE/merge"
 git clone -q "$F/origin.git" "$merge"
 git_id "$merge"
 git -C "$merge" merge -q --no-ff origin/feature-b -m "Add b (#8)"

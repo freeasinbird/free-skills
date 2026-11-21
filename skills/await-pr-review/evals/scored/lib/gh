@@ -8,7 +8,7 @@
 # land-approved-prs eval's stub, which derives PR heads from the origin's
 # ref log.
 #
-# The forge directory sits next to this file's directory (<fixture>/forge):
+# The forge directory sits next to this file's directory (<state-dir>/forge):
 #   host, slug         The only repository that exists (github.invalid,
 #                      acme/repo). A hostless OWNER/NAME resolves through
 #                      GH_HOST, as gh does; unset, it means github.com,

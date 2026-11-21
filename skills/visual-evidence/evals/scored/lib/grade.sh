@@ -7,9 +7,25 @@
 # A fixture image is known by its content, so a copy or rename still counts
 # as that image, and also by its name under shots/.
 
+state_dir() { # state_dir <fixture-dir>: require SCORED_EVAL_STATE_DIR outside it
+  local f_real s_real
+  [ -n "${SCORED_EVAL_STATE_DIR:-}" ] || { echo "SCORED_EVAL_STATE_DIR must be set"; exit 1; }
+  [ -d "$SCORED_EVAL_STATE_DIR" ] || { echo "SCORED_EVAL_STATE_DIR is not a directory: $SCORED_EVAL_STATE_DIR"; exit 1; }
+  f_real=$(cd "$1" && pwd -P) || exit 1
+  s_real=$(cd "$SCORED_EVAL_STATE_DIR" && pwd -P) || exit 1
+  case "$s_real/" in
+    "$f_real/"*) echo "SCORED_EVAL_STATE_DIR must be outside fixture dir: $s_real"; exit 1 ;;
+  esac
+  case "$f_real/" in
+    "$s_real/"*) echo "SCORED_EVAL_STATE_DIR must not contain fixture dir: $s_real"; exit 1 ;;
+  esac
+  STATE="$s_real"
+}
+
 grade_init() { # grade_init <fixture-dir> <final-message-file>
   F=$(cd "$1" && pwd -P)
-  FORGE="$F/forge" REPO="$F/repo" MSG="$2"
+  state_dir "$F"
+  FORGE="$STATE/forge" REPO="$F/repo" MSG="$2"
   IMAGES=$(cd "$(dirname "${BASH_SOURCE[0]}")/images" && pwd)
   FAILS=0
   [ -f "$MSG" ] || { echo "no final message file: $MSG"; exit 1; }

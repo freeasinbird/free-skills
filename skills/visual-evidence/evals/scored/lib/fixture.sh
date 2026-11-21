@@ -11,11 +11,12 @@
 #   install_imgup                put the gh-imgup stub on PATH
 #   fixture_done                 record the checkout's state for graders
 #
-# Layout under <fixture-dir>: `repo` is the checkout (the prompt's
-# <fixture-repo>), `origin.git` its bare origin at a local path, `bin/` the
-# stubs that lead the agent's PATH, and `forge/` the stubs' facts and logs.
-# The stubs print only .invalid URLs, and the curl stub refuses any URL with
-# a scheme that leaves this machine.
+# Layout: under <fixture-dir>, `repo` is the checkout (the prompt's
+# <fixture-repo>) and `origin.git` is its bare origin at a local path. Under
+# SCORED_EVAL_STATE_DIR (outside <fixture-dir>), `bin/` holds the stubs that
+# lead the agent's PATH, and `forge/` holds the stubs' facts and logs. The
+# stubs print only .invalid URLs, and the curl stub refuses any URL with a
+# scheme that leaves this machine.
 
 LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -26,10 +27,26 @@ git_id() {
   git -C "$1" config commit.gpgsign false
 }
 
+state_dir() { # state_dir <fixture-dir>: require SCORED_EVAL_STATE_DIR outside it
+  local f_real s_real
+  [ -n "${SCORED_EVAL_STATE_DIR:-}" ] || { echo "SCORED_EVAL_STATE_DIR must be set" >&2; return 1; }
+  [ -d "$SCORED_EVAL_STATE_DIR" ] || { echo "SCORED_EVAL_STATE_DIR is not a directory: $SCORED_EVAL_STATE_DIR" >&2; return 1; }
+  f_real=$(cd "$1" && pwd -P) || return 1
+  s_real=$(cd "$SCORED_EVAL_STATE_DIR" && pwd -P) || return 1
+  case "$s_real/" in
+    "$f_real/"*) echo "SCORED_EVAL_STATE_DIR must be outside fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  case "$f_real/" in
+    "$s_real/"*) echo "SCORED_EVAL_STATE_DIR must not contain fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  STATE="$s_real"
+}
+
 fixture_init() {
   F=$(cd "$1" && pwd -P)
-  REPO="$F/repo" FORGE="$F/forge"
-  mkdir -p "$REPO" "$FORGE/pr" "$FORGE/renders" "$F/bin"
+  state_dir "$F"
+  REPO="$F/repo" FORGE="$STATE/forge" BIN="$STATE/bin"
+  mkdir -p "$REPO" "$FORGE/pr" "$FORGE/renders" "$BIN"
   git init -q --bare -b main "$F/origin.git"
   git init -q -b main "$REPO"
   git_id "$REPO"
@@ -41,8 +58,8 @@ fixture_init() {
   git -C "$REPO" remote add origin "$F/origin.git"
   git -C "$REPO" push -q -u origin main
   local s
-  for s in gh npx curl node; do cp "$LIB/$s" "$F/bin/$s"; chmod +x "$F/bin/$s"; done
-  cp "$LIB/stub-common" "$F/bin/.stub-common"
+  for s in gh npx curl node; do cp "$LIB/$s" "$BIN/$s"; chmod +x "$BIN/$s"; done
+  cp "$LIB/stub-common" "$BIN/.stub-common"
   cp "$LIB/images/before.png" "$LIB/images/after.png" "$FORGE/renders/"
   cat >"$FORGE/config" <<'EOF'
 gh_version=2.99.0
@@ -93,7 +110,7 @@ shot() {
   cp "$LIB/images/$1" "$REPO/shots/${2:-$1}"
 }
 
-install_imgup() { cp "$LIB/gh-imgup" "$F/bin/gh-imgup"; chmod +x "$F/bin/gh-imgup"; }
+install_imgup() { cp "$LIB/gh-imgup" "$BIN/gh-imgup"; chmod +x "$BIN/gh-imgup"; }
 
 fixture_done() {
   touch "$FORGE/calls.log" "$FORGE/attempts.log" "$FORGE/uploads.log" "$FORGE/captures.log"

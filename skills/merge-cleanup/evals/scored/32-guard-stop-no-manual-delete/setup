@@ -9,7 +9,7 @@ standard_agents
 fixture_repos
 fixture_pr 12
 printf 'Ship widget v2.\n' | fixture_issue 12 CLOSED COMPLETED "Widget v2"
-late="$F/late"
+late="$STATE/late"
 git clone -q --branch feature "$F/origin.git" "$late"
 git_id "$late"
 echo "late fix" >>"$late/widget.txt"
