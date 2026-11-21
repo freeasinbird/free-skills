@@ -112,7 +112,12 @@ The implementation checklist:
    before you change it. Include the docs, tests, and assets needed to keep
    the change complete. Add a decision note only when its triggers apply.
    Write scratch scripts and temporary output outside the checkout, in a
-   session workspace or temporary directory.
+   session workspace or temporary directory. Record each extra checkout, by
+   path and branch or detached HEAD commit, and each temporary local branch you
+   create, and any a delegate reports, in the session workspace, or on the
+   issue when work continues in a later session. Remove one you abandon or
+   supersede then, under `docs/agent-workflow.md` §handing-off step 7's
+   checks, or leave it on the record for step 7.
 4. Run relevant verification and the standard lint, build, and test checks.
    Record any check you could not run in the PR.
 5. Commit one concern at a time. Explain why in each commit body.
