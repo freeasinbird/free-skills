@@ -44,58 +44,48 @@ permission gate that these safeguards already cover.
 Decide who owns the exchange before you read feedback, wait on CI, or start
 any watcher. **Default to one conductor subagent.** It owns steps 1 to 5 and
 wakes the main agent only for a judgment call, a no-go or uncertain
-convergence escalation, an armed rotation handoff at a quiescent boundary,
-or its terminal ledger. Resolve only the event-boundary facts its brief
-needs, then spawn it with the least inherited context the host exposes and
-the brief in `references/conductor.md` §spawn-brief. The brief opens with the
-current task contract at spawn: objective, acceptance criteria, scope,
-dependencies and blockers, non-goals, and task-specific user constraints.
-Its one startup read is `references/conductor-brief.md`; it opens the other
-references only where that file points.
+convergence escalation, an armed rotation handoff, or its terminal ledger.
+Spawn it with the least inherited context the host exposes and the brief in
+`references/conductor.md` §spawn-brief, which opens with the current task
+contract at spawn, including task-specific user constraints. Its one startup
+read is `references/conductor-brief.md`.
 
 **Apply one platform-neutral gate through four probes.** A conductor owns the
-exchange when all four grants hold. Decide each grant from observable evidence,
-never interpretation. `references/conductor.md` §probes expands every probe.
+exchange when all four grants hold, each decided from observable evidence per
+`references/conductor.md` §probes.
 
 1. **Write-capable delegation.** Evidence: a spawn tool is listed in this
    session (Claude Code `Agent` as an ordinary named background subagent; Codex
    `spawn_agent` with `fork_turns: "none"`) and no rule forbids it. Default:
-   listed means granted. A rule disabling proactive delegation except on
-   request does not fail it; this skill supplies that request.
-   "Higher-priority instruction" alone never fails it. To fail it on a rule,
-   explain why the rule's exceptions exclude skill-mandated delegation, then
-   name the rule by source. When disclosure is restricted, give a non-sensitive
-   paraphrase instead.
-2. **Wait-and-resume continuity.** Evidence: the subagent can run a bounded
-   foreground shell command, or receives a scheduled wake, and the host can
-   re-enter that same agent after a pause (Claude Code `SendMessage`; Codex's
-   listed continuation tool). Default: a shell in the subagent grants it. It
-   fails only when the subagent has no bounded wait or same-agent wake, or the
-   host cannot re-enter it after a pause.
+   listed means granted. A
+   rule disabling proactive delegation except on request does not fail it;
+   this skill supplies that request. "Higher-priority instruction" alone never
+   fails it. To fail it on a rule, explain why the rule's exceptions exclude
+   skill-mandated delegation. Then name the rule by source, or give a
+   non-sensitive paraphrase when disclosure is restricted.
+2. **Wait-and-resume continuity.** Evidence: the subagent has a bounded
+   foreground shell wait or a scheduled wake, and the host can re-enter it
+   after a pause. Default: a shell in the subagent grants it.
 3. **Completion notification.** Evidence: the host notifies the main agent when
-   a background subagent ends, or offers a blocking wait on it (Claude Code
-   task notification; Codex `wait_agent`). Default: a listed spawn tool grants
-   it. It fails only when a tool description says completion is not surfaced.
-   After the spawn, end your turn only where that signal re-enters you; in a
-   headless run, block on the conductor, since yielding ends the session.
+   a background subagent ends, or offers a blocking wait on it. Default: a
+   listed spawn tool grants it. After the spawn, end your turn only where that
+   signal re-enters you; in a headless run, block on the conductor, since
+   yielding ends the session.
 4. **Checkout isolation or exclusivity.** Evidence: `git worktree list` shows
    the PR branch in a worktree only the conductor will touch, or the spawn call
-   can create one (Claude Code `isolation: "worktree"`). Otherwise grant
-   exclusivity: the main agent makes no edit, commit, PR-branch fetch, rebase,
-   or push until the terminal ledger. Default: grant exclusivity. It fails only
-   when the main agent must keep changing that checkout during the exchange.
+   can create one. Otherwise the main agent makes no edit, commit, PR-branch
+   fetch, rebase, or push until the terminal ledger. Default: grant
+   exclusivity.
 
-A probe you cannot run is not a failed grant. Take the default, note the gap in
-the brief, and let the conductor report it. Never infer a failed grant from an
-unfamiliar tool name; name the concrete missing grant. Uncontrolled inherited
-context is an optimization gap, not a failed grant.
+A probe you cannot run is not a failed grant: take the default and note the
+gap in the brief. Never infer a failed grant from an unfamiliar tool name.
+Uncontrolled inherited context is an optimization gap, not a failed grant.
 
 Keep the exchange in the main agent only when a probe shows a grant concretely
-absent or forbidden, or when feedback is already in hand and needs at most a
-couple of trivial operations. A typo fix, a reply, or a thread resolution
-qualifies. A small main context, a background shell, or a predicted clean or
-one-shot review is not an exception. Under main ownership, watch only while a
-reviewer wait remains; address feedback already in hand without a watcher.
+absent or forbidden, or when feedback in hand needs at most a couple of
+trivial operations. A typo fix, a reply, or a thread resolution qualifies. A
+small main context, a background shell, or a predicted clean or one-shot review is not an
+exception. Under main ownership, watch only while a reviewer wait remains.
 Before any main-owned watch, state the fallback exactly so:
 
 ```text
