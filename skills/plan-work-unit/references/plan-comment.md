@@ -8,13 +8,10 @@ the shape, not the content. Post One Current Plan in `SKILL.md` lists what each
 part must contain, and it governs; the placeholders below prompt for those
 elements rather than replace them.
 
-Fill each heading with plain sentences: lead with the point, keep necessary
-causes and qualifications connected, use
-ordinary words, and name real paths. Preserve scope, perspective, and useful
-parallel wording; explain consequences only from supplied context. Follow
-Write the Contract and Plan Plainly in `SKILL.md` for the full writing rules.
-Keep the headings and their order so a later task can find each part. Replace
-the angle-bracket text.
+Write the prose under each heading per Write the Contract and Plan Plainly in
+`SKILL.md` (or §plain-writing-fallback below when write-plainly is
+unavailable). Keep the headings and their order so a later task can find each
+part. Replace the angle-bracket text.
 
 ```markdown
 Plan for #<N>. The contract lives in <the authoritative record, such as "the
@@ -70,7 +67,7 @@ language.
 
 ## §plain-writing-fallback
 
-When no such skill is available, follow these rules instead:
+When write-plainly is unavailable, follow these rules instead:
 
 - Lead with the point. Put the decision, blocker, or change first, and the
   reason after it.

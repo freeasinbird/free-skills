@@ -4,7 +4,7 @@
 
 When a blocker prevents a truthful replacement plan, follow these steps. An
 occupied issue is the exception: write nothing and leave its plan as it is
-(see Check Occupancy).
+(see Check Occupancy in `SKILL.md`).
 
 1. Edit the old plan to mark it blocked and name the invalidating fact. If
    editing is unavailable, post one linked invalidation comment.

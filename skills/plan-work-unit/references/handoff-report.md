@@ -31,8 +31,8 @@ tables. Aim for 120 to 200 words. Omit a part only where its rule says so.
    read but did not run, or write-safety gaps that no reread closes, such as
    a whole-body write that could lose a concurrent edit. If the default
    branch advanced during planning, say so in one line and recommend
-   verification or a replan. An unchecked-occupancy line (see Check
-   Occupancy) doesn't count toward the two. Do not reinspect and republish
+   verification or a replan. An unchecked-occupancy line (see Check Occupancy
+   in `SKILL.md`) doesn't count toward the two. Do not reinspect and republish
    here. Omit when there is nothing to report.
 6. **Kickoff.** The kickoff prompt for a fresh implementation task, with the
    real issue number in place of `N`:
@@ -60,7 +60,7 @@ implementation waits on another unit.
 - Give the recommended action before any options.
 - Verify any required prior-plan invalidation before reporting.
 - If the prior plan remains actionable, report its location as an unsafe
-  state, unless the block is occupancy (see Check Occupancy).
+  state, unless the block is occupancy (see Check Occupancy in `SKILL.md`).
 - Never hand off an incomplete authoritative record.
 - Omit the implementation kickoff prompt.
 

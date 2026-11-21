@@ -15,7 +15,8 @@ to run or report.
 
 The fallback requires a shell, an authenticated `gh`, and merge-cleanup
 installed beside this skill. Run `../merge-cleanup/tracker-refresh.sh` relative
-to this skill's directory with `--repo <host/owner/name> --issue <tracker>`.
+to this skill's directory (the directory holding `SKILL.md`) with
+`--repo <host/owner/name> --issue <tracker>`.
 Add `--comment <ID>` when the tracker is in a comment. The script only reads.
 Discard its stdout; never write the refreshed text to the tracker, which is
 outside the planning mutation surface.
