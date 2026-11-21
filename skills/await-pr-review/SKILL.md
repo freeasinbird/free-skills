@@ -16,9 +16,9 @@ description: >-
 # Await PR Review
 
 Watch an open pull request for its automated reviewer, address the feedback,
-and converge without asking the user to babysit the polling loop. This skill
-owns the waiting and orchestration; the project's review-response conventions
-still govern commits, replies, resolution, and handoff. A `none` reviewer
+and converge without the user babysitting the polling. The project's
+review-response conventions still govern commits, replies, resolution, and
+handoff. A `none` reviewer
 record skips routing and review and waits on CI checks only
 (`references/detection.md` §declared-no-reviewer).
 
@@ -94,8 +94,8 @@ Conductor skipped: <specific failed grant or allowed exception>.
 
 ## 1. Resolve the PR and Anchor the Baseline
 
-Anchor the baseline to the host event that should produce the next pass: the
-open, ready, or push event time, or a manual recheck's request time, never a
+Anchor the baseline to the host event that should produce the next pass (the
+open, ready, or push event, or a manual recheck's request time), never a
 commit time or a later clock read. Record the expected head, base branch, and
 base tip from the host; take `--repo` from the project's forge record, not a
 remote. Mechanics: `references/detection.md` §event-anchored-baselines.
@@ -104,29 +104,27 @@ remote. Mechanics: `references/detection.md` §event-anchored-baselines.
 
 Prefer the project's recorded reviewer identity, trigger, and status signals;
 otherwise detect per `references/detection.md` §reviewer-identity-and-trigger.
-If several bot reviewers appear, or the trigger cannot be established, ask
-rather than burning the wait cap. Record a newly observed reviewer or signal
-in the project's designated conventions section; only the owner records none.
+If several bot reviewers appear, or the trigger is unclear, ask rather than
+burning the wait cap. Record a newly observed reviewer or signal in the
+project's designated conventions section; only the owner records none.
 Request a command-triggered reviewer once, via `--request-comment`, never per
-poll. An unrecorded reviewer never delays the spawn; the conductor discovers it.
+poll. An unrecorded reviewer never delays the spawn.
 
 ## 3. Wait for New Activity
 
 **Conductor-owned exchange.** Run `watch-review.sh` as a bounded foreground
-command inside the conductor when a shell and host CLI exist. Choose run caps
-and waits using [Cadence and Cap](references/detection.md#cadence-and-cap).
-Otherwise run an equivalent bounded foreground API or connector polling loop
-over the same frozen baseline, expected head, sources, and completion signals
-(`references/detection.md` §connector-or-api-polling). When that loop cannot
-delay in-turn, use the scheduled same-conductor wake from grant 2. Either
-keeps conductor ownership and never emits terminal completion merely to wait;
-a completion notice that still reports waiting is stranded
-(`references/conductor.md` §stranded-conductor-recovery).
+command inside the conductor, with caps and waits from
+[Cadence and Cap](references/detection.md#cadence-and-cap). Without a shell
+and host CLI, run an equivalent bounded foreground API or connector polling
+loop (`references/detection.md` §connector-or-api-polling), or use the
+scheduled same-conductor wake from grant 2. Never emit terminal completion
+merely to wait (`references/conductor.md` §stranded-conductor-recovery).
 
-**Main-owned fallback only:** after emitting the `Conductor skipped` line, pick
-the cheapest mechanism in `references/detection.md` §main-owned-mechanisms that
-re-enters the main agent. The ladder: a background script run, a watcher
-subagent, a scheduled API or connector poll, a foreground detector, or a handoff.
+**Main-owned fallback only:** after the `Conductor skipped` line, pick the
+cheapest mechanism that re-enters the main agent, per
+`references/detection.md` §main-owned-mechanisms: a background script run, a
+watcher subagent, a scheduled API or connector poll, a foreground detector,
+or a handoff.
 
 Under either owner, keep one active watch per PR and reviewer per
 `references/detection.md` §watcher-invocation. An in-progress reaction is not
@@ -201,10 +199,10 @@ full fix round waits, per `references/conductor.md` §context-rotation.
 ## 6. Report the Ledger
 
 End every finding in exactly one state: fixed (pushed SHA), declined (reason),
-deferred (linked issue), or explicitly outstanding for the human, with the rest
-of `references/review-response.md` §disposition-ledger. Before calling the PR
-ready, the exchange owner takes the fresh live-state snapshot and clears the
-readiness bars in `references/conductor.md` §quiescence-and-reporting, which
-bind under both ownerships. Review completion is not CI completion: wait for
-every required check, fix any known-red result, then leave the PR open for
-human merge unless the project explicitly opts into self-merge.
+deferred (linked issue), or explicitly outstanding for the human, per
+`references/review-response.md` §disposition-ledger. Before calling the PR
+ready, the exchange owner clears the readiness bars on a fresh live-state
+snapshot, per `references/conductor.md` §quiescence-and-reporting, under
+either ownership. Review completion is not CI completion: wait for every
+required check, fix any known-red result, then leave the PR open for human
+merge unless the project explicitly opts into self-merge.
