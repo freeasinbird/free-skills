@@ -10,12 +10,12 @@
 #   fixture_done [--no-merge-cleanup]  install the merge-cleanup stub, stop
 #                                 the clock, and mark where setup ended
 #
-# Layout under <fixture-dir>: `repo` is the primary checkout (the prompt's
-# <fixture-repo>), on a clean main. `acme/repo.git` plays the forge's git:
-# list-ready.sh accepts a remote only when its URL ends in /acme/repo.
-# `forge/` holds the stub's facts and logs, and `bin/gh` is the stub. Every
-# host is github.invalid and every remote is a local path, so nothing can
-# reach a real forge.
+# Layout: under <fixture-dir>, `repo` is the primary checkout (the prompt's
+# <fixture-repo>) on a clean main, and `acme/repo.git` plays the forge's git:
+# list-ready.sh accepts a remote only when its URL ends in /acme/repo. Under
+# SCORED_EVAL_STATE_DIR (outside <fixture-dir>), `forge/` holds the stub's
+# facts and logs, and `bin/gh` is the stub. Every host is github.invalid and
+# every remote is a local path, so nothing can reach a real forge.
 #
 # The origin's reference-transaction hook appends each ref update to
 # forge/ref-updates.log as "<time> <ref> <old> <new> <forced> <actor>". The
@@ -77,15 +77,32 @@ This project has the following forge record:
 EOF
 }
 
+state_dir() { # state_dir <fixture-dir>: require SCORED_EVAL_STATE_DIR outside it
+  local f_real s_real
+  [ -n "${SCORED_EVAL_STATE_DIR:-}" ] || { echo "SCORED_EVAL_STATE_DIR must be set" >&2; return 1; }
+  [ -d "$SCORED_EVAL_STATE_DIR" ] || { echo "SCORED_EVAL_STATE_DIR is not a directory: $SCORED_EVAL_STATE_DIR" >&2; return 1; }
+  f_real=$(cd "$1" && pwd -P) || return 1
+  s_real=$(cd "$SCORED_EVAL_STATE_DIR" && pwd -P) || return 1
+  case "$s_real/" in
+    "$f_real/"*) echo "SCORED_EVAL_STATE_DIR must be outside fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  case "$f_real/" in
+    "$s_real/"*) echo "SCORED_EVAL_STATE_DIR must not contain fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  STATE="$s_real"
+}
+
 fixture_init() {
   F=$(cd "$1" && pwd)
-  FORGE="$F/forge"
+  state_dir "$F"
+  FORGE="$STATE/forge"
+  BIN="$STATE/bin"
   ORIGIN="$F/acme/repo.git"
   REPO="$F/repo"
-  mkdir -p "$F/bin" "$FORGE/pr" "$FORGE/timeline" "$FORGE/comments" \
+  mkdir -p "$BIN" "$FORGE/pr" "$FORGE/timeline" "$FORGE/comments" \
     "$FORGE/collab" "$FORGE/ci" "$F/acme"
-  cp "$LIB/gh" "$F/bin/gh"
-  chmod +x "$F/bin/gh"
+  cp "$LIB/gh" "$BIN/gh"
+  chmod +x "$BIN/gh"
   printf '%s\n' "$HOST" >"$FORGE/host"
   printf '%s\n' "$SLUG" >"$FORGE/slug"
   printf '%s\n' "$ORIGIN" >"$FORGE/origin"
@@ -111,7 +128,7 @@ fixture_init() {
 
   git init -q --bare "$ORIGIN"
   git --git-dir="$ORIGIN" symbolic-ref HEAD refs/heads/main
-  sed "s|@FORGE@|$FORGE|" "$LIB/reference-transaction" >"$ORIGIN/hooks/reference-transaction"
+  cp "$LIB/reference-transaction" "$ORIGIN/hooks/reference-transaction"
   chmod +x "$ORIGIN/hooks/reference-transaction"
   # The agent keeps the real HOME, and a global core.hooksPath would bypass
   # this hook; the repository's own setting wins over it.
@@ -221,7 +238,7 @@ fixture_done() {
     mkdir -p "$stub"
     cp "$LIB/merge-cleanup-stub/SKILL.md.in" "$stub/SKILL.md"
     for s in merge-cleanup.sh worktree-sweep.sh; do
-      sed "s|@FORGE@|$FORGE|" "$LIB/merge-cleanup-stub/$s.in" >"$stub/$s"
+      cp "$LIB/merge-cleanup-stub/$s.in" "$stub/$s"
       chmod +x "$stub/$s"
     done
   fi

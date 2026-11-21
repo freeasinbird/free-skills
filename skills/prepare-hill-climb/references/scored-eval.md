@@ -32,12 +32,16 @@ Claude Code only, and no skill installs it. Its case contract, from its
 header:
 
 ```text
-Case contract: `setup <fixture-dir>` builds the fixture; when it leaves a
-<fixture-dir>/bin, that directory leads the agent's PATH. The agent starts
-in <fixture-dir> with the case's evals.json prompt, `<fixture-repo>`
+Case contract: `setup <fixture-dir>` builds the fixture with
+SCORED_EVAL_STATE_DIR set to a per-run directory outside <fixture-dir> and
+<fixture-dir>/.. for stub state, stub binaries, and grader inputs; the agent
+never receives SCORED_EVAL_STATE_DIR. When <state-dir>/bin exists, it leads
+the agent's PATH (with <fixture-dir>/bin kept as a fallback). The agent
+starts in <fixture-dir> with the case's evals.json prompt, `<fixture-repo>`
 replaced by <fixture-dir>/repo, behind "Read <skill-copy>/SKILL.md and follow
-it." Then `grade <fixture-dir> <final-message-file>` exits 0 for a pass and
-prints one line per failed assertion.
+it." Then `grade <fixture-dir> <final-message-file>` runs with the same
+SCORED_EVAL_STATE_DIR, exits 0 for a pass, and prints one line per failed
+assertion.
 ```
 
 Its last output line is

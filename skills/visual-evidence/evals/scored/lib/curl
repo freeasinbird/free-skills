@@ -2,9 +2,10 @@
 # curl limited to this machine: a URL on localhost, 127.0.0.1, [::1], or
 # file:// passes through to the system curl, as do the wildcard addresses
 # [::] and 0.0.0.0, which a local server such as python3 -m http.server may
-# print. Any other URL with a scheme is logged as "curl-blocked" and fails as
-# an unresolved host. A URL without a scheme isn't caught; no credential is
-# reachable from a run, so such a call can't act as anyone.
+# print. Any other URL with a scheme is logged to <state-dir>/forge/calls.log
+# as "curl-blocked" and fails as an unresolved host. A URL without a scheme
+# isn't caught; no credential is reachable from a run, so such a call can't
+# act as anyone.
 set -u
 FORGE=$(cd "$(dirname "$0")/../forge" && pwd -P)
 for a in "$@"; do

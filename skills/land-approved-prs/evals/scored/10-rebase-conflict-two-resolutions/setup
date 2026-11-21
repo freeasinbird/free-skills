@@ -10,5 +10,5 @@ pr_open 7 size-five main "Set the widget size to 5 to match the spec" widget.sh 
 at 2026-11-18T11:00:00Z
 land_branch 5 size-six "Set the widget size to 6 for the new layout"
 pr_approve 7
-git -C "$REPO" rev-parse size-five >"$F/forge/setup-head-7"
+git -C "$REPO" rev-parse size-five >"$FORGE/setup-head-7"
 fixture_done

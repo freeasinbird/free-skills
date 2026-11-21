@@ -8,22 +8,42 @@
 #   fixture_pr <closing issues>   the merged PR's forge record
 #   fixture_issue <N> <state> <reason> <title>   issue body on stdin
 #
-# Layout under <fixture-dir>: `repo` is the work clone (the prompt's
-# <fixture-repo>), `origin.git` plays the forge's git, `forge/` holds the
-# stub's facts, and `bin/gh` is the stub. Every host is github.invalid and
-# every remote is a local path, so nothing can reach a real forge.
+# Layout: under <fixture-dir>, `repo` is the work clone (the prompt's
+# <fixture-repo>) and `origin.git` plays the forge's git. Under
+# SCORED_EVAL_STATE_DIR (outside <fixture-dir>), `forge/` holds the stub's
+# facts, `bin/gh` is the stub, and `base-files/` stages base-branch files.
+# Every host is github.invalid and every remote is a local path, so nothing
+# can reach a real forge.
 
 LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SLUG=acme/repo
 HOST=github.invalid
 REPO_SPEC="$HOST/$SLUG"
 
+state_dir() { # state_dir <fixture-dir>: require SCORED_EVAL_STATE_DIR outside it
+  local f_real s_real
+  [ -n "${SCORED_EVAL_STATE_DIR:-}" ] || { echo "SCORED_EVAL_STATE_DIR must be set" >&2; return 1; }
+  [ -d "$SCORED_EVAL_STATE_DIR" ] || { echo "SCORED_EVAL_STATE_DIR is not a directory: $SCORED_EVAL_STATE_DIR" >&2; return 1; }
+  f_real=$(cd "$1" && pwd -P) || return 1
+  s_real=$(cd "$SCORED_EVAL_STATE_DIR" && pwd -P) || return 1
+  case "$s_real/" in
+    "$f_real/"*) echo "SCORED_EVAL_STATE_DIR must be outside fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  case "$f_real/" in
+    "$s_real/"*) echo "SCORED_EVAL_STATE_DIR must not contain fixture dir: $s_real" >&2; return 1 ;;
+  esac
+  STATE="$s_real"
+}
+
 fixture_init() {
   F=$(cd "$1" && pwd)
-  FORGE="$F/forge"
-  mkdir -p "$F/bin" "$FORGE/pr" "$FORGE/issue" "$F/base-files"
-  cp "$LIB/gh" "$F/bin/gh"
-  chmod +x "$F/bin/gh"
+  state_dir "$F"
+  FORGE="$STATE/forge"
+  BIN="$STATE/bin"
+  BASE_FILES="$STATE/base-files"
+  mkdir -p "$BIN" "$FORGE/pr" "$FORGE/issue" "$BASE_FILES"
+  cp "$LIB/gh" "$BIN/gh"
+  chmod +x "$BIN/gh"
   printf '%s\n' "$HOST" >"$FORGE/host"
   printf '%s\n' "$SLUG" >"$FORGE/slug"
   printf '%s\n' "$F/origin.git" >"$FORGE/origin"
@@ -50,10 +70,10 @@ This project has the following forge record:
 EOF
 }
 
-fixture_agents() { cat >"$F/base-files/AGENTS.md"; }
+fixture_agents() { cat >"$BASE_FILES/AGENTS.md"; }
 fixture_file() {
-  mkdir -p "$F/base-files/$(dirname "$1")"
-  cat >"$F/base-files/$1"
+  mkdir -p "$BASE_FILES/$(dirname "$1")"
+  cat >"$BASE_FILES/$1"
 }
 
 git_id() { git -C "$1" config user.name Fixture; git -C "$1" config user.email fixture@example.invalid; }
@@ -61,12 +81,12 @@ git_id() { git -C "$1" config user.name Fixture; git -C "$1" config user.email f
 # Origin gets the base files on main, then a feature branch merged with a
 # merge commit. The work clone tracks the feature branch and stays on it.
 fixture_repos() {
-  local seed="$F/seed"
+  local seed="$STATE/seed"
   git init -q --bare "$F/origin.git"
   git --git-dir="$F/origin.git" symbolic-ref HEAD refs/heads/main
   git init -q "$seed"
   git_id "$seed"
-  cp -R "$F/base-files/." "$seed/"
+  cp -R "$BASE_FILES/." "$seed/"
   echo "widget v1" >"$seed/widget.txt"
   git -C "$seed" add -A
   git -C "$seed" commit -qm "Start the project"

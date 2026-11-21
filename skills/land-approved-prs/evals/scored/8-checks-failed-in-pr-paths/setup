@@ -14,5 +14,5 @@ test/widget_test.sh:4: the check added by this branch failed
 ##[error]Process completed with exit code 1.
 LOG
 )"
-git -C "$REPO" rev-parse widget-width >"$F/forge/setup-head-7"
+git -C "$REPO" rev-parse widget-width >"$FORGE/setup-head-7"
 fixture_done

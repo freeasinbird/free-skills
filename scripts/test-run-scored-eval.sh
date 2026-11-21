@@ -28,7 +28,7 @@ jq -n '{skill_name:"toy", evals:[
 for c in 1-good 2-bad 3-held; do
   mkdir -p "$EVAL/scored/$c"
   printf '#!/usr/bin/env bash\nmkdir -p "$1/repo" "$1/bin"\nenv >"$1/setup-env"\n' >"$EVAL/scored/$c/setup"
-  printf '#!/usr/bin/env bash\ngrep -q done "$2" || { echo "no done"; exit 1; }\n' \
+  printf '#!/usr/bin/env bash\nenv >"$1/grade-env"\ngrep -q done "$2" || { echo "no done"; exit 1; }\n' \
     >"$EVAL/scored/$c/grade"
 done
 printf '#!/usr/bin/env bash\necho "always fails"; exit 1\n' >"$EVAL/scored/2-bad/grade"
@@ -53,6 +53,7 @@ chmod +x "$FAKE/claude"
 run() { # run <args...>: sets RC, OUT, ERR
   OUT="$TMP/out.txt" ERR="$TMP/err.txt"
   PATH="$FAKE:$PATH" ANTHROPIC_API_KEY=test-key SECRET_SENTINEL=leak \
+    SCORED_EVAL_STATE_DIR=/caller/leaked/state \
     CLAUDE_CONFIG_DIR="$TMP/claude-config" "$RUNNER" "$@" >"$OUT" 2>"$ERR"
   RC=$?
 }
@@ -136,6 +137,23 @@ grep -q "^PATH=$r/fixture/bin:" "$envf" && ok || bad "the case bin does not lead
 grep -qx "ANTHROPIC_API_KEY=test-key" "$envf" && ok || bad "the API key was not passed"
 grep -qx "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1" "$envf" && ok || bad "auto memory is not off"
 grep -q SECRET_SENTINEL "$envf" && bad "the runner's environment leaked" || ok
+grep -q '^SCORED_EVAL_STATE_DIR=' "$envf" && bad "SCORED_EVAL_STATE_DIR leaked to the agent" || ok
+sdir="$TMP/climb/state/r1/1-good"
+grep -qx "SCORED_EVAL_STATE_DIR=$sdir" "$r/fixture/setup-env" && ok \
+  || bad "setup did not receive the expected SCORED_EVAL_STATE_DIR"
+grep -qx "SCORED_EVAL_STATE_DIR=$sdir" "$r/fixture/grade-env" && ok \
+  || bad "grade did not receive the same SCORED_EVAL_STATE_DIR"
+s_real=$(cd "$sdir" && pwd -P)
+r_real=$(cd "$r" && pwd -P)
+f_real=$(cd "$r/fixture" && pwd -P)
+case "$s_real/" in
+  "$f_real/"*|"$r_real/"*) bad "state dir sits inside fixture or its parent: $s_real" ;;
+  *) ok ;;
+esac
+case "$r_real/" in
+  "$s_real/"*) bad "state dir contains fixture parent: $s_real" ;;
+  *) ok ;;
+esac
 grep -q test-key "$argf" && bad "the API key is on the command line" || ok
 grep -q dangerously "$argf" && bad "permission checks were bypassed" || ok
 [ "$(wc -l <"$r/transcript.jsonl")" -eq 3 ] && ok || bad "the transcript was not kept whole"
@@ -148,6 +166,38 @@ grep -qx -- "--setting-sources" "$argf" && [ "$(grep -A1 -x -- --setting-sources
 grep -qx "Read $r/skill/toy/SKILL.md and follow it. Tidy $r/fixture/repo." "$argf" \
   && ok || bad "prompt: $(sed -n 2p "$argf")"
 [ -f "$r/skill/toy/SKILL.md" ] && ok || bad "the skill was not copied into the run"
+
+CASE="state-dir bin leads PATH and takes precedence over fixture bin"
+cp -R "$EVAL" "$TMP/statebin"
+cat >"$TMP/statebin/scored/1-good/setup" <<'SETUP'
+#!/usr/bin/env bash
+mkdir -p "$1/repo" "$SCORED_EVAL_STATE_DIR/bin"
+printf '#!/usr/bin/env bash\necho from-state\n' >"$SCORED_EVAL_STATE_DIR/bin/stub"
+chmod +x "$SCORED_EVAL_STATE_DIR/bin/stub"
+SETUP
+cat >"$TMP/statebin/scored/2-bad/setup" <<'SETUP'
+#!/usr/bin/env bash
+mkdir -p "$1/repo" "$1/bin" "$SCORED_EVAL_STATE_DIR/bin"
+printf '#!/usr/bin/env bash\necho from-fixture\n' >"$1/bin/stub"
+printf '#!/usr/bin/env bash\necho from-state\n' >"$SCORED_EVAL_STATE_DIR/bin/stub"
+chmod +x "$1/bin/stub" "$SCORED_EVAL_STATE_DIR/bin/stub"
+SETUP
+run --eval-dir "$TMP/statebin" --skill-dir "$SKILL" --agent claude --model test-model \
+  --repeats 1 --out "$TMP/statebin-out"
+want_rc 0
+r1="$TMP/statebin-out/runs/r1/1-good"
+s1="$TMP/statebin-out/state/r1/1-good"
+[ ! -e "$r1/fixture/bin" ] && ok || bad "fixture/bin unexpectedly exists"
+grep -q "^PATH=$s1/bin:" "$r1/fixture/agent-env" && ok \
+  || bad "state-dir bin does not lead PATH when fixture/bin is absent"
+grep -q "^PATH=.*$r1/fixture/bin" "$r1/fixture/agent-env" \
+  && bad "absent fixture/bin appeared on PATH" || ok
+grep -q '^SCORED_EVAL_STATE_DIR=' "$r1/fixture/agent-env" \
+  && bad "SCORED_EVAL_STATE_DIR leaked to state-bin agent" || ok
+r2="$TMP/statebin-out/runs/r1/2-bad"
+s2="$TMP/statebin-out/state/r1/2-bad"
+grep -q "^PATH=$s2/bin:$r2/fixture/bin:" "$r2/fixture/agent-env" && ok \
+  || bad "state-dir bin does not take precedence over fixture/bin"
 
 CASE="exported functions don't reach the agent"
 leak_fn() { :; }

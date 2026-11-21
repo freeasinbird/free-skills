@@ -4,7 +4,7 @@
 # and logs every call. Modeled on the gh shim in scripts/test-merge-cleanup.sh,
 # widened so an agent's own lookups work too, not only the bundled scripts'.
 #
-# The forge directory sits next to this file's directory (<fixture>/forge):
+# The forge directory sits next to this file's directory (<state-dir>/forge):
 #   host, slug       The only repository that exists (github.invalid, acme/repo).
 #   origin           Path of the bare repository that plays the forge's git.
 #   pr/<N>.json      PR objects in `gh pr view --json` shape.

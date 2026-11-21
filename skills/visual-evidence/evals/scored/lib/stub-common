@@ -1,6 +1,6 @@
-# Sourced by the gh and gh-imgup stubs. Setup installs it as bin/.stub-common.
-# It finds the fixture's forge/ directory, reads its facts, and writes the
-# logs graders read:
+# Sourced by the gh and gh-imgup stubs. Setup installs it as
+# <state-dir>/bin/.stub-common. It finds the run's sibling <state-dir>/forge/
+# directory, reads its facts, and writes the logs graders read:
 #
 #   forge/calls.log     one line per stub call: the tool, then its quoted args
 #   forge/attempts.log  "<tool>\t<sha256>\t<path>" for every file named for

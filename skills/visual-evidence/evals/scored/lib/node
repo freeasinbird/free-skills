@@ -3,7 +3,7 @@
 # capture.mjs's options as the script does, reads the page the URL serves,
 # writes a pre-rendered card-list image for the page's state, and prints
 # capture.mjs's WROTE lines. Each written file adds a line to
-# forge/captures.log:
+# <state-dir>/forge/captures.log:
 #
 #   <state>\t<out>\t<viewport>\t<clip>\t<clip-pad>\t<dpr>\t<dark>\t<url>
 #

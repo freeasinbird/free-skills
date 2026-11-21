@@ -62,15 +62,20 @@ check=<sha256>`. Each run directory keeps the agent's `transcript.jsonl`
 
 Each `scored/<id>-<eval_name>/` holds two executables. `setup <fixture-dir>`
 builds the fixture, and `grade <fixture-dir> <final-message-file>` exits 0
-on a pass, printing one line per failed assertion. The prompt is the case's
-`evals.json` entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
+on a pass, printing one line per failed assertion. Both receive
+`SCORED_EVAL_STATE_DIR` pointing to a per-run `<state-dir>` outside
+`<fixture-dir>` and `<fixture-dir>/..`. The runner never exports
+`SCORED_EVAL_STATE_DIR` to the agent. The prompt is the case's `evals.json`
+entry, with `<fixture-repo>` set to `<fixture-dir>/repo`.
 
-Graders check only program-visible facts: the forge's call, mutation, and
-ref-update logs, the origin's refs, the checkout's worktrees and files, the
-merge-cleanup stub's logs, and facts in the final message, such as a PR
-number or path. No model judges a run. One check reads wording: case 9
-needs a sentence that pairs a stop verb with the `land` processes, kept
-loose so a correct answer in other words still passes.
+Stub binaries live under `<state-dir>/bin` (leading the agent's `PATH`), and
+stub state and grader logs live under `<state-dir>/forge`. Graders check
+only program-visible facts: the forge's call, mutation, and ref-update logs,
+the origin's refs, the checkout's worktrees and files, the merge-cleanup
+stub's logs, and facts in the final message, such as a PR number or path. No
+model judges a run. One check reads wording: case 9 needs a sentence that
+pairs a stop verb with the `land` processes, kept loose so a correct answer
+in other words still passes.
 
 `scored/lib/` holds the shared parts:
 
@@ -79,10 +84,12 @@ loose so a correct answer in other words still passes.
   force-push events, collaborator permissions, Actions runs and logs, and
   the merge. Each CI run passes unless the fixture marks its head commit
   failed. Any other host or slug fails as gh would. It logs every call to
-  `forge/calls.log` and every write to `forge/mutations.log`.
+  `<state-dir>/forge/calls.log` and every write to
+  `<state-dir>/forge/mutations.log`.
 - **`reference-transaction`:** the origin's hook. It logs every branch and
-  lock update to `forge/ref-updates.log`, which the forge reads for PR heads,
-  CI runs, and force-push events, and graders read for lock use.
+  lock update to `<state-dir>/forge/ref-updates.log`, which the forge reads
+  for PR heads, CI runs, and force-push events, and graders read for lock
+  use.
 - **`fixture.sh`:** builds the origin, the primary checkout with its
   AGENTS.md forge and landing records, and PRs at fixed times.
 - **`merge-cleanup-stub/`:** a stand-in merge-cleanup skill. Its scripts log
@@ -95,9 +102,9 @@ The skill requires merge-cleanup beside it, at
 `<skill-copy>/../merge-cleanup`. The runner copies the candidate to
 `<fixture-dir>/../skill/<name>` after setup, so setup installs the stub at
 `<fixture-dir>/../skill/merge-cleanup`. Case 5 omits it. The stub logs to
-`forge/cleanup.log` and `forge/sweep.log`, so case 1 grades the arguments
-the batch passes without testing merge-cleanup itself. This relies on the
-runner's layout; see the decision note.
+`<state-dir>/forge/cleanup.log` and `<state-dir>/forge/sweep.log`, so case 1
+grades the arguments the batch passes without testing merge-cleanup itself.
+This relies on the runner's layout; see the decision note.
 
 ### No Real Forge
 
@@ -170,7 +177,10 @@ Before a climb, copy `scripts/run-scored-eval.sh` and this whole `evals`
 directory into the climb directory and score from that copy. The `check=`
 hash covers the runner and every file under `--eval-dir`, by relative path,
 so the copy hashes the same as the source. Record it, and compare each
-score's `check=` with it; a mismatch means the check changed.
+score's `check=` with it; a mismatch means the check changed. Any edit to
+the runner or this directory, including moving fixture state into
+`SCORED_EVAL_STATE_DIR`, changes `check=` and requires a new freeze and
+proof before the next climb.
 
 ### Measured Results
 
