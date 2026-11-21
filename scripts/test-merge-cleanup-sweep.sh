@@ -37,6 +37,9 @@
 # The own-* cases were run against copies without the own-* rule, without
 # its repository test, and without its read of the file. No case separates
 # its source-and-pattern check, which the file check always precedes.
+# The worktree-ref and post-HEAD reflog cases were run against the sweep at
+# fabd2ed, which removes worktrees holding refs/worktree/*, refs/bisect/*, or
+# post-HEAD unreferenced reflog commits.
 #
 # Usage: test-merge-cleanup-sweep.sh
 # Exit codes: 0 all passed, 1 a case failed.
@@ -1409,6 +1412,334 @@ want_rc 0
 want_out '"ignored":[],"flagged":[],"disposable":[]'   # discriminating: listing every dir/ record keeps it
 want_out "WORKTREE removed {\"path\":\"$WT\""
 want_removed "$WT"
+
+# --- worktree-only refs and post-HEAD reflog commits --------------------------
+
+scenario "a refs/worktree/* ref makes a merged worktree dirty across all remove modes"
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+G "$WT" update-ref refs/worktree/keep "$TIP"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"worktree_refs":["refs/worktree/keep"],"reflog_commits":[]'
+want_kept "$WT"   # discriminating: fabd2ed removes it
+run --remove-landed
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"worktree_refs":["refs/worktree/keep"],"reflog_commits":[]'
+want_kept "$WT"
+
+scenario "a refs/worktree/* ref in a sibling worktree or primary checkout does not taint a clean candidate"
+land feat
+G "$REPO" worktree add -b sibling "$SCEN/sibling" main
+G "$REPO" update-ref refs/worktree/primary-only HEAD
+G "$SCEN/sibling" update-ref refs/worktree/sibling-only HEAD
+run --remove-landed
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_out '"worktree_refs":[],"reflog_commits":[]'
+want_removed "$WT"
+want_kept "$SCEN/sibling"
+
+scenario "a refs/bisect/* ref without BISECT_START makes a merged worktree dirty"
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+G "$WT" update-ref refs/bisect/bad "$TIP"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"operation":null'
+want_out '"worktree_refs":["refs/bisect/bad"],"reflog_commits":[]'
+want_kept "$WT"   # discriminating: fabd2ed removes it
+run --remove-landed
+want_rc 0
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_kept "$WT"
+
+scenario "a post-HEAD reset-away commit makes a merged worktree dirty (#432 repro)"
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+G "$WT" commit --allow-empty -m wip
+WIP=$(git -C "$WT" rev-parse HEAD)
+G "$WT" reset --hard HEAD~1
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out "\"worktree_refs\":[],\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"   # discriminating: fabd2ed removes it
+run --remove-landed
+want_rc 0
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out "\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"
+
+scenario "a refs/worktree/* ref does not hide a post-HEAD reflog commit (#432 repro with ref)"
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+G "$WT" commit --allow-empty -m wip
+WIP=$(git -C "$WT" rev-parse HEAD)
+G "$WT" update-ref refs/worktree/keep "$WIP"
+G "$WT" reset --hard HEAD~1
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out "\"worktree_refs\":[\"refs/worktree/keep\"],\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"   # discriminating: fabd2ed removes it; omitting --exclude hides $WIP
+run --remove-landed
+want_rc 0
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out "\"worktree_refs\":[\"refs/worktree/keep\"],\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"
+
+scenario "a post-HEAD detached commit left by switching back makes a merged worktree dirty"
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+G "$WT" checkout --detach
+G "$WT" commit --allow-empty -m wip
+WIP=$(git -C "$WT" rev-parse HEAD)
+G "$WT" checkout feat
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out "\"worktree_refs\":[],\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"   # discriminating: fabd2ed removes it
+run --remove-landed
+want_rc 0
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP"
+want_rc 0
+want_out "\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"
+
+scenario "a pre-merge git commit --amend leaves a merged worktree clean"
+printf 'f2\n' > "$WT/f.txt"
+G "$WT" add f.txt
+G "$WT" commit --amend -m "feat work amended"
+land feat
+TIP=$(git -C "$REPO" rev-parse feat)
+run
+want_rc 0
+want_out 'WORKTREE clean {"path":"'"$WT"'"'
+want_out '"worktree_refs":[],"reflog_commits":[]'
+run --remove-landed
+want_rc 0
+want_out "WORKTREE removed {\"path\":\"$WT\""
+want_removed "$WT"
+
+scenario "a pre-merge git commit --amend removes under --remove and --remove-head"
+for mode in remove remove-head; do
+  scenario "pre-merge amend stays clean under --$mode"
+  printf 'f2\n' > "$WT/f.txt"
+  G "$WT" add f.txt
+  G "$WT" commit --amend -m "feat work amended"
+  land feat
+  TIP=$(git -C "$REPO" rev-parse feat)
+  if [ "$mode" = remove ]; then
+    run --remove
+  else
+    run --remove-head feat --head-oid "$TIP"
+  fi
+  want_rc 0
+  want_out "WORKTREE removed {\"path\":\"$WT\""
+  want_removed "$WT"
+done
+
+scenario "a pre-merge git rebase leaves a merged worktree clean across all remove modes"
+for mode in remove remove-landed remove-head; do
+  scenario "pre-merge rebase stays clean under --$mode"
+  printf 'm2\n' > "$REPO/m2.txt"
+  G "$REPO" add m2.txt
+  G "$REPO" commit -m "main advances"
+  G "$WT" rebase main
+  land feat
+  TIP=$(git -C "$REPO" rev-parse feat)
+  case "$mode" in
+    remove) run --remove ;;
+    remove-landed) run --remove-landed ;;
+    remove-head) run --remove-head feat --head-oid "$TIP" ;;
+  esac
+  want_rc 0
+  want_out "WORKTREE removed {\"path\":\"$WT\""
+  want_out '"worktree_refs":[],"reflog_commits":[]'
+  want_removed "$WT"
+done
+
+scenario "a post-HEAD reflog commit reachable from a surviving ref leaves the worktree clean"
+for mode in remove remove-landed remove-head; do
+  scenario "post-HEAD reflog commit reachable from surviving ref under --$mode"
+  land feat
+  TIP=$(git -C "$REPO" rev-parse feat)
+  G "$WT" commit --allow-empty -m saved
+  if [ "$mode" = remove ]; then
+    G "$WT" branch saved-branch HEAD
+  else
+    G "$WT" tag saved-tag HEAD
+  fi
+  G "$WT" reset --hard HEAD~1
+  case "$mode" in
+    remove) run --remove ;;
+    remove-landed) run --remove-landed ;;
+    remove-head) run --remove-head feat --head-oid "$TIP" ;;
+  esac
+  want_rc 0
+  want_out "WORKTREE removed {\"path\":\"$WT\""
+  want_out '"worktree_refs":[],"reflog_commits":[]'
+  want_removed "$WT"
+done
+
+scenario "an absent HEAD reflog leaves a clean worktree clean across all remove modes"
+for mode in remove remove-landed remove-head; do
+  scenario "absent HEAD reflog stays clean under --$mode"
+  land feat
+  TIP=$(git -C "$REPO" rev-parse feat)
+  # Even when the branch's shared reflog carries a reset-away commit, removing
+  # the worktree's own logs/HEAD leaves no HEAD reflog to read.
+  G "$WT" commit --allow-empty -m wip
+  G "$WT" reset --hard HEAD~1
+  WT_GIT=$(git -C "$WT" rev-parse --git-dir)
+  rm -f "$WT_GIT/logs/HEAD"
+  case "$mode" in
+    remove) run --remove ;;
+    remove-landed) run --remove-landed ;;
+    remove-head) run --remove-head feat --head-oid "$TIP" ;;
+  esac
+  want_rc 0
+  want_out "WORKTREE removed {\"path\":\"$WT\""
+  want_out '"worktree_refs":[],"reflog_commits":[]'
+  want_removed "$WT"
+done
+
+scenario "disposable files never override refs/worktree/* or post-HEAD reflog findings"
+ignore .DS_Store .build/
+disposables .build/
+land feat
+BASE=$(git -C "$REPO" rev-parse main)
+TIP=$(git -C "$REPO" rev-parse feat)
+: > "$WT/.DS_Store"
+G "$WT" update-ref refs/worktree/keep "$TIP"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out '"disposable":[".DS_Store"],"worktree_refs":["refs/worktree/keep"],"reflog_commits":[]'
+want_kept "$WT"   # discriminating: fabd2ed removes it
+run --remove-landed
+want_rc 0
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP" --disposables-at "$BASE"
+want_rc 0
+want_kept "$WT"
+G "$WT" update-ref -d refs/worktree/keep
+rm -f "$WT/.DS_Store"
+mkdir "$WT/.build"
+printf 'o\n' > "$WT/.build/obj.o"
+G "$WT" commit --allow-empty -m wip
+WIP=$(git -C "$WT" rev-parse HEAD)
+G "$WT" reset --hard HEAD~1
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out "\"disposable\":[\".build/\"],\"worktree_refs\":[],\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"   # discriminating: fabd2ed removes it
+run --remove-landed
+want_rc 0
+want_kept "$WT"
+run --remove-head feat --head-oid "$TIP" --disposables-at "$BASE"
+want_rc 0
+want_kept "$WT"
+
+scenario "a candidate that gains refs/worktree/* before removal is kept by the recheck"
+G "$REPO" branch feat2 feat
+land feat
+G "$REPO" worktree add "$SCEN/wt2" feat2
+shim '"$REAL_GIT" -C "$1" update-ref refs/worktree/late HEAD'
+run_shimmed --remove
+want_rc 0
+want_out 'changed since the first pass and no longer authorized for removal'
+want_out '"worktree_refs":["refs/worktree/late"]'
+want_out '"candidates":2,"clean":1,"dirty":1,"removed":1,"kept":1'
+
+scenario "a candidate that gains a post-HEAD reflog commit before removal is kept by the recheck"
+G "$REPO" branch feat2 feat
+land feat
+G "$REPO" worktree add "$SCEN/wt2" feat2
+shim '"$REAL_GIT" -C "$1" commit --allow-empty -qm late && "$REAL_GIT" -C "$1" reset --hard -q HEAD~1'
+run_shimmed --remove
+want_rc 0
+want_out 'changed since the first pass and no longer authorized for removal'
+want_out '"candidates":2,"clean":1,"dirty":1,"removed":1,"kept":1'
+
+scenario "a symlinked logs/HEAD still detects post-HEAD reflog commits, and an unreadable one fails loud"
+land feat
+G "$WT" commit --allow-empty -m wip
+WIP=$(git -C "$WT" rev-parse HEAD)
+G "$WT" reset --hard HEAD~1
+WT_GIT=$(git -C "$WT" rev-parse --git-dir)
+mv "$WT_GIT/logs/HEAD" "$SCEN/head-log"
+ln -s "$SCEN/head-log" "$WT_GIT/logs/HEAD"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out "\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"
+chmod 000 "$SCEN/head-log"
+run --remove
+chmod 644 "$SCEN/head-log"
+want_rc 4
+want_out 'LOOKUP_FAILED reflog'
+want_kept "$WT"
+
+scenario "a prunable detached sibling worktree does not hide a post-HEAD reflog commit"
+land feat
+G "$WT" commit --allow-empty -m wip
+WIP=$(git -C "$WT" rev-parse HEAD)
+G "$WT" reset --hard HEAD~1
+G "$REPO" worktree add --detach "$SCEN/prunable-sib" "$WIP"
+rm -rf "$SCEN/prunable-sib"
+run --remove
+want_rc 0
+want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+want_out "\"reflog_commits\":[\"$WIP\"]"
+want_kept "$WT"
+
+if git init -q --ref-format=reftable "$TMP/reftable-probe" 2>/dev/null; then
+  rm -rf "$TMP/reftable-probe"
+  NAME="reftable backend detects refs/worktree/*, refs/bisect/*, and post-HEAD reflog commits"
+  SCEN=$(mktemp -d "$TMP/scen.XXXXXX")
+  REPO="$SCEN/repo"
+  WT="$SCEN/wt"
+  git init -q --ref-format=reftable -b main "$REPO"
+  printf 'a\n' > "$REPO/a.txt"
+  G "$REPO" add .
+  G "$REPO" commit -m seed
+  sync_origin
+  G "$REPO" worktree add -b feat "$WT"
+  printf 'f\n' > "$WT/f.txt"
+  G "$WT" add .
+  G "$WT" commit -m "feat work"
+  land feat
+  G "$REPO" update-ref refs/worktree/primary-only HEAD
+  G "$WT" commit --allow-empty -m wip
+  WIP=$(git -C "$WT" rev-parse HEAD)
+  G "$WT" update-ref refs/worktree/keep "$WIP"
+  G "$WT" update-ref refs/bisect/bad "$WIP"
+  G "$WT" reset --hard HEAD~1
+  run --remove-landed
+  want_rc 0
+  want_out 'WORKTREE dirty {"path":"'"$WT"'"'
+  want_out "\"worktree_refs\":[\"refs/bisect/bad\",\"refs/worktree/keep\"],\"reflog_commits\":[\"$WIP\"]"
+  want_kept "$WT"
+fi
 
 echo "merge-cleanup sweep matrix: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
