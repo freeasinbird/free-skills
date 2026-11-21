@@ -24,20 +24,20 @@ record skips routing and review and waits on CI checks only
 
 ## Authorization
 
-Invoking this skill authorizes its ordinary, task-scoped review-loop actions
-without per-action or per-round confirmation. Those actions are waiting for
-the reviewer; fixing accepted findings and folding them into their commits;
-pushing with the required pinned lease and safeguards; verifying, replying,
-and resolving threads; and advancing the baseline, then triggering or
-awaiting the next pass. Folding rewrites history; that rewrite is covered
-only on the expected PR branch under the checkout and lease gates.
+Invoking this skill authorizes its task-scoped review-loop actions without
+per-action or per-round confirmation. They are waiting for the reviewer;
+fixing accepted findings and folding them into their commits; pushing with
+the pinned lease and safeguards; verifying, replying, and resolving threads;
+and advancing the baseline to trigger or await the next pass. Folding
+rewrites history, which is covered only on the expected PR branch under the
+checkout and lease gates.
 
 The authorization stops at a destructive action outside that sequence, a
 failed pinned lease or other unmet safety precondition, material scope
-expansion, or a genuine judgment call. At a stop, apply the documented safe
+expansion, or a genuine judgment call. There, apply the documented safe
 recovery where one exists, and surface what needs judgment or new authority.
 Obey a platform-required approval prompt, but never invent a conversational
-permission gate that these safeguards already cover.
+permission gate these safeguards already cover.
 
 ## Route Ownership Before Waiting
 
@@ -57,9 +57,8 @@ exchange when all four grants hold, each decided from observable evidence per
 1. **Write-capable delegation.** Evidence: a spawn tool is listed in this
    session (Claude Code `Agent` as an ordinary named background subagent; Codex
    `spawn_agent` with `fork_turns: "none"`) and no rule forbids it. Default:
-   listed means granted. A
-   rule disabling proactive delegation except on request does not fail it;
-   this skill supplies that request. "Higher-priority instruction" alone never
+   listed means granted. A rule disabling proactive delegation except on
+   request does not fail it; this skill supplies that request. "Higher-priority instruction" alone never
    fails it. To fail it on a rule, explain why the rule's exceptions exclude
    skill-mandated delegation. Then name the rule by source, or give a
    non-sensitive paraphrase when disclosure is restricted.
@@ -84,8 +83,8 @@ Uncontrolled inherited context is an optimization gap, not a failed grant.
 Keep the exchange in the main agent only when a probe shows a grant concretely
 absent or forbidden, or when feedback in hand needs at most a couple of
 trivial operations. A typo fix, a reply, or a thread resolution qualifies. A
-small main context, a background shell, or a predicted clean or one-shot review is not an
-exception. Under main ownership, watch only while a reviewer wait remains.
+small main context, a background shell, or a predicted clean or one-shot
+review is not an exception. Under main ownership, watch only while a reviewer wait remains.
 Before any main-owned watch, state the fallback exactly so:
 
 ```text
@@ -121,10 +120,9 @@ scheduled same-conductor wake from grant 2. Never emit terminal completion
 merely to wait (`references/conductor.md` §stranded-conductor-recovery).
 
 **Main-owned fallback only:** after the `Conductor skipped` line, pick the
-cheapest mechanism that re-enters the main agent, per
-`references/detection.md` §main-owned-mechanisms: a background script run, a
-watcher subagent, a scheduled API or connector poll, a foreground detector,
-or a handoff.
+cheapest mechanism in `references/detection.md` §main-owned-mechanisms that
+re-enters the main agent, such as a background script run or a scheduled API
+or connector poll.
 
 Under either owner, keep one active watch per PR and reviewer per
 `references/detection.md` §watcher-invocation. An in-progress reaction is not
