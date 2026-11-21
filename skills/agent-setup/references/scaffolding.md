@@ -251,7 +251,9 @@ follow this full sequence:
      so refresh before handoff and again whenever the base moves before
      approval. The check reruns on each push.
    - **No landing check:** refresh before handoff, and repeat the integration
-     pass by hand whenever the base moves.
+     pass by hand whenever the base moves. Merge PRs one at a time: start
+     each merge's base-moved recheck only after the previous merge finishes,
+     while development and PR starts stay parallel.
 
    Refresh only by rebasing onto the tip, never by merging the base into the
    branch. A merge inside the branch breaks the linear history under the PR's
@@ -378,8 +380,17 @@ Run this procedure only when the user asks you to merge.
    the rebase conflicted, report what the resolution changed and wait for the
    user to confirm it: they asked to merge the PR they saw, not your
    resolution. Then repeat this step. `UNKNOWN` means the forge is still
-   computing the state; run the command again. Any other state continues to
-   step 2.
+   computing the state; run the command again. When a confirmed landing check
+   enforces the base tip, any other state continues to step 2.
+
+   Without a confirmed landing check, the forge may neither reject a
+   behind-tip branch nor serialize concurrent merges. Merge PRs one at a time,
+   while development and PR starts stay parallel: start a merge only after any
+   earlier merge finishes, fetch the base branch, and confirm this branch
+   contains its tip. For example, run
+   `git merge-base --is-ancestor <remote>/<base> HEAD`. If it is behind,
+   refresh, wait for required checks, and confirm any conflict resolution as
+   above, then repeat this step. Otherwise continue to step 2.
 
    A direct merge request makes you the lander for this PR, so the freeze at
    the end of §handing-off step 7 doesn't stop this refresh.
