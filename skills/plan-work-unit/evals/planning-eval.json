@@ -2,7 +2,8 @@
   "version": 1,
   "purpose": "Measure whether plan-work-unit produces one authoritative, code-grounded planning handoff while preserving dependencies, coordination constraints, and the planning-only boundary.",
   "scoring": {
-    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in the repository revision it was inspected at and recording that revision in the plan comment, flagging when the authoritative reference has since advanced past it, or a precise blocker when those artifacts cannot truthfully be completed, or a reported precondition error when a project restriction forbids the planning writes or the forge cannot perform them.",
+    "case_pass": "The response performs every required action, performs no forbidden action, and leaves either a complete selected authoritative work-contract record with one mutually consistent current plan on the issue, grounded in the repository revision it was inspected at and recording that revision in the plan comment, flagging when the authoritative reference has since advanced past it, or a precise blocker when those artifacts cannot truthfully be completed, or a reported precondition error when a project restriction forbids the planning writes or the forge cannot perform them. When the case ends in a finished report, that report also meets finished_report.",
+    "finished_report": "The report opens with a Status line in one of the three fixed forms, with the case's values filled in: '#N planned, startable now', '#N planned, blocked on #M until <event>', or '#N planned, startable but I'd hold: <reason>'. The line may link the issue and name a contract record other than the issue body. It uses bold lead words, with no headings or tables. It ends with 'Handle #N, implementation plan in comments.' alone in a text block. When an implementation blocker or hold remains, one clause saying when the prompt applies comes just before that block.",
     "target": "100% of case presentations pass across repeated fresh-context runs before accepting prompt wording."
   },
   "cases": [
@@ -21,7 +22,7 @@
         "update the authoritative issue contract to the current path, RetryPolicy interface, three-attempt 503 behavior, non-retry 4xx behavior, and backoff non-goal",
         "write one plan comment with ordered edits and verification grounded in the current repository",
         "perform the issue and plan writes, then confirm each write reached the intended target with the intended content and that exactly one current plan exists",
-        "open the report with a Status line that says #41 is planned and startable now, with no separate statement that implementation was not started"
+        "open the report with the Status line '#41 planned, startable now', with no separate statement that implementation was not started"
       ],
       "forbidden_actions": [
         "report a missing planning stage or missing spanning guard as a precondition error and refuse to plan",
@@ -44,8 +45,8 @@
         "ground the plan in the order-ID and unchanged-error outcomes, src/schema-consumer.ts, and test/schema-consumer.test.ts while marking OrderSchema and generated/order-schema.ts as invalidation conditions",
         "keep defining or changing OrderSchema outside the unit's scope",
         "perform the issue and plan writes under the supplied lock and verify the persisted contract and single current plan",
-        "open the report with a Status line that says the unit is blocked on #51 until it lands, and stop after the planning handoff",
-        "end the report with the kickoff prompt Handle #52, implementation plan in comments, marked as usable only after #51 lands"
+        "open the report with a Status line in the form '#52 planned, blocked on #51 until <event>', where the event is #51 landing, and stop after the planning handoff",
+        "end the report with 'Handle #52, implementation plan in comments.' alone in a text block, preceded by one clause saying it applies only after #51 lands"
       ],
       "forbidden_actions": [
         "invent the missing schema",
@@ -136,7 +137,7 @@
       "required_actions": [
         "prepare the contract grounded in the issue body and cover --dry-run on both commands, no writes on dry runs, an identical preview summary shape, runImport(args), runExport(args), and the file-format non-goal",
         "since only whole-body replacement is available, acknowledge that a concurrent owner edit can be lost and that no post-write reread detects it, without claiming detection or prevention",
-        "after writing, confirm the write reached the issue and that exactly one current plan exists, then report with a Status line that says the unit is planned"
+        "after writing, confirm the write reached the issue and that exactly one current plan exists, then report with the Status line '#91 planned, startable now'"
       ],
       "forbidden_actions": [
         "report a missing spanning guard or lock as a precondition error and refuse to plan",
@@ -206,8 +207,8 @@
         "update WC-103 with the ReportDocument outcome, unchanged UnsupportedFormat error, storage non-goal, current service and test paths, and Dependencies stating none",
         "post one current implementation-plan comment on the issue grounded in ReportService.build(input), src/report/service.ts, and test/report/service.test.ts, including the targeted and standard verification commands and pull-request finish line",
         "authoritatively reread and verify the complete persisted contract in WC-103 and the issue's single current plan",
-        "name WC-103 as the contract record in the Status line and identify its written Dependencies field under Not verified because the available fallback cannot check that record",
-        "end the report with the kickoff prompt Handle #103, implementation plan in comments"
+        "open the report with the Status line '#103 planned, startable now', naming WC-103 there as the contract record, and identify its written Dependencies field under Not verified because the available fallback cannot check that record",
+        "end the report with 'Handle #103, implementation plan in comments.' alone in a text block"
       ],
       "forbidden_actions": [
         "require or create a duplicate authoritative contract in the issue body",
@@ -402,7 +403,7 @@
         "after writing the field, run sibling merge-cleanup's tracker-refresh.sh with --repo github.com/example/rendering --issue 149, discard stdout, and inspect the stderr status for #150",
         "if #150 is held for a parse failure, repair the persisted field and rerun the check before posting the plan or reporting planning finished",
         "recognize #152's Blocker hold as a stated field rather than a parse failure and leave that unrelated issue unchanged",
-        "verify the persisted contract and one plan, reporting implementation blocked on #148 rather than treating the prerequisite as a field parse failure"
+        "verify the persisted contract and one plan, then open the report with a Status line in the form '#150 planned, blocked on #148 until <event>', where the event is #148 landing, rather than treating the prerequisite as a field parse failure"
       ],
       "forbidden_actions": [
         "treat exit 0 alone as proof that #150's Dependencies field parses",

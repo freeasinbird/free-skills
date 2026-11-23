@@ -139,6 +139,9 @@ run conclusions. Grade the selected contract record, plan comment, completion
 report, and observed source reads afterward. A printed SHA alone proves
 nothing about which source supplied the plan.
 
+Grade every finished report against `scoring.finished_report` as well. A
+report that contains the kickoff text but breaks that rule fails.
+
 When isolated tasks or agents are available, use a fresh one per presentation.
 Otherwise, use a new user-controlled session. Repeat without the skill as a
 baseline, with the same capabilities and fresh tracker state. Never reuse
