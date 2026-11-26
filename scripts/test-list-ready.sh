@@ -120,6 +120,12 @@ t 64 "pr without pushed" --repo owner/name --run r1 --pr 1
 t 64 "pr with leading zero" --repo owner/name --run r1 --pr 01 --pushed "$OID"
 t 64 "pr non-numeric" --repo owner/name --run r1 --pr x --pushed "$OID"
 t 64 "pushed with order" --repo owner/name --run r1 --pr 1 --pushed "$OID" --order 1
+t 0 "cleaned reads nothing from the forge" --repo owner/name --cleaned 7
+t 64 "cleaned with run" --repo owner/name --cleaned 7 --run r1
+t 64 "cleaned with release" --repo owner/name --cleaned 7 --release r1
+t 64 "cleaned with pushed" --repo owner/name --cleaned 7 --pr 1 --pushed "$OID"
+t 64 "cleaned with leading zero" --repo owner/name --cleaned 07
+t 64 "cleaned non-numeric" --repo owner/name --cleaned x
 t 64 "base remote leading hyphen" --repo owner/name --run r1 --base-remote --upload-pack=/x
 t 2 "an unknown base remote stops" --repo owner/name --run r1 --base-remote nosuch
 git -C "$WORK" remote add fork "$TMP/srv/forker/name.git"
@@ -1567,6 +1573,32 @@ ready_pr 1 feat/one "not-an-oid"
 GH_DEBUG=api lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED pr-list "* ]]; then ok; else bad "an unparseable head is LOOKUP_FAILED: $LAST"; fi
 case "$LAST" in *'"stderr"'*) bad "a failure past successful reads carries an excerpt: $LAST" ;; *) ok ;; esac
+
+# --- merges awaiting cleanup ---
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+expect_rc 0 "a list without a cleanup-pending file succeeds"
+[ "$(printf '%s' "$JSON" | jq -c .cleanup_pending)" = "[]" ] && ok || bad "no file reports no merges awaiting cleanup: $LAST"
+CLEANUP="$WORK/.git/land-approved-prs/cleanup-pending"
+mkdir -p "${CLEANUP%/*}"
+printf '7\n9\n7\n' > "$CLEANUP"
+lr --run r1
+[ "$(printf '%s' "$JSON" | jq -c .cleanup_pending)" = "[7,9]" ] && ok || bad "the list reports each merge awaiting cleanup once: $LAST"
+grep -qF 'cleanup pending: #7, #9' "$TMP/out" && ok || bad "the prose names the merges awaiting cleanup"
+lr --release r1
+[ -s "$CLEANUP" ] && ok || bad "release keeps the cleanup-pending file, which outlives a run"
+: > "$FIX/calls.log"
+lr --cleaned 7
+expect_rc 0 "a finished cleanup is cleared"
+[ "$(printf '%s' "$JSON" | jq -r .removed)" = true ] && ok || bad "cleaned reports the removal: $LAST"
+[ "$(cat "$CLEANUP")" = 9 ] && ok || bad "cleaned removes every entry for that PR and keeps the others"
+[ ! -s "$FIX/calls.log" ] && ok || bad "cleaned reads the forge"
+lr --cleaned 7
+[ "$(printf '%s' "$JSON" | jq -r .removed)" = false ] && ok || bad "cleaning an unlisted PR reports nothing removed: $LAST"
+lr --run r1
+[ "$(printf '%s' "$JSON" | jq -c .cleanup_pending)" = "[9]" ] && ok || bad "the next list reports what remains: $LAST"
 
 fi
 

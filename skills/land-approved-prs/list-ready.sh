@@ -9,6 +9,7 @@
 #   list-ready.sh --repo owner/name --run <id> [--order N,N,...]
 #   list-ready.sh --repo owner/name --run <id> --pr <num> --pushed <40-hex-oid>...
 #   list-ready.sh --repo owner/name --release <id>
+#   list-ready.sh --repo owner/name --cleaned <num>
 #     [--base-remote NAME]   # override remote resolution for the repository
 #
 # --run       List the ready PRs and take or refresh the lock for run <id>.
@@ -22,6 +23,15 @@
 #             another branch can be pushed to the same commit.
 # --release   Delete the lock held by run <id>: ends a batch early, or frees
 #             a stale lock once the owner has confirmed the old run is gone.
+# --cleaned   Remove PR <num> from the cleanup-pending file once
+#             merge-cleanup for it has finished. Needs no lock, reads
+#             nothing from the forge, and lists nothing.
+#
+# land.sh appends each PR it merges to
+# <git-common-dir>/land-approved-prs/cleanup-pending, and every list
+# reports the file's PRs as "cleanup_pending". The file outlives a run and
+# a release, so a lander that died before a merge's cleanup finds it on its
+# next list.
 #
 # The landing record is read from AGENTS.md at the fetched default-branch
 # tip, never from the working tree. The lock is refs/land/lock on the
@@ -38,7 +48,7 @@
 # goes when the lock is released.
 #
 # Last line on stdout is the machine-readable result:
-#   OK <list|pushed|release> <json>
+#   OK <list|pushed|release|cleaned> <json>
 #   STOP <guard> <json>          a guard fired; the guard names are stable
 #   LOOKUP_FAILED <what> <json>  a read failed; unknown is not absence; a
 #                                failed forge read adds "stderr", the first
@@ -47,7 +57,7 @@
 # (GitHub CLI) not found on PATH.
 set -u
 
-REPO="" RUN="" RELEASE="" ORDER="" BASE_REMOTE_OPT="" PUSH_PR="" PUSHED=()
+REPO="" RUN="" RELEASE="" CLEANED="" ORDER="" BASE_REMOTE_OPT="" PUSH_PR="" PUSHED=()
 
 usage() {
   sed -n '2,/^set -u$/p' "$0" | sed '$d' >&2
@@ -59,7 +69,7 @@ die_usage() { echo "list-ready.sh: $1" >&2; usage; }
 while [ $# -gt 0 ]; do
   opt="$1"
   case "$opt" in
-    --repo|--run|--release|--order|--pr|--pushed|--base-remote) ;;
+    --repo|--run|--release|--cleaned|--order|--pr|--pushed|--base-remote) ;;
     *) die_usage "unknown option: $opt" ;;
   esac
   [ $# -ge 2 ] || die_usage "$opt requires a value"
@@ -68,6 +78,7 @@ while [ $# -gt 0 ]; do
     --repo) REPO="$val" ;;
     --run) RUN="$val" ;;
     --release) RELEASE="$val" ;;
+    --cleaned) CLEANED="$val" ;;
     --order) ORDER="$val" ;;
     --pr) PUSH_PR="$val" ;;
     --pushed) PUSHED+=("$(printf '%s' "$val" | tr 'A-F' 'a-f')") ;;
@@ -81,7 +92,12 @@ case "$REPO" in
   *) die_usage "--repo must be owner/name" ;;
 esac
 if [ -n "$RUN" ] && [ -n "$RELEASE" ]; then die_usage "--run and --release are exclusive"; fi
-[ -n "$RUN$RELEASE" ] || die_usage "one of --run or --release is required"
+if [ -n "$CLEANED" ]; then
+  [ -z "$RUN$RELEASE$ORDER$PUSH_PR" ] && [ "${#PUSHED[@]}" -eq 0 ] \
+    || die_usage "--cleaned takes no --run, --release, --order, --pr, or --pushed"
+  case "$CLEANED" in 0*|*[!0-9]*) die_usage "--cleaned must be a PR number without leading zeros" ;; esac
+fi
+[ -n "$RUN$RELEASE$CLEANED" ] || die_usage "one of --run, --release, or --cleaned is required"
 # A run id lands in a ref's commit message and a file name, so it gets the
 # narrowest shape that still holds a host-and-time id.
 for id in "$RUN" "$RELEASE"; do
@@ -201,6 +217,23 @@ gh_read() {
 GIT_COMMON=$(git rev-parse --git-common-dir 2>/dev/null) \
   || stop not-a-repo "run from a checkout of $REPO"
 GIT_COMMON=$(cd "$GIT_COMMON" && pwd -P)
+CLEANUP_FILE="$GIT_COMMON/land-approved-prs/cleanup-pending"
+
+if [ -n "$CLEANED" ]; then
+  removed=false
+  if [ -f "$CLEANUP_FILE" ]; then
+    grep -qxF -- "$CLEANED" "$CLEANUP_FILE" && removed=true
+    # A temporary file in the same directory, so the mv replaces the file
+    # in one step and a killed run leaves the old list whole.
+    tmp=$(mktemp "$CLEANUP_FILE.XXXXXX") || lookup_failed cleanup-pending "mktemp failed"
+    { grep -vxF -- "$CLEANED" "$CLEANUP_FILE" > "$tmp"; [ $? -le 1 ]; } \
+      && mv -f -- "$tmp" "$CLEANUP_FILE" \
+      || { rm -f -- "$tmp"; lookup_failed cleanup-pending "could not rewrite $CLEANUP_FILE"; }
+  fi
+  echo "cleanup pending: PR $CLEANED $([ "$removed" = true ] && echo removed || echo was not listed)"
+  echo "OK cleaned {\"pr\":$CLEANED,\"removed\":$removed}"
+  exit 0
+fi
 
 # Whether a URL names the repository: it ends in /owner/name or
 # :owner/name, ignoring case, a trailing slash, and .git.
@@ -818,4 +851,20 @@ while IFS=$'\t' read -r num filter detail; do
 done < <(sort -t $'\t' -k1,1n "$TMPD/excluded")
 [ -n "$excluded_json" ] || echo "  (none)"
 echo "lock: $LOCK_STATE $LOCK_REF for run $RUN${FIRST:+ (PR $FIRST)}"
-echo "OK list {\"run\":\"$RUN\",\"lock\":\"$LOCK_STATE\",\"ready\":[${ready_json#,}],\"excluded\":[${excluded_json#,}]}"
+# Merged PRs whose merge-cleanup hasn't finished, oldest first. Anything
+# that isn't a PR number is skipped rather than trusted into the JSON.
+cleanup_json="" cleanup_seen=","
+if [ -f "$CLEANUP_FILE" ]; then
+  while IFS= read -r num; do
+    case "$num" in ''|0*|*[!0-9]*) continue ;; esac
+    case "$cleanup_seen" in *",$num,"*) continue ;; esac
+    cleanup_seen+="$num,"
+    cleanup_json+=",$num"
+  done < "$CLEANUP_FILE"
+fi
+if [ -n "$cleanup_json" ]; then
+  echo "cleanup pending: #$(printf '%s' "${cleanup_json#,}" | sed 's/,/, #/g')"
+else
+  echo "cleanup pending: (none)"
+fi
+echo "OK list {\"run\":\"$RUN\",\"lock\":\"$LOCK_STATE\",\"ready\":[${ready_json#,}],\"excluded\":[${excluded_json#,}],\"cleanup_pending\":[${cleanup_json#,}]}"
