@@ -109,6 +109,8 @@ t 64 "pr non-numeric" --repo owner/name --pr x
 t 64 "repo extra segment" --repo a/b/c --pr 5
 t 64 "since abbreviated" --repo owner/name --pr 5 --since 0123456
 t 64 "since non-hex" --repo owner/name --pr 5 --since zz23456789abcdef0123456789abcdef01234567
+t 4 "valid through reaches the forge read" --repo owner/name --pr 5 --through "$OID"
+t 64 "through abbreviated" --repo owner/name --pr 5 --through 0123456
 t 64 "base remote leading hyphen" --repo owner/name --pr 5 --base-remote -x
 t 2 "an unknown base remote stops" --repo owner/name --pr 5 --base-remote nosuch
 git -C "$WORK" remote add fork "$TMP/srv/forker/name.git"
@@ -561,6 +563,75 @@ new_repo
 ls_run --since "$X1"
 expect_lookup since "an unknown --since commit is a lookup failure"
 expect_no_out '"stderr"' "a git failure carries no excerpt"
+
+# --- the preparation read through the predecessor's head ---
+
+# through_head: PA is the predecessor's pushed head, the tip c2 plus one
+# commit, on its own branch and never on main.
+through_head() {
+  git -C "$SEED" checkout -q -b pa "$C2"
+  echo a > "$SEED/a"; git -C "$SEED" add a; git -C "$SEED" commit -qm "pa predecessor"
+  PA=$(git -C "$SEED" rev-parse HEAD)
+  git -C "$SEED" checkout -q main
+  git -C "$SEED" push -q "$SRV" pa
+  git -C "$WORK" fetch -q origin pa
+}
+
+new_repo; through_head
+ls_run --since "$C1" --through "$PA"
+expect_field .through "$PA" "--through names the end of the range"
+expect_field .tip "$C2" "--through keeps tip as the fetched tip"
+expect_field .commits 3 "--through counts the predecessor's commits too"
+expect_out "pa predecessor" "--through prints the predecessor's commits"
+
+new_repo; through_head
+pr_commit "$A1" "$C0"
+ls_run --through "$PA"
+expect_field .from "$C0" "--through still finds the fork point from the fetched tip"
+expect_field .commits 4 "--through counts c1, M, c2, and the predecessor from the fork point"
+
+new_repo '`printf '"'"'%s %s\n'"'"' "$LAND_FROM" "$LAND_TIP"`.'
+through_head
+ls_run --since "$C1" --through "$PA"
+expect_out "$C1 $PA" "a check sees LAND_TIP at the --through commit"
+
+new_repo; through_head
+# The predecessor's own record would plant a check; the fetched tip's
+# record, which has none, is the one that counts.
+git -C "$SEED" checkout -q pa
+sed -i.bak 's/Base-advance checks:\*\* none\./Base-advance checks:** `touch planted`./' "$SEED/AGENTS.md"
+rm -f "$SEED/AGENTS.md.bak"
+git -C "$SEED" commit -qam "pa plants a check"
+PA=$(git -C "$SEED" rev-parse HEAD)
+git -C "$SEED" checkout -q main
+git -C "$SEED" push -q "$SRV" pa
+git -C "$WORK" fetch -q origin pa
+ls_run --since "$C1" --through "$PA"
+expect_out "base-advance checks: none recorded" "--through reads the record from the fetched tip"
+if [ -e "$WORK/planted" ]; then bad "--through ran a check from the predecessor's record"; else ok; fi
+
+# A predecessor that merged main into its branch: its head's first parent
+# is the branch, so the base commits come in through the second parent.
+new_repo
+git -C "$SEED" checkout -q -b pa "$C0"
+echo a > "$SEED/a"; git -C "$SEED" add a; git -C "$SEED" commit -qm "pa early work"
+git -C "$SEED" merge -q --no-ff -m "pa merges main" main
+PA=$(git -C "$SEED" rev-parse HEAD)
+git -C "$SEED" checkout -q main
+git -C "$SEED" push -q "$SRV" pa
+git -C "$WORK" fetch -q origin pa
+ls_run --since "$C1" --through "$PA"
+expect_field .commits 4 "--through counts M and c2 below a merge head, plus its two commits"
+expect_out "c2 second landing" "--through prints the base commits a merge head brought in"
+expect_out "pa early work" "--through prints the merge head's branch commits"
+
+new_repo
+ls_run --since "$C0" --through "$C1"
+expect_stop through-not-on-tip "--through refuses a commit without the fetched tip"
+
+new_repo
+ls_run --since "$C1" --through "$X1"
+expect_lookup through "an unknown --through commit is a lookup failure"
 
 # --- base-advance checks ---
 
