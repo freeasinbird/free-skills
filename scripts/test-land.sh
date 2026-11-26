@@ -14,11 +14,15 @@
 # Set LAND_SCRIPT to test a different copy of the script.
 set -u
 
-SCRIPT="${LAND_SCRIPT:-$(cd "$(dirname "$0")/.." && pwd)/skills/land-approved-prs/land.sh}"
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+SCRIPT="${LAND_SCRIPT:-$ROOT/skills/land-approved-prs/land.sh}"
 [ -f "$SCRIPT" ] || { echo "not found: $SCRIPT" >&2; exit 1; }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+# Run from scratch, outside any repository: a git -C "$var" whose var came
+# back empty then fails instead of acting on the checkout this runs from.
+cd "$TMP" || exit 1
 SHIM="$TMP/dead"; FIX="$TMP/fix"; SHIMD="$TMP/shim"
 mkdir -p "$SHIM" "$FIX" "$SHIMD"
 printf '#!/bin/sh\nexit 1\n' > "$SHIM/gh"
@@ -2657,7 +2661,7 @@ rm -f "$SHIMD/ssh"
 # their own gh shims. The second shim mirrors scripts/test-merge-cleanup.sh's
 # routing so merge-cleanup.sh's own --jq filters run against the fixtures.
 
-MC_SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/skills/merge-cleanup/merge-cleanup.sh"
+MC_SCRIPT="$ROOT/skills/merge-cleanup/merge-cleanup.sh"
 if ! [ -f "$MC_SCRIPT" ]; then
   skip=$((skip + 1))
   echo "SKIP: handoff case needs $MC_SCRIPT" >&2

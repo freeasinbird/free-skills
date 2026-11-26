@@ -19,6 +19,9 @@ SCRIPT="${LANDED_SINCE_SCRIPT:-$(cd "$(dirname "$0")/.." && pwd)/skills/land-app
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+# Run from scratch, outside any repository: a git -C "$var" whose var came
+# back empty then fails instead of acting on the checkout this runs from.
+cd "$TMP" || exit 1
 DEAD="$TMP/dead"; FIX="$TMP/fix"; SHIMD="$TMP/shim"
 mkdir -p "$DEAD" "$FIX" "$SHIMD"
 printf '#!/bin/sh\nexit 1\n' > "$DEAD/gh"
