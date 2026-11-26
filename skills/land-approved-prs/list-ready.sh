@@ -29,6 +29,14 @@
 # PR in progress, whose committer date is the heartbeat. A lock held by
 # another run, fresh or stale, is reported and never taken over.
 #
+# A relist reuses an unchanged PR's timeline and CI-run reads from earlier
+# lists in the same run. One batched read per list fetches every candidate's
+# review threads and its count of label and force-push events; a change to
+# that count, the PR's listing fields, the landing record, or the PR's lines
+# in the push log rereads the PR. The approver's permission and the review
+# threads are read on every list. The cache lives beside the push log and
+# goes when the lock is released.
+#
 # Last line on stdout is the machine-readable result:
 #   OK <list|pushed|release> <json>
 #   STOP <guard> <json>          a guard fired; the guard names are stable
@@ -395,7 +403,10 @@ release_lock() { # release_lock <run>
   else
     LOCK_STATE=absent
   fi
+  # The run id's shape (validated above) keeps both paths inside
+  # PUSHLOG_DIR.
   rm -f -- "$PUSHLOG_DIR/pushed-$1"
+  rm -rf -- "$PUSHLOG_DIR/listed-$1"
 }
 
 # --- release and push-log modes ----------------------------------------------
@@ -501,23 +512,148 @@ actor_role() { # actor_role <login>: sets ROLE
   ROLE=$(cat "$cache")
 }
 
-# Sets REASON_FILTER and REASON on exclusion, APPROVED_AT on readiness.
-# Cheap filters first (1, 2, 3, 7 from the listing), then the reads.
-evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <labels>
-  local num="$1" draft="$2" base="$3" head="$4" oid="$5" cross="$6" created="$7" labels="$8"
-  local events kind at name actor sha t="" t_actor="" h0="" h0_at="" runs line n_open sums s
-  REASON_FILTER="" REASON="" APPROVED_AT=""
+# --- the per-run cache --------------------------------------------------------
+
+# One file per PR under listed-<run>, written whole through a temporary file
+# and a rename. It holds the key it was written under, the timeline's label
+# and force-push events (e lines), the CI runs once read (a runs line, then
+# r lines), the head a reviewer round was found complete on, and an end
+# line. The cache only saves reads, so a file that doesn't parse is a miss,
+# never a result, and a cache that can't be written leaves the list uncached.
+CACHE_DIR="$PUSHLOG_DIR/listed-$RUN"
+CACHE_WRITABLE=true
+TAB=$'\t'
+C_EVENTS="" C_HAS_RUNS=false C_RUNS="" C_REVIEWED="" C_STORE=false
+
+cache_reset() { C_EVENTS="" C_HAS_RUNS=false C_RUNS="" C_REVIEWED=""; }
+
+# The key covers every input the cached reads depend on: the landing
+# record's values, the PR's listing fields, its count of label and
+# force-push events, and its lines in the push log. Prints nothing when it
+# can't hash, which turns the cache off for that PR.
+cache_key() { # cache_key <num> <listing-fields>... <event-count>
+  local key
+  key=$({
+    printf '%s\n' listed-v1 "$REPO" "$DEFAULT" "$APPROVAL" "$REVIEWER" "$MARKER" "$@"
+    [ ! -f "$PUSHLOG_DIR/pushed-$RUN" ] || grep -- "^$1 " "$PUSHLOG_DIR/pushed-$RUN"
+  } | git hash-object --stdin 2>/dev/null)
+  case "$key" in *[!0-9a-f]*|'') return ;; esac
+  printf '%s' "$key"
+}
+
+cache_load() { # cache_load <num> <key> <event-count>: sets C_*, 1 on a miss
+  local f="$CACHE_DIR/$1" body
+  cache_reset
+  [ -n "$2" ] && [ -f "$f" ] || return 1
+  body=$(cat -- "$f" 2>/dev/null) || return 1
+  [ "$(printf '%s\n' "$body" | head -n 1)" = "key${TAB}$2" ] || return 1
+  [ "$(printf '%s\n' "$body" | tail -n 1)" = end ] || return 1
+  if printf '%s\n' "$body" | grep -qvE "^(key${TAB}[0-9a-f]+|e${TAB}[a-z_]+(${TAB}[^${TAB}]*){4}|runs|r${TAB}[^${TAB}]*${TAB}[^${TAB}]*|reviewed${TAB}[0-9a-f]{40}|end)\$"; then
+    return 1
+  fi
+  C_EVENTS=$(printf '%s\n' "$body" | sed -n "s/^e${TAB}//p")
+  [ "$(grep -c . <<< "$C_EVENTS")" = "$3" ] || { cache_reset; return 1; }
+  if printf '%s\n' "$body" | grep -qx runs; then
+    C_HAS_RUNS=true
+    C_RUNS=$(printf '%s\n' "$body" | sed -n "s/^r${TAB}//p")
+  fi
+  C_REVIEWED=$(printf '%s\n' "$body" | sed -n "s/^reviewed${TAB}//p" | head -n 1)
+}
+
+cache_store() { # cache_store <num> <key>
+  [ "$C_STORE" = true ] && [ "$CACHE_WRITABLE" = true ] || return 0
+  local tmp line
+  if mkdir -p -- "$CACHE_DIR" 2>/dev/null && tmp=$(mktemp "$CACHE_DIR/.tmp.XXXXXX" 2>/dev/null); then
+    if {
+      printf 'key\t%s\n' "$2"
+      while IFS= read -r line; do [ -z "$line" ] || printf 'e\t%s\n' "$line"; done <<< "$C_EVENTS"
+      if [ "$C_HAS_RUNS" = true ]; then
+        echo runs
+        while IFS= read -r line; do [ -z "$line" ] || printf 'r\t%s\n' "$line"; done <<< "$C_RUNS"
+      fi
+      [ -z "$C_REVIEWED" ] || printf 'reviewed\t%s\n' "$C_REVIEWED"
+      echo end
+    } > "$tmp" && mv -f -- "$tmp" "$CACHE_DIR/$1"; then
+      return 0
+    fi
+    rm -f -- "$tmp"
+  fi
+  CACHE_WRITABLE=false
+  echo "${0##*/}: could not write the list cache in $CACHE_DIR; listing on without it" >&2
+}
+
+# --- the batched read ----------------------------------------------------------
+
+# One GraphQL read per 50 candidates fetches each one's first page of review
+# threads and its count of label and force-push events. The count moves
+# whenever the approval label is added or removed or the head is
+# force-pushed, which are the events the cached timeline depends on.
+BATCH_FIELDS='reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}} timelineItems(itemTypes:[LABELED_EVENT,UNLABELED_EVENT,HEAD_REF_FORCE_PUSHED_EVENT]){filteredCount}'
+batch_read() { # batch_read: reads $TMPD/survivors, writes $TMPD/batch
+  local nums=() num rest i q
+  while IFS=$'\t' read -r num rest; do nums+=("$num"); done < "$TMPD/survivors"
+  : > "$TMPD/batch"
+  for (( i = 0; i < ${#nums[@]}; i += 50 )); do
+    q='query($o:String!,$r:String!){repository(owner:$o,name:$r){'
+    for num in "${nums[@]:i:50}"; do q+="p$num:pullRequest(number:$num){$BATCH_FIELDS} "; done
+    q+='}}'
+    gh_read api graphql -f query="$q" -F o="$OWNER" -F r="$NAME" \
+      --jq '.data.repository | to_entries[] | .value as $v | [(.key | ltrimstr("p")),
+              (if $v.reviewThreads.nodes == null then "null" else [$v.reviewThreads.nodes[] | select(.isResolved == false)] | length | tostring end),
+              ($v.reviewThreads.pageInfo.hasNextPage | tostring), ($v.timelineItems.filteredCount | tostring)] | @tsv' \
+      >> "$TMPD/batch" \
+      || lookup_failed review-threads "could not read the review threads and event counts of PRs ${nums[*]:i:50}"
+  done
+}
+
+batch_entry() { # batch_entry <num>: sets B_OPEN, B_MORE, and B_COUNT, or stops
+  local line rest
+  line=$(awk -F'\t' -v n="$1" '$1 == n { print; exit }' "$TMPD/batch")
+  B_OPEN="" B_MORE="" B_COUNT=""
+  IFS=$'\t' read -r rest B_OPEN B_MORE B_COUNT <<< "$line"
+  case "${B_OPEN:-x}${B_COUNT:-x}" in *[!0-9]*) lookup_failed review-threads "the batched read returned no review threads or event count for PR $1" ;; esac
+  case "$B_MORE" in true|false) ;; *) lookup_failed review-threads "the batched read returned no review-thread paging for PR $1" ;; esac
+}
+
+# --- the filters ----------------------------------------------------------------
+
+# Filters 1, 2, the label half of 3, and 7, from the listing alone. Sets
+# REASON_FILTER and REASON on exclusion.
+cheap_filters() { # cheap_filters <num> <draft> <base> <oid> <cross> <labels>
+  local num="$1" draft="$2" base="$3" oid="$4" cross="$5" labels="$6"
+  REASON_FILTER="" REASON=""
   if [ "$draft" = true ]; then REASON_FILTER=1 REASON="draft"; return; fi
   if [ "$base" != "$DEFAULT" ]; then REASON_FILTER=2 REASON="targets $base, not $DEFAULT"; return; fi
   if ! has_label "$APPROVAL" "$labels"; then REASON_FILTER=3 REASON="no $APPROVAL label"; return; fi
   if has_label "$HANDBACK" "$labels"; then REASON_FILTER=3 REASON="carries $HANDBACK"; return; fi
   if [ "$cross" = true ]; then REASON_FILTER=7 REASON="head branch is in another repository"; return; fi
+  # The number goes into the batched query's text, so it gets a strict shape.
+  case "$num" in 0*|*[!0-9]*|'') lookup_failed pr-list "the PR list reported number '$num'" ;; esac
   case "$oid" in *[!0-9a-f]*|'') lookup_failed pr-list "PR $num reported head '$oid'" ;; esac
   [ "${#oid}" -eq 40 ] || lookup_failed pr-list "PR $num reported head '$oid'"
+}
 
-  events=$(gh_read api --paginate "repos/$REPO/issues/$num/timeline?per_page=100" \
-    --jq '.[] | select(.event == "labeled" or .event == "head_ref_force_pushed") | [.event, .created_at, (.label.name // "-"), (.actor.login // "-"), (.commit_id // "-")] | @tsv') \
-    || lookup_failed timeline "could not read PR $num's timeline"
+# The rest of filter 3, then 4, 5, and 6, in that order. Reads the timeline
+# and CI runs only on a cache miss; takes filter 5 from the batched read.
+# Sets REASON_FILTER and REASON on exclusion, APPROVED_AT on readiness, and
+# leaves the C_* values for cache_store.
+evaluate() { # evaluate <num> <head> <oid> <created> <key>
+  local num="$1" head="$2" oid="$3" created="$4" key="$5"
+  local events kind at name actor sha t="" t_actor="" h0="" h0_at="" runs n_open sums s
+  REASON_FILTER="" REASON="" APPROVED_AT=""
+  if cache_load "$num" "$key" "$B_COUNT"; then
+    C_STORE=true
+  else
+    events=$(gh_read api --paginate "repos/$REPO/issues/$num/timeline?per_page=100" \
+      --jq '.[] | select(.event == "labeled" or .event == "unlabeled" or .event == "head_ref_force_pushed") | [.event, .created_at, (.label.name // "-"), (.actor.login // "-"), (.commit_id // "-")] | @tsv') \
+      || lookup_failed timeline "could not read PR $num's timeline"
+    C_EVENTS="$events"
+    # A timeline that disagrees with the batched count (one side saw an
+    # event the other hasn't yet) is used for this list but not kept.
+    C_STORE=false
+    if [ -n "$key" ] && [ "$(grep -c . <<< "$events")" = "$B_COUNT" ]; then C_STORE=true; fi
+  fi
+  events="$C_EVENTS"
   : > "$TMPD/evidence"
   while IFS=$'\t' read -r kind at name actor sha; do
     [ -n "$kind" ] || continue
@@ -536,10 +672,15 @@ evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <lab
   # Filter 4. A pull_request run created before the PR existed belongs to
   # an earlier PR that reused the branch name, and one whose head lives in
   # another repository belongs to a fork's PR from a same-named branch.
-  runs=$(gh_read api -X GET --paginate "repos/$REPO/actions/runs" -f event=pull_request \
-    -f branch="$head" -f per_page=100 \
-    --jq ".workflow_runs[] | select((.head_repository.full_name // \"\" | ascii_downcase) == \"$REPO_LC\") | [.created_at, .head_sha] | @tsv") \
-    || lookup_failed actions-runs "could not read PR $num's CI runs"
+  if [ "$C_HAS_RUNS" = true ]; then
+    runs="$C_RUNS"
+  else
+    runs=$(gh_read api -X GET --paginate "repos/$REPO/actions/runs" -f event=pull_request \
+      -f branch="$head" -f per_page=100 \
+      --jq ".workflow_runs[] | select((.head_repository.full_name // \"\" | ascii_downcase) == \"$REPO_LC\") | [.created_at, .head_sha] | @tsv") \
+      || lookup_failed actions-runs "could not read PR $num's CI runs"
+    C_RUNS="$runs" C_HAS_RUNS=true
+  fi
   while IFS=$'\t' read -r at sha; do
     [ -n "$at" ] || continue
     [[ "$at" < "$created" ]] && continue
@@ -564,18 +705,31 @@ evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <lab
     REASON_FILTER=4 REASON="head $oid is neither the approved head $h0 (seen $h0_at, approval $t) nor a head this run pushed"; return
   fi
 
-  n_open=$(open_threads "$num") || lookup_failed review-threads "could not read PR $num's review threads"
+  # Filter 5 stays fresh on every list. A PR with more than one page of
+  # threads is counted by the paginated read.
+  if [ "$B_MORE" = true ]; then
+    n_open=$(open_threads "$num") || lookup_failed review-threads "could not read PR $num's review threads"
+  else
+    n_open="$B_OPEN"
+  fi
   if [ "$n_open" -gt 0 ]; then REASON_FILTER=5 REASON="$n_open unresolved review thread(s)"; return; fi
 
+  # Filter 6. A round found complete on this head is kept; a missing round
+  # is read again, since the reviewer may edit its summary in place.
   if [ "$REVIEWER" != none ]; then
-    sums=$(gh_read api --paginate "repos/$REPO/issues/$num/comments?per_page=100" \
-      --jq ".[] | select(.user.type == \"Bot\" and (.user.login == \"$REVIEWER\" or .user.login == \"${REVIEWER}[bot]\") and (.body | contains(\"$MARKER\"))) | .body | split(\"\\n\")[] | select(contains(\"**Completed**\") and test(\"\`[0-9a-f]{7,40}\`\")) | capture(\"\`(?<sha>[0-9a-f]{7,40})\`\").sha") \
-      || lookup_failed reviewer "could not read PR $num's comments for the reviewer's summary"
     local done_on_head=false
-    while IFS= read -r s; do
-      [ -n "$s" ] || continue
-      case "$oid" in "$s"*) done_on_head=true ;; esac
-    done <<< "$sums"
+    if [ "$C_REVIEWED" = "$oid" ]; then
+      done_on_head=true
+    else
+      sums=$(gh_read api --paginate "repos/$REPO/issues/$num/comments?per_page=100" \
+        --jq ".[] | select(.user.type == \"Bot\" and (.user.login == \"$REVIEWER\" or .user.login == \"${REVIEWER}[bot]\") and (.body | contains(\"$MARKER\"))) | .body | split(\"\\n\")[] | select(contains(\"**Completed**\") and test(\"\`[0-9a-f]{7,40}\`\")) | capture(\"\`(?<sha>[0-9a-f]{7,40})\`\").sha") \
+        || lookup_failed reviewer "could not read PR $num's comments for the reviewer's summary"
+      while IFS= read -r s; do
+        [ -n "$s" ] || continue
+        case "$oid" in "$s"*) done_on_head=true ;; esac
+      done <<< "$sums"
+      [ "$done_on_head" = false ] || C_REVIEWED="$oid"
+    fi
     if [ "$done_on_head" = false ]; then
       REASON_FILTER=6 REASON="$REVIEWER has no completed round on head ${oid:0:7}"; return
     fi
@@ -583,16 +737,35 @@ evaluate() { # evaluate <num> <draft> <base> <head> <oid> <cross> <created> <lab
   APPROVED_AT="$t"
 }
 
-while IFS=$'\t' read -r num draft base head oid cross created labels; do
+# Pass 1 runs the cheap filters over every open PR. The batched read covers
+# the survivors, and pass 2 runs the read-backed filters over them.
+: > "$TMPD/survivors"
+while IFS= read -r row; do
+  IFS=$'\t' read -r num draft base head oid cross created labels <<< "$row"
   [ -n "$num" ] || continue
   echo "$num" >> "$TMPD/open"
-  evaluate "$num" "$draft" "$base" "$head" "$oid" "$cross" "$created" "${labels:-}"
+  cheap_filters "$num" "$draft" "$base" "$oid" "$cross" "${labels:-}"
+  if [ -n "$REASON_FILTER" ]; then
+    exclude "$num" "$REASON_FILTER" "$REASON"
+  else
+    printf '%s\n' "$row" >> "$TMPD/survivors"
+  fi
+done < "$TMPD/prs"
+
+batch_read
+while IFS=$'\t' read -r num rest; do batch_entry "$num"; done < "$TMPD/survivors"
+
+while IFS=$'\t' read -r num draft base head oid cross created labels; do
+  batch_entry "$num"
+  key=$(cache_key "$num" "$draft" "$base" "$head" "$oid" "$cross" "$created" "$labels" "$B_COUNT")
+  evaluate "$num" "$head" "$oid" "$created" "$key"
+  cache_store "$num" "$key"
   if [ -n "$REASON_FILTER" ]; then
     exclude "$num" "$REASON_FILTER" "$REASON"
   else
     printf '%s\t%s\t%s\t%s\n' "$APPROVED_AT" "$num" "$oid" "$head" >> "$TMPD/ready"
   fi
-done < "$TMPD/prs"
+done < "$TMPD/survivors"
 
 # Oldest approval first; a typed order goes ahead of it. An ordered PR that
 # is open but not ready holds back every ordered PR after it.

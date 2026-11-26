@@ -181,11 +181,11 @@ if [ -n "${GH_DEBUG:-}" ] || { [ -z "${GH_DEBUG+set}" ] && [ -n "${DEBUG:-}" ]; 
    || [[ "${GODEBUG:-}" == *http2debug=[12]* ]]; then
   echo "> Authorization: token SECRET-313" >&2
 fi
-sub='' verb='' api='' jqval='' prev='' branch='' cursor='' prnum=''
+sub='' verb='' api='' jqval='' prev='' branch='' cursor='' prnum='' query=''
 for a in "$@"; do
   case "$prev" in
     --jq) jqval="$a" ;;
-    -f) case "$a" in branch=*) branch="${a#branch=}" ;; c=*) cursor="${a#c=}" ;; esac ;;
+    -f) case "$a" in branch=*) branch="${a#branch=}" ;; c=*) cursor="${a#c=}" ;; query=*) query="${a#query=}" ;; esac ;;
     -F) case "$a" in n=*) prnum="${a#n=}" ;; esac ;;
   esac
   case "$a" in
@@ -195,11 +195,32 @@ for a in "$@"; do
   esac
   prev="$a"
 done
-fixture='' default=''
+fixture='' default='' match="$api$verb"
 if [ "$sub" = api ]; then
   case "$api" in
     graphql)
-      if [ -n "$cursor" ]; then fixture="$FIX/threads-$prnum-page2.json"
+      if [[ "$query" == *timelineItems* ]]; then
+        # The batched read: one alias per PR, assembled from that PR's thread
+        # and timeline fixtures. batch-null-<n> serves the alias as null and
+        # batch-omit-<n> leaves it out. A fail-* pattern of "batch" matches
+        # only this read; "graphql" matches it and the per-PR thread read.
+        match="graphql batch"
+        echo '{}' > "$FIX/batch.json"
+        for n in $(printf '%s' "$query" | grep -oE 'p[0-9]+:pullRequest' | sed 's/^p//; s/:.*//'); do
+          [ -f "$FIX/batch-omit-$n" ] && continue
+          if [ -f "$FIX/batch-null-$n" ]; then v=null
+          else
+            th='{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}'
+            [ -f "$FIX/threads-$n.json" ] && th=$(jq -c '.data.repository.pullRequest.reviewThreads' "$FIX/threads-$n.json")
+            c=0
+            [ -f "$FIX/timeline-$n.json" ] && c=$(jq '[.[] | select(.event == "labeled" or .event == "unlabeled" or .event == "head_ref_force_pushed")] | length' "$FIX/timeline-$n.json")
+            v="{\"reviewThreads\":$th,\"timelineItems\":{\"filteredCount\":$c}}"
+          fi
+          jq --arg k "p$n" --argjson v "$v" '. + {($k): $v}' "$FIX/batch.json" > "$FIX/batch.tmp" && mv "$FIX/batch.tmp" "$FIX/batch.json"
+        done
+        jq '{data:{repository:.}}' "$FIX/batch.json" > "$FIX/batch.tmp" && mv "$FIX/batch.tmp" "$FIX/batch.json"
+        fixture="$FIX/batch.json"
+      elif [ -n "$cursor" ]; then fixture="$FIX/threads-$prnum-page2.json"
       else fixture="$FIX/threads-$prnum.json"; fi
       default='{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}' ;;
     */issues/*/timeline*)
@@ -230,7 +251,7 @@ for f in "$FIX"/fail-*; do
   case "$f" in *.left) continue ;; esac
   pat='' times=''
   { IFS= read -r pat; IFS= read -r times; } < "$f"
-  case "$api$verb" in *"$pat"*) ;; *) continue ;; esac
+  case "$match" in *"$pat"*) ;; *) continue ;; esac
   if [ -n "$times" ]; then
     [ -f "$f.left" ] || echo "$times" > "$f.left"
     left=$(cat "$f.left")
@@ -283,6 +304,12 @@ collaborator() { # collaborator <login> <permission> [role-name] [base-role]
     + (if $b == "" then {} else (["read","triage","write","maintain","admin"] | index($b)) as $i
        | {user:{permissions:{pull:($i >= 0), triage:($i >= 1), push:($i >= 2), maintain:($i >= 3), admin:($i >= 4)}}} end)' \
     > "$FIX/role-$1.json"
+}
+unlabeled() { # unlabeled <num> <at> [actor] [label]
+  local f="$FIX/timeline-$1.json"
+  [ -f "$f" ] || echo '[]' > "$f"
+  jq --arg at "$2" --arg a "${3:-owner1}" --arg l "${4:-approved}" \
+    '. + [{event:"unlabeled", created_at:$at, label:{name:$l}, actor:{login:$a}}]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 }
 force_pushed() { # force_pushed <num> <at> <oid>
   local f="$FIX/timeline-$1.json"
@@ -799,6 +826,137 @@ lr --run r1 --pr 1 --pushed "$H2"
 force_pushed 2 2026-10-03T00:00:00Z "$H2"; pr_set 2 ".headRefOid = \"$H2\""; reviewed 2 "$H2"
 lr --run r1
 expect_excluded 2 4 "a head pushed to another PR does not exempt this one" "not pushed by this run"
+
+# --- the per-run cache ---
+
+CACHE="$WORK/.git/land-approved-prs/listed-r1"
+relist() { : > "$FIX/calls.log"; lr --run r1; } # relist: list again with a fresh call log
+lists() { printf '%s' "$JSON" | jq -c '{ready, excluded}' 2>/dev/null; }
+
+# A relist of unchanged PRs costs the same calls for one PR as for four,
+# and reads no timeline, CI runs, or reviewer comments.
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+first=$(lists)
+relist
+expect_ready 1 "a relist of an unchanged PR keeps it ready"
+if [ "$(lists)" = "$first" ]; then ok; else bad "a cached relist lists the same PRs: $(lists), want $first"; fi
+expect_calls 0 /timeline "a relist of an unchanged PR reads no timeline"
+expect_calls 0 actions/runs "a relist of an unchanged PR reads no CI runs"
+expect_calls 0 /comments "a relist of an unchanged PR reads no reviewer comments"
+expect_calls 1 "timelineItems(itemTypes" "a relist reads threads and event counts in one batched read"
+if [ -f "$CACHE/1" ]; then ok; else bad "the list caches the PR under the run's directory"; fi
+one=$(grep -c "" "$FIX/calls.log")
+new_repo
+ready_pr 1 feat/one "$H1"; ready_pr 2 feat/two "$H2"; ready_pr 3 feat/three "$H3"; ready_pr 4 feat/four "$H4"
+lr --run r1
+first=$(lists)
+relist
+expect_ready 1,2,3,4 "a relist of four unchanged PRs keeps them ready"
+if [ "$(lists)" = "$first" ]; then ok; else bad "a cached relist of four PRs lists the same PRs"; fi
+four=$(grep -c "" "$FIX/calls.log")
+if [ "$one" -eq "$four" ]; then ok; else bad "a relist of four unchanged PRs made $four calls, one PR made $one"; fi
+
+# Every change that can move filters 3 or 4 rereads the PR.
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+unlabeled 1 2026-10-03T00:00:00Z; labeled 1 2026-10-04T00:00:00Z
+relist
+got=$(printf '%s' "$JSON" | jq -r '.ready[0].approved_at' 2>/dev/null)
+if [ "$got" = 2026-10-04T00:00:00Z ]; then ok; else bad "removing and re-adding the label re-times the approval: '$got'"; fi
+expect_calls 1 issues/1/timeline "a label change rereads the timeline"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+unlabeled 1 2026-10-03T00:00:00Z; pr_set 1 '.labels = []'
+relist
+expect_excluded 1 3 "a removed label excludes the PR on the relist" "no approved label"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+pr_set 1 ".headRefOid = \"$H2\""; ci_run feat/one 2026-10-03T00:00:00Z "$H2"; reviewed 1 "$H2"
+relist
+expect_excluded 1 4 "a new head on the relist is checked against the approved head" "neither the approved head"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+force_pushed 1 2026-10-03T00:00:00Z "$H2"; force_pushed 1 2026-10-03T00:01:00Z "$H1"
+relist
+expect_excluded 1 4 "a force-push away and back is seen on the relist" "not pushed by this run"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+threads 1 1
+relist
+expect_excluded 1 5 "a new unresolved thread excludes the PR on the relist" "1 unresolved"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+collaborator owner1 read
+relist
+expect_excluded 1 3 "the approver's permission is read on every list" "permission is read"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+lr --run r1 --pr 1 --pushed "$H2"
+relist
+expect_calls 1 issues/1/timeline "a recorded push rereads the PR on the next list"
+expect_calls 1 /comments "a recorded push rereads the reviewer comments"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+printf 'garbage\n' > "$CACHE/1"
+relist
+expect_ready 1 "a malformed cache file is a miss"
+expect_calls 1 issues/1/timeline "a malformed cache file rereads the timeline"
+if [ "$(head -n 1 "$CACHE/1" | cut -f 1)" = key ]; then ok; else bad "a malformed cache file is rewritten"; fi
+
+new_repo
+ready_pr 1 feat/one "$H1"
+mkdir -p "$WORK/.git/land-approved-prs"; : > "$CACHE"
+lr --run r1
+expect_ready 1 "a cache that can't be written leaves the list uncached"
+expect_err "could not write the list cache" "an unwritable cache warns"
+rm -f "$CACHE"
+
+# The batched read fails closed.
+new_repo
+ready_pr 1 feat/one "$H1"
+echo batch > "$FIX/fail-batch"
+lr --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED review-threads "* ]]; then ok; else bad "a failed batched read is LOOKUP_FAILED review-threads: $LAST"; fi
+for kind in null omit; do
+  case "$kind" in null) what="a null alias" ;; omit) what="a missing alias" ;; esac
+  new_repo
+  ready_pr 1 feat/one "$H1"; ready_pr 2 feat/two "$H2"
+  : > "$FIX/batch-$kind-2"
+  lr --run r1
+  if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED review-threads "*"PR 2"* ]]; then ok
+  else bad "$what in the batched read is LOOKUP_FAILED review-threads: $LAST"; fi
+done
+
+# The cache goes with the lock.
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+lr --release r1
+if [ -e "$CACHE" ]; then bad "release removes the run's list cache"; else ok; fi
+new_repo
+ready_pr 1 feat/one "$H1"
+lr --run r1
+pr_set 1 '.labels = []'
+relist
+expect_lock_state released "an empty relist releases the lock"
+if [ -e "$CACHE" ]; then bad "an empty relist removes the run's list cache"; else ok; fi
 
 # --- the landing record ---
 
@@ -1346,7 +1504,7 @@ if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED timeline "* ]]; then ok; else
 expect_stderr 'gh: Service Unavailable (HTTP 503)' "a timeline read failure quotes gh's error"
 case "$LAST" in *SECRET-313*) bad "a GH_DEBUG header reached the excerpt: $LAST" ;; *) ok ;; esac
 expect_remote_lock absent "a read failure takes no lock"
-expect_calls 3 timeline "a timeline read that keeps failing with a 503 stops after three attempts"
+expect_calls 3 issues/1/timeline "a timeline read that keeps failing with a 503 stops after three attempts"
 expect_err 'list-ready.sh: forge read failed (attempt 2 of 3): gh: Service Unavailable (HTTP 503); retrying in 2s' "each retry is logged"
 expect_no_err SECRET-313 "a GH_DEBUG header never reaches the retry line"
 
@@ -1356,7 +1514,7 @@ printf 'timeline\n2\n' > "$FIX/fail-timeline"
 echo 'gh: Service Unavailable (HTTP 503)' > "$FIX/gh-stderr"
 lr --run r1
 expect_ready 1 "a timeline read that fails twice with a 503 then works"
-expect_calls 3 timeline "the timeline read took three attempts"
+expect_calls 3 issues/1/timeline "the timeline read took three attempts"
 expect_err 'list-ready.sh: forge read failed (attempt 1 of 3): gh: Service Unavailable (HTTP 503); retrying in 1s' "the first retry is logged"
 
 new_repo
