@@ -18,6 +18,8 @@ repository.
 - `no-background-delegation`: Stop with an error naming the missing
   capability; plan and implement nothing.
 - `plan-work-unit-missing`: Stop with an error naming `plan-work-unit`.
+- `plan-work-unit-read-from-disk`: Brief each planner with the installed
+  `SKILL.md` path and its `references/` files.
 - `set-named-earlier-resolves`: Run one explicit earlier list in its order and
   name it in the opening message.
 - `two-candidate-sets`: Ask which list is meant; launch nothing.
@@ -82,5 +84,5 @@ two-presentation case in its own fresh context.
 ## Structural Validation
 
 Parse both JSON files with `python3 -m json.tool`, directing output to scratch
-files. Confirm 20 unique orchestration IDs match the inventory above. Parsing
+files. Confirm 22 unique orchestration IDs match the inventory above. Parsing
 validates structure only; it doesn't grade model behavior.
