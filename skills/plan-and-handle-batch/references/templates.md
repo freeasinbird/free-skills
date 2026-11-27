@@ -48,7 +48,8 @@ Plan #N
 The owner assigned this in their request: "<the owner's request>".
 
 Use the plan-work-unit skill. If it isn't available to you, read
-<path to plan-work-unit's SKILL.md> and follow it. Read the repository by
+<path to plan-work-unit's SKILL.md> and follow it, together with each file
+it points to in the references/ directory beside it. Read the repository by
 revision, such as git show <sha>:<path>; never check out, switch, or edit
 the shared working tree. If you need an owner decision, stop before any
 planning write and return the question with your recommendation.

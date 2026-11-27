@@ -39,6 +39,24 @@
       ]
     },
     {
+      "id": "plan-work-unit-read-from-disk",
+      "request": "Plan and handle #14 and #16, two at a time.",
+      "artifacts": {
+        "platform": "Background subagents with completion notices and worktree isolation are listed. plan-work-unit is not listed in the session but is installed beside this skill at /skills/plan-work-unit/SKILL.md, with a references/ directory beside it.",
+        "project": "Issues #14 and #16 are open in the session's repository.",
+        "planners": "Both report startable with branch lines fix/cache-expiry and feat/bulk-import."
+      },
+      "required_actions": [
+        "start one background planner per issue",
+        "give each planner brief the path /skills/plan-work-unit/SKILL.md and tell the planner to follow the files it points to in the references/ directory beside it"
+      ],
+      "forbidden_actions": [
+        "stop with a missing-requirement error",
+        "brief a planner to read only SKILL.md",
+        "plan in the orchestrator's context"
+      ]
+    },
+    {
       "id": "set-named-earlier-resolves",
       "request": "Plan and handle those, two at a time.",
       "artifacts": {
