@@ -325,12 +325,13 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
   any classification and run links.
 
 `LOOKUP_FAILED` is a read failure, not a guard stop, and the scripts already
-retried transient forge reads. Read its `stderr` key first. On a timeout, an
-HTTP 5xx, a rate limit, or no `stderr` key, check that the forge and remote are
-reachable, then rerun the same script once. A 404, a permission error, or an
-authentication error won't clear: end the batch as "Ending Early" says and
-quote the error. Never act on your own reading in place of the script's
-result. If the rerun fails, end the batch as "Ending Early" says.
+retried transient forge reads and `land.sh`'s git fetches. Read its `stderr`
+key first. On a timeout, an HTTP 5xx, a rate limit, or no `stderr` key, check
+that the forge and remote are reachable, then rerun the same script once. A
+404, missing branch, permission error, or authentication error won't clear: end
+the batch as "Ending Early" says and quote the error. Never substitute your own
+reading for the script's result. If the rerun fails, end the batch the same
+way.
 
 ### Ending Early
 

@@ -116,8 +116,9 @@
 #                                around it; the guard names are stable
 #   LOOKUP_FAILED <what> <json>  a read failed; unknown is not absence, so
 #                                nothing was decided from the empty result;
-#                                a failed forge read adds "stderr", the first
-#                                300 bytes of gh's error output
+#                                a failed forge read or git fetch adds
+#                                "stderr", the first 300 bytes of the tool's
+#                                error output; both retry transient failures
 # STOP checks-failed carries "failed", one entry per failed check:
 # {name, run_id, job_id, url}. An entry for a GitHub Actions job also
 # carries "failing_tests", up to 20 {name, line} objects read from the
@@ -532,8 +533,9 @@ lookup_failed() { # lookup_failed <what> <detail>
   exit 4
 }
 
-# Forge reads keep gh's stderr here so lookup_failed can quote why a read
-# failed. head, not tail: gh's summary line comes first, before any body.
+# Forge reads and git fetches keep their stderr here so lookup_failed can
+# quote why a read failed. head, not tail: gh's summary line and git's
+# fatal line come first, before any body or hint.
 # GH_OUT holds one attempt's output, so a retry never follows a failed
 # attempt's partial output (a page of a paginated read, an error body).
 GH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
@@ -576,6 +578,51 @@ gh_read() {
     { [ "$attempt" -lt "$GH_READ_ATTEMPTS" ] && ! gh_err_permanent; } || return "$rc"
     line=$(tr -d '\0' < "$GH_ERR" | head -n 1 | head -c 300)
     echo "${0##*/}: forge read failed (attempt $attempt of $GH_READ_ATTEMPTS): ${line:-gh exited $rc}; retrying in ${attempt}s" >&2
+    sleep "$attempt"
+    attempt=$((attempt + 1))
+  done
+}
+
+# Is the git fetch failure in GH_ERR an answer rather than a blip? These
+# are git's messages for a missing branch, a missing or unreadable
+# repository (git names an HTTP 404 "repository '<url>' not found"), and
+# refused credentials. Anything else (DNS, a refused or
+# reset connection, a timeout, early EOF, an HTTP 5xx) is retried, as
+# gh_read treats a failure it can't name.
+git_fetch_err_permanent() {
+  grep -qE "couldn't find remote ref|does not appear to be a git repository|Repository not found|repository '[^']*' not found|Authentication failed|Permission denied|could not read Username|The requested URL returned error: (401|403|404)" "$GH_ERR"
+}
+# Run one git fetch with gh_read's retry, keeping git's stderr only when
+# the fetch fails, so a successful fetch's "From ..." lines can't attach
+# to a later failure. Git's trace settings are dropped first: with
+# GIT_TRACE or GIT_TRACE_CURL on and GIT_TRACE_REDACT=0, git writes the
+# remote URL's userinfo and request headers to stderr, which
+# lookup_failed would then quote. Git's own messages don't always hide
+# userinfo either (a redirect error prints the asked-for URL whole), so
+# every "scheme://user:pass@" in its stderr loses the "user:pass@" before
+# anything reads it; if that pass fails, the text is dropped. The stderr
+# goes to a file, not a pipe: a pipe waits for every process holding it,
+# and an SSH ControlPersist master git leaves running can hold it open.
+# Callers pass git fetch's arguments.
+git_fetch() {
+  local attempt=1 rc line v
+  while :; do
+    (
+      for v in $(compgen -e); do
+        case "$v" in GIT_TRACE*|GIT_CURL_VERBOSE) unset "$v" ;; esac
+      done
+      exec git fetch "$@"
+    ) >/dev/null 2>"$GH_ERR"
+    rc=$?
+    [ "$rc" -ne 0 ] || { : > "$GH_ERR"; return 0; }
+    if LC_ALL=C sed -E 's#(://)[^/[:space:]]*@#\1#g' "$GH_ERR" > "$GH_OUT"; then
+      cat -- "$GH_OUT" > "$GH_ERR"
+    else
+      : > "$GH_ERR"
+    fi
+    { [ "$attempt" -lt "$GH_READ_ATTEMPTS" ] && ! git_fetch_err_permanent; } || return "$rc"
+    line=$(tr -d '\0' < "$GH_ERR" | head -n 1 | head -c 300)
+    echo "${0##*/}: git fetch failed (attempt $attempt of $GH_READ_ATTEMPTS): ${line:-git exited $rc}; retrying in ${attempt}s" >&2
     sleep "$attempt"
     attempt=$((attempt + 1))
   done
@@ -1908,7 +1955,7 @@ prepare_local_branch() { # prepare_local_branch <head-remote>
       || stop oid-mismatch "local $BRANCH is $(git rev-parse "refs/heads/$BRANCH"), not the pinned head $HEAD_OID; prepare does not move an existing branch"
     return 0
   fi
-  git fetch -- "$1" "+refs/heads/$BRANCH:$tmp_ref" >/dev/null 2>&1 \
+  git_fetch -- "$1" "+refs/heads/$BRANCH:$tmp_ref" \
     || lookup_failed head-fetch "could not fetch $BRANCH from $1"
   fetched=$(git rev-parse --verify --quiet "$tmp_ref^{commit}")
   git update-ref -d "$tmp_ref" >/dev/null 2>&1
@@ -1993,7 +2040,7 @@ phase_prepare() {
   remote_repo_check "$BASE_REMOTE" base
   head_remote="${HEAD_REMOTE_OPT:-$BASE_REMOTE}"
   [ "$head_remote" = "$BASE_REMOTE" ] || remote_repo_check "$head_remote" head
-  git fetch -- "$BASE_REMOTE" "+refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+  git_fetch -- "$BASE_REMOTE" "+refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" \
     || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
   LAND_TIP=$(git rev-parse --verify --quiet "refs/remotes/$BASE_REMOTE/$BASE^{commit}") \
     || lookup_failed base-fetch "the fetched $BASE did not resolve to a commit"
@@ -2184,7 +2231,7 @@ phase_land() {
   remote_repo_check "$BASE_REMOTE" base
   # The + lets a base force-pushed to a non-descendant still update the
   # tracking ref, so the checks below judge the base as it is now.
-  git fetch -- "$BASE_REMOTE" "+refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+  git_fetch -- "$BASE_REMOTE" "+refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" \
     || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
   LAND_TIP=$(git rev-parse --verify --quiet "refs/remotes/$BASE_REMOTE/$BASE^{commit}") \
     || lookup_failed base-fetch "the fetched $BASE did not resolve to a commit"
