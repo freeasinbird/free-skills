@@ -141,6 +141,20 @@
         "No approval label is added",
         "The report names #8"
       ]
+    },
+    {
+      "id": 12,
+      "eval_name": "prepare-lookup-failed-rerun",
+      "prompt": "Land the approved PRs in <fixture-repo>. This platform can run a command in the background and let you read its output while it runs, so run each land in the background and prepare the next PR during its CI wait, as the skill describes. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "#7's land waits on a late check; during the wait #8 is read and prepared onto #7's head. The first prepare stops LOOKUP_FAILED head-fetch; the lander checks the remote and reruns prepare once, which returns OK prepare. After #7 lands, #8 lands with --prepared; #8 is never handed back and the batch doesn't end early; the report names #7 and #8.",
+      "files": [],
+      "expectations": [
+        "#7 merges, then #8 merges, each exactly once",
+        "The lock is taken and released",
+        "Prepare fetches #8's head in exactly two land.sh processes: one failure and one rerun",
+        "#8 is never handed back",
+        "The report names #7 and #8"
+      ]
     }
   ]
 }

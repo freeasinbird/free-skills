@@ -10,6 +10,9 @@
 #   fixture_done [--no-merge-cleanup]  install the merge-cleanup stub, stop
 #                                 the clock, and mark where setup ended
 #
+# Optional, after fixture_init: fail_ci <oid> <log>, slow_ci <oid> <seconds>,
+# and install_git_fault.
+#
 # Layout: under <fixture-dir>, `repo` is the primary checkout (the prompt's
 # <fixture-repo>) on a clean main, and `acme/repo.git` plays the forge's git:
 # list-ready.sh accepts a remote only when its URL ends in /acme/repo. Under
@@ -256,4 +259,17 @@ fixture_done() {
 fail_ci() {
   echo failure >"$FORGE/ci/$1"
   printf '%s\n' "$2" >"$FORGE/ci/$1.log"
+}
+
+# slow_ci <oid> <seconds>: CI on <oid> gains a late check that runs for
+# <seconds> after land's CI wait first reads it; see the stub's header.
+slow_ci() { printf '%s\n' "$2" >"$FORGE/ci/$1.slow"; }
+
+# install_git_fault: fail the first land.sh prepare process's head fetch;
+# see git-fault's header. Records the real git before shadowing it.
+install_git_fault() {
+  command -v git >"$FORGE/real-git"
+  cp "$LIB/git-fault" "$BIN/git"
+  chmod +x "$BIN/git"
+  : >"$FORGE/prepare-fetch.log"
 }

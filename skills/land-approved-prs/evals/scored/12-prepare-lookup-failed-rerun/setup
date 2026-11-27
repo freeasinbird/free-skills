@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# #7 is on main's tip; #8 edits another file off main. #7's CI gains a
+# late check, so its land waits long enough to prepare #8. #8 has no local
+# branch, so prepare fetches its head, and the first prepare process's
+# fetch times out.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 7 widget-docs main "Document the widget" README.md "Call widget.sh to get the size."
+pr_open 8 widget-notes main "Add widget notes" NOTES.md "The widget size is fixed."
+git -C "$REPO" branch -q -D widget-notes
+pr_approve 7 2026-11-18T12:00:00Z
+pr_approve 8 2026-11-18T12:05:00Z
+slow_ci "$(git -C "$REPO" rev-parse widget-docs)" 240
+install_git_fault
+fixture_done
