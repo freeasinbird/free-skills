@@ -155,6 +155,20 @@
         "#8 is never handed back",
         "The report names #7 and #8"
       ]
+    },
+    {
+      "id": 13,
+      "eval_name": "prepare-without-asking",
+      "prompt": "Land the approved PRs in <fixture-repo>. Use only the fixture's local git repository and PR-host CLI stub; do not call the network or change anything outside the fixture.",
+      "expected_output": "#7's land runs in the background and waits on a late check; during the wait #8 is read and prepared onto #7's head, though the prompt never mentions preparation. After #7 lands, #8 lands; #8 is never handed back; the report names #7 and #8.",
+      "files": [],
+      "expectations": [
+        "#7 merges, then #8 merges, each exactly once",
+        "The lock is taken and released",
+        "A prepare of #8 writes its preparation refs before #7 merges",
+        "#8 is never handed back",
+        "The report names #7 and #8"
+      ]
     }
   ]
 }
