@@ -191,6 +191,14 @@ check_runs() { # check_runs <oid>
 }
 
 # --- PRs --------------------------------------------------------------------------
+timeline_events() { # timeline_events <N>: label events plus force-pushes from the ref log
+  local b
+  b=$(jq -r .headRefName "$FORGE/pr/$1.json")
+  awk -v r="refs/heads/$b" '$2 == r && $5 == 1 { print $1, $4, $6 }' "$FORGE/ref-updates.log" \
+    | jq -R -s 'split("\n") | map(select(length > 0) | split(" ")
+        | {event:"head_ref_force_pushed", created_at:.[0], commit_id:.[1], actor:{login:.[2]}})' \
+    | jq -s '.[0] + .[1] | sort_by(.created_at)' "$FORGE/timeline/$1.json" -
+}
 pr_file() {
   case "${1:-x}" in *[!0-9]*) die "GraphQL: Could not resolve to a PullRequest with the number of ${1:-?}. (repository.pullRequest)" ;; esac
   [ -f "$FORGE/pr/$1.json" ] \
@@ -511,6 +519,15 @@ case "$sub" in
       q=$(field query)
       case "$q" in
         *mutation*) die "fixture gh: GraphQL mutations are not served" ;;
+        *:pullRequest\(number:*)
+          # list-ready.sh's batched read: one alias p<N> per PR, each with
+          # its review threads and its label and force-push event count.
+          for n in $(printf '%s' "$q" | grep -oE 'p[0-9]+:pullRequest\(number:[0-9]+\)' | sed -E 's/^p([0-9]+):.*/\1/'); do
+            pr_file "$n" >/dev/null || exit 1
+            timeline_events "$n" | jq --arg k "p$n" \
+              '{($k): {reviewThreads:{pageInfo:{hasNextPage:false}, nodes:[]},
+                       timelineItems:{filteredCount:([.[] | select(.event == "labeled" or .event == "unlabeled" or .event == "head_ref_force_pushed")] | length)}}}'
+          done | jq -s '{data:{repository:(add // {})}}' >"$out" ;;
         *reviewThreads*)
           echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}' >"$out" ;;
         *HeadRefForcePushedEvent*|*HEAD_REF_FORCE_PUSHED_EVENT*)
@@ -598,12 +615,7 @@ case "$sub" in
                  state:(if .state == "OPEN" then "open" else "closed" end)}' "$FORGE/pr/$n.json" >"$out" ;;
           issues/"$n"/comments) cp "$FORGE/comments/$n.json" "$out" ;;
           issues/"$n"/labels) jq '.labels' "$FORGE/pr/$n.json" >"$out" ;;
-          issues/"$n"/timeline|issues/"$n"/events)
-            b=$(jq -r .headRefName "$FORGE/pr/$n.json")
-            awk -v r="refs/heads/$b" '$2 == r && $5 == 1 { print $1, $4, $6 }' "$FORGE/ref-updates.log" \
-              | jq -R -s 'split("\n") | map(select(length > 0) | split(" ")
-                  | {event:"head_ref_force_pushed", created_at:.[0], commit_id:.[1], actor:{login:.[2]}})' \
-              | jq -s '.[0] + .[1] | sort_by(.created_at)' "$FORGE/timeline/$n.json" - >"$out" ;;
+          issues/"$n"/timeline|issues/"$n"/events) timeline_events "$n" >"$out" ;;
           *) notfound ;;
         esac ;;
       collaborators/*/permission)
