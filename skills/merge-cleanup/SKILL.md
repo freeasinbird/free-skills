@@ -99,7 +99,10 @@ Before any of that, it removes the linked worktree holding the head branch
 only when that worktree is clean, at the merged head, and doesn't hold your
 working directory; otherwise it stops `head-worktree-present` for the owner.
 Ignored paths that `.worktree-disposables` declares at the base tip, fetched
-just before that check, don't make the worktree dirty.
+just before that check, don't make the worktree dirty. A removal that fails
+partway can delete the worktree's registration and leave its directory. The
+script writes the path down before it removes anything, so that run and every
+rerun stop `head-worktree-orphaned` until the directory is gone.
 
 It calls `base-landing-plan.sh --format nul` internally; never parse that
 helper's JSON to recreate the sequence. `worktree-inventory.sh
@@ -120,11 +123,17 @@ ledger. Every JSON payload carries every step's disposition. Report completed
 ones even when a later step stopped: a resynced base isn't a failed cleanup
 because remote deletion was refused. The `worktree` field reads
 `removed_clean` after a removal and `owner_removal_required` after the stop.
+A `local_branch` value ending in `_config_retained` means the ref is gone and
+same-named branch config was left on purpose; don't report it as config
+removal.
+
 `STOP bad-record` means the base's `.worktree-disposables` breaks the file's
 grammar; the worktree and remote head stay in place until the owner fixes the
-file on the base branch and you rerun. A `local_branch` value ending in
-`_config_retained` means the ref is gone and same-named branch config was left
-on purpose; don't report it as config removal.
+file on the base branch and you rerun. `STOP head-worktree-orphaned` means a
+head worktree's removal failed partway. Its directory, named in the detail, is
+no longer a worktree. Report the path to the owner and never delete it
+yourself: only the owner can tell whether what's left matters. Once they
+delete it, rerun.
 
 To retry, resolve the stated guard and rerun the whole script with the same
 PR and checkout; completed deletions are idempotent. Never run the remaining
@@ -138,6 +147,7 @@ them: `references/hazards.md` §merged-not-ancestor,
 `references/hazards.md` §leading-hyphen-args,
 `references/hazards.md` §worktree-refusals,
 `references/hazards.md` §worktree-remove-destroys,
+`references/hazards.md` §worktree-partial-remove,
 `references/hazards.md` §ignored-file-overwrite,
 `references/hazards.md` §status-config,
 `references/hazards.md` §prune-refspec-scope, and

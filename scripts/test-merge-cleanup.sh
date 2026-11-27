@@ -38,6 +38,11 @@ want_no_ref() {
   if git --git-dir="$1" show-ref --verify --quiet "$2"; then bad "unexpected ref $2 in $1"
   else ok; fi
 }
+want_no_record() { # no removal record left in $WORK
+  local left
+  left=$(find "$WORK/.git/merge-cleanup" -type f 2>/dev/null || :)
+  [ -z "$left" ] && ok || bad "removal record left behind: $left"
+}
 
 # Validation uses a real checkout and a dead forge. Valid input reaches the
 # forge lookup and exits 4; malformed input exits 64 first.
@@ -712,6 +717,82 @@ want_out '"remote_branch":"deleted"'
 want_no_ref "$ORIGIN" refs/heads/feature
 want_no_ref "$WORK/.git" refs/heads/feature
 [ ! -e "$HEAD_WT" ] && ok || bad "clean linked head worktree survived"
+want_no_record
+
+# A removal git can't finish deletes the registration and keeps the tree
+# (references/hazards.md §worktree-partial-remove). A read-only directory
+# reproduces it without a shim; root ignores the mode, so these skip there.
+orphan_reruns() { # <desc>: the rerun stops, then deleting the directory clears it
+  run_cleanup
+  want_rc 2
+  want_out 'STOP head-worktree-orphaned'
+  want_out '"worktree":"owner_removal_required"'
+  want_out "linked head worktree $(cd "$SCEN" && pwd -P)/head-wt failed partway"
+  want_out "$1"
+  want_ref "$WORK/.git" refs/heads/feature
+  want_ref "$ORIGIN" refs/heads/feature
+  case "$OUT" in *'"worktree":"absent"'*) bad "orphan reported absent" ;; *) ok ;; esac
+  chmod -R u+w "$HEAD_WT"
+  rm -rf "$HEAD_WT"
+  run_cleanup
+  want_rc 0
+  want_out 'OK cleanup'
+  want_out '"worktree":"absent"'
+  want_no_ref "$WORK/.git" refs/heads/feature
+  want_no_record
+}
+if [ "$(id -u)" -eq 0 ]; then
+  skip=$((skip + 1))
+  echo "SKIP: partial worktree removal cases need a non-root user" >&2
+else
+SCENARIO="a removal that fails partway stops orphaned until the directory is gone"
+setup_same merge
+git -C "$WORK" switch -q main
+git -C "$WORK" branch -f feature origin/feature
+HEAD_WT="$SCEN/head-wt"
+git -C "$WORK" worktree add -q "$HEAD_WT" feature
+chmod a-w "$HEAD_WT"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 2
+want_out 'STOP head-worktree-orphaned'
+want_out '"worktree":"owner_removal_required"'
+want_out "removal of linked head worktree $(cd "$SCEN" && pwd -P)/head-wt failed partway: registration gone, directory on disk"
+want_out 'STOP remove-failed'
+want_ref "$WORK/.git" refs/heads/feature
+[ -e "$HEAD_WT/.git" ] && ok || bad "setup: git deleted the read-only root's .git file"
+orphan_reruns '.git file present'
+
+SCENARIO="a half-removed worktree without its .git file still stops orphaned"
+setup_same merge
+git -C "$SEED" switch -q feature
+mkdir "$SEED/sub"
+echo sub >"$SEED/sub/file"
+git -C "$SEED" add sub/file
+git -C "$SEED" commit -qm sub
+HEAD_OID=$(git -C "$SEED" rev-parse HEAD)
+git -C "$SEED" push -q origin feature
+git -C "$SEED" switch -q main
+git -C "$SEED" merge -q --no-ff feature -m "merged again"
+git -C "$SEED" push -q origin main
+git -C "$WORK" fetch -q origin
+reset_forge
+write_pr acme/repo acme/repo feature "$HEAD_OID" false >"$FIX/pr.json"
+git -C "$WORK" switch -q main
+git -C "$WORK" branch -f feature origin/feature
+HEAD_WT="$SCEN/head-wt"
+git -C "$WORK" worktree add -q "$HEAD_WT" feature
+chmod a-w "$HEAD_WT/sub"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup
+want_rc 2
+want_out 'STOP head-worktree-orphaned'
+want_out 'registration gone, directory on disk'
+# Git deletes entries in directory order, so whether .git survives the
+# failure depends on the filesystem. Drop it to pin the case.
+rm -f "$HEAD_WT/.git"
+orphan_reruns '.git file absent'
+fi
 
 SCENARIO="--keep-worktree keeps a clean linked head worktree before mutation"
 setup_same merge
@@ -770,6 +851,14 @@ want_out 'STOP head-worktree-present'
 want_out 'dirty: not clean; --remove-head removes only a clean worktree'
 want_ref "$ORIGIN" refs/heads/feature
 [ -e "$HEAD_WT" ] && ok || bad "dirty linked worktree was removed"
+# The kept stop leaves its removal record. The rerun finds the path
+# registered again, so the record is stale, not an orphan.
+rm "$HEAD_WT/untracked"
+run_cleanup
+want_rc 0
+want_out '"worktree":"removed_clean"'
+[ ! -e "$HEAD_WT" ] && ok || bad "head worktree survived once clean"
+want_no_record
 
 # The base's .worktree-disposables, read at the base tip the cleanup fetches.
 base_disposables() { # base_disposables <line...>: commit it on main in $SEED and push
