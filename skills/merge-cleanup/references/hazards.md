@@ -552,6 +552,36 @@ head worktree.
 
 ---
 
+## §worktree-partial-remove
+
+A `git worktree remove` that can't delete the whole tree still deletes the
+worktree's admin directory under `.git/worktrees/`. The registration goes and
+the directory stays. Verified in scratch repos on git 2.54.0:
+
+- With the worktree root read-only, removal exited 255 with "failed to
+  delete ... Permission denied". `git worktree list` no longer named the path,
+  and the root kept its entries, including a `.git` file that names the
+  missing admin directory.
+- With only a tracked subdirectory read-only, removal failed the same way and
+  deleted other files. Whether the `.git` file survived depended on the order
+  git read the entries: it was deleted on one filesystem and kept on another.
+  So the `.git` file isn't a reliable sign of an orphan.
+- Once the admin directory is gone, nothing in the repository names the path:
+  not `git worktree list`, not the branch's reflog. A later run can only
+  recognize the orphan if an earlier one wrote the path down.
+
+A freeside-ai/freeside landing batch on 2026-11-27 hit this with a removal
+that left 138 tracked files behind. The rerun saw no registered worktree,
+reported `worktree: absent`, and deleted the local branch, while the
+directory stayed on disk unreported.
+
+Relied on by `merge-cleanup.sh`, which writes the head worktree's path to a
+removal record before `worktree-sweep.sh --remove-head` runs, and on every
+run stops `head-worktree-orphaned` while the recorded path is on disk and no
+registered worktree holds it.
+
+---
+
 ## §ignored-file-overwrite
 
 `git status --porcelain` does not report ignored files, and both the checkout

@@ -20,6 +20,12 @@
 # leftovers are ignored paths that .worktree-disposables declares at the base
 # tip, freshly fetched for that check, or ignored .DS_Store files. Otherwise,
 # or with --keep-worktree, it stops before mutation for the worktree's owner.
+# Before that removal it writes the worktree's path to a removal record under
+# the repository's common git directory (merge-cleanup/head-worktree/), and
+# deletes the record once the removal is verified. A removal that fails
+# partway can delete the registration and leave the directory; this run and
+# every rerun then stop head-worktree-orphaned, before mutation, until the
+# owner deletes that directory. The script never deletes it.
 # It never closes issues or interprets project post-merge policy.
 #
 # Last line on stdout is the machine-readable result. Every result payload has
@@ -572,6 +578,97 @@ worktree_scan() { # worktree_scan <ref>: sets WT_MATCH to the unique path
   rm -f "$tmp"
   [ "$count" -le 1 ] \
     || stop duplicate-worktree "$count worktrees check out $want; cleanup cannot choose one without leaving or moving another"
+}
+
+# Is <path> the path of any registered worktree, whatever its branch? Same
+# NUL-aware parse as worktree_scan. A recorded path can outlive a change in
+# how git spells a registered one (git worktree repair, a symlinked parent),
+# so the same directory under another spelling counts too: calling a live
+# worktree orphaned would tell its owner to delete it.
+path_registered() { # path_registered <path>
+  local want="$1" tmp field cand found=1
+  tmp=$(mktemp) || lookup_failed worktree-scan "mktemp failed"
+  git worktree list --porcelain -z > "$tmp" 2>/dev/null \
+    || { rm -f "$tmp"; lookup_failed worktree-scan "git worktree list failed"; }
+  while IFS= read -r -d '' field; do
+    case "$field" in
+      "worktree "*)
+        cand="${field#worktree }"
+        if [ "$cand" = "$want" ] || [ "$cand" -ef "$want" ]; then found=0; fi ;;
+    esac
+  done < "$tmp"
+  rm -f "$tmp"
+  return "$found"
+}
+
+# The head worktree's removal record. A `git worktree remove` that fails
+# partway can delete the admin directory and keep the tree, and afterward
+# nothing in the repository names the path (references/hazards.md
+# §worktree-partial-remove). The path is written down before the removal,
+# not after a failure, so a run killed mid-removal leaves a record too.
+# The file name is a hash of the full ref, so every branch name maps to one
+# safe file and feat never collides with feat/x. The common directory is
+# resolved to an absolute path so every checkout finds the same record. The
+# record file is the only thing these helpers delete, and its path never
+# comes from the recorded value.
+head_record_locate() { # sets HEAD_RECORD_DIR and HEAD_RECORD for $BRANCH
+  local common id
+  out_exact common git rev-parse --git-common-dir \
+    && out_exact common physical_dir "$common" \
+    || lookup_failed head-worktree-record "could not locate the repository's common directory"
+  id=$(printf '%s' "refs/heads/$BRANCH" | git hash-object --stdin 2>/dev/null) \
+    || lookup_failed head-worktree-record "could not hash refs/heads/$BRANCH"
+  case "$id" in
+    ""|*[!0-9a-f]*) lookup_failed head-worktree-record "git hash-object printed no object name" ;;
+  esac
+  HEAD_RECORD_DIR="$common/merge-cleanup/head-worktree"
+  HEAD_RECORD="$HEAD_RECORD_DIR/$id"
+}
+
+# Write to a temp file in the same directory, then rename, so a reader
+# never sees a partial record. The NUL terminator lets the reader tell a
+# complete record from a truncated one and keeps a trailing newline.
+head_record_write() { # head_record_write <path>
+  local tmp=""
+  mkdir -p -- "$HEAD_RECORD_DIR" 2>/dev/null \
+    && tmp=$(mktemp "$HEAD_RECORD_DIR/.write.XXXXXX" 2>/dev/null) \
+    || lookup_failed head-worktree-record "could not create a removal record in $HEAD_RECORD_DIR; nothing was removed"
+  if ! { printf '%s\0' "$1" > "$tmp" && mv -f -- "$tmp" "$HEAD_RECORD"; } 2>/dev/null; then
+    rm -f -- "$tmp"
+    lookup_failed head-worktree-record "could not write the removal record $HEAD_RECORD; nothing was removed"
+  fi
+}
+
+# Returns 1 when there is no record; sets HEAD_RECORD_PATH otherwise.
+head_record_read() {
+  HEAD_RECORD_PATH=""
+  [ -e "$HEAD_RECORD" ] || [ -L "$HEAD_RECORD" ] || return 1
+  IFS= read -r -d '' HEAD_RECORD_PATH < "$HEAD_RECORD" 2>/dev/null \
+    || lookup_failed head-worktree-record "could not read the removal record $HEAD_RECORD; delete it if no half-removed worktree is left"
+  case "$HEAD_RECORD_PATH" in
+    /*) ;;
+    *) lookup_failed head-worktree-record "removal record $HEAD_RECORD holds no absolute path; delete it if no half-removed worktree is left" ;;
+  esac
+}
+
+head_record_delete() {
+  rm -f -- "$HEAD_RECORD" 2>/dev/null \
+    || lookup_failed head-worktree-record "could not delete the removal record $HEAD_RECORD"
+}
+
+# A recorded path still on disk that no registered worktree holds is what a
+# partial removal leaves behind. Its .git file is no evidence either way:
+# git may delete it or keep it. Any other record is stale and is deleted.
+check_head_record() {
+  local p git_file=absent
+  head_record_read || return 0
+  p="$HEAD_RECORD_PATH"
+  if { [ -e "$p" ] || [ -L "$p" ]; } && ! path_registered "$p"; then
+    WORKTREE_DISPOSITION=owner_removal_required
+    { [ -e "$p/.git" ] || [ -L "$p/.git" ]; } && git_file=present
+    stop head-worktree-orphaned "an earlier removal of linked head worktree $p failed partway: registration gone, directory on disk, .git file $git_file; delete the directory, then rerun (removal record $HEAD_RECORD)"
+  fi
+  head_record_delete
 }
 
 # Normalized identity of a remote URL. Hosted forms
@@ -1193,7 +1290,7 @@ check_consumers() {
 # list the project reviewed onto its base, so an entry dropped after the
 # merge no longer counts. The merged head's own copy is never read.
 remove_head_worktree() { # remove_head_worktree <path> <base-fetch-url>
-  local path="$1" base_url="$2" base_tip out rc last kept
+  local path="$1" base_url="$2" base_tip out rc last kept reg dir
   WORKTREE_DISPOSITION=owner_removal_required
   [ "$KEEP_WORKTREE" != true ] \
     || stop head-worktree-present "linked head worktree $path was kept: --keep-worktree"
@@ -1205,13 +1302,19 @@ remove_head_worktree() { # remove_head_worktree <path> <base-fetch-url>
     || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
   base_tip=$(git rev-parse --verify --quiet "refs/remotes/$BASE_REMOTE/$BASE^{commit}" 2>/dev/null) \
     || lookup_failed base-fetch "could not read fetched $BASE from $BASE_REMOTE"
+  head_record_write "$path"
   out=$("$SWEEP" --remove-head "$BRANCH" --head-oid "$HEAD_OID" \
     --disposables-at "$base_tip" --caller-dir "$CALLER_DIR" 2>&1); rc=$?
   last=$(printf '%s\n' "$out" | tail -n 1)
   case "$rc:$last" in
     "0:OK sweep "*) ;;
     "2:STOP remove-failed "*)
-      stop head-worktree-present "git refused to remove linked head worktree $path: $last" ;;
+      reg=kept dir="on disk"
+      path_registered "$path" || reg=gone
+      [ -e "$path" ] || [ -L "$path" ] || dir=gone
+      [ "$reg:$dir" != "gone:on disk" ] \
+        || stop head-worktree-orphaned "removal of linked head worktree $path failed partway: registration gone, directory on disk; delete the directory, then rerun (removal record $HEAD_RECORD): $last"
+      stop head-worktree-present "removal of linked head worktree $path failed: registration $reg, directory $dir: $last" ;;
     # Only fixing the file on the base clears it, so a retry can't pass.
     "2:STOP bad-record "*)
       stop bad-record "linked head worktree $path was kept: $last" ;;
@@ -1224,6 +1327,7 @@ remove_head_worktree() { # remove_head_worktree <path> <base-fetch-url>
     kept=$(printf '%s\n' "$out" | sed -n 's/^WORKTREE \([a-z-]*\) .*"reason":"\(.*\)"}$/\1: \2/p' | tail -n 1)
     stop head-worktree-present "linked head worktree $WT_MATCH was kept for its owner (${kept:-no reason reported}); worktree-sweep.sh lists what removing it would delete"
   fi
+  head_record_delete
   WORKTREE_DISPOSITION=removed_clean
 }
 
@@ -1262,6 +1366,10 @@ phase_cleanup() {
     stop wrong-checkout "base $BASE is checked out in $base_wt; use that path as --checkout"
   fi
   worktree_scan "refs/heads/$BRANCH"; head_worktree="$WT_MATCH"
+  # Every run, whatever the worktree's state: a new worktree for the branch
+  # must not overwrite the record of an orphan an earlier run left.
+  head_record_locate
+  check_head_record
   if [ -n "$head_worktree" ] && ! [ "$head_worktree" -ef "$WORKTREE_ROOT" ]; then
     WORKTREE_DISPOSITION=owner_removal_required
   elif [ -n "$head_worktree" ]; then
