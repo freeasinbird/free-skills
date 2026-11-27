@@ -1024,6 +1024,7 @@ want_out 'STOP credential-url'
 want_ref "$ORIGIN" refs/heads/feature
 if rg -q -- 'secret-token' "$FIX/stderr"; then bad "xtrace exposed inline credentials"
 else ok; fi
+case "$OUT" in *secret-token*) bad "the result exposed inline credentials" ;; *) ok ;; esac
 
 SCENARIO="inline push credentials stop before remote deletion"
 setup_same merge
@@ -1034,6 +1035,9 @@ run_cleanup
 want_rc 2
 want_out 'STOP credential-url'
 want_ref "$ORIGIN" refs/heads/feature
+case "$OUT" in *push-secret*) bad "the result exposed inline push credentials" ;; *) ok ;; esac
+if rg -q -- 'push-secret' "$FIX/stderr"; then bad "stderr exposed inline push credentials"
+else ok; fi
 
 SCENARIO="pinned transports work without BASHPID"
 setup_same merge
@@ -1300,6 +1304,189 @@ want_no_ref "$ORIGIN" refs/heads/-x
 if git -C "$WORK" show-ref --verify --quiet refs/heads/-x; then
   bad "option-shaped local branch survived"
 else ok; fi
+
+# ---- git fetch failures ----
+
+# FETCH_SHIM fails each git fetch whose arguments contain the first line
+# of $FIX/git-fetch-fail, writing $FIX/git-fetch-stderr and exiting 128 as
+# git does. A second line caps how many matching calls fail (absent: all);
+# with $FIX/git-fetch-fake-ok, a matching call past the cap writes the same
+# stderr and exits 0 without fetching. $FIX/git-fetch-calls counts the
+# matching calls, and $FIX/git-fetch-env lists any git trace variable a
+# matching call saw. With $FIX/git-ls-remote-fail, every ls-remote fails.
+# Every other git command runs the real git. A fetch is matched anywhere
+# in the arguments because the prune fetch starts with -c.
+FETCH_SHIM="$TMP/fetch-shim"
+mkdir -p "$FETCH_SHIM"
+{
+  echo '#!/bin/bash'
+  printf 'REAL_GIT=%q\n' "$REAL_GIT"
+  cat <<'FETCHEOF'
+case " $* " in
+  *" fetch "*)
+    if [ -f "$FIX/git-fetch-fail" ]; then
+      { IFS= read -r match; IFS= read -r cap; } < "$FIX/git-fetch-fail"
+      case " $* " in
+        *"$match"*)
+          n=$(( $(cat "$FIX/git-fetch-calls" 2>/dev/null || echo 0) + 1 ))
+          echo "$n" > "$FIX/git-fetch-calls"
+          env | grep -oE '^(GIT_TRACE[^=]*|GIT_CURL_VERBOSE)=' >> "$FIX/git-fetch-env"
+          if [ -z "$cap" ] || [ "$n" -le "$cap" ]; then
+            cat "$FIX/git-fetch-stderr" >&2; exit 128
+          fi
+          if [ -f "$FIX/git-fetch-fake-ok" ]; then
+            cat "$FIX/git-fetch-stderr" >&2; exit 0
+          fi
+          ;;
+      esac
+    fi
+    ;;
+  *" ls-remote "*)
+    [ ! -f "$FIX/git-ls-remote-fail" ] || exit 128
+    ;;
+esac
+exec "$REAL_GIT" "$@"
+FETCHEOF
+} > "$FETCH_SHIM/git"
+chmod +x "$FETCH_SHIM/git"
+fetch_fail_fx() { # fetch_fail_fx <arg-text> <cap-or-empty> <stderr>
+  rm -f "$FIX/git-fetch-calls" "$FIX/git-fetch-env" "$FIX/git-fetch-fake-ok" "$FIX/git-ls-remote-fail"
+  printf '%s\n%s\n' "$1" "$2" > "$FIX/git-fetch-fail"
+  printf '%s\n' "$3" > "$FIX/git-fetch-stderr"
+}
+fetch_fx_clear() { rm -f "$FIX"/git-fetch-* "$FIX/git-ls-remote-fail"; }
+run_cleanup_fetch_shim() {
+  local saved="$SHIMD"
+  SHIMD="$SHIMD:$FETCH_SHIM"; run_cleanup; SHIMD="$saved"
+}
+want_fetch_calls() { # want_fetch_calls <count>: matching git fetch calls
+  local n
+  n=$(cat "$FIX/git-fetch-calls" 2>/dev/null || echo 0)
+  [ "$n" -eq "$1" ] && ok || bad "$n matching git fetch calls, want $1"
+}
+want_no_out() { case "$OUT" in *"$1"*) bad "stdout has $1: $OUT" ;; *) ok ;; esac; }
+want_err() { grep -qF -- "$1" "$FIX/stderr" && ok || bad "stderr lacks $1: $(tail -c 240 "$FIX/stderr")"; }
+want_no_err() { if grep -qF -- "$1" "$FIX/stderr"; then bad "stderr has $1"; else ok; fi; }
+result_json() { local l="${OUT##*$'\n'}"; l="${l#* }"; printf '%s' "${l#* }"; }
+want_stderr_key() { # want_stderr_key <value>
+  local got
+  got=$(result_json | jq -j '.stderr // empty')
+  [ "$got" = "$1" ] && ok || bad "stderr key is '$got', want '$1'"
+}
+BASE_FETCH="refs/heads/main:refs/remotes/origin/main"
+PRUNE_FETCH='+refs/heads/*:refs/remotes/origin/*'
+DNS_ERR="fatal: unable to access 'https://github.invalid/acme/repo.git/': Could not resolve host: github.invalid"
+LEDGER_KEYS='["repo","pr","merge","head_branch","base_branch","head_repo","checkout","worktree","consumers","remote_branch","base_resync","local_branch","prune","closing_refs","incomplete_step","detail","stderr"]'
+
+SCENARIO="a base resync fetch that keeps failing quotes git's error"
+setup_same merge
+fetch_fail_fx "$BASE_FETCH" "" "$DNS_ERR"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup_fetch_shim
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_stderr_key "$DNS_ERR"
+want_fetch_calls 3
+want_err 'merge-cleanup.sh: git fetch failed (attempt 1 of 3): fatal: unable to access'
+want_err 'merge-cleanup.sh: git fetch failed (attempt 2 of 3)'
+[ "$(result_json | jq -c 'keys_unsorted')" = "$LEDGER_KEYS" ] && ok \
+  || bad "the ledger fields changed beyond an added stderr after detail: $OUT"
+[ "$(result_json | jq -r '.incomplete_step + " " + .remote_branch')" = "base_resync not_started" ] && ok \
+  || bad "the ledger dispositions changed: $OUT"
+want_ref "$ORIGIN" refs/heads/feature
+fetch_fx_clear
+
+SCENARIO="a base resync fetch that fails twice then works completes"
+setup_same merge
+fetch_fail_fx "$BASE_FETCH" 2 "$DNS_ERR"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup_fetch_shim
+want_rc 0
+want_out 'OK cleanup'
+want_out '"base_resync":"resynced"'
+want_no_out '"stderr"'
+want_fetch_calls 3
+want_no_ref "$ORIGIN" refs/heads/feature
+fetch_fx_clear
+
+SCENARIO="a base fetch of a missing branch fails at once"
+setup_same merge
+fetch_fail_fx "$BASE_FETCH" "" "fatal: couldn't find remote ref main"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup_fetch_shim
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_stderr_key "fatal: couldn't find remote ref main"
+want_fetch_calls 1
+want_no_err 'git fetch failed'
+fetch_fx_clear
+
+SCENARIO="a failed head-worktree base fetch quotes git's error and keeps the worktree"
+setup_same merge
+venv_head_worktree
+fetch_fail_fx "$BASE_FETCH" "" "fatal: Authentication failed for 'https://github.invalid/acme/repo.git/'"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup_fetch_shim
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_out '"worktree":"owner_removal_required"'
+want_stderr_key "fatal: Authentication failed for 'https://github.invalid/acme/repo.git/'"
+want_fetch_calls 1
+[ -e "$HEAD_WT" ] && ok || bad "a failed base fetch still removed the head worktree"
+want_ref "$ORIGIN" refs/heads/feature
+fetch_fx_clear
+
+SCENARIO="a failed prune fetch quotes git's error"
+setup_same merge
+fetch_fail_fx "$PRUNE_FETCH" "" "fatal: Authentication failed for 'https://github.invalid/acme/repo.git/'"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup_fetch_shim
+want_rc 4
+want_out 'LOOKUP_FAILED prune'
+want_stderr_key "fatal: Authentication failed for 'https://github.invalid/acme/repo.git/'"
+want_fetch_calls 1
+want_no_ref "$ORIGIN" refs/heads/feature
+fetch_fx_clear
+
+SCENARIO="a fetch error that prints a URL's credentials quotes none, with tracing dropped"
+setup_same merge
+# Git's redirect error prints the asked-for URL with its userinfo, and the
+# retry line quotes the first line, so the token is on both. A URL git
+# can't parse is printed whole too, and its password may hold a raw slash
+# or quote. merge-cleanup
+# refuses a remote URL with credentials (STOP credential-url), so a shim
+# stands in for git printing one.
+fetch_fail_fx "$BASE_FETCH" "" "error: Unable to find abc under https://x:TESTTOKEN@github.invalid/acme/repo.git
+fatal: unable to access 'https://x:TESTTOKEN/a'b@github.invalid/acme/repo.git/'
+fatal: unable to update url base from redirection:
+  asked for: https://x:TESTTOKEN@github.invalid/acme/repo.git/info/refs?service=git-upload-pack"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+GIT_TRACE=1 GIT_TRACE_CURL=1 GIT_TRACE_REDACT=0 GIT_CURL_VERBOSE=1 run_cleanup_fetch_shim
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_out 'asked for: https://github.invalid/acme/repo.git/info/refs'
+want_out "unable to access 'https://github.invalid/acme/repo.git/'"
+want_err 'git fetch failed (attempt 1 of 3): error: Unable to find abc under https://github.invalid/'
+want_no_out TESTTOKEN
+want_no_err TESTTOKEN
+[ ! -s "$FIX/git-fetch-env" ] && ok \
+  || bad "a fetch ran with git tracing on: $(tr '\n' ' ' < "$FIX/git-fetch-env")"
+fetch_fx_clear
+
+SCENARIO="a successful fetch's output never reaches a later lookup failure"
+setup_same merge
+# The fake fetch writes git's progress lines and succeeds; the head read
+# after it fails, so its LOOKUP_FAILED must carry no excerpt.
+fetch_fail_fx "$BASE_FETCH" 0 "From $ORIGIN
+ * branch            main       -> origin/main"
+touch "$FIX/git-fetch-fake-ok" "$FIX/git-ls-remote-fail"
+RUN_REPO=acme/repo; HEAD_REMOTE_ARG="--head-remote origin"
+run_cleanup_fetch_shim
+want_rc 4
+want_out 'LOOKUP_FAILED ls-remote'
+want_out '"base_resync":"resynced"'
+want_no_out '"stderr"'
+fetch_fx_clear
 
 fi
 
