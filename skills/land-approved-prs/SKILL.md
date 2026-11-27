@@ -331,7 +331,8 @@ that the forge and remote are reachable, then rerun the same script once. A
 404, missing branch, permission error, or authentication error won't clear: end
 the batch as "Ending Early" says and quote the error. Never substitute your own
 reading for the script's result. If the rerun fails, end the batch the same
-way.
+way. A `prepare` during a CI wait follows `references/prepare-next.md`
+§prepare-next instead: it gets the same one rerun but never ends the batch.
 
 ### Ending Early
 
