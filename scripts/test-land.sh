@@ -3165,8 +3165,11 @@ want_fetch_calls 1
 scenario "a fetch error that prints a URL's credentials quotes none"
 prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
 # Git's redirect error prints the asked-for URL with its userinfo, and the
-# retry line quotes the first line, so the token is on both.
+# retry line quotes the first line, so the token is on both. A URL git
+# can't parse is printed whole too, and its password may hold a raw slash
+# or quote.
 fetch_fail_fx "$HEAD_FETCH" "" "error: Unable to find abc under https://x:TESTTOKEN@github.invalid/owner/name.git
+fatal: unable to access 'https://x:TESTTOKEN/a'b@github.invalid/owner/name.git/'
 fatal: unable to update url base from redirection:
   asked for: https://x:TESTTOKEN@github.invalid/owner/name.git/info/refs?service=git-upload-pack
    redirect: https://x:TESTTOKEN@github.invalid/login"
@@ -3174,6 +3177,7 @@ prep_run_fetch_shim "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
 want_rc 4
 want_out 'LOOKUP_FAILED head-fetch'
 want_out 'asked for: https://github.invalid/owner/name.git/info/refs'
+want_out "unable to access 'https://github.invalid/owner/name.git/'"
 want_err 'git fetch failed (attempt 1 of 3): error: Unable to find abc under https://github.invalid/'
 want_no_out 'TESTTOKEN'
 want_no_err 'TESTTOKEN'
