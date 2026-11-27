@@ -325,7 +325,7 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
   any classification and run links.
 
 `LOOKUP_FAILED` is a read failure, not a guard stop, and the scripts already
-retried transient forge reads and `land.sh`'s git fetches. Read its `stderr`
+retried transient forge reads and git fetches. Read its `stderr`
 key first. On a timeout, an HTTP 5xx, a rate limit, or no `stderr` key, check
 that the forge and remote are reachable, then rerun the same script once. A
 404, missing branch, permission error, or authentication error won't clear: end
