@@ -134,8 +134,7 @@ several remotes name the repository, and pass the same value to
 Run the PRs in sequence in the main session, which owns the engine's waits.
 Where the platform supports delegation, hand only the bounded read and
 decision of steps 1 and 2 in "One PR" to a subagent; otherwise do them inline.
-During a `land`'s CI wait, prepare the next ready PR as
-`references/prepare-next.md` §prepare-next says.
+Step 3 there uses each `land`'s CI wait to prepare the next ready PR.
 
 ## Readiness Filters
 
@@ -195,7 +194,12 @@ the approval label yourself. Never run its `merge` phase on its own.
    that could bear on the PR, not only those touching the same paths, and
    decide whether the PR still holds.
 3. **If it holds, land it** with `land.sh`, acting on each stop as "Acting on
-   Each Stop" says.
+   Each Stop" says. Start every `land`, including one run again after a
+   stop, as "Running the Engine" says: in the background where the platform
+   allows, with its stderr unfiltered, never piped through `tail`. When a
+   background `land` prints `land.sh: waiting for CI on <oid>`, prepare the
+   next ready PR as `references/prepare-next.md` §prepare-next says, before
+   you act on `land`'s result.
 4. **If it doesn't hold, rework it only when the landed change dictates the
    fix.** See "The Rework Rule."
 5. **After the merge, run merge-cleanup.** See "After the Merge."
@@ -223,8 +227,8 @@ the verified head OID that `land` pins with `--head`:
 
 ```sh
 <skill-dir>/land.sh check --pr <n> --repo <owner/name>
-<skill-dir>/land.sh land  --pr <n> --repo <owner/name> --head <oid>
-<skill-dir>/land.sh rerun --pr <n> --repo <owner/name> --head <oid>
+<skill-dir>/land.sh land  --pr <n> --repo <owner/name> --head <oid> 2><log>
+<skill-dir>/land.sh rerun --pr <n> --repo <owner/name> --head <oid> 2><log>
 ```
 
 The PR's pinned head is the `head_oid` from the list you took it from, or the
@@ -236,8 +240,19 @@ again and let filter 4 decide.
 exact head, and the base hasn't moved; otherwise it stops. `rerun` runs only
 after `land` stops `checks-failed`, and never merges.
 
-Run `land` and `rerun` in the background with a completion wake where the
-platform offers one. Otherwise keep each command under the platform's limit on a
+`land` and `rerun` wait on CI, often for minutes. Start each one in the
+background on any platform that can run a command in the background and let
+you read its output while it runs; a completion wake helps but isn't required.
+A foreground call blocks until the engine exits, even with its output
+redirected, so it isn't a background run.
+
+Send stderr to a log file and read that file while the command runs; never
+pipe it through `tail` or another filter that holds output until exit.
+Preparing the next PR starts on the CI-wait line in that log, and the result
+is the last line on stdout. Run `check` as its own command: a `land` chained
+after it in one call runs in the foreground.
+
+Without background runs, keep each command under the platform's limit on a
 single command: for `land`, `--ci-cap-minutes` plus `--cap-minutes` (30 and 15
 by default); for `rerun`, twice `--ci-cap-minutes`. Either way, run the engine
 again on `checks-pending` or `checks-missing` at most three times before handing
@@ -248,6 +263,9 @@ three.
 
 Rerun the engine only where a bullet below says to. Never rerun it to get past
 any other stop, and never bypass a guard with force, reset, or a manual merge.
+Start every `land` or `rerun` a bullet runs again, including after a fixed
+invocation, as the first one: in the background with stderr in a log, so the
+next PR's preparation still starts on its CI-wait line.
 
 - **`rebased`:** The engine pushed a rebased head. Record the result's
   `head_oid` with `list-ready.sh --pushed`; it is now the pinned head. Rerun
@@ -308,8 +326,9 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
 - **`wrong-checkout`, `not-a-repo`, `remote-unresolved`, `remote-ambiguous`,
   `remote-repo-mismatch`, `pushurl-mismatch`, or `op-in-progress`:** The
   checkout or the invocation is wrong, not the PR, so don't hand the PR back.
-  Fix the invocation if you can; otherwise end the batch as "Ending Early"
-  says.
+  Fix the invocation if you can, then run `check` again and start `land` in
+  the background as "Running the Engine" says; otherwise end the batch as
+  "Ending Early" says.
 - **`no-landing-record`, `bad-record`, `unsupported-mechanism`,
   `queue-method`, or `queue-message`:** The landing record or a repository
   setting is wrong and would stop every PR alike, so don't hand the PR back.
