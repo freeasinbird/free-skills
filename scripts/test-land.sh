@@ -321,7 +321,8 @@ scenario() {
     "$FIX"/repo-read-once "$FIX"/rules-page2-fail "$FIX"/live-remote \
     "$FIX"/pr-next-armed "$FIX"/pr-read-once "$FIX"/gh-stderr "$FIX"/fail-* \
     "$FIX"/runs-read-once "$FIX"/rerun-rc "$FIX"/rerun-env.log \
-    "$FIX"/rerun-registers-late "$FIX"/swap-armed "$FIX"/job-*.txt
+    "$FIX"/rerun-registers-late "$FIX"/swap-armed "$FIX"/job-*.txt \
+    "$FIX"/git-fetch-*
   SCEN="$TMP/scen-$((pass + fail))"
   mkdir -p "$SCEN"
 }
@@ -336,6 +337,47 @@ run_sm_with_git_shim() { # run_sm_with_git_shim <shim-dir> <args...>
   shift
   OUT=$(cd "$WORK" && PATH="$SHIMD:$git_shim:$PATH" bash "$SCRIPT" "$@" 2>"$FIX/stderr")
   RC=$?
+}
+# FETCH_SHIM fails each git fetch whose arguments contain the first line
+# of $FIX/git-fetch-fail, writing $FIX/git-fetch-stderr and exiting 128 as
+# git does. A second line caps how many matching calls fail (absent: all);
+# with $FIX/git-fetch-fake-ok, a matching call past the cap writes the same
+# stderr and exits 0 without fetching. $FIX/git-fetch-calls counts the
+# matching calls. Every other git command runs the real git.
+FETCH_SHIM="$TMP/fetch-shim"
+mkdir -p "$FETCH_SHIM"
+{
+  echo '#!/bin/bash'
+  printf 'REAL_GIT=%q\n' "$(command -v git)"
+  printf 'FIX=%q\n' "$FIX"
+  cat <<'FETCHEOF'
+if [ "${1:-}" = fetch ] && [ -f "$FIX/git-fetch-fail" ]; then
+  { IFS= read -r match; IFS= read -r cap; } < "$FIX/git-fetch-fail"
+  case " $* " in
+    *"$match"*)
+      n=$(( $(cat "$FIX/git-fetch-calls" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$FIX/git-fetch-calls"
+      if [ -z "$cap" ] || [ "$n" -le "$cap" ]; then
+        cat "$FIX/git-fetch-stderr" >&2; exit 128
+      fi
+      if [ -f "$FIX/git-fetch-fake-ok" ]; then
+        cat "$FIX/git-fetch-stderr" >&2; exit 0
+      fi
+      ;;
+  esac
+fi
+exec "$REAL_GIT" "$@"
+FETCHEOF
+} > "$FETCH_SHIM/git"
+chmod +x "$FETCH_SHIM/git"
+fetch_fail_fx() { # fetch_fail_fx <arg-text> <cap-or-empty> <stderr>
+  printf '%s\n%s\n' "$1" "$2" > "$FIX/git-fetch-fail"
+  printf '%s\n' "$3" > "$FIX/git-fetch-stderr"
+}
+want_fetch_calls() { # want_fetch_calls <count>: matching git fetch calls
+  local n
+  n=$(cat "$FIX/git-fetch-calls" 2>/dev/null)
+  [ "${n:-0}" -eq "$1" ] && ok || bad "${n:-0} matching git fetch calls, want $1"
 }
 want_rc() { if [ "$RC" -eq "$1" ]; then ok; else bad "exit $RC, want $1 (out: $OUT; err: $(tail -c 200 "$FIX/stderr" 2>/dev/null))"; fi; }
 want_out() { case "$OUT" in *"$1"*) ok ;; *) bad "stdout lacks '$1' (got: $OUT)" ;; esac; }
@@ -1222,7 +1264,21 @@ G "$WORK" remote add forge git@github.invalid:owner/name.git
 run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 4
 want_out 'LOOKUP_FAILED base-fetch'
-want_no_out '"stderr"'
+# The excerpt is git's own SSH error now; its wording differs by platform,
+# so check only that it is there and that the gh error is not.
+want_out '"stderr":'
+want_no_out "$PLAN_MSG"
+
+scenario "a failed base fetch quotes no credential from the remote URL"
+land_setup; land_fixtures
+G "$WORK" remote set-url origin 'https://x:TESTTOKEN@github.invalid/owner/name.git'
+GIT_TRACE=1 GIT_TRACE_CURL=1 GIT_TRACE_REDACT=0 GIT_CURL_VERBOSE=1 \
+  run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_out '"stderr":"fatal: unable to access'
+want_no_out 'TESTTOKEN'
+want_no_err 'TESTTOKEN'
 
 scenario "land rebases a behind head, lease-pushes it, and stops for its range-diff"
 land_setup behind; land_fixtures
@@ -2206,7 +2262,10 @@ G "$WORK" remote add forge git@github.invalid:owner/name.git
 GH_DEBUG=api run_sm land --pr 83 --repo owner/name --interval 1 --head "$FEAT_OID"
 want_rc 4
 want_out 'LOOKUP_FAILED base-fetch'
-want_no_out '"stderr"'   # a git failure; the forge reads before it worked
+# A git failure: the excerpt is git's own SSH error, never a debug header
+# from the forge reads before it, which worked.
+want_out '"stderr":'
+want_no_out 'SECRET-313'
 want_land_untouched "the remote head was pushed before the selected base remote failed"
 
 scenario "a second configured push URL still stops the split"
@@ -3051,6 +3110,125 @@ prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
 want_rc 2
 want_out 'STOP onto-not-on-tip'
 [ -z "$(ls -A "$SCEN/tmp")" ] && ok || bad "prepare made a directory before refusing"
+
+# ---- git fetch failures ----
+
+# Each fetch retries a transient failure like a forge read, quotes git's
+# error in "stderr", and fails a permanent one at once. The head fetch
+# names prepare's temporary ref; the base fetches name the tracking ref.
+HEAD_FETCH=refs/land/prepare-83
+BASE_FETCH=refs/remotes/origin/main
+DNS_ERR="fatal: unable to access 'https://github.invalid/owner/name.git/': Could not resolve host: github.invalid"
+prep_run_fetch_shim() {
+  OUT=$(cd "$WORK" && TMPDIR="$SCEN/tmp" PATH="$SHIMD:$FETCH_SHIM:$PATH" bash "$SCRIPT" "$@" 2>"$FIX/stderr")
+  RC=$?
+}
+
+scenario "a head fetch that fails twice with a DNS error then works"
+prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
+fetch_fail_fx "$HEAD_FETCH" 2 "$DNS_ERR"
+prep_run_fetch_shim "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 0
+want_out 'OK prepare'
+want_json '.created_branch == true'
+want_fetch_calls 3
+want_err 'git fetch failed (attempt 1 of 3): fatal: unable to access'
+want_err 'git fetch failed (attempt 2 of 3)'
+
+scenario "a head fetch that fails every time quotes git's error"
+prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
+fetch_fail_fx "$HEAD_FETCH" "" "$DNS_ERR"
+prep_run_fetch_shim "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 4
+want_out 'LOOKUP_FAILED head-fetch'
+want_out '"stderr":"fatal: unable to access'
+want_fetch_calls 3
+
+scenario "a head fetch of a missing branch fails at once"
+prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
+fetch_fail_fx "$HEAD_FETCH" "" "fatal: couldn't find remote ref feat"
+prep_run_fetch_shim "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 4
+want_out 'LOOKUP_FAILED head-fetch'
+want_out "\"stderr\":\"fatal: couldn't find remote ref feat"
+want_fetch_calls 1
+want_no_err 'git fetch failed'
+
+scenario "a fetch of a repository the remote doesn't know fails at once"
+prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
+fetch_fail_fx "$HEAD_FETCH" "" "fatal: repository 'https://github.invalid/owner/name.git/' not found"
+prep_run_fetch_shim "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 4
+want_out 'LOOKUP_FAILED head-fetch'
+want_fetch_calls 1
+
+scenario "a fetch error that prints a URL's credentials quotes none"
+prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
+# Git's redirect error prints the asked-for URL with its userinfo, and the
+# retry line quotes the first line, so the token is on both.
+fetch_fail_fx "$HEAD_FETCH" "" "error: Unable to find abc under https://x:TESTTOKEN@github.invalid/owner/name.git
+fatal: unable to update url base from redirection:
+  asked for: https://x:TESTTOKEN@github.invalid/owner/name.git/info/refs?service=git-upload-pack
+   redirect: https://x:TESTTOKEN@github.invalid/login"
+prep_run_fetch_shim "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 4
+want_out 'LOOKUP_FAILED head-fetch'
+want_out 'asked for: https://github.invalid/owner/name.git/info/refs'
+want_err 'git fetch failed (attempt 1 of 3): error: Unable to find abc under https://github.invalid/'
+want_no_out 'TESTTOKEN'
+want_no_err 'TESTTOKEN'
+
+scenario "a prepare base fetch that fails every time quotes git's error"
+prep_setup; prep_fixtures feat "$FEAT_OID"
+fetch_fail_fx "$BASE_FETCH" "" "$DNS_ERR"
+prep_run_fetch_shim "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_out '"stderr":"fatal: unable to access'
+want_fetch_calls 3
+
+scenario "a land base fetch that fails every time quotes git's error"
+land_setup; land_fixtures
+fetch_fail_fx "$BASE_FETCH" "" "$DNS_ERR"
+run_sm_with_git_shim "$FETCH_SHIM" "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_out '"stderr":"fatal: unable to access'
+want_fetch_calls 3
+want_land_untouched "a failed base fetch still rewrote the head branch"
+
+scenario "a base remote that is not a repository fails at once"
+land_setup; land_fixtures
+G "$WORK" remote set-url origin "$SCEN/nowhere.git"
+run_sm "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch'
+want_out 'does not appear to be a git repository'
+want_no_err 'git fetch failed'
+
+scenario "a fetch's excerpt is cut to git's first 300 bytes"
+land_setup; land_fixtures
+# A permanent error, so the case runs one attempt, not three.
+fetch_fail_fx "$BASE_FETCH" "" "fatal: couldn't find remote ref \"quoted\"
+line two $(printf '%0400d' 0)"
+run_sm_with_git_shim "$FETCH_SHIM" "${LAND[@]}" --head "$FEAT_OID"
+got=$(printf '%s' "${OUT#*LOOKUP_FAILED base-fetch }" | jq -j .stderr 2>/dev/null)
+want_rc 4
+if [ "$got" = "$(head -c 300 "$FIX/git-fetch-stderr")" ]; then ok
+else bad "stderr is not the first 300 bytes of git's error output (got ${#got} chars)"; fi
+
+scenario "a successful fetch's output never reaches a later failure"
+land_setup; land_fixtures
+# The fake fetch writes git's progress lines and succeeds without
+# updating the tracking ref, so the tip lookup after it fails.
+G "$WORK" update-ref -d "$BASE_FETCH"
+fetch_fail_fx "$BASE_FETCH" 0 "From $BARE
+ * branch            main       -> origin/main"
+touch "$FIX/git-fetch-fake-ok"
+run_sm_with_git_shim "$FETCH_SHIM" "${LAND[@]}" --head "$FEAT_OID"
+want_rc 4
+want_out 'LOOKUP_FAILED base-fetch {"detail":"the fetched main did not resolve to a commit"'
+want_no_out '"stderr"'
 
 scenario "drop removes only a worktree prepare made for this PR"
 prep_setup
