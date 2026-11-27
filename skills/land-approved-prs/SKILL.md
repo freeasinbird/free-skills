@@ -415,6 +415,13 @@ parts it skipped that don't touch the worktree: fast-forward the checkout's
 default branch from the remote, and confirm the issues the PR closes actually
 closed. Leave the local branch; "The End-of-Batch Sweep" may free it.
 
+If merge-cleanup stops `head-worktree-orphaned`, a removal failed partway and
+left a directory that's no longer a worktree. Record the path and report it
+to the owner as a half-removed directory that only they should delete. Do the
+same skipped parts and leave the local branch. Don't rerun merge-cleanup for
+it during the batch: the end-of-batch sweep can't see the directory, so only
+the owner's deletion clears the stop.
+
 Never print a bare `git worktree remove` line for the owner to paste: even
 without `--force`, it deletes the worktree's ignored files and exits 0. For a
 worktree the end-of-batch sweep keeps, point the owner at merge-cleanup's
