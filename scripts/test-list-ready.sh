@@ -1574,6 +1574,151 @@ GH_DEBUG=api lr --run r1
 if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED pr-list "* ]]; then ok; else bad "an unparseable head is LOOKUP_FAILED: $LAST"; fi
 case "$LAST" in *'"stderr"'*) bad "a failure past successful reads carries an excerpt: $LAST" ;; *) ok ;; esac
 
+# --- git fetch failures ---
+
+# FETCH_SHIM fails each git fetch whose arguments contain the first line
+# of $FIX/git-fetch-fail, writing $FIX/git-fetch-stderr and exiting 128 as
+# git does. A second line caps how many matching calls fail (absent: all);
+# with $FIX/git-fetch-fake-ok, a matching call past the cap writes the same
+# stderr and exits 0 without fetching. $FIX/git-fetch-calls counts the
+# matching calls. Every other git command runs the real git.
+FETCH_SHIM="$TMP/fetch-shim"
+mkdir -p "$FETCH_SHIM"
+{
+  echo '#!/bin/bash'
+  printf 'REAL_GIT=%q\n' "$(command -v git)"
+  printf 'FIX=%q\n' "$FIX"
+  cat <<'FETCHEOF'
+if [ "${1:-}" = fetch ] && [ -f "$FIX/git-fetch-fail" ]; then
+  { IFS= read -r match; IFS= read -r cap; } < "$FIX/git-fetch-fail"
+  case " $* " in
+    *"$match"*)
+      n=$(( $(cat "$FIX/git-fetch-calls" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$FIX/git-fetch-calls"
+      if [ -z "$cap" ] || [ "$n" -le "$cap" ]; then
+        cat "$FIX/git-fetch-stderr" >&2; exit 128
+      fi
+      if [ -f "$FIX/git-fetch-fake-ok" ]; then
+        cat "$FIX/git-fetch-stderr" >&2; exit 0
+      fi
+      ;;
+  esac
+fi
+exec "$REAL_GIT" "$@"
+FETCHEOF
+} > "$FETCH_SHIM/git"
+chmod +x "$FETCH_SHIM/git"
+fetch_fail_fx() { # fetch_fail_fx <arg-text> <cap-or-empty> <stderr>
+  printf '%s\n%s\n' "$1" "$2" > "$FIX/git-fetch-fail"
+  printf '%s\n' "$3" > "$FIX/git-fetch-stderr"
+}
+expect_fetch_calls() { # expect_fetch_calls <count> <desc>: matching git fetch calls
+  local n
+  n=$(cat "$FIX/git-fetch-calls" 2>/dev/null)
+  if [ "${n:-0}" -eq "$1" ]; then ok; else bad "$2: ${n:-0} matching git fetch calls, want $1"; fi
+}
+lr_fetch_shim() { # lr_fetch_shim <args...>: lr with FETCH_SHIM's git
+  local saved="$SHIMD"
+  SHIMD="$SHIMD:$FETCH_SHIM"; lr "$@"; SHIMD="$saved"
+}
+BASE_FETCH=refs/remotes/origin/main
+LOCK_FETCH=refs/land/seen-lock
+DNS_ERR="fatal: unable to access 'https://github.invalid/owner/name.git/': Could not resolve host: github.invalid"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+fetch_fail_fx "$BASE_FETCH" 2 "$DNS_ERR"
+lr_fetch_shim --run r1
+expect_ready 1 "a base fetch that fails twice with a DNS error then works"
+expect_fetch_calls 3 "the base fetch took three attempts"
+expect_err "list-ready.sh: git fetch failed (attempt 1 of 3): $DNS_ERR; retrying in 1s" "the first fetch retry is logged"
+expect_err 'list-ready.sh: git fetch failed (attempt 2 of 3)' "the second fetch retry is logged"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+fetch_fail_fx "$BASE_FETCH" "" "$DNS_ERR"
+lr_fetch_shim --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED base-fetch "* ]]; then ok; else bad "a base fetch that keeps failing is LOOKUP_FAILED base-fetch: $LAST"; fi
+expect_stderr "$DNS_ERR" "a failed base fetch quotes git's error"
+expect_fetch_calls 3 "a persistent DNS error stops after three attempts"
+expect_remote_lock absent "a failed base fetch takes no lock"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+fetch_fail_fx "$BASE_FETCH" "" "fatal: couldn't find remote ref main"
+lr_fetch_shim --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED base-fetch "* ]]; then ok; else bad "a base fetch of a missing branch is LOOKUP_FAILED base-fetch: $LAST"; fi
+expect_stderr "fatal: couldn't find remote ref main" "a missing branch quotes git's error"
+expect_fetch_calls 1 "a missing branch is not retried"
+expect_no_err 'git fetch failed' "a missing branch logs no retry"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+# Git's redirect error prints the asked-for URL with its userinfo, and the
+# retry line quotes the first line, so the token is on both. A URL git
+# can't parse is printed whole too, and its password may hold a raw slash
+# or quote.
+fetch_fail_fx "$BASE_FETCH" "" "error: Unable to find abc under https://x:TESTTOKEN@github.invalid/owner/name.git
+fatal: unable to access 'https://x:TESTTOKEN/a'b@github.invalid/owner/name.git/'
+fatal: unable to update url base from redirection:
+  asked for: https://x:TESTTOKEN@github.invalid/owner/name.git/info/refs?service=git-upload-pack"
+lr_fetch_shim --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED base-fetch "* ]]; then ok; else bad "a fetch error naming credentials is LOOKUP_FAILED base-fetch: $LAST"; fi
+expect_err 'git fetch failed (attempt 1 of 3): error: Unable to find abc under https://github.invalid/' "the retry line keeps the URL without its userinfo"
+if grep -qF 'asked for: https://github.invalid/owner/name.git/info/refs' "$TMP/out"; then ok; else bad "the excerpt keeps the URL without its userinfo: $LAST"; fi
+if grep -qF "unable to access 'https://github.invalid/owner/name.git/'" "$TMP/out"; then ok; else bad "a password with a slash or quote is stripped too: $LAST"; fi
+if grep -qF TESTTOKEN "$TMP/out"; then bad "a credential in git's error reached stdout: $LAST"; else ok; fi
+expect_no_err TESTTOKEN "a credential in git's error never reaches stderr"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+git -C "$WORK" remote set-url origin 'https://x:TESTTOKEN@github.invalid/owner/name.git'
+GIT_TRACE=1 GIT_TRACE_CURL=1 GIT_TRACE_REDACT=0 GIT_CURL_VERBOSE=1 lr --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED base-fetch "* ]]; then ok; else bad "a fetch from an unreachable token URL is LOOKUP_FAILED base-fetch: $LAST"; fi
+case "$LAST" in *'"stderr":"fatal: unable to access'*) ok ;; *) bad "the fetch excerpt is git's error: $LAST" ;; esac
+if grep -qF TESTTOKEN "$TMP/out"; then bad "a token in the remote URL reached stdout under git tracing: $LAST"; else ok; fi
+expect_no_err TESTTOKEN "a token in the remote URL never reaches stderr under git tracing"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+plant_lock other 5
+fetch_fail_fx "$LOCK_FETCH" 2 "$DNS_ERR"
+lr_fetch_shim --run r1
+expect_stop lock-held "a lock fetch that fails twice then works still reads the lock"
+expect_fetch_calls 3 "the lock fetch took three attempts"
+
+new_repo
+ready_pr 1 feat/one "$H1"
+plant_lock other 5
+fetch_fail_fx "$LOCK_FETCH" "" "$DNS_ERR"
+lr_fetch_shim --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED lock-read "* ]]; then ok; else bad "a lock fetch that keeps failing is LOOKUP_FAILED lock-read: $LAST"; fi
+expect_stderr "$DNS_ERR" "a failed lock fetch quotes git's error"
+expect_fetch_calls 3 "a failing lock fetch stops after three attempts"
+
+# A lock released between ls-remote and the fetch is the race the OID
+# check reports, not a missing branch the lander would end the batch on.
+new_repo
+ready_pr 1 feat/one "$H1"
+plant_lock other 5
+fetch_fail_fx "$LOCK_FETCH" "" "fatal: couldn't find remote ref refs/land/lock"
+lr_fetch_shim --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == 'LOOKUP_FAILED lock-read {"detail":"refs/land/lock moved while it was read; list again"}' ]]; then ok
+else bad "a lock gone before its fetch asks for a fresh list with no excerpt: $LAST"; fi
+expect_fetch_calls 1 "a vanished lock is not retried"
+
+# The fake fetch writes git's progress lines and succeeds without
+# creating the seen-lock ref, so the OID check after it fails.
+new_repo
+ready_pr 1 feat/one "$H1"
+plant_lock other 5
+fetch_fail_fx "$LOCK_FETCH" 0 "From $SRV
+ * branch            refs/land/lock -> refs/land/seen-lock"
+touch "$FIX/git-fetch-fake-ok"
+lr_fetch_shim --run r1
+if [ "$RC" -eq 4 ] && [[ "$LAST" == "LOOKUP_FAILED lock-read "* ]]; then ok; else bad "a fetch that left no seen-lock ref is LOOKUP_FAILED lock-read: $LAST"; fi
+case "$LAST" in *'"stderr"'*) bad "a successful fetch's output reached a later failure: $LAST" ;; *) ok ;; esac
+
 # --- merges awaiting cleanup ---
 
 new_repo

@@ -51,8 +51,10 @@
 #   OK <list|pushed|release|cleaned> <json>
 #   STOP <guard> <json>          a guard fired; the guard names are stable
 #   LOOKUP_FAILED <what> <json>  a read failed; unknown is not absence; a
-#                                failed forge read adds "stderr", the first
-#                                300 bytes of gh's error output
+#                                failed forge read or git fetch adds
+#                                "stderr", the first 300 bytes of the
+#                                tool's error output; both retry transient
+#                                failures
 # Exit codes: 0 OK; 2 STOP; 4 LOOKUP_FAILED; 64 usage error; 69 gh
 # (GitHub CLI) not found on PATH.
 set -u
@@ -212,6 +214,52 @@ gh_read() {
   done
 }
 
+# Is the git fetch failure in GH_ERR an answer rather than a blip? These
+# are git's messages for a missing branch, a missing or unreadable
+# repository (git names an HTTP 404 "repository '<url>' not found"), and
+# refused credentials. Anything else (DNS, a refused or
+# reset connection, a timeout, early EOF, an HTTP 5xx) is retried, as
+# gh_read treats a failure it can't name.
+git_fetch_err_permanent() {
+  grep -qE "couldn't find remote ref|does not appear to be a git repository|Repository not found|repository '[^']*' not found|Authentication failed|Permission denied|could not read Username|The requested URL returned error: (401|403|404)" "$GH_ERR"
+}
+# Run one git fetch with gh_read's retry, keeping git's stderr only when
+# the fetch fails, so a successful fetch's "From ..." lines can't attach
+# to a later failure. Git's trace settings are dropped first: with
+# GIT_TRACE or GIT_TRACE_CURL on and GIT_TRACE_REDACT=0, git writes the
+# remote URL's userinfo and request headers to stderr, which
+# lookup_failed would then quote. Git's own messages don't always hide
+# userinfo either (a redirect error prints the asked-for URL whole), so
+# everything from a "://" to the last "@" before whitespace is dropped
+# from its stderr before anything reads it: a password may hold a raw "/"
+# or quote, and a path's "@" costs only the host. If that pass fails, the
+# text is dropped. The stderr goes to a file, not a pipe: a pipe waits
+# for every process holding it, and an SSH ControlPersist master git
+# leaves running can hold it open. Callers pass git fetch's arguments.
+git_fetch() {
+  local attempt=1 rc line v
+  while :; do
+    (
+      for v in $(compgen -e); do
+        case "$v" in GIT_TRACE*|GIT_CURL_VERBOSE) unset "$v" ;; esac
+      done
+      exec git fetch "$@"
+    ) >/dev/null 2>"$GH_ERR"
+    rc=$?
+    [ "$rc" -ne 0 ] || { : > "$GH_ERR"; return 0; }
+    if LC_ALL=C sed -E 's#(://)[^[:space:]]*@#\1#g' "$GH_ERR" > "$GH_OUT"; then
+      cat -- "$GH_OUT" > "$GH_ERR"
+    else
+      : > "$GH_ERR"
+    fi
+    { [ "$attempt" -lt "$GH_READ_ATTEMPTS" ] && ! git_fetch_err_permanent; } || return "$rc"
+    line=$(tr -d '\0' < "$GH_ERR" | head -n 1 | head -c 300)
+    echo "${0##*/}: git fetch failed (attempt $attempt of $GH_READ_ATTEMPTS): ${line:-git exited $rc}; retrying in ${attempt}s" >&2
+    sleep "$attempt"
+    attempt=$((attempt + 1))
+  done
+}
+
 # --- repository and record -------------------------------------------------
 
 GIT_COMMON=$(git rev-parse --git-common-dir 2>/dev/null) \
@@ -289,7 +337,7 @@ fi
 DEFAULT=$(gh_read api "repos/$REPO" --jq .default_branch) \
   || lookup_failed repo "could not read $REPO's default branch"
 [ -n "$DEFAULT" ] || lookup_failed repo "$REPO reported no default branch"
-git fetch -q --no-tags -- "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$DEFAULT" 2>/dev/null \
+git_fetch -q --no-tags -- "$REMOTE" "+refs/heads/$DEFAULT:refs/remotes/$REMOTE/$DEFAULT" \
   || lookup_failed base-fetch "could not fetch $DEFAULT from $REMOTE"
 
 LANDING_RECORD_HELPER="$(cd "$(dirname "$0")" && pwd)/landing-record.sh"
@@ -355,8 +403,16 @@ read_lock() {
   LOCK_OID=$(printf '%s\n' "$out" | awk -F'\t' -v r="$LOCK_REF" '$2 == r { print $1 }')
   LOCK_RUN="" LOCK_HOST="" LOCK_PR="" LOCK_AGE=0
   [ -n "$LOCK_OID" ] || return 0
-  git fetch -q --no-tags -- "$REMOTE" "+$LOCK_REF:refs/land/seen-lock" 2>/dev/null \
-    || lookup_failed lock-read "could not fetch $LOCK_REF from $REMOTE"
+  # A lock released between ls-remote and this fetch makes git say the
+  # ref is missing. That is the race the OID check below reports, not a
+  # missing branch, so it drops git's text and asks for a fresh list.
+  if ! git_fetch -q --no-tags -- "$REMOTE" "+$LOCK_REF:refs/land/seen-lock"; then
+    if grep -q "couldn't find remote ref" "$GH_ERR"; then
+      : > "$GH_ERR"
+      lookup_failed lock-read "$LOCK_REF moved while it was read; list again"
+    fi
+    lookup_failed lock-read "could not fetch $LOCK_REF from $REMOTE"
+  fi
   got=$(git rev-parse --verify --quiet refs/land/seen-lock) || got=""
   git update-ref -d refs/land/seen-lock 2>/dev/null
   [ "$got" = "$LOCK_OID" ] \

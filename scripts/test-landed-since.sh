@@ -550,6 +550,121 @@ ls_run
 expect_field .from "$C0" "a force-pushed head cut from a side branch keeps the range wide"
 expect_out "c2 second landing" "a landing the rebase absorbed is shown"
 
+# --- git fetch failures ---
+
+# FETCH_SHIM fails each git fetch whose arguments contain the first line
+# of $FIX/git-fetch-fail, writing $FIX/git-fetch-stderr and exiting 128 as
+# git does. A second line caps how many matching calls fail (absent: all);
+# with $FIX/git-fetch-fake-ok, a matching call past the cap writes the same
+# stderr and exits 0 without fetching. $FIX/git-fetch-calls counts the
+# matching calls. Every other git command runs the real git.
+FETCH_SHIM="$TMP/fetch-shim"
+mkdir -p "$FETCH_SHIM"
+{
+  echo '#!/bin/bash'
+  printf 'REAL_GIT=%q\n' "$(command -v git)"
+  printf 'FIX=%q\n' "$FIX"
+  cat <<'FETCHEOF'
+if [ "${1:-}" = fetch ] && [ -f "$FIX/git-fetch-fail" ]; then
+  { IFS= read -r match; IFS= read -r cap; } < "$FIX/git-fetch-fail"
+  case " $* " in
+    *"$match"*)
+      n=$(( $(cat "$FIX/git-fetch-calls" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$FIX/git-fetch-calls"
+      if [ -z "$cap" ] || [ "$n" -le "$cap" ]; then
+        cat "$FIX/git-fetch-stderr" >&2; exit 128
+      fi
+      if [ -f "$FIX/git-fetch-fake-ok" ]; then
+        cat "$FIX/git-fetch-stderr" >&2; exit 0
+      fi
+      ;;
+  esac
+fi
+exec "$REAL_GIT" "$@"
+FETCHEOF
+} > "$FETCH_SHIM/git"
+chmod +x "$FETCH_SHIM/git"
+fetch_fail_fx() { # fetch_fail_fx <arg-text> <cap-or-empty> <stderr>
+  printf '%s\n%s\n' "$1" "$2" > "$FIX/git-fetch-fail"
+  printf '%s\n' "$3" > "$FIX/git-fetch-stderr"
+}
+expect_fetch_calls() { # expect_fetch_calls <count> <desc>: matching git fetch calls
+  local n
+  n=$(cat "$FIX/git-fetch-calls" 2>/dev/null)
+  if [ "${n:-0}" -eq "$1" ]; then ok; else bad "$2: ${n:-0} matching git fetch calls, want $1"; fi
+}
+ls_run_fetch_shim() { # ls_run_fetch_shim <args...>: ls_run with FETCH_SHIM's git
+  local saved="$SHIMD"
+  SHIMD="$SHIMD:$FETCH_SHIM"; ls_run "$@"; SHIMD="$saved"
+}
+BASE_FETCH=refs/remotes/origin/main
+DNS_ERR="fatal: unable to access 'https://github.invalid/owner/name.git/': Could not resolve host: github.invalid"
+
+new_repo
+pr_commit "$A1" "$C0"
+fetch_fail_fx "$BASE_FETCH" 2 "$DNS_ERR"
+ls_run_fetch_shim
+expect_field .from "$C0" "a base fetch that fails twice with a DNS error then works"
+expect_fetch_calls 3 "the base fetch took three attempts"
+expect_err "landed-since.sh: git fetch failed (attempt 1 of 3): $DNS_ERR; retrying in 1s" "the first fetch retry is logged"
+expect_err 'landed-since.sh: git fetch failed (attempt 2 of 3)' "the second fetch retry is logged"
+
+new_repo
+pr_commit "$A1" "$C0"
+fetch_fail_fx "$BASE_FETCH" "" "$DNS_ERR"
+ls_run_fetch_shim
+expect_lookup base-fetch "a base fetch that keeps failing is a lookup failure"
+if [ "$(printf '%s' "$JSON" | jq -j .stderr 2>/dev/null)" = "$DNS_ERR" ]; then ok; else bad "a failed base fetch quotes git's error: $LAST"; fi
+expect_fetch_calls 3 "a persistent DNS error stops after three attempts"
+
+new_repo
+pr_commit "$A1" "$C0"
+fetch_fail_fx "$BASE_FETCH" "" "fatal: couldn't find remote ref main"
+ls_run_fetch_shim
+expect_lookup base-fetch "a base fetch of a missing branch is a lookup failure"
+expect_out "\"stderr\":\"fatal: couldn't find remote ref main\"}" "a missing branch quotes git's error"
+expect_fetch_calls 1 "a missing branch is not retried"
+expect_no_err 'git fetch failed' "a missing branch logs no retry"
+
+new_repo
+pr_commit "$A1" "$C0"
+# Git's redirect error prints the asked-for URL with its userinfo, and the
+# retry line quotes the first line, so the token is on both. A URL git
+# can't parse is printed whole too, and its password may hold a raw slash
+# or quote.
+fetch_fail_fx "$BASE_FETCH" "" "error: Unable to find abc under https://x:TESTTOKEN@github.invalid/owner/name.git
+fatal: unable to access 'https://x:TESTTOKEN/a'b@github.invalid/owner/name.git/'
+fatal: unable to update url base from redirection:
+  asked for: https://x:TESTTOKEN@github.invalid/owner/name.git/info/refs?service=git-upload-pack"
+ls_run_fetch_shim
+expect_lookup base-fetch "a fetch error naming credentials is a lookup failure"
+expect_err 'git fetch failed (attempt 1 of 3): error: Unable to find abc under https://github.invalid/' "the retry line keeps the URL without its userinfo"
+expect_out 'asked for: https://github.invalid/owner/name.git/info/refs' "the excerpt keeps the URL without its userinfo"
+expect_out "unable to access 'https://github.invalid/owner/name.git/'" "a password with a slash or quote is stripped too"
+expect_no_out TESTTOKEN "a credential in git's error never reaches stdout"
+expect_no_err TESTTOKEN "a credential in git's error never reaches stderr"
+
+new_repo
+pr_commit "$A1" "$C0"
+git -C "$WORK" remote set-url origin 'https://x:TESTTOKEN@github.invalid/owner/name.git'
+GIT_TRACE=1 GIT_TRACE_CURL=1 GIT_TRACE_REDACT=0 GIT_CURL_VERBOSE=1 ls_run
+expect_lookup base-fetch "a fetch from an unreachable token URL is a lookup failure"
+expect_out '"stderr":"fatal: unable to access' "the fetch excerpt is git's error"
+expect_no_out TESTTOKEN "a token in the remote URL never reaches stdout under git tracing"
+expect_no_err TESTTOKEN "a token in the remote URL never reaches stderr under git tracing"
+
+# The fake fetch writes git's progress lines and succeeds without
+# updating the tracking ref, so the tip lookup after it fails.
+new_repo
+pr_commit "$A1" "$C0"
+git -C "$WORK" update-ref -d "$BASE_FETCH"
+fetch_fail_fx "$BASE_FETCH" 0 "From $SRV
+ * branch            main       -> origin/main"
+touch "$FIX/git-fetch-fake-ok"
+ls_run_fetch_shim
+expect_lookup base-fetch "a fetch that left no tracking ref is a lookup failure"
+expect_out 'LOOKUP_FAILED base-fetch {"detail":"the fetched main did not resolve to a commit"}' "a successful fetch's output never reaches a later failure"
+
 # --- the re-read after rebased ---
 
 new_repo

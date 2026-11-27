@@ -29,10 +29,15 @@
 # It never closes issues or interprets project post-merge policy.
 #
 # Last line on stdout is the machine-readable result. Every result payload has
-# the same fields, including dispositions for steps that did not start:
+# the same fields, including dispositions for steps that did not start; only
+# a LOOKUP_FAILED from a failed git fetch adds one:
 #   OK cleanup <json>            cleanup completed
 #   STOP <guard> <json>          a safety guard refused the next step
-#   LOOKUP_FAILED <what> <json>  required evidence could not be read
+#   LOOKUP_FAILED <what> <json>  required evidence could not be read; a
+#                                failed git fetch adds "stderr" after
+#                                "detail", the first 300 bytes of git's
+#                                error output, once transient failures
+#                                were retried
 # Exit codes: 0 OK; 2 STOP; 4 LOOKUP_FAILED; 64 usage; 69 missing runtime.
 set -u
 # A caller may invoke `bash -x`; disable inherited tracing before any remote
@@ -204,8 +209,14 @@ remote_urls_newline_free() { # remote_urls_newline_free <remote>
   return 0
 }
 emit_result() { # emit_result <kind> <label> <detail>
-  local kind="$1" label="$2" detail="$3"
-  printf '%s %s {"repo":"%s","pr":%s,"merge":"%s","head_branch":"%s","base_branch":"%s","head_repo":"%s","checkout":"%s","worktree":"%s","consumers":"%s","remote_branch":"%s","base_resync":"%s","local_branch":"%s","prune":"%s","closing_refs":%s,"incomplete_step":"%s","detail":"%s"}\n' \
+  local kind="$1" label="$2" detail="$3" excerpt="" extra=""
+  # FETCH_ERR holds only the latest fetch's failure, so this quotes git
+  # only when that fetch is what failed.
+  if [ "$kind" = LOOKUP_FAILED ] && [ -s "${FETCH_ERR:-}" ]; then
+    excerpt=$(tr -d '\0' < "$FETCH_ERR" | head -c 300)
+    [ -z "$excerpt" ] || extra=",\"stderr\":\"$(json_escape "$excerpt")\""
+  fi
+  printf '%s %s {"repo":"%s","pr":%s,"merge":"%s","head_branch":"%s","base_branch":"%s","head_repo":"%s","checkout":"%s","worktree":"%s","consumers":"%s","remote_branch":"%s","base_resync":"%s","local_branch":"%s","prune":"%s","closing_refs":%s,"incomplete_step":"%s","detail":"%s"%s}\n' \
     "$kind" "$label" "$(json_escape "$REPO_SPEC")" "$PR" \
     "$(json_escape "$MERGE_DISPOSITION")" "$(json_escape "$BRANCH")" \
     "$(json_escape "$BASE")" "$(json_escape "$HEAD_REPO")" \
@@ -216,7 +227,7 @@ emit_result() { # emit_result <kind> <label> <detail>
     "$(json_escape "$BASE_DISPOSITION")" \
     "$(json_escape "$LOCAL_DISPOSITION")" \
     "$(json_escape "$PRUNE_DISPOSITION")" "$CLOSING_REFS_JSON" \
-    "$(json_escape "$INCOMPLETE_STEP")" "$(json_escape "$detail")"
+    "$(json_escape "$INCOMPLETE_STEP")" "$(json_escape "$detail")" "$extra"
 }
 stop() { # stop <guard> <detail>
   emit_result STOP "$1" "$2"
@@ -226,6 +237,12 @@ lookup_failed() { # lookup_failed <what> <detail>
   emit_result LOOKUP_FAILED "$1" "$2"
   exit 4
 }
+
+# Git fetches keep git's stderr here so emit_result can quote why one
+# failed; FETCH_SCRATCH holds it while URL userinfo is stripped.
+FETCH_ERR=$(mktemp) || lookup_failed tmp "mktemp failed"
+FETCH_SCRATCH=$(mktemp) || { rm -f -- "$FETCH_ERR"; FETCH_ERR=""; lookup_failed tmp "mktemp failed"; }
+trap 'rm -f -- "$FETCH_ERR" "$FETCH_SCRATCH"' EXIT
 
 # Percent-encode one URL path segment or query value. Forge-sourced branch
 # names are parsed as URL syntax by the API client, so a branch legitimately
@@ -1022,14 +1039,62 @@ git_pinned_url() { # git_pinned_url <ssh-command> <literal-url> <git args with @
   next=$((count + 1))
   [ -z "$ssh_command" ] || env_args+=("GIT_SSH_COMMAND=$ssh_command")
   # Bash before 4.4 treats an empty "${env_args[@]}" as unbound under set -u
-  # and exits. The empty-ssh_command callers (safe_prune, the base-resync
-  # fetch) discard stderr, so that crash would leave no output at all.
+  # and exits. The empty-ssh_command callers (the fetches in
+  # git_fetch_pinned) discard stdout, so that crash would leave no result.
   env ${env_args[@]+"${env_args[@]}"} "GIT_CONFIG_COUNT=$((count + 2))" \
     "GIT_CONFIG_KEY_${count}=url.$target.insteadOf" \
     "GIT_CONFIG_VALUE_${count}=$pin" \
     "GIT_CONFIG_KEY_${next}=url.$target.pushInsteadOf" \
     "GIT_CONFIG_VALUE_${next}=$pin" \
     git "${args[@]}"
+}
+
+# Is the git fetch failure in FETCH_ERR an answer rather than a blip? These
+# are git's messages for a missing branch, a missing or unreadable
+# repository (git names an HTTP 404 "repository '<url>' not found"), and
+# refused credentials, as land-approved-prs' land.sh classifies them.
+# Anything else (DNS, a refused or reset connection, a timeout, early EOF,
+# an HTTP 5xx) is retried.
+git_fetch_err_permanent() {
+  grep -qE "couldn't find remote ref|does not appear to be a git repository|Repository not found|repository '[^']*' not found|Authentication failed|Permission denied|could not read Username|The requested URL returned error: (401|403|404)" "$FETCH_ERR"
+}
+# Run one pinned git fetch, retrying a transient failure after 1 s and
+# then 2 s, and keep git's stderr in FETCH_ERR only when the last attempt
+# fails, so a successful fetch's "From ..." lines can't attach to a later
+# failure. Git's trace settings are dropped first: with GIT_TRACE or
+# GIT_TRACE_CURL on and GIT_TRACE_REDACT=0, git writes the remote URL's
+# userinfo and request headers to stderr. Git's own messages don't always
+# hide userinfo either (a redirect error prints the asked-for URL whole),
+# so everything from a "://" to the last "@" before whitespace is dropped
+# from its stderr before anything reads it: a password may hold a raw "/"
+# or quote, and a path's "@" costs only the host. If that pass fails, the
+# text is dropped. The stderr goes to a file, not a pipe: a pipe waits
+# for every process holding it, and an SSH ControlPersist master git
+# leaves running can hold it open. Callers pass git_pinned_url's URL and
+# git arguments.
+git_fetch_pinned() { # git_fetch_pinned <literal-url> <git args with @PINNED_URL@>
+  local attempt=1 attempts=3 rc line v
+  while :; do
+    (
+      for v in $(compgen -e); do
+        case "$v" in GIT_TRACE*|GIT_CURL_VERBOSE) unset "$v" ;; esac
+      done
+      git_pinned_url "" "$@"
+    ) >/dev/null 2>"$FETCH_ERR"
+    rc=$?
+    [ "$rc" -ne 0 ] || { : > "$FETCH_ERR"; return 0; }
+    if LC_ALL=C sed -E 's#(://)[^[:space:]]*@#\1#g' "$FETCH_ERR" > "$FETCH_SCRATCH"; then
+      cat -- "$FETCH_SCRATCH" > "$FETCH_ERR"
+    else
+      : > "$FETCH_ERR"
+    fi
+    : > "$FETCH_SCRATCH"
+    { [ "$attempt" -lt "$attempts" ] && ! git_fetch_err_permanent; } || return "$rc"
+    line=$(tr -d '\0' < "$FETCH_ERR" | head -n 1 | head -c 300)
+    echo "merge-cleanup.sh: git fetch failed (attempt $attempt of $attempts): ${line:-git exited $rc}; retrying in ${attempt}s" >&2
+    sleep "$attempt"
+    attempt=$((attempt + 1))
+  done
 }
 
 # Resolve which configured remote points at a repository, matching the
@@ -1211,8 +1276,8 @@ remote_namespace_check() { # remote_namespace_check <remote-name>
 safe_prune() { # safe_prune <validated-url> <remote-name>
   local url="$1" remote="$2"
   remote_namespace_check "$remote"
-  git_pinned_url "" "$url" -c fetch.pruneTags=false fetch --prune -- @PINNED_URL@ \
-    "+refs/heads/*:refs/remotes/$remote/*" >/dev/null 2>&1
+  git_fetch_pinned "$url" -c fetch.pruneTags=false fetch --prune -- @PINNED_URL@ \
+    "+refs/heads/*:refs/remotes/$remote/*"
 }
 
 check_consumers() {
@@ -1297,8 +1362,8 @@ remove_head_worktree() { # remove_head_worktree <path> <base-fetch-url>
   [ -n "$CALLER_DIR" ] \
     || stop head-worktree-present "linked head worktree $path was kept: the caller's working directory could not be read"
   remote_namespace_check "$BASE_REMOTE"
-  git_pinned_url "" "$base_url" fetch -- @PINNED_URL@ \
-    "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+  git_fetch_pinned "$base_url" fetch -- @PINNED_URL@ \
+    "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" \
     || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
   base_tip=$(git rev-parse --verify --quiet "refs/remotes/$BASE_REMOTE/$BASE^{commit}" 2>/dev/null) \
     || lookup_failed base-fetch "could not read fetched $BASE from $BASE_REMOTE"
@@ -1427,8 +1492,8 @@ phase_cleanup() {
 
   INCOMPLETE_STEP=base_resync
   remote_namespace_check "$BASE_REMOTE"
-  git_pinned_url "" "$base_fetch_url" fetch -- @PINNED_URL@ \
-    "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+  git_fetch_pinned "$base_fetch_url" fetch -- @PINNED_URL@ \
+    "refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" \
     || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
   git merge --ff-only --no-overwrite-ignore \
     "refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \

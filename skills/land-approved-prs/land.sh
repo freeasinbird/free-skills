@@ -599,11 +599,12 @@ git_fetch_err_permanent() {
 # remote URL's userinfo and request headers to stderr, which
 # lookup_failed would then quote. Git's own messages don't always hide
 # userinfo either (a redirect error prints the asked-for URL whole), so
-# every "scheme://user:pass@" in its stderr loses the "user:pass@" before
-# anything reads it; if that pass fails, the text is dropped. The stderr
-# goes to a file, not a pipe: a pipe waits for every process holding it,
-# and an SSH ControlPersist master git leaves running can hold it open.
-# Callers pass git fetch's arguments.
+# everything from a "://" to the last "@" before whitespace is dropped
+# from its stderr before anything reads it: a password may hold a raw "/"
+# or quote, and a path's "@" costs only the host. If that pass fails, the
+# text is dropped. The stderr goes to a file, not a pipe: a pipe waits
+# for every process holding it, and an SSH ControlPersist master git
+# leaves running can hold it open. Callers pass git fetch's arguments.
 git_fetch() {
   local attempt=1 rc line v
   while :; do
@@ -615,7 +616,7 @@ git_fetch() {
     ) >/dev/null 2>"$GH_ERR"
     rc=$?
     [ "$rc" -ne 0 ] || { : > "$GH_ERR"; return 0; }
-    if LC_ALL=C sed -E 's#(://)[^/[:space:]]*@#\1#g' "$GH_ERR" > "$GH_OUT"; then
+    if LC_ALL=C sed -E 's#(://)[^[:space:]]*@#\1#g' "$GH_ERR" > "$GH_OUT"; then
       cat -- "$GH_OUT" > "$GH_ERR"
     else
       : > "$GH_ERR"

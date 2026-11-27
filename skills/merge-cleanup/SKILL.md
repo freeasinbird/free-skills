@@ -116,7 +116,9 @@ The script's last stdout line is the result:
 - `STOP <guard> <json>` at exit 2: a guard refused the next unsafe step.
 - `LOOKUP_FAILED <what> <json>` at exit 4: required evidence couldn't be
   read, so the next step didn't run. An authentication or API failure is a
-  lookup failure, not proof of an unsupported forge.
+  lookup failure, not proof of an unsupported forge. A failed git fetch adds
+  `stderr`, the first 300 bytes of git's error, after the script retried a
+  transient failure.
 
 Exit 64 is a usage error, and exit 69 a missing runtime, which may print no
 ledger. Every JSON payload carries every step's disposition. Report completed
