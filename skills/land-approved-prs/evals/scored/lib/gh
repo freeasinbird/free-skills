@@ -20,6 +20,7 @@
 #   ci/<oid>           A CI conclusion other than success for that commit;
 #                      ci/<oid>.log is its failed-step log, and
 #                      ci/<oid>.attempt its run attempt after a rerun.
+#   ci/<oid>.slow      Seconds a late check keeps running; see below.
 #   ref-updates.log    Written by the origin's hook; see fixture.sh.
 #   calls.log          One line per call: the arguments joined by spaces.
 #   mutations.log      One line per forge write the stub applied, in order:
@@ -28,7 +29,12 @@
 #                      "<time> rerun <run-id>", and so on.
 #
 # Every CI run is one GitHub Actions job named "test", green unless ci/<oid>
-# says otherwise. Merging makes a real merge commit in the origin, deletes
+# says otherwise. A head with ci/<oid>.slow also has a check that registers
+# late, the case land.sh's two-green-read rule exists for: the first
+# check-runs read of that head (check's) sees only "test", and later reads
+# see "slow-test" in progress until ci/<oid>.slow seconds after the second
+# read, then green. This keeps a land waiting on CI long enough for the
+# agent to prepare the next PR. Merging makes a real merge commit in the origin, deletes
 # the head branch (the repository auto-deletes), and retargets open PRs
 # based on it, as GitHub does. Anything else fails the way gh does.
 set -u
@@ -184,13 +190,43 @@ run_oid() { # run_oid <run-id>: the head a run belongs to
   all_runs | jq -r --argjson id "$1" '.[] | select(.id == $id) | .head_sha' | head -n 1
 }
 check_runs() { # check_runs <oid>
-  jq -n --argjson id "$(jobid "$1")" --arg c "$(ci_concl "$1")" --arg sha "$1" \
+  local runs slow=0
+  runs=$(jq -n --argjson id "$(jobid "$1")" --arg c "$(ci_concl "$1")" --arg sha "$1" \
     --arg url "$(run_url "$1")/job/$(jobid "$1")" \
-    '{total_count:1, check_runs:[{id:$id, name:"test", status:"completed", conclusion:$c,
-      head_sha:$sha, app:{slug:"github-actions"}, details_url:$url, html_url:$url}]}'
+    '[{id:$id, name:"test", status:"completed", conclusion:$c,
+      head_sha:$sha, app:{slug:"github-actions"}, details_url:$url, html_url:$url}]')
+  [ ! -f "$FORGE/ci/$1.slow" ] || slow=$(slow_run "$1")
+  if [ "$slow" != 0 ]; then
+    runs=$(jq --argjson id "$(( $(jobid "$1") + 5 ))" --arg st "$slow" --arg sha "$1" \
+      --arg url "$(run_url "$1")/job/$(( $(jobid "$1") + 5 ))" \
+      '. + [{id:$id, name:"slow-test", status:$st,
+        conclusion:(if $st == "completed" then "success" else null end),
+        head_sha:$sha, app:{slug:"github-actions"}, details_url:$url, html_url:$url}]' <<<"$runs")
+  fi
+  jq '{total_count:length, check_runs:.}' <<<"$runs"
+}
+# slow_run <oid>: the late check's status on this read, or 0 before it
+# registers. Counts reads in ci/<oid>.reads; the second starts the clock.
+slow_run() {
+  local reads start
+  reads=$(( $(cat "$FORGE/ci/$1.reads" 2>/dev/null || echo 0) + 1 ))
+  echo "$reads" >"$FORGE/ci/$1.reads"
+  [ "$reads" -gt 1 ] || { echo 0; return; }
+  [ "$reads" -gt 2 ] || date +%s >"$FORGE/ci/$1.slow-start"
+  start=$(cat "$FORGE/ci/$1.slow-start")
+  if [ $(( $(date +%s) - start )) -ge "$(cat "$FORGE/ci/$1.slow")" ]; then echo completed
+  else echo in_progress; fi
 }
 
 # --- PRs --------------------------------------------------------------------------
+timeline_events() { # timeline_events <N>: label events plus force-pushes from the ref log
+  local b
+  b=$(jq -r .headRefName "$FORGE/pr/$1.json")
+  awk -v r="refs/heads/$b" '$2 == r && $5 == 1 { print $1, $4, $6 }' "$FORGE/ref-updates.log" \
+    | jq -R -s 'split("\n") | map(select(length > 0) | split(" ")
+        | {event:"head_ref_force_pushed", created_at:.[0], commit_id:.[1], actor:{login:.[2]}})' \
+    | jq -s '.[0] + .[1] | sort_by(.created_at)' "$FORGE/timeline/$1.json" -
+}
 pr_file() {
   case "${1:-x}" in *[!0-9]*) die "GraphQL: Could not resolve to a PullRequest with the number of ${1:-?}. (repository.pullRequest)" ;; esac
   [ -f "$FORGE/pr/$1.json" ] \
@@ -511,6 +547,15 @@ case "$sub" in
       q=$(field query)
       case "$q" in
         *mutation*) die "fixture gh: GraphQL mutations are not served" ;;
+        *:pullRequest\(number:*)
+          # list-ready.sh's batched read: one alias p<N> per PR, each with
+          # its review threads and its label and force-push event count.
+          for n in $(printf '%s' "$q" | grep -oE 'p[0-9]+:pullRequest\(number:[0-9]+\)' | sed -E 's/^p([0-9]+):.*/\1/'); do
+            pr_file "$n" >/dev/null || exit 1
+            timeline_events "$n" | jq --arg k "p$n" \
+              '{($k): {reviewThreads:{pageInfo:{hasNextPage:false}, nodes:[]},
+                       timelineItems:{filteredCount:([.[] | select(.event == "labeled" or .event == "unlabeled" or .event == "head_ref_force_pushed")] | length)}}}'
+          done | jq -s '{data:{repository:(add // {})}}' >"$out" ;;
         *reviewThreads*)
           echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}' >"$out" ;;
         *HeadRefForcePushedEvent*|*HEAD_REF_FORCE_PUSHED_EVENT*)
@@ -598,12 +643,7 @@ case "$sub" in
                  state:(if .state == "OPEN" then "open" else "closed" end)}' "$FORGE/pr/$n.json" >"$out" ;;
           issues/"$n"/comments) cp "$FORGE/comments/$n.json" "$out" ;;
           issues/"$n"/labels) jq '.labels' "$FORGE/pr/$n.json" >"$out" ;;
-          issues/"$n"/timeline|issues/"$n"/events)
-            b=$(jq -r .headRefName "$FORGE/pr/$n.json")
-            awk -v r="refs/heads/$b" '$2 == r && $5 == 1 { print $1, $4, $6 }' "$FORGE/ref-updates.log" \
-              | jq -R -s 'split("\n") | map(select(length > 0) | split(" ")
-                  | {event:"head_ref_force_pushed", created_at:.[0], commit_id:.[1], actor:{login:.[2]}})' \
-              | jq -s '.[0] + .[1] | sort_by(.created_at)' "$FORGE/timeline/$n.json" - >"$out" ;;
+          issues/"$n"/timeline|issues/"$n"/events) timeline_events "$n" >"$out" ;;
           *) notfound ;;
         esac ;;
       collaborators/*/permission)

@@ -6,7 +6,7 @@ the repo.
 
 ## Files
 
-- `evals.json`: eleven task evals, each with a scored fixture.
+- `evals.json`: twelve task evals, each with a scored fixture.
   1. `land-one-ready-pr`: lands one ready PR under the lock, runs
      merge-cleanup, and asks the sweep for landed branches only, after the
      lock's release.
@@ -30,6 +30,8 @@ the repo.
       defensible resolutions instead of choosing one.
   11. `stacked-child-after-parent`: lands a parent, then its retargeted
       child.
+  12. `prepare-lookup-failed-rerun`: reruns a `prepare` that failed its head
+      fetch once during the CI wait, then lands both PRs without a hand-back.
 - `scored/`: one directory per case, the shared fixture library, and the
   held-out list. See Scored Eval.
 
@@ -83,7 +85,9 @@ in other words still passes.
   It serves what the skill's scripts read: PRs, labels, timelines with
   force-push events, collaborator permissions, Actions runs and logs, and
   the merge. Each CI run passes unless the fixture marks its head commit
-  failed. Any other host or slug fails as gh would. It logs every call to
+  failed. A head marked slow gains a check that registers after the first
+  read and runs for a set time, so its `land` waits on CI. Any other host or
+  slug fails as gh would. It logs every call to
   `<state-dir>/forge/calls.log` and every write to
   `<state-dir>/forge/mutations.log`.
 - **`reference-transaction`:** the origin's hook. It logs every branch and
@@ -92,6 +96,10 @@ in other words still passes.
   use.
 - **`fixture.sh`:** builds the origin, the primary checkout with its
   AGENTS.md forge and landing records, and PRs at fixed times.
+- **`git-fault`:** a `git` installed ahead of the real one in case 12. It
+  fails the head fetch of the first `land.sh prepare` process, however often
+  that process retries, and logs each such fetch's process to
+  `<state-dir>/forge/prepare-fetch.log`.
 - **`merge-cleanup-stub/`:** a stand-in merge-cleanup skill. Its scripts log
   their arguments and remove nothing.
 - **`grade.sh`:** assertions over those logs, git state, and the message.
@@ -134,7 +142,7 @@ is unmeasured.
 | ----------------------------- | -------------- |
 | Requirements                  | 5              |
 | The Landing Record            | 2              |
-| The Batch                     | 1, 11          |
+| The Batch                     | 1, 11, 12      |
 | Readiness Filters             | 2, 6, 7        |
 | The Lock                      | 1, 5, 11       |
 | One PR                        | 1, 6, 7, 8, 10 |
@@ -143,7 +151,7 @@ is unmeasured.
 | Stacks                        | 11             |
 | Recovery After a Dead Lander  | 6              |
 | Revoking Approval             | 9              |
-| Script Results                | 1, 8, 10       |
+| Script Results                | 1, 8, 10, 12   |
 | Comments and the Batch Report | 1, 6, 10, 11   |
 
 Each owner-gated or authorization rule that no script enforces has a case
@@ -163,6 +171,7 @@ whose result depends on it:
 | Rework only what the landed change dictates; hand back a choice         | 10    |
 | Remove worktrees only through merge-cleanup, sweeping `--remove-landed` | 1     |
 | Leave a dead lander's `land-wt` worktree for the owner                  | 6     |
+| Rerun a failed `prepare` once; it never hands back or ends the batch    | 12    |
 
 ### Held-Out Cases
 
@@ -201,6 +210,22 @@ own edit.
 | Size-climbed skill (#440)           | climb    | 1.000 | 1.000, 1.000, 1.000 | 0.000 |
 | Size-climbed skill, held-out, once  | held-out | 1.000 | 1.000, 1.000, 1.000 | 0.000 |
 
+- **Case 12 (#502), 2026-11-27:** The climb split, now with case 12,
+  scored 1.000 with a 0.000 band over 30 runs, for $4.83 and 19 minutes.
+  That run used the tree before review tightened case 12's grader and fault.
+  Case 12 alone then passed 2 of 3 after the review fixes, and 1 of 3 after
+  rebasing onto #506's fetch retry. All 8 runs that prepared reran once and
+  passed. One failure never prepared: it piped the background `land` through
+  `tail` and never saw the CI-wait line (see #505). Two failures skipped
+  setting `GH_HOST`, took the stub's 401 as an authentication error, and
+  ended the batch before listing.
+- **Case 12 separates the rules.** With the earlier discard rule in
+  `references/prepare-next.md`, case 12 failed 2 of 2 runs, each with one
+  `prepare`.
+- **Fixture forge before #502:** From 191bf08 (2026-11-26) until #502, the
+  stub didn't serve `list-ready.sh`'s batched GraphQL read. Every case that
+  lists a PR stopped `LOOKUP_FAILED review-threads`, so no score from that
+  span is valid.
 - **Size climb (#440):** the climbed `SKILL.md` has 4,339 words, down from
   6,186. The climb re-measured the current skill three times at 1.000 with a
   0.000 band and the `### Hand-Back` cut at 0.556, matching the rows above.

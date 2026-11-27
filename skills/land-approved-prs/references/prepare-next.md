@@ -59,9 +59,18 @@ Act on what `prepare` returns:
   names an automated reviewer, don't resolve a conflict here: it can't review
   a commit that was never pushed, so `drop` the worktree and take the
   ordinary path.
-- **Any other `STOP` or a `LOOKUP_FAILED`:** Discard the preparation, `drop`
-  any worktree it reported, and take the ordinary path after A merges. A
-  `prepare` result is never a reason to hand B back.
+- **Any other `STOP`:** Discard the preparation, `drop` any worktree it
+  reported, and take the ordinary path after A merges. A `prepare` result is
+  never a reason to hand B back.
+- **`LOOKUP_FAILED`:** Triage it as "Acting on Each Stop" in `SKILL.md` says,
+  reading the `stderr` key first. On a timeout, an HTTP 5xx, a rate limit, or
+  no `stderr` key, check that the forge and remote are reachable. Then rerun
+  the same `prepare` once while A's `land` still waits. The preparation counts
+  only from the rerun's `OK prepare`; a rerun that stops `rebase-conflict`
+  follows that bullet above. Any other `LOOKUP_FAILED`, a failed rerun, or A's
+  `land` returning first takes the ordinary path after A merges. A
+  `LOOKUP_FAILED` never ends the batch or hands B back: B's own `check` and
+  `land` meet any lasting failure, and `SKILL.md` handles it there.
 
 Preparation never comments, labels, hands back, or pushes. Act on what it
 found only after A's `land` returns.

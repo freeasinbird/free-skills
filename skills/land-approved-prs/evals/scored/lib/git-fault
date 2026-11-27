@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# A git that fails one land.sh prepare process's head fetch. install_git_fault
+# in fixture.sh puts it at <state-dir>/bin/git, ahead of the real git, and
+# records the real git's path in <state-dir>/forge/real-git.
+#
+# Every call passes through to the real git except a fetch whose last
+# argument ends in :refs/land/prepare-<N>, the head fetch only prepare
+# makes. For that fetch, "<UTC time> <PID>" is appended to
+# forge/prepare-fetch.log, where PID is the land.sh process it runs under,
+# or "unknown" when none is found. When that PID is the first one logged,
+# the fetch fails as a network timeout would. Keying on the process, not on
+# a fetch count, keeps the first prepare failing however often it retries,
+# while a second prepare process passes.
+set -u
+STATE=$(cd "$(dirname "$0")/.." && pwd) || exit 1
+REAL=$(cat "$STATE/forge/real-git") || exit 1
+
+# A fetch may follow global options such as -C <dir> or -c <key>=<value>.
+fault=false
+case "${!#}" in
+  *:refs/land/prepare-[0-9]*)
+    for a in "$@"; do [ "$a" != fetch ] || { fault=true; break; }; done ;;
+esac
+[ "$fault" = true ] || exec "$REAL" "$@"
+
+# A land.sh process runs as "bash <path>/land.sh <phase> ...", and its
+# subshells show the same command line, so take the outermost of the nearest
+# run of such ancestors. A shell whose -c string names land.sh doesn't match.
+is_lander() { # is_lander <pid>: prints its parent's PID; true when land.sh
+  local line ppid exe script
+  line=$(ps -o ppid=,command= -p "$1") || return 2
+  read -r ppid exe script _ <<<"$line"
+  printf '%s\n' "$ppid"
+  case "$exe" in bash|*/bash) ;; *) return 1 ;; esac
+  case "$script" in land.sh|*/land.sh) return 0 ;; *) return 1 ;; esac
+}
+pid=$PPID lander=""
+while [ "$pid" -gt 1 ] 2>/dev/null; do
+  ppid=$(is_lander "$pid"); rc=$?
+  [ "$rc" -ne 2 ] || break
+  if [ "$rc" -eq 0 ]; then lander=$pid
+  elif [ -n "$lander" ]; then break
+  fi
+  pid=$ppid
+done
+log="$STATE/forge/prepare-fetch.log"
+printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${lander:-unknown}" >>"$log"
+if [ -n "$lander" ] && [ "$(awk '$2 != "unknown" { print $2; exit }' "$log")" = "$lander" ]; then
+  echo "fatal: unable to access '${@: -2:1}': Operation timed out after 30001 milliseconds with 0 bytes received" >&2
+  exit 128
+fi
+exec "$REAL" "$@"

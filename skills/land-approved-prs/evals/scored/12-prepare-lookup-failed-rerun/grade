@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The first prepare of #8 fails its head fetch. The lander reruns prepare
+# once while #7's land waits, so exactly two land.sh processes fetch #8's
+# head; both PRs land, and #8 is never handed back.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_lock_taken_and_released
+expect_merged_once 7
+expect_merged_once 8
+m7=$(awk '$2 == "merge" && $3 == 7 { print NR; exit }' "$MUTS")
+m8=$(awk '$2 == "merge" && $3 == 8 { print NR; exit }' "$MUTS")
+[ -z "$m7" ] || [ -z "$m8" ] || [ "$m7" -lt "$m8" ] || fail "#8 merged before #7"
+# prepare-fetch.log holds "<time> <pid>" per head fetch; see lib/git-fault.
+LOG="$FORGE/prepare-fetch.log"
+! awk '$2 == "unknown"' "$LOG" | grep -q . \
+  || fail "fixture error: git-fault found no land.sh process for a prepare fetch"
+pids=$(awk '$2 != "unknown" { print $2 }' "$LOG" | sort -u | grep -c .)
+[ "$pids" -eq 2 ] || fail "prepare fetched #8's head in $pids land.sh process(es), not 2"
+# Both prepares ran during #7's wait, before its merge.
+t7=$(awk '$2 == "merge" && $3 == 7 { print $1; exit }' "$MUTS")
+[ -z "$t7" ] || ! awk -v t="$t7" '$1 > t' "$LOG" | grep -q . \
+  || fail "a prepare of #8 ran after #7 merged"
+! has_label 8 needs-human || fail "PR #8 carries needs-human"
+! awk '$3 == 8 && (($2 == "label-" && $4 == "approved") || ($2 == "label+" && $4 == "needs-human"))' "$MUTS" \
+  | grep -q . || fail "PR #8 was handed back"
+expect_no_approval_added
+expect_msg_pr 7
+expect_msg_pr 8
+grade_done
