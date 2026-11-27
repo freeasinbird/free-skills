@@ -6,6 +6,7 @@
 #
 # Usage:
 #   landed-since.sh --repo owner/name --pr N [--since <40-hex-oid>]
+#     [--through <40-hex-oid>]
 #     [--base-remote NAME]   # override remote resolution for the repository
 #
 # Without --since, the range starts at the PR's original fork point: the
@@ -25,6 +26,13 @@
 # --since starts the range at an earlier read's tip instead, for the re-read
 # after land stops rebased.
 #
+# --through ends the range at a commit that contains the fetched tip, such
+# as the pushed head of the PR landing before this one, so a preparation
+# reads what will have landed once that PR merges. The printed log and the
+# checks' LAND_TIP end there; the fork point and the landing record still
+# come from the fetched tip, so a branch can't loosen its own rules. The
+# result's "tip" stays the fetched tip and "through" names the end.
+#
 # It then prints the default branch's first-parent log with --stat over the
 # range and runs each command the landing record lists under Base-advance
 # checks, from the checkout's root, printing its output and exit status.
@@ -39,7 +47,7 @@
 # (GitHub CLI) not found on PATH.
 set -u
 
-REPO="" PR="" SINCE="" BASE_REMOTE_OPT=""
+REPO="" PR="" SINCE="" THROUGH="" BASE_REMOTE_OPT=""
 
 usage() {
   sed -n '2,/^set -u$/p' "$0" | sed '$d' >&2
@@ -51,7 +59,7 @@ die_usage() { echo "landed-since.sh: $1" >&2; usage; }
 while [ $# -gt 0 ]; do
   opt="$1"
   case "$opt" in
-    --repo|--pr|--since|--base-remote) ;;
+    --repo|--pr|--since|--through|--base-remote) ;;
     *) die_usage "unknown option: $opt" ;;
   esac
   [ $# -ge 2 ] || die_usage "$opt requires a value"
@@ -60,6 +68,7 @@ while [ $# -gt 0 ]; do
     --repo) REPO="$val" ;;
     --pr) PR="$val" ;;
     --since) SINCE=$(printf '%s' "$val" | tr 'A-F' 'a-f') ;;
+    --through) THROUGH=$(printf '%s' "$val" | tr 'A-F' 'a-f') ;;
     --base-remote) BASE_REMOTE_OPT="$val" ;;
   esac
 done
@@ -74,6 +83,10 @@ esac
 if [ -n "$SINCE" ]; then
   case "$SINCE" in *[!0-9a-f]*) die_usage "--since must be a full 40-hex commit OID" ;; esac
   [ "${#SINCE}" -eq 40 ] || die_usage "--since must be a full 40-hex commit OID"
+fi
+if [ -n "$THROUGH" ]; then
+  case "$THROUGH" in *[!0-9a-f]*) die_usage "--through must be a full 40-hex commit OID" ;; esac
+  [ "${#THROUGH}" -eq 40 ] || die_usage "--through must be a full 40-hex commit OID"
 fi
 case "$BASE_REMOTE_OPT" in -*) die_usage "remote names must not begin with a hyphen" ;; esac
 
@@ -355,13 +368,41 @@ else
     || lookup_failed merge-base "the fork points of PR $PR have no common ancestor on $DEFAULT"
 fi
 
+END="$TIP" through_json=""
+if [ -n "$THROUGH" ]; then
+  git cat-file -e "$THROUGH^{commit}" 2>/dev/null \
+    || lookup_failed through "--through $THROUGH is not a commit in this repository"
+  rc=0
+  git merge-base --is-ancestor "$TIP" "$THROUGH" 2>/dev/null || rc=$?
+  case "$rc" in
+    0) ;;
+    1) stop through-not-on-tip "--through $THROUGH does not contain the fetched $DEFAULT tip $TIP" ;;
+    *) lookup_failed through "could not compare $THROUGH with $DEFAULT tip $TIP" ;;
+  esac
+  END="$THROUGH" through_json=",\"through\":\"$THROUGH\""
+fi
+
+# The stretch past the tip is walked on its own: a predecessor head made by
+# merging the base into its branch has the branch as its first parent, so a
+# first-parent walk of FROM..THROUGH would skip the base commits it merged.
 COUNT=$(git rev-list --first-parent --count "$FROM..$TIP" 2>/dev/null) \
   || lookup_failed log "could not count $FROM..$TIP"
-echo "landed on $DEFAULT from ${FROM:0:7} to ${TIP:0:7}: $COUNT first-parent commit(s)$([ "$HEADS" -eq 0 ] || echo " (original fork point of $HEADS head(s))")"
+PAST=0
+if [ -n "$THROUGH" ]; then
+  PAST=$(git rev-list --first-parent --count "$TIP..$END" 2>/dev/null) \
+    || lookup_failed log "could not count $TIP..$END"
+fi
+echo "landed on $DEFAULT from ${FROM:0:7} to ${END:0:7}$([ -z "$THROUGH" ] || echo ", past the fetched tip ${TIP:0:7}"): $((COUNT + PAST)) first-parent commit(s)$([ "$HEADS" -eq 0 ] || echo " (original fork point of $HEADS head(s))")"
+# Newest first, as one git log would print them.
+if [ "$PAST" -gt 0 ]; then
+  git --no-pager log --first-parent --stat --no-color "$TIP..$END" \
+    || lookup_failed log "could not print $TIP..$END"
+fi
 if [ "$COUNT" -gt 0 ]; then
   git --no-pager log --first-parent --stat --no-color "$FROM..$TIP" \
     || lookup_failed log "could not print $FROM..$TIP"
 fi
+COUNT=$((COUNT + PAST))
 
 # The record's Base-advance checks bullet: none (bare or backticked), or
 # backticked commands. Every backticked span is a command. A record that
@@ -384,7 +425,7 @@ case "$checks" in
       [ -n "$cmd" ] || continue
       echo "base-advance check: $cmd"
       rc=0
-      (cd "$TOP" && LAND_PR="$PR" LAND_FROM="$FROM" LAND_TIP="$TIP" bash -c "$cmd") < /dev/null 2>&1 || rc=$?
+      (cd "$TOP" && LAND_PR="$PR" LAND_FROM="$FROM" LAND_TIP="$END" bash -c "$cmd") < /dev/null 2>&1 || rc=$?
       echo "base-advance check exit $rc: $cmd"
       checks_json+=",{\"command\":\"$(json_escape "$cmd")\",\"exit\":$rc}"
     done < <(printf '%s\n' "$checks" | grep -o '`[^`]*`' | sed 's/^`//; s/`$//')
@@ -395,4 +436,4 @@ case "$checks" in
     ;;
 esac
 
-echo "OK landed-since {\"pr\":$PR,\"from\":\"$FROM\",\"tip\":\"$TIP\",\"heads\":$HEADS,\"commits\":$COUNT,\"checks\":[${checks_json#,}]}"
+echo "OK landed-since {\"pr\":$PR,\"from\":\"$FROM\",\"tip\":\"$TIP\"$through_json,\"heads\":$HEADS,\"commits\":$COUNT,\"checks\":[${checks_json#,}]}"

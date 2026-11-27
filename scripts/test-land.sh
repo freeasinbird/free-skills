@@ -14,11 +14,15 @@
 # Set LAND_SCRIPT to test a different copy of the script.
 set -u
 
-SCRIPT="${LAND_SCRIPT:-$(cd "$(dirname "$0")/.." && pwd)/skills/land-approved-prs/land.sh}"
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+SCRIPT="${LAND_SCRIPT:-$ROOT/skills/land-approved-prs/land.sh}"
 [ -f "$SCRIPT" ] || { echo "not found: $SCRIPT" >&2; exit 1; }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+# Run from scratch, outside any repository: a git -C "$var" whose var came
+# back empty then fails instead of acting on the checkout this runs from.
+cd "$TMP" || exit 1
 SHIM="$TMP/dead"; FIX="$TMP/fix"; SHIMD="$TMP/shim"
 mkdir -p "$SHIM" "$FIX" "$SHIMD"
 printf '#!/bin/sh\nexit 1\n' > "$SHIM/gh"
@@ -72,6 +76,22 @@ t 64 "rerun without head" rerun --pr 83 --repo owner/name
 t 64 "dry run takes no value" land --pr 83 --repo owner/name --head "$OID" --dry-run yes
 t 64 "dry run outside land never merges" merge --pr 83 --repo owner/name --head "$OID" --dry-run
 t 64 "dry run is not a rerun option" rerun --pr 83 --repo owner/name --head "$OID" --dry-run
+t 4 "valid prepare reaches the forge read" prepare --pr 83 --repo owner/name --head "$OID" --onto "$OID"
+t 4 "valid prepared land reaches the forge read" land --pr 83 --repo owner/name --head "$OID" --prepared "$OID"
+t 64 "prepare without onto" prepare --pr 83 --repo owner/name --head "$OID"
+t 64 "prepare without head" prepare --pr 83 --repo owner/name --onto "$OID"
+t 64 "short onto" prepare --pr 83 --repo owner/name --head "$OID" --onto 0123456
+t 64 "non-hex prepared" land --pr 83 --repo owner/name --head "$OID" --prepared "${OID%?}g"
+t 64 "prepared with a dry run" land --pr 83 --repo owner/name --head "$OID" --prepared "$OID" --dry-run
+t 64 "prepared outside land" merge --pr 83 --repo owner/name --head "$OID" --prepared "$OID"
+t 64 "onto outside prepare" land --pr 83 --repo owner/name --head "$OID" --onto "$OID"
+t 64 "worktree outside drop and prepare" land --pr 83 --repo owner/name --head "$OID" --worktree /x
+t 64 "prepare with an empty worktree" prepare --pr 83 --repo owner/name --head "$OID" --onto "$OID" --worktree ''
+t 64 "drop without worktree" drop --pr 83 --repo owner/name
+t 64 "drop with an empty worktree" drop --pr 83 --repo owner/name --worktree ''
+# drop reads nothing from the forge, so a path it refuses stops before the
+# dead shim is reached.
+t 2 "drop refuses a missing path" drop --pr 83 --repo owner/name --worktree /nonexistent/land-wt.abcdef/wt
 t 64 "ci cap non-numeric" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes xyz
 t 64 "ci cap leading zeros" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes 08
 t 64 "ci cap beyond arithmetic bound" land --pr 83 --repo owner/name --head "$OID" --ci-cap-minutes 10000000
@@ -2649,6 +2669,426 @@ fi
 
 rm -f "$SHIMD/ssh"
 
+# ---- prepare, --prepared, and drop ----
+
+# Scratch layout for preparation: the forge's main at A0, PR A's pushed head
+# pa (A0 plus a.txt, on the tip, as land leaves it while CI runs), and the
+# next PRs' feat and featc, both branched from A0. "conflict" makes pa and
+# feat both change shared.txt. The work clone has every branch locally.
+prep_setup() { # prep_setup [conflict]
+  HB=feat BB=main
+  BARE="$SCEN/remote.git"; WORK="$SCEN/work"; SRC="$SCEN/src"
+  git init --bare -q -b main "$BARE"
+  git init -q -b main "$SRC"
+  G "$SRC" config user.email t@t; G "$SRC" config user.name t
+  echo base > "$SRC/base.txt"; echo shared > "$SRC/shared.txt"
+  G "$SRC" add .; G "$SRC" commit -m A0
+  G "$SRC" checkout -b pa
+  echo a > "$SRC/a.txt"; [ "${1:-}" != conflict ] || echo from-a > "$SRC/shared.txt"
+  G "$SRC" add .; G "$SRC" commit -m "PR A"
+  G "$SRC" checkout -b feat main
+  echo feat > "$SRC/feat.txt"; [ "${1:-}" != conflict ] || echo from-b > "$SRC/shared.txt"
+  G "$SRC" add .; G "$SRC" commit -m "PR B"
+  G "$SRC" checkout -b featc main
+  echo c > "$SRC/c.txt"; G "$SRC" add .; G "$SRC" commit -m "PR C"
+  G "$SRC" checkout main
+  G "$SRC" remote add origin "$BARE"
+  G "$SRC" push origin main pa feat featc
+  A_HEAD=$(git -C "$SRC" rev-parse pa)
+  FEAT_OID=$(git -C "$SRC" rev-parse feat)
+  FEATC_OID=$(git -C "$SRC" rev-parse featc)
+  BASE_TIP=$(git -C "$SRC" rev-parse main)
+  git clone -q "$BARE" "$WORK"
+  G "$WORK" config user.email t@t; G "$WORK" config user.name t
+  for b in pa feat featc; do G "$WORK" branch "$b" "origin/$b"; done
+  mkdir -p "$SCEN/tmp"
+}
+# The forge merges <branch> into main with a merge commit, as the
+# predecessor's land would.
+forge_merge() { # forge_merge <branch>
+  G "$SRC" fetch origin; G "$SRC" checkout main; G "$SRC" reset --hard origin/main
+  G "$SRC" merge --no-ff -m "merge $1" "origin/$1"; G "$SRC" push origin main
+  BASE_TIP=$(git -C "$SRC" rev-parse main)
+}
+forge_commit() { # forge_commit <file>: one more commit lands on main
+  G "$SRC" fetch origin; G "$SRC" checkout main; G "$SRC" reset --hard origin/main
+  echo "$1" > "$SRC/$1"; G "$SRC" add .; G "$SRC" commit -m "land $1"; G "$SRC" push origin main
+  BASE_TIP=$(git -C "$SRC" rev-parse main)
+}
+prep_fixtures() { # prep_fixtures <branch> <head>
+  pr_full OPEN "$1" main "$2" false owner name
+  repo_fx main; rules_fx '[]'; lists_empty; merged_fx
+  printf '{"title":"T"}' > "$FIX/title.json"
+  checks_fx completed '"success"'
+  status_fx pending 0
+  base_ref_fx "$BASE_TIP"
+  echo "$BARE" > "$FIX/live-remote"
+}
+# Every run keeps its land-wt directories under the scenario, so a kept
+# conflict worktree can't leak into the real temporary directory.
+prep_run() {
+  OUT=$(cd "$WORK" && TMPDIR="$SCEN/tmp" PATH="$SHIMD:$PATH" bash "$SCRIPT" "$@" 2>"$FIX/stderr")
+  RC=$?
+}
+result_field() { # result_field <jq-filter>: read a field of the result JSON
+  local json="${OUT##*$'\n'}"
+  json="${json#* }"; json="${json#* }"
+  printf '%s' "$json" | jq -r "$1"
+}
+# What prepare must never change: the forge's refs, the work clone's
+# branches, and the checkout's index and files.
+prep_snapshot() {
+  git -C "$BARE" for-each-ref --format='%(refname) %(objectname)'
+  git -C "$WORK" for-each-ref --format='%(refname) %(objectname)' refs/heads
+  git -C "$WORK" ls-files -s
+  git -C "$WORK" status --porcelain -uall
+}
+want_no_forge_write() {
+  want_no_call 'pr merge'; want_no_call 'run rerun'; want_no_call 'pr edit'
+  want_no_call 'pr comment'; want_no_call '--method'; want_no_call ' -X '
+}
+tree_of() { git -C "$WORK" rev-parse "$1^{tree}"; }
+# The conflict worktree prepare reported. The steps after it act inside
+# that path, so a result without one ends the run.
+prep_worktree() {
+  PWT=$(result_field .worktree)
+  [ -n "$PWT" ] && [ "$PWT" != null ] && [ -d "$PWT" ] \
+    || { echo "FATAL: prepare reported no worktree: $OUT" >&2; exit 1; }
+}
+# The latest preparation's recorded head and commit, "none" for a missing one.
+prepared_refs() {
+  local r
+  for r in head commit; do
+    git -C "$WORK" rev-parse --verify --quiet "refs/land/prepared/83/$r" || echo none
+  done | tr '\n' ' '
+}
+# Record the resolved conflict worktree PWT as feat's preparation onto A.
+prep_record() {
+  prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD" --worktree "$PWT"
+  want_rc 0
+  want_out 'OK prepare'
+  PREPARED_B=$(result_field .prepared_oid)
+}
+PREP=(prepare --pr 83 --repo owner/name --base-remote origin --head-remote origin)
+
+scenario "prepare rebases a copy onto the predecessor's head and changes nothing else"
+prep_setup; prep_fixtures feat "$FEAT_OID"
+BEFORE=$(prep_snapshot)
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 0
+want_out 'OK prepare'
+want_json ".head_oid == \"$FEAT_OID\" and .onto == \"$A_HEAD\" and .created_branch == false"
+PREPARED_B=$(result_field .prepared_oid)
+[ "$(prepared_refs)" = "$FEAT_OID $PREPARED_B " ] && ok || bad "prepare did not record its head and commit"
+git -C "$WORK" merge-base --is-ancestor "$A_HEAD" "$PREPARED_B" && ok \
+  || bad "the preparation is not on the predecessor's head"
+[ "$(result_field .tree)" = "$(tree_of "$PREPARED_B")" ] && ok || bad "the reported tree is not the prepared commit's"
+[ "$(prep_snapshot)" = "$BEFORE" ] && ok || bad "prepare changed a branch, the forge's refs, or the checkout"
+want_no_forge_write
+want_err 'git range-diff'
+[ "$(worktree_count)" -eq 1 ] && ok || bad "prepare left its worktree"
+[ -z "$(ls -A "$SCEN/tmp")" ] && ok || bad "prepare left its directory"
+
+# The chain goes on: A merges, and B lands in one run without a rebased
+# stop, then C does the same on B.
+forge_merge pa; prep_fixtures feat "$FEAT_OID"
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$PREPARED_B"
+want_rc 0
+NEW_B=$(remote_feat)
+want_out 'OK land'
+want_json ".head_oid == \"$NEW_B\" and .pushed_head == \"$NEW_B\" and .old_head_oid == \"$FEAT_OID\""
+want_err "land.sh: waiting for CI on $NEW_B"
+want_call "--match-head-commit=$NEW_B"
+[ "$(tree_of "$NEW_B")" = "$(tree_of "$PREPARED_B")" ] && ok || bad "the landed tree is not the prepared tree"
+[ "$(prepared_refs)" = "none none " ] && ok || bad "land left the recorded preparation"
+[ "$(local_feat)" = "$NEW_B" ] && ok || bad "local feat is not the pushed head"
+grep -qxF 83 "$WORK/.git/land-approved-prs/cleanup-pending" 2>/dev/null && ok \
+  || bad "the merge was not recorded in cleanup-pending"
+prep_fixtures featc "$FEATC_OID"
+prep_run "${PREP[@]}" --head "$FEATC_OID" --onto "$NEW_B"
+want_rc 0
+PREPARED_C=$(result_field .prepared_oid)
+forge_merge feat; prep_fixtures featc "$FEATC_OID"
+prep_run "${LAND[@]}" --head "$FEATC_OID" --prepared "$PREPARED_C"
+want_rc 0
+NEW_C=$(git -C "$BARE" rev-parse refs/heads/featc)
+want_json ".head_oid == \"$NEW_C\" and .pushed_head == \"$NEW_C\" and .old_head_oid == \"$FEATC_OID\""
+want_call "--match-head-commit=$NEW_C"
+[ "$(tree_of "$NEW_C")" = "$(tree_of "$PREPARED_C")" ] && ok || bad "C's landed tree is not its prepared tree"
+
+scenario "land --prepared stops rebased when the rebase differs from the preparation"
+prep_setup; prep_fixtures feat "$FEAT_OID"
+# A preparation the real rebase can't reproduce: A's tree without feat.txt.
+STALE=$(git -C "$WORK" commit-tree "$A_HEAD^{tree}" -p "$A_HEAD" -m "PR B")
+G "$WORK" update-ref refs/land/prepared/83/head "$FEAT_OID"
+G "$WORK" update-ref refs/land/prepared/83/commit "$STALE"
+forge_merge pa; prep_fixtures feat "$FEAT_OID"
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$STALE"
+want_rc 2
+want_out 'STOP rebased'
+want_json '.prepared == "tree-mismatch"'
+want_land_pushed
+want_no_call 'pr merge'
+want_no_out 'pushed_head'
+
+scenario "land ignores a preparation once the base moved past the predecessor's merge"
+prep_setup; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+PREPARED_B=$(result_field .prepared_oid)
+forge_merge pa; forge_commit extra.txt; prep_fixtures feat "$FEAT_OID"
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$PREPARED_B"
+want_rc 2
+want_out 'STOP rebased'
+want_json '.prepared == "ignored"'
+want_err 'ignoring --prepared'
+want_no_call 'pr merge'
+git -C "$BARE" cat-file -e "$(remote_feat):extra.txt" 2>/dev/null && ok \
+  || bad "the rebase dropped the extra base commit"
+
+scenario "a prepared conflict resolution replays and goes on to CI"
+prep_setup conflict; prep_fixtures feat "$FEAT_OID"
+# A caller's rerere replays the resolution it records at the continue
+# below, which would leave land's rebase paused with nothing to replay.
+G "$WORK" config rerere.enabled true; G "$WORK" config rerere.autoUpdate true
+BEFORE=$(prep_snapshot)
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 2
+want_out 'STOP rebase-conflict'
+want_json '.conflicts == "shared.txt" and .created_branch == false'
+prep_worktree
+[ "$(prep_snapshot)" = "$BEFORE" ] && ok || bad "a conflicted prepare changed a branch, the forge's refs, or the checkout"
+want_no_forge_write
+[ -d "$(git -C "$PWT" rev-parse --absolute-git-dir 2>/dev/null)/rebase-merge" ] && ok \
+  || bad "the conflict worktree has no paused rebase"
+echo resolved > "$PWT/shared.txt"; G "$PWT" add shared.txt
+(cd "$PWT" && GIT_EDITOR=true git rebase --continue >/dev/null 2>&1)
+prep_record
+prep_run drop --pr 83 --repo owner/name --worktree "$PWT"
+want_rc 0
+want_out 'OK drop'
+[ ! -e "$PWT" ] && ok || bad "drop left the prepared worktree"
+[ "$(worktree_count)" -eq 1 ] && ok || bad "drop left the worktree registered"
+forge_merge pa; prep_fixtures feat "$FEAT_OID"
+# A waiting or failing editor in the caller's environment never runs.
+GIT_EDITOR=false prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$PREPARED_B"
+want_rc 0
+NEW_B=$(remote_feat)
+want_json ".pushed_head == \"$NEW_B\" and .old_head_oid == \"$FEAT_OID\""
+[ "$(tree_of "$NEW_B")" = "$(tree_of "$PREPARED_B")" ] && ok || bad "the landed tree is not the prepared resolution"
+[ "$(git -C "$BARE" show "$NEW_B:shared.txt")" = resolved ] && ok || bad "the resolution did not land"
+[ "$(worktree_count)" -eq 1 ] && ok || bad "land left its worktree"
+
+scenario "a prepared resolution that doesn't replay stops rebase-conflict and pushes nothing"
+prep_setup conflict; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+prep_worktree
+echo resolved > "$PWT/shared.txt"; G "$PWT" add shared.txt
+(cd "$PWT" && GIT_EDITOR=true git rebase --continue >/dev/null 2>&1)
+# Another commit than the one being picked: its message differs.
+G "$PWT" commit --amend -m "not PR B"
+prep_record
+prep_run drop --pr 83 --repo owner/name --worktree "$PWT"
+want_rc 0
+forge_merge pa; prep_fixtures feat "$FEAT_OID"
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$PREPARED_B"
+want_rc 2
+want_out 'STOP rebase-conflict'
+want_out 'did not replay'
+want_land_untouched "a failed replay moved or pushed the head"
+want_no_call 'pr merge'
+want_no_out 'pushed_head'
+[ "$(worktree_count)" -eq 1 ] && ok || bad "a failed replay left its worktree"
+
+# An amend keeps author, date, and message, so the replay's identity check
+# can't tell the old commit from the new one. Only the recorded head can.
+scenario "land ignores a preparation of an older head of the PR"
+prep_setup conflict; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+prep_worktree
+echo resolved > "$PWT/shared.txt"; G "$PWT" add shared.txt
+(cd "$PWT" && GIT_EDITOR=true git rebase --continue >/dev/null 2>&1)
+prep_record
+G "$SRC" checkout feat; echo late > "$SRC/late.txt"; G "$SRC" add late.txt
+G "$SRC" commit --amend --no-edit; G "$SRC" push -f origin feat
+FEAT_OID=$(git -C "$SRC" rev-parse feat); G "$WORK" fetch origin; G "$WORK" branch -f feat origin/feat
+forge_merge pa; prep_fixtures feat "$FEAT_OID"
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$PREPARED_B"
+want_rc 2
+want_out 'STOP rebase-conflict'
+want_no_out 'did not replay'
+want_err "ignoring --prepared: the latest preparation"
+want_land_untouched "a preparation of an older head moved or pushed the head"
+want_no_call 'pr merge'
+
+# Preparing again supersedes the last result, so a commit from an earlier
+# preparation of the same PR is never replayed.
+scenario "land ignores a commit from a superseded preparation"
+prep_setup conflict; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+prep_worktree
+echo resolved > "$PWT/shared.txt"; G "$PWT" add shared.txt
+(cd "$PWT" && GIT_EDITOR=true git rebase --continue >/dev/null 2>&1)
+prep_record
+OLD_PREPARED=$PREPARED_B
+G "$SRC" checkout feat; echo late > "$SRC/late.txt"; G "$SRC" add late.txt
+G "$SRC" commit --amend --no-edit; G "$SRC" push -f origin feat
+FEAT_OID=$(git -C "$SRC" rev-parse feat); G "$WORK" fetch origin; G "$WORK" branch -f feat origin/feat
+prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_out 'STOP rebase-conflict'
+[ "$(prepared_refs)" = "none none " ] && ok || bad "a new prepare kept the last preparation's record"
+prep_worktree
+echo resolved > "$PWT/shared.txt"; G "$PWT" add shared.txt
+(cd "$PWT" && GIT_EDITOR=true git rebase --continue >/dev/null 2>&1)
+prep_record
+forge_merge pa; prep_fixtures feat "$FEAT_OID"
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$OLD_PREPARED"
+want_rc 2
+want_out 'STOP rebase-conflict'
+want_err "ignoring --prepared: the latest preparation"
+want_land_untouched "a superseded preparation moved or pushed the head"
+want_no_call 'pr merge'
+
+scenario "prepare --worktree records only a finished rebase from this preparation"
+prep_setup conflict; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+prep_worktree
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD" --worktree "$PWT"
+want_rc 2
+want_out 'STOP rebase-paused'
+echo resolved > "$PWT/shared.txt"; G "$PWT" add shared.txt
+(cd "$PWT" && GIT_EDITOR=true git rebase --continue >/dev/null 2>&1)
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$BASE_TIP" --worktree "$PWT"
+want_rc 2
+want_out 'STOP not-prepared'
+[ "$(prepared_refs)" = "none none " ] && ok || bad "a refused record wrote the preparation"
+prep_record
+want_json ".head_oid == \"$FEAT_OID\""
+[ "$(result_field .worktree)" -ef "$PWT" ] && ok || bad "the record names another worktree"
+[ "$(prepared_refs)" = "$FEAT_OID $PREPARED_B " ] && ok || bad "the record did not write its head and commit"
+[ "$PREPARED_B" = "$(git -C "$PWT" rev-parse HEAD)" ] && ok || bad "the recorded commit is not the worktree's HEAD"
+want_no_forge_write
+
+scenario "prepare creates no branch before refusing an onto that lacks the tip"
+prep_setup; G "$WORK" branch -D feat; forge_commit extra.txt; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 2
+want_out 'STOP onto-not-on-tip'
+git -C "$WORK" show-ref --quiet refs/heads/feat && bad "prepare created a branch before refusing" || ok
+
+scenario "a prepare stop after creating the branch reports it"
+prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
+# An onto that already contains the head leaves nothing to prepare.
+ONTO_ALL=$(git -C "$WORK" commit-tree "$A_HEAD^{tree}" -p "$A_HEAD" -p "$FEAT_OID" -m both)
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$ONTO_ALL"
+want_rc 2
+want_out 'STOP rebase-failed'
+want_json '.created_branch == true'
+[ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "the reported branch is not at the pinned head"
+
+# The case the base-tree check exists for: replaying whole prepared trees
+# onto a base with an extra commit would revert that commit.
+scenario "a prepared conflict resolution is ignored once the base moved past the merge"
+prep_setup conflict; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+prep_worktree
+echo resolved > "$PWT/shared.txt"; G "$PWT" add shared.txt
+(cd "$PWT" && GIT_EDITOR=true git rebase --continue >/dev/null 2>&1)
+prep_record
+prep_run drop --pr 83 --repo owner/name --worktree "$PWT"
+forge_merge pa; forge_commit extra.txt; prep_fixtures feat "$FEAT_OID"
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$PREPARED_B"
+want_rc 2
+want_out 'STOP rebase-conflict'
+want_no_out 'did not replay'
+want_err 'ignoring --prepared'
+want_land_untouched "a preparation onto a moved base moved or pushed the head"
+want_no_call 'pr merge'
+
+scenario "a stop after a prepared push names the pushed head"
+prep_setup; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+PREPARED_B=$(result_field .prepared_oid)
+forge_merge pa; prep_fixtures feat "$FEAT_OID"
+checks_fx completed '"failure"'
+prep_run "${LAND[@]}" --head "$FEAT_OID" --prepared "$PREPARED_B"
+want_rc 2
+want_out 'STOP checks-failed'
+NEW_B=$(remote_feat)
+want_json ".pushed_head == \"$NEW_B\" and .old_head_oid == \"$FEAT_OID\""
+want_no_call 'pr merge'
+
+scenario "prepare creates a missing local head branch at the pinned head"
+prep_setup; G "$WORK" branch -D feat; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 0
+want_json '.created_branch == true'
+[ "$(local_feat)" = "$FEAT_OID" ] && ok || bad "local feat is not the pinned head"
+git -C "$WORK" show-ref --quiet refs/land/prepare-83 && bad "prepare left its fetch ref" || ok
+
+scenario "prepare creates no branch when the fetched head is another commit"
+prep_setup; G "$WORK" branch -D feat
+# The forge and --head name featc's commit, but the head remote's feat is
+# still B: the branch moved after the head was pinned.
+prep_fixtures feat "$FEATC_OID"; rm -f "$FIX/live-remote"
+prep_run "${PREP[@]}" --head "$FEATC_OID" --onto "$A_HEAD"
+want_rc 2
+want_out 'STOP oid-mismatch'
+git -C "$WORK" show-ref --quiet refs/heads/feat && bad "prepare created a branch at another commit" || ok
+want_no_forge_write
+
+scenario "prepare never moves an existing local branch"
+prep_setup; G "$WORK" branch -f feat "$A_HEAD"; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 2
+want_out 'STOP oid-mismatch'
+[ "$(local_feat)" = "$A_HEAD" ] && ok || bad "prepare moved local feat"
+[ -z "$(ls -A "$SCEN/tmp")" ] && ok || bad "prepare made a directory before refusing"
+
+scenario "prepare refuses an onto that lacks the fetched tip"
+prep_setup; forge_commit extra.txt; prep_fixtures feat "$FEAT_OID"
+prep_run "${PREP[@]}" --head "$FEAT_OID" --onto "$A_HEAD"
+want_rc 2
+want_out 'STOP onto-not-on-tip'
+[ -z "$(ls -A "$SCEN/tmp")" ] && ok || bad "prepare made a directory before refusing"
+
+scenario "drop removes only a worktree prepare made for this PR"
+prep_setup
+DROP=(drop --pr 83 --repo owner/name)
+# A land run's own scratch worktree: the template, detached, no marker.
+LW=$(mktemp -d "$SCEN/tmp/land-wt.XXXXXX"); G "$WORK" worktree add --detach "$LW/wt" "$FEAT_OID"
+prep_run "${DROP[@]}" --worktree "$LW/wt"
+want_rc 2; want_out 'STOP not-prepared'
+[ -d "$LW/wt" ] && ok || bad "drop removed a land run's worktree"
+printf 'pr: 84\n' > "$LW/prepare"
+prep_run "${DROP[@]}" --worktree "$LW/wt"
+want_rc 2; want_out 'STOP not-prepared'
+[ -d "$LW/wt" ] && ok || bad "drop removed another PR's preparation"
+# A branch worktree, even under the template with this PR's marker.
+BW=$(mktemp -d "$SCEN/tmp/land-wt.XXXXXX"); printf 'pr: 83\n' > "$BW/prepare"
+G "$WORK" worktree add "$BW/wt" featc
+prep_run "${DROP[@]}" --worktree "$BW/wt"
+want_rc 2; want_out 'STOP not-prepared'
+[ -d "$BW/wt" ] && ok || bad "drop removed a branch worktree"
+# Detached and marked, but outside the template.
+OW="$SCEN/tmp/other"; mkdir -p "$OW"; printf 'pr: 83\n' > "$OW/prepare"
+G "$WORK" worktree add --detach "$OW/wt" "$FEAT_OID"
+prep_run "${DROP[@]}" --worktree "$OW/wt"
+want_rc 2; want_out 'STOP not-prepared'
+[ -d "$OW/wt" ] && ok || bad "drop removed a worktree outside the template"
+# Marked and under the template, but not a registered worktree.
+UW=$(mktemp -d "$SCEN/tmp/land-wt.XXXXXX"); mkdir "$UW/wt"; printf 'pr: 83\n' > "$UW/prepare"
+prep_run "${DROP[@]}" --worktree "$UW/wt"
+want_rc 2; want_out 'STOP not-prepared'
+[ -d "$UW/wt" ] && ok || bad "drop removed an unregistered directory"
+# This PR's preparation.
+printf 'pr: 83\n' > "$LW/prepare"
+prep_run "${DROP[@]}" --worktree "$LW/wt"
+want_rc 0; want_out 'OK drop'
+[ ! -e "$LW" ] && ok || bad "drop left this PR's preparation"
+[ "$(worktree_count)" -eq 3 ] && ok || bad "drop unregistered the wrong worktrees"
+[ ! -s "$FIX/calls.log" ] && ok || bad "drop read the forge"
+
 # ---- handoff to merge-cleanup ----
 # After `merge`, the land-approved-prs skill hands the merged PR to merge-cleanup.
 # std_setup already leaves the scratch forge in the state merge-cleanup
@@ -2657,7 +3097,7 @@ rm -f "$SHIMD/ssh"
 # their own gh shims. The second shim mirrors scripts/test-merge-cleanup.sh's
 # routing so merge-cleanup.sh's own --jq filters run against the fixtures.
 
-MC_SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/skills/merge-cleanup/merge-cleanup.sh"
+MC_SCRIPT="$ROOT/skills/merge-cleanup/merge-cleanup.sh"
 if ! [ -f "$MC_SCRIPT" ]; then
   skip=$((skip + 1))
   echo "SKIP: handoff case needs $MC_SCRIPT" >&2

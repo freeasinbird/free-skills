@@ -14,6 +14,9 @@
 #   land.sh land    --pr N --repo owner/name --head <40-hex-oid>
 #   land.sh merge   --pr N --repo owner/name --head <40-hex-oid>
 #   land.sh rerun   --pr N --repo owner/name --head <40-hex-oid>
+#   land.sh prepare --pr N --repo owner/name --head <40-hex-oid> --onto <40-hex-oid>
+#                   [--worktree <path>]   # record a resolved conflict worktree
+#   land.sh drop    --pr N --repo owner/name --worktree <path>
 #     [--base-remote NAME]   # override remote resolution for the base repo
 #     [--head-remote NAME]   # override remote resolution for the head repo
 #     [--interval 10]        # land/merge/rerun: seconds between polls
@@ -21,6 +24,9 @@
 #     [--ci-cap-minutes 30]  # land: total wait for CI on the head; rerun:
 #                            # each of its two waits
 #     [--dry-run]            # land phase only: report, never rebase or merge
+#     [--prepared <oid>]     # land phase only, not with --dry-run: the
+#                            # prepare result to reuse when the head is
+#                            # rebased
 #
 # Run each phase from the base-branch checkout, the one merge-cleanup will
 # later rewrite. --repo is required, never defaulted: a bare PR number
@@ -52,6 +58,57 @@
 #          latest check run. It then waits until the rerun jobs replace the
 #          failed check runs, so the next land reads the new attempt rather
 #          than the old failure. It never merges.
+# prepare  Rebases a copy of the head onto --onto, the pushed head of the
+#          PR landing before this one, while that PR waits on CI. --onto
+#          must contain the fetched base tip. The rebase runs in a
+#          temporary detached worktree under the land-wt template, marked
+#          for this PR. prepare never moves an existing local branch, never
+#          pushes, never writes to the forge, and never touches the
+#          checkout it runs from. A missing local head branch is created at
+#          --head, only when the fetched head branch is that commit. A
+#          clean rebase removes the worktree, prints the range-diff to
+#          stderr, and reports prepared_oid and its tree. A conflict keeps
+#          the worktree with the rebase paused and stops rebase-conflict
+#          with its "worktree" and "conflicts", for the caller to resolve
+#          there and finish with git rebase --continue. prepare --worktree
+#          then records that worktree's HEAD as the prepared commit, after
+#          checking its marker names this PR, --head, and --onto, and that
+#          no rebase is paused. A clean prepare and a recorded worktree
+#          write --head and the prepared commit to refs/land/prepared/<pr>/
+#          head and commit; a prepare run that passes its checks deletes
+#          both before it rebases, so only the latest preparation can be
+#          used. Every result after a branch
+#          was created carries "created_branch".
+# drop     Removes a worktree prepare made for --pr: a registered, detached
+#          worktree at <dir>/land-wt.XXXXXX/wt whose directory holds
+#          prepare's marker naming this PR. Anything else stops
+#          not-prepared and nothing is removed. It reads nothing from the
+#          forge.
+#
+# land --prepared reads and deletes both refs, and ignores the preparation
+# unless they are --head and --prepared: a conflict replay matches commits
+# by author, date, and message, which an amend keeps, so an older head's
+# preparation would otherwise land that head's content. It also reuses a
+# preparation only when the fetched base tip has
+# the tree of the prepared commit's base (its merge base with the tip). That
+# check is what makes the reuse safe: the predecessor's merge commit of an
+# up-to-date head has that head's tree, while a base that moved by more than
+# that merge has another tree, and replaying a prepared tree onto it would
+# silently revert the extra changes. A preparation that fails the check, or
+# whose commit is gone, is ignored and land behaves as without it. When it
+# is used: a clean rebase whose tree equals the prepared tree goes on to CI
+# and the merge in the same run, and one whose tree differs stops rebased
+# with "prepared":"tree-mismatch". At each conflict the rebase takes the
+# matching prepared commit's tree, matched by position and by author, date,
+# and message, after the state before that pick matched too. Any mismatch,
+# a different commit count, or a final tree other than the prepared tree
+# aborts, pushes nothing, and stops rebase-conflict. Every result printed
+# after a --prepared run's push carries "pushed_head" and "old_head_oid".
+# land prints "land.sh: waiting for CI on <oid>" to stderr when the CI wait
+# starts. land and merge append the PR number to
+# <git-common-dir>/land-approved-prs/cleanup-pending once the forge reports
+# the merge; list-ready.sh reports and clears that file. A failed write adds
+# "cleanup_recorded":false to the OK line rather than change the result.
 #
 # Last line on stdout is the machine-readable result:
 #   OK <phase> <json>            phase completed; json carries the facts
@@ -75,6 +132,10 @@ set -u
 
 PHASE="" PR="" REPO="" HEAD_OID="" BASE_REMOTE_OPT="" HEAD_REMOTE_OPT=""
 INTERVAL=10 CAP_MINUTES=15 CI_CAP_MINUTES=30 DRY_RUN=false
+ONTO="" PREPARED="" DROP_WT="" HAVE_DROP_WT=false CREATED_BRANCH=false
+# Set once a --prepared run has pushed, so every later result names the
+# head it pushed and the one it replaced.
+PUSHED_HEAD="" OLD_HEAD=""
 
 usage() {
   sed -n '2,/^set -u$/p' "$0" | sed '$d' >&2
@@ -82,8 +143,8 @@ usage() {
 }
 
 case "${1:-}" in
-  check|land|merge|rerun) PHASE="$1"; shift ;;
-  *) echo "land.sh: first argument must be check, land, merge, or rerun" >&2; usage ;;
+  check|land|merge|rerun|prepare|drop) PHASE="$1"; shift ;;
+  *) echo "land.sh: first argument must be check, land, merge, rerun, prepare, or drop" >&2; usage ;;
 esac
 
 # Recognize the option, then require its value, before reading $2: a
@@ -98,6 +159,11 @@ while [ $# -gt 0 ]; do
   fi
   case "$opt" in
     --pr|--repo|--head|--base-remote|--head-remote|--interval|--cap-minutes|--ci-cap-minutes) ;;
+    # Phase-bound options refuse every other phase, so a mistyped phase
+    # never runs without the option the caller meant.
+    --onto) [ "$PHASE" = prepare ] || { echo "land.sh: --onto applies only to prepare" >&2; usage; } ;;
+    --prepared) [ "$PHASE" = land ] || { echo "land.sh: --prepared applies only to land" >&2; usage; } ;;
+    --worktree) case "$PHASE" in drop|prepare) ;; *) echo "land.sh: --worktree applies only to drop and prepare" >&2; usage ;; esac ;;
     *) echo "land.sh: unknown option: $opt" >&2; usage ;;
   esac
   [ $# -ge 2 ] || { echo "land.sh: $opt requires a value" >&2; usage; }
@@ -106,6 +172,9 @@ while [ $# -gt 0 ]; do
     --pr) PR="$val" ;;
     --repo) REPO="$val" ;;
     --head) HEAD_OID="$val" ;;
+    --onto) ONTO="$val" ;;
+    --prepared) PREPARED="$val" ;;
+    --worktree) DROP_WT="$val" HAVE_DROP_WT=true ;;
     --base-remote) BASE_REMOTE_OPT="$val" ;;
     --head-remote) HEAD_REMOTE_OPT="$val" ;;
     --interval) INTERVAL="$val" ;;
@@ -123,14 +192,35 @@ case "$REPO" in
   ?*/?*) ;;
   *) echo "land.sh: --repo must be owner/name" >&2; usage ;;
 esac
-if [ "$PHASE" != check ]; then
-  HEAD_OID=$(printf '%s' "$HEAD_OID" | tr 'A-F' 'a-f')
-  case "$HEAD_OID" in *[!0-9a-f]*|'')
-    echo "land.sh: --head must be the full 40-hex verified head OID" >&2; usage ;;
+full_oid() { # full_oid <option> <value>: prints the lowercased 40-hex OID
+  local v
+  v=$(printf '%s' "$2" | tr 'A-F' 'a-f')
+  case "$v" in *[!0-9a-f]*|'')
+    echo "land.sh: $1 must be a full 40-hex commit OID" >&2; usage ;;
   esac
-  [ "${#HEAD_OID}" -eq 40 ] || {
-    echo "land.sh: --head must be the full 40-hex verified head OID" >&2; usage
-  }
+  [ "${#v}" -eq 40 ] || { echo "land.sh: $1 must be a full 40-hex commit OID" >&2; usage; }
+  printf '%s' "$v"
+}
+case "$PHASE" in
+  land|merge|rerun|prepare)
+    case "$HEAD_OID" in '')
+      echo "land.sh: --head must be the full 40-hex verified head OID" >&2; usage ;;
+    esac
+    HEAD_OID=$(full_oid --head "$HEAD_OID") || exit 64 ;;
+esac
+if [ "$PHASE" = prepare ]; then
+  [ -n "$ONTO" ] || { echo "land.sh: prepare requires --onto, the pushed head it prepares onto" >&2; usage; }
+  ONTO=$(full_oid --onto "$ONTO") || exit 64
+fi
+if [ -n "$PREPARED" ]; then
+  [ "$DRY_RUN" = false ] || { echo "land.sh: --prepared and --dry-run are exclusive" >&2; usage; }
+  PREPARED=$(full_oid --prepared "$PREPARED") || exit 64
+fi
+if [ "$PHASE" = drop ] && { [ "$HAVE_DROP_WT" = false ] || [ -z "$DROP_WT" ]; }; then
+  echo "land.sh: drop requires --worktree, the path prepare reported" >&2; usage
+fi
+if [ "$PHASE" = prepare ] && [ "$HAVE_DROP_WT" = true ] && [ -z "$DROP_WT" ]; then
+  echo "land.sh: prepare --worktree requires the path prepare reported" >&2; usage
 fi
 case "$INTERVAL" in ''|0|0*|*[!0-9]*)
   echo "land.sh: --interval must be a positive integer without leading zeros (seconds)" >&2; usage ;;
@@ -231,8 +321,16 @@ remote_urls_newline_free() { # remote_urls_newline_free <remote>
   case "$raw" in *$'\n'*) return 1 ;; esac
   return 0
 }
+# After a --prepared run's push, every result names the pushed head, so the
+# caller can record it with list-ready.sh --pushed before acting on a stop.
+# After prepare creates a local branch, every later result says so, so the
+# caller can delete the branch when it hands the PR back.
+pushed_fields() {
+  [ -z "$PUSHED_HEAD" ] || printf ',"pushed_head":"%s","old_head_oid":"%s"' "$PUSHED_HEAD" "$OLD_HEAD"
+  [ "$CREATED_BRANCH" != true ] || printf ',"created_branch":true'
+}
 stop() { # stop <guard> <detail>
-  echo "STOP $1 {\"detail\":\"$(json_escape "$2")\"}"
+  echo "STOP $1 {\"detail\":\"$(json_escape "$2")\"$(pushed_fields)}"
   exit 2
 }
 # checks-failed also names each failed check, so the agent can fetch a
@@ -250,7 +348,7 @@ stop_failed() { # stop_failed <detail>
     fi
     failed+=",$entry"
   done
-  echo "STOP checks-failed {\"detail\":\"$(json_escape "$1")\",\"failed\":[${failed#,}]}"
+  echo "STOP checks-failed {\"detail\":\"$(json_escape "$1")\",\"failed\":[${failed#,}]$(pushed_fields)}"
   exit 2
 }
 
@@ -430,7 +528,7 @@ lookup_failed() { # lookup_failed <what> <detail>
   local excerpt="" extra=""
   [ -s "${GH_ERR:-}" ] && excerpt=$(tr -d '\0' < "$GH_ERR" | head -c 300)
   [ -z "$excerpt" ] || extra=",\"stderr\":\"$(json_escape "$excerpt")\""
-  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"$extra}"
+  echo "LOOKUP_FAILED $1 {\"detail\":\"$(json_escape "$2")\"$extra$(pushed_fields)}"
   exit 4
 }
 
@@ -503,6 +601,78 @@ urlencode() {
   done
   printf '%s' "$out"
 }
+
+# --- drop -------------------------------------------------------------------
+
+# The marker prepare writes beside its worktree. Its "pr: N" line is what
+# lets drop tell a preparation for this PR from a land run's own scratch
+# worktree, which shares the template.
+PREPARE_MARKER=prepare
+# The latest preparation's head and commit, which land --prepared requires
+# to be --head and --prepared.
+PREPARED_HEAD_REF="refs/land/prepared/$PR/head"
+PREPARED_COMMIT_REF="refs/land/prepared/$PR/commit"
+
+# Check that <path> is a worktree prepare made for this PR. Sets PW_WT, the
+# resolved worktree, and PW_DIR, its land-wt directory; anything else stops
+# not-prepared.
+prepared_worktree_check() { # prepared_worktree_check <path>
+  local wt dir tmp field cand="" detached=false found=false
+  # Resolve symlinks first, so every check below and the delete name the
+  # same directory.
+  out_exact wt physical_dir "$1" \
+    || stop not-prepared "$1 is not a directory; nothing changed"
+  dir="${wt%/wt}"
+  { [ "$dir" != "$wt" ] && [ -n "$dir" ]; } \
+    || stop not-prepared "$wt does not end in /wt, so prepare did not make it; nothing changed"
+  case "${dir##*/}" in
+    land-wt.[[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]]) ;;
+    *) stop not-prepared "$wt is not under the land-wt.XXXXXX template, so prepare did not make it; nothing changed" ;;
+  esac
+  # Registered in this repository and detached: a branch worktree is never
+  # a preparation, whatever its path.
+  tmp=$(mktemp) || lookup_failed worktree-scan "mktemp failed"
+  git worktree list --porcelain -z > "$tmp" 2>/dev/null \
+    || { rm -f "$tmp"; lookup_failed worktree-scan "git worktree list failed"; }
+  while IFS= read -r -d '' field; do
+    case "$field" in
+      "worktree "*)
+        cand="${field#worktree }"
+        [ "$cand" -ef "$wt" ] && found=true ;;
+      detached) [ "$cand" -ef "$wt" ] && detached=true ;;
+    esac
+  done < "$tmp"
+  rm -f "$tmp"
+  [ "$found" = true ] \
+    || stop not-prepared "$wt is not a worktree registered in this repository; nothing changed"
+  [ "$detached" = true ] \
+    || stop not-prepared "$wt has a branch checked out, so prepare did not make it; nothing changed"
+  { [ -f "$dir/$PREPARE_MARKER" ] && ! [ -L "$dir/$PREPARE_MARKER" ] \
+      && grep -qxF -- "pr: $PR" "$dir/$PREPARE_MARKER"; } \
+    || stop not-prepared "$dir carries no prepare marker for PR $PR; nothing changed"
+  PW_WT="$wt" PW_DIR="$dir"
+}
+
+# drop is the one path that removes a prepared worktree during a batch, so
+# it removes only what prepare made for this PR and refuses everything
+# else. It needs no forge read, so it runs before the PR facts load, and a
+# forge outage can't strand a worktree.
+phase_drop() {
+  local wt dir
+  git rev-parse --git-dir >/dev/null 2>&1 || stop not-a-repo "not inside a git working tree"
+  prepared_worktree_check "$DROP_WT"
+  wt="$PW_WT" dir="$PW_DIR"
+  # The worktree holds a detached checkout of commits already in the object
+  # store, plus whatever a paused rebase left, so --force discards nothing
+  # that a branch or the forge lacks.
+  git worktree remove --force -- "$wt" >/dev/null 2>&1 \
+    || stop drop-failed "git could not remove the worktree at $wt; nothing was removed"
+  rm -rf -- "$dir" \
+    || stop drop-failed "the worktree at $wt is unregistered, but its directory $dir could not be deleted"
+  echo "OK drop {\"worktree\":\"$(json_escape "$wt")\"}"
+  exit 0
+}
+[ "$PHASE" != drop ] || phase_drop
 
 # --- PR facts ---------------------------------------------------------------
 
@@ -1274,6 +1444,8 @@ remote_repo_check() { # remote_repo_check <remote> <role>
 # fetched one when the merge starts. Each refusal is a STOP and rerunning
 # land is the retry, so every refusal reaches the caller.
 LAND_TIP="" LAND_TMP_WT="" LAND_WT="" NEW_HEAD="" MOVE_ERR="" MOVE_IGNORED=false
+# Set only when --prepared passes the base-tree check in phase_land.
+PREP_BASE="" PREP_TREE="" REPLAY_ERR=""
 
 # Encode a branch for a forge path that takes it as slash-separated
 # segments (git/ref/heads/<branch>): each segment percent-encoded, the
@@ -1400,6 +1572,9 @@ ci_read() { # ci_read <oid>
 
 ci_wait() { # ci_wait <oid>: returns only once CI passed on <oid>
   local oid="$1" deadline remaining sleep_for seen_passing="" failed_polls=0
+  # The caller starts its own work for the wait (merge-cleanup, the next
+  # PR's preparation) only once it sees this line.
+  echo "land.sh: waiting for CI on $oid" >&2
   deadline=$(( SECONDS + CI_CAP_MINUTES * 60 ))
   while :; do
     # The poll loop is the retry and --interval its backoff, so each poll
@@ -1521,13 +1696,17 @@ land_rebase() {
   err=$(mktemp) || lookup_failed rebase "mktemp failed"
   # Pin the settings that would let a rebase touch more than this commit:
   # autostash stashes and reapplies work, and updateRefs moves branches.
-  if ! git -C "$wt" -c rebase.autoStash=false -c rebase.updateRefs=false \
+  if ! git -C "$wt" -c rebase.autoStash=false -c rebase.updateRefs=false -c rebase.backend=merge -c rerere.enabled=false \
       rebase --quiet "$LAND_TIP" >/dev/null 2>"$err"; then
     detail=$(tr -d '\0' < "$err" | tail -c 300); rm -f "$err"
     conflicts=$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')
     [ -n "$conflicts" ] \
       || stop rebase-failed "rebasing $HEAD_OID onto $LAND_TIP failed without conflicts; $BRANCH is unchanged: $detail"
-    stop rebase-conflict "rebasing $BRANCH onto $BASE tip $LAND_TIP conflicts in: ${conflicts% }. $BRANCH is unchanged at $HEAD_OID. Rebase it by hand, read git range-diff, push, then run check and land again"
+    [ -n "$PREP_BASE" ] \
+      || stop rebase-conflict "rebasing $BRANCH onto $BASE tip $LAND_TIP conflicts in: ${conflicts% }. $BRANCH is unchanged at $HEAD_OID. Rebase it by hand, read git range-diff, push, then run check and land again"
+    land_replay "$wt" \
+      || { git -C "$wt" rebase --abort >/dev/null 2>&1
+           stop rebase-conflict "rebasing $BRANCH onto $BASE tip $LAND_TIP conflicts in: ${conflicts% }, and the prepared resolution $PREPARED did not replay: $REPLAY_ERR. $BRANCH is unchanged at $HEAD_OID and nothing was pushed. Rebase it by hand, read git range-diff, push, then run check and land again"; }
   fi
   rm -f "$err"
   NEW_HEAD=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null) \
@@ -1554,6 +1733,61 @@ land_rebase() {
   echo "land.sh: rebased $BRANCH onto $LAND_TIP; git range-diff $LAND_TIP $HEAD_OID $NEW_HEAD:" >&2
   git range-diff --no-color "$LAND_TIP" "$HEAD_OID" "$NEW_HEAD" >&2 2>/dev/null \
     || echo "land.sh: (git range-diff failed; compare the commits by hand)" >&2
+}
+
+# Is a rebase paused in <dir>? Its state directory is per-worktree.
+rebase_paused() { # rebase_paused <dir>
+  local gp
+  out_exact gp git -C "$1" rev-parse --git-path rebase-merge || return 1
+  (cd "$1" && [ -d "$gp" ])
+}
+
+# The facts a pick must share with the prepared commit it takes the tree
+# of: rebase keeps the author and the message, so a different commit, or
+# the same commits in another order, differs here.
+pick_identity() { # pick_identity <dir> <rev>
+  git -C "$1" log -1 --date=raw --format='%an%x00%ae%x00%ad%x00%B' "$2" 2>/dev/null
+}
+
+# Finish a conflicted rebase in <dir> with the preparation's resolutions.
+# At each conflict stop, the k-th pick takes the tree of the preparation's
+# k-th commit, but only when the commit being picked has that commit's
+# identity and the rebase so far has the tree of the preparation's first
+# k-1 commits. The rebase must then end with as many commits as the
+# preparation and with its tree. Any other outcome returns 1 with
+# REPLAY_ERR set and the rebase possibly still paused; nothing outside the
+# temporary worktree has moved. The base-tree check in phase_land is what
+# makes taking whole trees safe.
+land_replay() { # land_replay <dir>
+  local wt="$1" picks done_n k pick prev
+  REPLAY_ERR=""
+  picks=$(git rev-list --reverse "$PREP_BASE..$PREPARED" 2>/dev/null) \
+    || { REPLAY_ERR="could not list the prepared commits"; return 1; }
+  while rebase_paused "$wt"; do
+    [ -n "$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null)" ] \
+      || { REPLAY_ERR="the rebase paused without a conflict"; return 1; }
+    done_n=$(git -C "$wt" rev-list --count "$LAND_TIP..HEAD" 2>/dev/null) \
+      || { REPLAY_ERR="could not count the rebased commits"; return 1; }
+    k=$((done_n + 1))
+    pick=$(sed -n "${k}p" <<< "$picks")
+    [ -n "$pick" ] || { REPLAY_ERR="the preparation has no commit $k"; return 1; }
+    if [ "$k" -eq 1 ]; then prev="$PREP_BASE"; else prev=$(sed -n "$((k - 1))p" <<< "$picks"); fi
+    [ "$(git -C "$wt" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$(git rev-parse "$prev^{tree}")" ] \
+      || { REPLAY_ERR="the rebase before commit $k differs from the preparation"; return 1; }
+    [ "$(pick_identity "$wt" REBASE_HEAD)" = "$(pick_identity "$wt" "$pick")" ] \
+      || { REPLAY_ERR="commit $k of the rebase is not the preparation's commit $k"; return 1; }
+    git -C "$wt" read-tree -u --reset "$pick" >/dev/null 2>&1 \
+      || { REPLAY_ERR="could not check out the prepared tree of commit $k"; return 1; }
+    # The loop reads the outcome: a later conflict pauses again, and any
+    # other failure leaves a pause without conflicts.
+    # GIT_EDITOR outranks core.editor, so only it keeps a waiting editor
+    # from a caller's environment out of the run.
+    GIT_EDITOR=true git -C "$wt" -c rerere.enabled=false rebase --continue >/dev/null 2>&1
+  done
+  [ "$(git -C "$wt" rev-list --count "$LAND_TIP..HEAD" 2>/dev/null)" = "$(sed -n '$=' <<< "$picks")" ] \
+    || { REPLAY_ERR="the rebase made a different number of commits than the preparation"; return 1; }
+  [ "$(git -C "$wt" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$PREP_TREE" ] \
+    || { REPLAY_ERR="the rebased tree is not the prepared tree"; return 1; }
 }
 
 # Push the rebased branch with a lease on the reviewed head, so a push that
@@ -1599,6 +1833,34 @@ land_await_forge_head() {
   done
 }
 
+# Use the preparation only when the fetched base tip has the tree of the
+# commit it was prepared onto, its merge base with the tip. A base that
+# moved by more than the predecessor's merge fails this, and the run goes
+# on exactly as without --prepared.
+prepared_check() {
+  local base from made
+  from=$(git rev-parse --verify --quiet "$PREPARED_HEAD_REF^{commit}") || from=""
+  made=$(git rev-parse --verify --quiet "$PREPARED_COMMIT_REF^{commit}") || made=""
+  prepared_refs_clear
+  if [ "$from" != "$HEAD_OID" ] || [ "$made" != "$PREPARED" ]; then
+    echo "land.sh: ignoring --prepared: the latest preparation of PR $PR is head ${from:-none} as ${made:-none}, not --head $HEAD_OID as $PREPARED" >&2
+    return 0
+  fi
+  if ! git cat-file -e "$PREPARED^{commit}" 2>/dev/null; then
+    echo "land.sh: ignoring --prepared: $PREPARED is not a commit in this repository" >&2
+    return 0
+  fi
+  base=$(git merge-base "$PREPARED" "$LAND_TIP" 2>/dev/null) || base=""
+  if [ -z "$base" ] \
+      || [ "$(git rev-parse "$base^{tree}")" != "$(git rev-parse "$LAND_TIP^{tree}")" ]; then
+    echo "land.sh: ignoring --prepared: $BASE tip $LAND_TIP has another tree than the base $PREPARED was prepared onto" >&2
+    return 0
+  fi
+  PREP_BASE="$base"
+  PREP_TREE=$(git rev-parse "$PREPARED^{tree}") \
+    || lookup_failed prepared "could not read the tree of $PREPARED"
+}
+
 # Read every check once and report what land would do, changing nothing
 # beyond the base fetch. The STOP or OK line is what a real run would hit
 # first; stderr carries all three results either way.
@@ -1631,6 +1893,156 @@ land_dry_run() { # land_dry_run <on-tip>
   [ "$FORGE_BASE_TIP" = "$LAND_TIP" ] || stop base-moved "$summary"
   echo "OK land {\"dry_run\":true,\"head_oid\":\"$HEAD_OID\",\"base_tip\":\"$LAND_TIP\",\"checks\":\"$CI_STATE\",\"would\":\"merge\"}"
   exit 0
+}
+
+# --- prepare ----------------------------------------------------------------
+
+# Create a missing local head branch at HEAD_OID, only when the head remote's
+# branch is that commit. A branch pushed from another machine has no local
+# ref, and check and land need one at the pinned head. Sets CREATED_BRANCH.
+prepare_local_branch() { # prepare_local_branch <head-remote>
+  local tmp_ref="refs/land/prepare-$PR" fetched
+  CREATED_BRANCH=false
+  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    [ "$(git rev-parse "refs/heads/$BRANCH")" = "$HEAD_OID" ] \
+      || stop oid-mismatch "local $BRANCH is $(git rev-parse "refs/heads/$BRANCH"), not the pinned head $HEAD_OID; prepare does not move an existing branch"
+    return 0
+  fi
+  git fetch -- "$1" "+refs/heads/$BRANCH:$tmp_ref" >/dev/null 2>&1 \
+    || lookup_failed head-fetch "could not fetch $BRANCH from $1"
+  fetched=$(git rev-parse --verify --quiet "$tmp_ref^{commit}")
+  git update-ref -d "$tmp_ref" >/dev/null 2>&1
+  [ "$fetched" = "$HEAD_OID" ] \
+    || stop oid-mismatch "$1's $BRANCH is ${fetched:-unreadable}, not the pinned head $HEAD_OID; no local branch was created"
+  # The empty old value creates the ref only if nothing made it meanwhile.
+  git update-ref "refs/heads/$BRANCH" "$HEAD_OID" "" >/dev/null 2>&1 \
+    || stop oid-mismatch "could not create local $BRANCH at $HEAD_OID; another run may have created it"
+  CREATED_BRANCH=true
+}
+
+# Record the latest preparation, for land --prepared to match.
+prepared_refs_write() { # prepared_refs_write <prepared-commit>
+  git update-ref "$PREPARED_HEAD_REF" "$HEAD_OID" >/dev/null 2>&1 \
+    && git update-ref "$PREPARED_COMMIT_REF" "$1" >/dev/null 2>&1 \
+    || lookup_failed prepare "could not write $PREPARED_HEAD_REF and $PREPARED_COMMIT_REF"
+}
+prepared_refs_clear() {
+  git update-ref -d "$PREPARED_HEAD_REF" >/dev/null 2>&1
+  git update-ref -d "$PREPARED_COMMIT_REF" >/dev/null 2>&1
+}
+
+# Record a resolved conflict worktree as the preparation. The marker ties
+# it to this PR, head, and onto; the rebase must be finished, so its HEAD
+# is the whole prepared result.
+prepare_record() {
+  local wt prepared tree rc=0
+  prepared_worktree_check "$DROP_WT"
+  wt="$PW_WT"
+  { grep -qxF -- "head: $HEAD_OID" "$PW_DIR/$PREPARE_MARKER" \
+      && grep -qxF -- "onto: $ONTO" "$PW_DIR/$PREPARE_MARKER"; } \
+    || stop not-prepared "$wt was prepared from another --head or --onto; nothing was recorded"
+  ! rebase_paused "$wt" \
+    || stop rebase-paused "the rebase in $wt is still paused; finish it with git rebase --continue there, then record it"
+  prepared=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null) \
+    || lookup_failed prepare "could not read the HEAD of $wt"
+  git merge-base --is-ancestor "$ONTO" "$prepared" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 0 ] && [ "$prepared" != "$ONTO" ] \
+    || stop rebase-failed "the HEAD of $wt, $prepared, is not a commit on top of --onto $ONTO; nothing was recorded"
+  tree=$(git rev-parse "$prepared^{tree}") || lookup_failed prepare "could not read the prepared tree"
+  prepared_refs_clear
+  prepared_refs_write "$prepared"
+  echo "land.sh: recorded $wt; git range-diff $ONTO $HEAD_OID $prepared:" >&2
+  git range-diff --no-color "$ONTO" "$HEAD_OID" "$prepared" >&2 2>/dev/null \
+    || echo "land.sh: (git range-diff failed; compare the commits by hand)" >&2
+  echo "OK prepare {\"head_oid\":\"$HEAD_OID\",\"onto\":\"$ONTO\",\"prepared_oid\":\"$prepared\",\"tree\":\"$tree\",\"worktree\":\"$(json_escape "$wt")\",\"created_branch\":false}"
+  exit 0
+}
+
+# Remove prepare's directory. Before the worktree exists only the marker
+# is there; after, git removes the worktree first, as in land.
+prepare_cleanup() {
+  [ -n "$LAND_TMP_WT" ] || return 0
+  if [ -e "$LAND_TMP_WT/wt" ]; then
+    remove_land_worktree
+  else
+    rm -rf -- "$LAND_TMP_WT"; LAND_TMP_WT=""
+  fi
+}
+
+# Rebase a copy of the head onto ONTO in a marked land-wt worktree. Only
+# the base remote's tracking ref, a missing local head branch, and the
+# worktree change; the reviewed branch, the forge, and the checkout this
+# runs from stay as they were.
+phase_prepare() {
+  [ "$PR_STATE" = OPEN ] || stop pr-not-open "PR $PR is $PR_STATE, not OPEN"
+  [ "$FORGE_HEAD_OID" = "$HEAD_OID" ] \
+    || stop oid-mismatch "the forge reports head $FORGE_HEAD_OID but --head pinned $HEAD_OID"
+  [ "$IS_FORK" != true ] \
+    || stop not-on-tip "PR $PR's head is in another repository, and land does not push to it, so there is nothing to prepare"
+  [ "$HAVE_DROP_WT" = false ] || prepare_record
+  collision_check
+  local head_remote rc=0 wt err conflicts detail prepared tree
+  if [ -n "$BASE_REMOTE_OPT" ]; then
+    BASE_REMOTE="$BASE_REMOTE_OPT"
+  else
+    resolve_remote "$REPO"
+    [ -n "$RESOLVED_REMOTE" ] \
+      || stop remote-unresolved "no configured remote's URL matches $REPO; pass --base-remote"
+    BASE_REMOTE="$RESOLVED_REMOTE"
+  fi
+  remote_repo_check "$BASE_REMOTE" base
+  head_remote="${HEAD_REMOTE_OPT:-$BASE_REMOTE}"
+  [ "$head_remote" = "$BASE_REMOTE" ] || remote_repo_check "$head_remote" head
+  git fetch -- "$BASE_REMOTE" "+refs/heads/$BASE:refs/remotes/$BASE_REMOTE/$BASE" >/dev/null 2>&1 \
+    || lookup_failed base-fetch "could not fetch $BASE from $BASE_REMOTE"
+  LAND_TIP=$(git rev-parse --verify --quiet "refs/remotes/$BASE_REMOTE/$BASE^{commit}") \
+    || lookup_failed base-fetch "the fetched $BASE did not resolve to a commit"
+  git cat-file -e "$ONTO^{commit}" 2>/dev/null \
+    || stop onto-not-on-tip "--onto $ONTO is not a commit in this repository"
+  git merge-base --is-ancestor "$LAND_TIP" "$ONTO" >/dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) ;;
+    1) stop onto-not-on-tip "--onto $ONTO does not contain the fetched $BASE tip $LAND_TIP, so its tree is not the tree $BASE will have after it merges" ;;
+    *) lookup_failed ancestry "could not compare $ONTO with $BASE tip $LAND_TIP (git merge-base exit $rc)" ;;
+  esac
+  prepare_local_branch "$head_remote"
+  # A new preparation supersedes the last, whatever this one's outcome.
+  prepared_refs_clear
+
+  # The marker goes in before the worktree, so a run killed in between
+  # still leaves a directory drop accepts.
+  LAND_TMP_WT=$(mktemp -d "${TMPDIR:-/tmp}/land-wt.XXXXXX") || lookup_failed prepare "mktemp failed"
+  trap 'prepare_cleanup; rm -f -- "$GH_ERR" "$GH_OUT" "$GH_LOG"' EXIT
+  printf 'pr: %s\nhead: %s\nonto: %s\n' "$PR" "$HEAD_OID" "$ONTO" > "$LAND_TMP_WT/$PREPARE_MARKER" \
+    || lookup_failed prepare "could not write the prepare marker in $LAND_TMP_WT"
+  wt="$LAND_TMP_WT/wt"
+  git worktree add --quiet --detach -- "$wt" "$HEAD_OID" >/dev/null 2>&1 \
+    || lookup_failed prepare "could not add a temporary worktree at $HEAD_OID"
+  err=$(mktemp) || lookup_failed prepare "mktemp failed"
+  if ! git -C "$wt" -c rebase.autoStash=false -c rebase.updateRefs=false -c rebase.backend=merge -c rerere.enabled=false \
+      rebase --quiet "$ONTO" >/dev/null 2>"$err"; then
+    detail=$(tr -d '\0' < "$err" | tail -c 300); rm -f "$err"
+    conflicts=$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')
+    [ -n "$conflicts" ] \
+      || stop rebase-failed "rebasing $HEAD_OID onto $ONTO failed without conflicts: $detail"
+    # Keep the paused rebase for the caller to resolve; drop removes it.
+    LAND_TMP_WT=""
+    echo "STOP rebase-conflict {\"detail\":\"$(json_escape "rebasing $BRANCH onto $ONTO conflicts in: ${conflicts% }. Resolve them in the worktree under the rework rule, finish with git rebase --continue there, and record it with prepare --worktree; drop removes the worktree. Nothing else changed")\",\"worktree\":\"$(json_escape "$wt")\",\"conflicts\":\"$(json_escape "${conflicts% }")\",\"created_branch\":$CREATED_BRANCH}"
+    exit 2
+  fi
+  rm -f "$err"
+  prepared=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null) \
+    || lookup_failed prepare "could not read the prepared head"
+  tree=$(git rev-parse "$prepared^{tree}") || lookup_failed prepare "could not read the prepared tree"
+  [ "$prepared" != "$ONTO" ] \
+    || stop rebase-failed "every commit on $BRANCH is already in $ONTO, so there is nothing to land"
+  echo "land.sh: prepared $BRANCH onto $ONTO; git range-diff $ONTO $HEAD_OID $prepared:" >&2
+  git range-diff --no-color "$ONTO" "$HEAD_OID" "$prepared" >&2 2>/dev/null \
+    || echo "land.sh: (git range-diff failed; compare the commits by hand)" >&2
+  prepare_cleanup \
+    || stop prepare-failed "the temporary worktree at $wt could not be removed"
+  prepared_refs_write "$prepared"
+  echo "OK prepare {\"head_oid\":\"$HEAD_OID\",\"onto\":\"$ONTO\",\"prepared_oid\":\"$prepared\",\"tree\":\"$tree\",\"created_branch\":$CREATED_BRANCH}"
 }
 
 # --- rerun ------------------------------------------------------------------
@@ -1802,13 +2214,26 @@ phase_land() {
       || lookup_failed head-remote "could not read $head_remote's URL"
     push_ids_match "$head_remote" "$(url_id "$hr_furl")" \
       || stop pushurl-mismatch "$head_remote must have exactly one effective push destination matching its fetch URL; git broadcasts to every configured push URL"
+    [ -z "$PREPARED" ] || prepared_check
     land_rebase
     land_push "$head_remote" "$head_pin"
     land_await_forge_head
-    # CI reruns on the rebased commit, but nothing reviews its diff, so the
-    # agent reads the range-diff printed above before landing it.
-    echo "STOP rebased {\"head_oid\":\"$NEW_HEAD\",\"old_head_oid\":\"$HEAD_OID\",\"base_tip\":\"$LAND_TIP\",\"detail\":\"$(json_escape "rebased $BRANCH onto $BASE tip $LAND_TIP and pushed $NEW_HEAD; read the range-diff on stderr, then run check and land --head $NEW_HEAD")\"}"
-    exit 2
+    # A rebase that reproduced the reviewed preparation needs no second
+    # read, so the run goes on to CI with the pushed head as its own.
+    if [ -n "$PREP_BASE" ] \
+        && [ "$(git rev-parse "$NEW_HEAD^{tree}" 2>/dev/null)" = "$PREP_TREE" ]; then
+      PUSHED_HEAD="$NEW_HEAD" OLD_HEAD="$HEAD_OID"
+      HEAD_OID="$NEW_HEAD" FORGE_HEAD_OID="$NEW_HEAD"
+    else
+      local prep_field=""
+      if [ -n "$PREP_BASE" ]; then prep_field=',"prepared":"tree-mismatch"'
+      elif [ -n "$PREPARED" ]; then prep_field=',"prepared":"ignored"'
+      fi
+      # CI reruns on the rebased commit, but nothing reviews its diff, so
+      # the agent reads the range-diff printed above before landing it.
+      echo "STOP rebased {\"head_oid\":\"$NEW_HEAD\",\"old_head_oid\":\"$HEAD_OID\",\"base_tip\":\"$LAND_TIP\"$prep_field,\"detail\":\"$(json_escape "rebased $BRANCH onto $BASE tip $LAND_TIP and pushed $NEW_HEAD; read the range-diff on stderr, then run check and land --head $NEW_HEAD")\"}"
+      exit 2
+    fi
   fi
 
   ci_wait "$HEAD_OID"
@@ -1822,6 +2247,16 @@ phase_land() {
   [ "$base_now" = "$BASE" ] \
     || stop base-moved "PR $PR now targets $base_now, not $BASE, which land checked the head against; run check and land again"
   phase_merge
+}
+
+# Record a merged PR until merge-cleanup for it finishes, so a lander that
+# dies between the next PR's push and this cleanup finds it on its next
+# list. list-ready.sh reads and clears the file.
+record_cleanup() {
+  local common
+  common=$(git rev-parse --git-common-dir 2>/dev/null) && [ -n "$common" ] || return 1
+  mkdir -p -- "$common/land-approved-prs" 2>/dev/null \
+    && printf '%s\n' "$PR" >> "$common/land-approved-prs/cleanup-pending" 2>/dev/null
 }
 
 phase_merge() {
@@ -1882,10 +2317,15 @@ phase_merge() {
         --jq '[.state,(.mergedAt // "null")] | @tsv'); then
       IFS=$'\t' read -r state merged_at <<< "$pr_fields"
       if [ "$state" = MERGED ] && [ "$merged_at" != null ]; then
+        local cleanup_field=""
+        record_cleanup || {
+          echo "land.sh: merged, but could not record PR $PR in cleanup-pending; run merge-cleanup for it by hand" >&2
+          cleanup_field=',"cleanup_recorded":false'
+        }
         if [ "$PHASE" = land ]; then
-          echo "OK land {\"head_oid\":\"$HEAD_OID\",\"merged_at\":\"$(json_escape "$merged_at")\"}"
+          echo "OK land {\"head_oid\":\"$HEAD_OID\",\"merged_at\":\"$(json_escape "$merged_at")\"$(pushed_fields)$cleanup_field}"
         else
-          echo "OK merge {\"merged_at\":\"$(json_escape "$merged_at")\"}"
+          echo "OK merge {\"merged_at\":\"$(json_escape "$merged_at")\"$cleanup_field}"
         fi
         return 0
       fi
@@ -1964,4 +2404,5 @@ case "$PHASE" in
   land) phase_land ;;
   merge) phase_merge ;;
   rerun) phase_rerun ;;
+  prepare) phase_prepare ;;
 esac

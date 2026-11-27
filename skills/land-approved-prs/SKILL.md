@@ -25,9 +25,9 @@ Never start a batch on your own. The owner starts each one.
 
 ## Requirements
 
-This skill requires a shell, git, and a forge CLI (`gh`) authenticated for the
-repository. It also requires the merge-cleanup skill installed beside it. If any
-one of these is missing, stop before listing and hand the batch to the owner.
+This skill requires a shell, git, a forge CLI (`gh`) authenticated for the
+repository, and the merge-cleanup skill installed beside it. If any is missing,
+stop before listing and hand the batch to the owner.
 There is no prose fallback: the lock, the filters, and the landing engine exist
 only as scripts.
 
@@ -88,9 +88,8 @@ stops `bad-record` on a malformed one:
 
 Both labels must exist on the forge before a batch. Create any missing one
 with the commands below, using the record's label names and the project's
-repository. The default colors are `#0e8a16` for `approved` and `#d93f0b` for
-`needs-rework`. Keep a project's existing colors unless it wants these
-defaults, and add `--force` only to replace them.
+repository. Keep a project's existing colors; add `--force` only to replace
+them with these.
 
 ```sh
 gh label create approved --repo owner/name --color 0e8a16 \
@@ -99,10 +98,9 @@ gh label create needs-rework --repo owner/name --color d93f0b \
   --description "Lander hand-back: this pull request could not land; rework it, then re-approve"
 ```
 
-Only a person adds the approval label. Any agent running under a
-collaborator's account can add it, and the record is what makes doing so a
-violation. Never add it, even to a PR you wrote, and never treat a chat
-message as approval.
+Only a person adds the approval label. An agent under a collaborator's
+account can add it, but the record makes that a violation: never add it, even
+to a PR you wrote, and never treat a chat message as approval.
 
 ## The Batch
 
@@ -136,6 +134,8 @@ several remotes name the repository, and pass the same value to
 Run the PRs in sequence in the main session, which owns the engine's waits.
 Where the platform supports delegation, hand only the bounded read and
 decision of steps 1 and 2 in "One PR" to a subagent; otherwise do them inline.
+During a `land`'s CI wait, prepare the next ready PR as
+`references/prepare-next.md` §prepare-next says.
 
 ## Readiness Filters
 
@@ -227,10 +227,10 @@ the verified head OID that `land` pins with `--head`:
 <skill-dir>/land.sh rerun --pr <n> --repo <owner/name> --head <oid>
 ```
 
-Pin the head the list gave. The PR's pinned head is the `head_oid` from the
-list you took it from, or the OID you last recorded with `--pushed`. Land
-only a `check` that reports the pinned head. When it reports another, someone
-pushed after the list: list again and let filter 4 decide.
+The PR's pinned head is the `head_oid` from the list you took it from, or the
+OID you last recorded with `--pushed`. Land only a `check` that reports the
+pinned head. When it reports another, someone pushed after the list: list
+again and let filter 4 decide.
 
 `land` merges only when the head contains the base tip, CI is green on that
 exact head, and the base hasn't moved; otherwise it stops. `rerun` runs only
@@ -322,9 +322,7 @@ any other stop, and never bypass a guard with force, reset, or a manual merge.
   head. Hand back naming the guard; see "Stacks."
 - **`rerun-spent`, `rerun-unsupported`, `rerun-refused`,
   `rerun-unconfirmed`, or any other `STOP`:** Hand back naming the guard, with
-  any classification and run links. `rerun-spent` means a failed run on the
-  head was already rerun; `rerun-unsupported`, that a failure isn't a GitHub
-  Actions job.
+  any classification and run links.
 
 `LOOKUP_FAILED` is a read failure, not a guard stop, and the scripts already
 retried transient forge reads. Read its `stderr` key first. On a timeout, an
@@ -376,9 +374,9 @@ round on a merged head; read whatever posted when the batch ends.
 
 ### Hand-Back
 
-Hand back when the rework rule says stop, when a finding can't be resolved
-under it, when CI stays red, or when anything else needs a person. Comment
-why, then swap the labels the record names:
+Hand back whenever something needs a person: the rework rule says stop, a
+finding can't be resolved under it, or CI stays red. Comment why, then swap
+the labels the record names:
 
 ```sh
 gh pr comment <n> --repo <owner/name> --body-file <comment-file>
@@ -392,9 +390,12 @@ again."
 
 ### After the Merge
 
-Once the forge reports the PR merged, stop any review watch on it, then run
-the merge-cleanup skill's procedure for it from Resolve the Work Unit through
-Summarize. Run it from the same checkout and pass:
+Once the forge reports the PR merged, stop its review watch and list again.
+Once the next PR's `land` prints `land.sh: waiting for CI on <oid>` or
+returns, or on an empty list, run the merge-cleanup skill's procedure for the
+merged PR from Resolve the Work Unit through Summarize. Then run
+`list-ready.sh --cleaned <n>`. Run merge-cleanup from the same checkout and
+pass:
 
 - `--repo` as `<host>/<owner>/<name>`: the forge record's host joined to the
   slug. Name the host even when it is `github.com`.
@@ -402,8 +403,9 @@ Summarize. Run it from the same checkout and pass:
 - `--checkout` as the checkout's absolute root.
 
 Merge-cleanup removes the PR's head worktree itself when it's clean. Never
-remove a worktree any other way during a batch. If merge-cleanup stops
-`head-worktree-present`, it kept that worktree; record the path. Its
+remove a worktree any other way during a batch, except a preparation's with
+`drop`. If merge-cleanup stops `head-worktree-present`, it kept that
+worktree; record the path. Its
 `bad-record` stop means the base's `.worktree-disposables` is malformed, not
 the landing record: it kept the worktree too, so record the path and report
 the file to the owner. In either case, do the
@@ -484,8 +486,8 @@ back naming the guard; the owner retargets the children or merges the parent.
 ## Recovery After a Dead Lander
 
 Once the owner has released a stale lock, the next run starts as usual. Report,
-and leave in place, any temporary worktree the dead run's `land` left
-registered, at a path ending in `land-wt.XXXXXX/wt`. The end-of-batch sweep
+and leave in place, any temporary worktree the dead run's `land` or `prepare`
+left registered, at a path ending in `land-wt.XXXXXX/wt`. The end-of-batch sweep
 leaves it, so the owner removes it with merge-cleanup's
 manual worktree sweep. The PR the dead run was on is in one of three states:
 
@@ -493,7 +495,8 @@ manual worktree sweep. The PR the dead run was on is in one of three states:
 - **Rebased and pushed, not merged:** its head is neither the approved head
   nor in the new run's push log, so filter 4 excludes it; hand it back. The
   owner re-approves it by removing and re-adding the approval label.
-- **Merged, not cleaned up:** run merge-cleanup on it.
+- **Merged, not cleaned up:** it is in the first list's `cleanup_pending`:
+  run merge-cleanup, then `--cleaned`.
 
 ## Revoking Approval
 
