@@ -11,7 +11,7 @@
 #                                 the clock, and mark where setup ended
 #
 # Optional, after fixture_init: fail_ci <oid> <log>, slow_ci <oid> <seconds>,
-# and install_git_fault.
+# log_checkout_refs, and install_git_fault.
 #
 # Layout: under <fixture-dir>, `repo` is the primary checkout (the prompt's
 # <fixture-repo>) on a clean main, and `acme/repo.git` plays the forge's git:
@@ -264,6 +264,18 @@ fail_ci() {
 # slow_ci <oid> <seconds>: CI on <oid> gains a late check that runs for
 # <seconds> after land's CI wait first reads it; see the stub's header.
 slow_ci() { printf '%s\n' "$2" >"$FORGE/ci/$1.slow"; }
+
+# log_checkout_refs: log the primary checkout's refs/land/prepared/*
+# updates to forge/checkout-ref-updates.log; see
+# checkout-reference-transaction's header. The repository's own
+# core.hooksPath wins over a global one, as for the origin, and the prepare
+# worktrees share it.
+log_checkout_refs() {
+  cp "$LIB/checkout-reference-transaction" "$REPO/.git/hooks/reference-transaction"
+  chmod +x "$REPO/.git/hooks/reference-transaction"
+  git -C "$REPO" config core.hooksPath "$REPO/.git/hooks"
+  : >"$FORGE/checkout-ref-updates.log"
+}
 
 # install_git_fault: fail the first land.sh prepare process's head fetch;
 # see git-fault's header. Records the real git before shadowing it.

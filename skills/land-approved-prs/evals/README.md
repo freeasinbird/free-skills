@@ -6,7 +6,7 @@ the repo.
 
 ## Files
 
-- `evals.json`: twelve task evals, each with a scored fixture.
+- `evals.json`: thirteen task evals, each with a scored fixture.
   1. `land-one-ready-pr`: lands one ready PR under the lock, runs
      merge-cleanup, and asks the sweep for landed branches only, after the
      lock's release.
@@ -32,6 +32,8 @@ the repo.
       child.
   12. `prepare-lookup-failed-rerun`: reruns a `prepare` that failed its head
       fetch once during the CI wait, then lands both PRs without a hand-back.
+  13. `prepare-without-asking`: with case 1's prompt, which never mentions
+      preparation, prepares #8 during #7's CI wait, then lands both PRs.
 - `scored/`: one directory per case, the shared fixture library, and the
   held-out list. See Scored Eval.
 
@@ -94,6 +96,10 @@ in other words still passes.
   lock update to `<state-dir>/forge/ref-updates.log`, which the forge reads
   for PR heads, CI runs, and force-push events, and graders read for lock
   use.
+- **`checkout-reference-transaction`:** the primary checkout's hook in
+  case 13, installed by `fixture.sh`'s `log_checkout_refs`. It logs each
+  `refs/land/prepared/*` update, which only `land.sh prepare` writes, to
+  `<state-dir>/forge/checkout-ref-updates.log`, in the stub's time format.
 - **`fixture.sh`:** builds the origin, the primary checkout with its
   AGENTS.md forge and landing records, and PRs at fixed times.
 - **`git-fault`:** a `git` installed ahead of the real one in case 12. It
@@ -138,21 +144,21 @@ rarely fails case 9, because the agent reasons the advice out from the
 engine's description; see Measured Results. The other sections' dependence
 is unmeasured.
 
-| Section                       | Climb cases    |
-| ----------------------------- | -------------- |
-| Requirements                  | 5              |
-| The Landing Record            | 2              |
-| The Batch                     | 1, 11, 12      |
-| Readiness Filters             | 2, 6, 7        |
-| The Lock                      | 1, 5, 11       |
-| One PR                        | 1, 6, 7, 8, 10 |
-| The End-of-Batch Sweep        | 1              |
-| Ordering                      | 7              |
-| Stacks                        | 11             |
-| Recovery After a Dead Lander  | 6              |
-| Revoking Approval             | 9              |
-| Script Results                | 1, 8, 10, 12   |
-| Comments and the Batch Report | 1, 6, 10, 11   |
+| Section                       | Climb cases        |
+| ----------------------------- | ------------------ |
+| Requirements                  | 5                  |
+| The Landing Record            | 2                  |
+| The Batch                     | 1, 11, 12, 13      |
+| Readiness Filters             | 2, 6, 7            |
+| The Lock                      | 1, 5, 11           |
+| One PR                        | 1, 6, 7, 8, 10, 13 |
+| The End-of-Batch Sweep        | 1                  |
+| Ordering                      | 7                  |
+| Stacks                        | 11                 |
+| Recovery After a Dead Lander  | 6                  |
+| Revoking Approval             | 9                  |
+| Script Results                | 1, 8, 10, 12       |
+| Comments and the Batch Report | 1, 6, 10, 11       |
 
 Each owner-gated or authorization rule that no script enforces has a case
 whose result depends on it:
@@ -219,6 +225,18 @@ own edit.
   `tail` and never saw the CI-wait line (see #505). Two failures skipped
   setting `GH_HOST`, took the stub's 401 as an authentication error, and
   ended the batch before listing.
+- **Case 13 (#505), 2026-11-27:** Case 13 alone passed 1 of 6 runs on the
+  skill at 0992cdb, and 2 of 6 with only "One PR" step 3 and "Running the
+  Engine" reworded. In each failure `land` ran in the foreground, or behind
+  `2>&1 | tail`, and the CI-wait line never showed. The first `land` here
+  stops `remote-unresolved`, and the fixed relaunch, often chained after
+  `check` in one call, went to the foreground. Adding the rule at those
+  sites (the stop's bullet, "Acting on Each Stop," and a separate `check`)
+  raised it to 4 of 6, then 6 of 6, with every `land` in the background.
+- **Climb split with case 13, 2026-11-27:** It scored 0.970 with a 0.091
+  band over 33 runs, for $6.11 and 20 minutes. Case 13 passed 3 of 3, and
+  every other climb case passed every run but one of case 12's, which
+  skipped setting `GH_HOST` and ended the batch on the stub's 401.
 - **Case 12 separates the rules.** With the earlier discard rule in
   `references/prepare-next.md`, case 12 failed 2 of 2 runs, each with one
   `prepare`.

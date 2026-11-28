@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Usage: setup <fixture-dir>
+# #7 is on main's tip; #8 edits another file off main. #7's CI gains a
+# late check, so its land waits long enough to prepare #8. The prompt
+# doesn't ask for preparation, so the skill text alone must lead the agent
+# to it. The checkout's ref log records each prepare's refs.
+set -euo pipefail
+. "$(dirname "$0")/../lib/fixture.sh"
+fixture_init "$1"
+pr_open 7 widget-docs main "Document the widget" README.md "Call widget.sh to get the size."
+pr_open 8 widget-notes main "Add widget notes" NOTES.md "The widget size is fixed."
+pr_approve 7 2026-11-18T12:00:00Z
+pr_approve 8 2026-11-18T12:05:00Z
+slow_ci "$(git -C "$REPO" rev-parse widget-docs)" 240
+log_checkout_refs
+fixture_done

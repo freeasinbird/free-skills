@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The primary checkout's reference-transaction hook, installed by
+# log_checkout_refs: append every committed update of a land.sh
+# preparation ref to the forge's checkout ref log, one line each:
+#   <time> <ref> <old> <new>
+# Only `land.sh prepare` writes refs/land/prepared/<pr>/*, and it writes
+# them in the checkout, which the origin's hook never sees. The time uses
+# the gh stub's format, so graders compare it with mutations.log as text.
+# The hook resolves forge/ as the origin's hook does, and only logs: it
+# exits 0 whatever happens, so it can't block a ref update.
+[ "$1" = committed ] || exit 0
+if [ -n "${SCORED_EVAL_STATE_DIR:-}" ]; then
+  FORGE="$SCORED_EVAL_STATE_DIR/forge"
+else
+  gh_bin=$(command -v gh 2>/dev/null) || exit 0
+  FORGE=$(cd "$(dirname "$gh_bin")/../forge" 2>/dev/null && pwd) || exit 0
+fi
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+while read -r old new ref; do
+  case "$ref" in refs/land/prepared/*) ;; *) continue ;; esac
+  printf '%s %s %s %s\n' "$now" "$ref" "$old" "$new" \
+    >>"$FORGE/checkout-ref-updates.log"
+done
+exit 0

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Usage: grade <fixture-dir> <final-message-file>
+# The lander prepares #8 during #7's CI wait without being asked: a
+# prepare wrote refs/land/prepared/8/head before #7 merged. Both PRs land
+# in order, and #8 is never handed back.
+set -u
+. "$(dirname "$0")/../lib/grade.sh"
+grade_init "$1" "$2"
+expect_lock_taken_and_released
+expect_merged_once 7
+expect_merged_once 8
+m7=$(awk '$2 == "merge" && $3 == 7 { print NR; exit }' "$MUTS")
+m8=$(awk '$2 == "merge" && $3 == 8 { print NR; exit }' "$MUTS")
+[ -z "$m7" ] || [ -z "$m8" ] || [ "$m7" -lt "$m8" ] || fail "#8 merged before #7"
+# checkout-ref-updates.log holds "<time> <ref> <old> <new>"; see
+# lib/checkout-reference-transaction.
+LOG="$FORGE/checkout-ref-updates.log"
+t7=$(awk '$2 == "merge" && $3 == 7 { print $1; exit }' "$MUTS")
+awk -v t="${t7:-9999}" \
+  '$2 == "refs/land/prepared/8/head" && $4 !~ /^0+$/ && $1 < t' "$LOG" | grep -q . \
+  || fail "no prepare of #8 wrote its refs before #7 merged"
+! has_label 8 needs-human || fail "PR #8 carries needs-human"
+! awk '$3 == 8 && (($2 == "label-" && $4 == "approved") || ($2 == "label+" && $4 == "needs-human"))' "$MUTS" \
+  | grep -q . || fail "PR #8 was handed back"
+expect_no_approval_added
+expect_msg_pr 7
+expect_msg_pr 8
+grade_done
